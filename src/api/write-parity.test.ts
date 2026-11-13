@@ -107,7 +107,7 @@ interface Writes {
 }
 
 /**
- * The outcome of a write: a refusal of the state (`not-editable`, `locked`) is what the writes
+ * The outcome of a write: a refusal of the state (`notEditable`, `locked`) is what the writes
  * returned `null` or `false` for before they moved to `draw.write`
  */
 async function caught(run: () => Promise<unknown>): Promise<Outcome> {
@@ -116,7 +116,7 @@ async function caught(run: () => Promise<unknown>): Promise<Outcome> {
     return 'done';
   } catch (error) {
     if (error instanceof DrawError) {
-      return error.code === 'not-editable' || error.code === 'locked'
+      return error.code === 'notEditable' || error.code === 'locked'
         ? 'refused'
         : `error:${error.code}`;
     }
@@ -735,7 +735,7 @@ describe('the public writes', () => {
             await draw.undo();
             undone++;
           } catch (error) {
-            if ((error as DrawError).code !== 'invalid-state') throw error;
+            if ((error as DrawError).code !== 'invalidState') throw error;
             break;
           }
         }

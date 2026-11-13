@@ -57,7 +57,7 @@ function expectInvalid(fn: () => void): void {
     expect.unreachable();
   } catch (error) {
     expect(error).toBeInstanceOf(DrawError);
-    expect((error as DrawError).code).toBe('invalid-input');
+    expect((error as DrawError).code).toBe('invalidInput');
   }
 }
 
@@ -119,7 +119,7 @@ describe('the options at creation', () => {
     first.destroy();
   });
 
-  it('createDraw throws invalid-input for an unknown option and for a wrong value', () => {
+  it('createDraw throws invalidInput for an unknown option and for a wrong value', () => {
     const map = createMapStub().map;
     for (const bad of [
       { what: 1 },
@@ -361,7 +361,7 @@ describe('options.update', () => {
     expect(names.generateName('Point')).toBeUndefined();
   });
 
-  it('throws invalid-input and changes nothing for a wrong patch', () => {
+  it('throws invalidInput and changes nothing for a wrong patch', () => {
     const before = options.get();
     for (const bad of [
       null,

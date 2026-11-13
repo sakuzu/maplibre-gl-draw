@@ -8,7 +8,7 @@
  * A renderer of an extension only holds the `RenderContext` it receives (or its `terrain`).
  * The building blocks that draw on the terrain must find the terrain state of the instance
  * behind it. `null` draws without terrain, and an object the engine did not hand out is refused
- * with `invalid-input`, as `viewUniforms` refuses it.
+ * with `invalidInput`, as `viewUniforms` refuses it.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -107,7 +107,7 @@ describe('the terrain behind a render context', () => {
 
   it('finds no state for null, and refuses an object the engine did not hand out', () => {
     expect(terrainStateOf(null)).toBeNull();
-    const refused = expect.objectContaining({ code: 'invalid-input' });
+    const refused = expect.objectContaining({ code: 'invalidInput' });
     expect(() => terrainStateOf({} as TerrainSurface)).toThrow(refused);
     expect(() => terrainStateOf({ terrain: {} } as RenderContext)).toThrow(refused);
   });
@@ -119,7 +119,7 @@ describe('the terrain behind a render context', () => {
     expect(terrainOnWith(ctx.terrain)).toBe(1);
     expect(terrainOnWith(null)).toBe(0);
     expect(() => terrainOnWith({} as TerrainSurface)).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 
@@ -130,7 +130,7 @@ describe('the terrain behind a render context', () => {
     expect(terrainTessellationStep(ctx)?.grid).toBe(ACTIVE_TERRAIN.stepGrid);
     expect(terrainTessellationStep(ctx.terrain)?.grid).toBe(ACTIVE_TERRAIN.stepGrid);
     expect(() => terrainTessellationStep({} as TerrainSurface)).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 
@@ -144,7 +144,7 @@ describe('the terrain behind a render context', () => {
     const content = { glsl: '', bind: () => {} };
     expect(drawQuadOnTerrain(renderContextOver(terrain), corners, content, 1)).toBe(false);
     expect(() => drawQuadOnTerrain({} as TerrainSurface, corners, content, 1)).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 });

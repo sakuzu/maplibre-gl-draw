@@ -86,27 +86,27 @@ describe.each(['objects', 'rows'] as const)('the items read by position, a Store
     expect(draw.features.count({ groupId: 'g' })).toBe(2);
   });
 
-  it('throws not-found for a layer or a group that is not there, and invalid-input for a wrong range', () => {
+  it('throws notFound for a layer or a group that is not there, and invalidInput for a wrong range', () => {
     const draw = setup(kind);
     expect(() => draw.layers.listItems('none')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
     expect(() => draw.layers.countItems('none')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
     expect(() => draw.groups.listMembers('none')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
     for (const range of [{ offset: -1 }, { offset: 1.5 }, { limit: -1 }, { limit: Number.NaN }]) {
       expect(() => draw.layers.listItems('l', range)).toThrow(
-        expect.objectContaining({ code: 'invalid-input' }),
+        expect.objectContaining({ code: 'invalidInput' }),
       );
       expect(() => draw.groups.listMembers('g', range)).toThrow(
-        expect.objectContaining({ code: 'invalid-input' }),
+        expect.objectContaining({ code: 'invalidInput' }),
       );
     }
     expect(() => draw.layers.listItems('l', { after: 'p0' } as never)).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 });

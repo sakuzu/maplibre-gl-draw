@@ -142,7 +142,7 @@ export interface TabaneFeatureRow {
 /**
  * A feature as the row the writer of Tabane takes
  *
- * @throws `DrawError` with the code `invalid-input` when the geometry is not of one of the six
+ * @throws `DrawError` with the code `invalidInput` when the geometry is not of one of the six
  *   GeoJSON types a row holds
  * @experimental
  */
@@ -152,7 +152,7 @@ export function tabaneRowOf(row: TabaneFeatureRow): TabaneRow {
   if (geometry !== null && geometry !== undefined) {
     if (!isGeometryType(geometry.type)) {
       throw new DrawError(
-        'invalid-input',
+        'invalidInput',
         `Tabane: a ${geometry.type} geometry cannot be a row (${row.id})`,
       );
     }
@@ -182,7 +182,7 @@ export function tabaneRowOf(row: TabaneFeatureRow): TabaneRow {
  * A row of Tabane read back as a feature (`readRows` of `@sakuzu/tabane` reads the rows of a
  * page as objects)
  *
- * @throws `DrawError` with the code `invalid-input` when the row is not one of a feature: a column
+ * @throws `DrawError` with the code `invalidInput` when the row is not one of a feature: a column
  *   that is not one of {@link TABANE_FEATURE_COLUMNS}, no type, a geometry of another name or
  *   depth, or a style that is not an object
  * @experimental
@@ -218,22 +218,22 @@ export function featureRowOfTabane(row: TabaneRow): TabaneFeatureRow {
 }
 
 function invalidRow(id: string, what: string): DrawError {
-  return new DrawError('invalid-input', `Tabane: the row ${id} ${what}`);
+  return new DrawError('invalidInput', `Tabane: the row ${id} ${what}`);
 }
 
 function unknownColumn(name: string): DrawError {
-  return new DrawError('invalid-input', `Tabane: a column that is not one of a feature: ${name}`);
+  return new DrawError('invalidInput', `Tabane: a column that is not one of a feature: ${name}`);
 }
 
 /**
  * The GeoJSON type of a shape of a name and a depth
  *
- * @throws `DrawError` with the code `invalid-input` when the name is not a GeoJSON type a row
+ * @throws `DrawError` with the code `invalidInput` when the name is not a GeoJSON type a row
  *   holds, or the depth not its depth
  */
 export function geometryTypeOf(name: string, depth: number): GeometryType {
   if (!isGeometryType(name) || GEOMETRY_DEPTH[name] !== depth) {
-    throw new DrawError('invalid-input', `Tabane: a shape ${name} of the depth ${depth}`);
+    throw new DrawError('invalidInput', `Tabane: a shape ${name} of the depth ${depth}`);
   }
   return name;
 }
@@ -258,7 +258,7 @@ export interface FeatureColumns {
 /**
  * The columns of a feature of a page, each checked to be of its kind
  *
- * @throws `DrawError` with the code `invalid-input` when the page holds a column that is not
+ * @throws `DrawError` with the code `invalidInput` when the page holds a column that is not
  *   one of {@link TABANE_FEATURE_COLUMNS}, or one of another kind
  * @internal
  */
@@ -274,7 +274,7 @@ export function featureColumnsOf(rowBlock: TabanePage): FeatureColumns {
     if (kind === undefined) throw unknownColumn(column.name);
     if (kind !== column.kind) {
       throw new DrawError(
-        'invalid-input',
+        'invalidInput',
         `Tabane: the column ${column.name} is of the kind ${column.kind}, not ${kind}`,
       );
     }
@@ -301,7 +301,7 @@ export function featureColumnsOf(rowBlock: TabanePage): FeatureColumns {
 /**
  * The names of the types of a column of types, and the type of each row as an index into them
  *
- * @throws `DrawError` with the code `invalid-input` when a row has no type, or a type that is not a
+ * @throws `DrawError` with the code `invalidInput` when a row has no type, or a type that is not a
  *   string
  * @internal
  */
@@ -309,20 +309,20 @@ export function typesOf(
   column: TabaneValueColumn | null,
   rows: number,
 ): { typeNames: string[]; types: Uint8Array } {
-  if (column === null) throw new DrawError('invalid-input', 'Tabane: rows without a type');
+  if (column === null) throw new DrawError('invalidInput', 'Tabane: rows without a type');
   const { offsets, bytes } = column.values;
   const typeNames: string[] = [];
   for (let k = 0; k + 1 < offsets.length; k++) {
     const name = decodeCanonicalValue(bytes, offsets[k], offsets[k + 1]);
     if (typeof name !== 'string')
-      throw new DrawError('invalid-input', 'Tabane: a type not a string');
+      throw new DrawError('invalidInput', 'Tabane: a type not a string');
     typeNames.push(name);
   }
-  if (typeNames.length > 256) throw new DrawError('invalid-input', 'Tabane: more than 256 types');
+  if (typeNames.length > 256) throw new DrawError('invalidInput', 'Tabane: more than 256 types');
   const types = new Uint8Array(rows);
   for (let r = 0; r < rows; r++) {
     const t = column.valueIndex[r];
-    if (t < 0) throw new DrawError('invalid-input', 'Tabane: a row without a type');
+    if (t < 0) throw new DrawError('invalidInput', 'Tabane: a row without a type');
     types[r] = t;
   }
   return { typeNames, types };
@@ -335,7 +335,7 @@ const EMPTY_STYLE = Uint8Array.of(CANONICAL_OBJECT, 0);
  * The styles of a column of styles, as their canonical bytes, and the style of each row as an
  * index into them (a row without one has `{}`)
  *
- * @throws `DrawError` with the code `invalid-input` when a style is not an object
+ * @throws `DrawError` with the code `invalidInput` when a style is not an object
  * @internal
  */
 export function stylesOf(
@@ -354,7 +354,7 @@ export function stylesOf(
   let empty = -1;
   for (let k = 0; k < count; k++) {
     if (bytes[offsets[k]] !== CANONICAL_OBJECT)
-      throw new DrawError('invalid-input', 'Tabane: a style that is not an object');
+      throw new DrawError('invalidInput', 'Tabane: a style that is not an object');
     if (
       empty < 0 &&
       offsets[k + 1] - offsets[k] === EMPTY_STYLE.length &&

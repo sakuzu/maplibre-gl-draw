@@ -93,7 +93,7 @@ describe('createDrawUI', () => {
     expect(ui.tools.list()).toEqual([
       {
         id: 'circle',
-        mode: 'draw_circle',
+        mode: 'drawCircle',
         label: '円',
         icon: 'circle',
         shortcut: 'C',
@@ -119,7 +119,7 @@ describe('createDrawUI', () => {
     const fake = fakeDraw();
     ui = createDrawUI(fake.asDraw);
     key(document.body, 'a');
-    expect(fake.draw.setMode).toHaveBeenLastCalledWith('draw_polygon');
+    expect(fake.draw.setMode).toHaveBeenLastCalledWith('drawPolygon');
     key(fake.canvas, 'v');
     expect(fake.draw.setMode).toHaveBeenLastCalledWith('select');
   });

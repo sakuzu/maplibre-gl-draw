@@ -258,7 +258,7 @@ export function createWriter(writerDeps: WriterDeps): Writer {
   const write = <T>(fn: (tx: Transaction) => T | Promise<T>, options?: WriteOptions): Write<T> => {
     if (running > 0) {
       throw new DrawError(
-        'nested-write',
+        'nestedWrite',
         'draw.write is called in the function of another: give its transaction to a function instead',
       );
     }
@@ -321,7 +321,7 @@ export function createWriter(writerDeps: WriterDeps): Writer {
     },
     async open(source, options) {
       if (source === undefined) {
-        throw new DrawError('invalid-state', 'There is no storage to open the document from');
+        throw new DrawError('invalidState', 'There is no storage to open the document from');
       }
       const signal = options?.signal;
       const loader = writerDeps.writers.document;
@@ -344,7 +344,7 @@ export function createWriter(writerDeps: WriterDeps): Writer {
           features: result?.featureIds.length ?? 0,
           skipped: (result?.skipped ?? []).map(({ index, reason }) => ({
             index,
-            error: new DrawError('invalid-input', reason),
+            error: new DrawError('invalidInput', reason),
           })),
         };
       });
@@ -383,7 +383,7 @@ export function abortedError(signal: AbortSignal): DrawError {
 }
 
 function notEditable(): DrawError {
-  return new DrawError('not-editable', 'The document is read-only');
+  return new DrawError('notEditable', 'The document is read-only');
 }
 
 function lockedError(ids: readonly string[]): DrawError {
@@ -392,7 +392,7 @@ function lockedError(ids: readonly string[]): DrawError {
 
 /** Whether a write made at the commit failed because what it named is gone, or locked meanwhile */
 function isSkip(error: unknown): boolean {
-  return error instanceof DrawError && (error.code === 'not-found' || error.code === 'locked');
+  return error instanceof DrawError && (error.code === 'notFound' || error.code === 'locked');
 }
 
 // ============================================================================
@@ -607,7 +607,7 @@ class TransactionImpl implements Transaction {
     } catch (error) {
       // What the Store refuses at the commit fails the write as an error of the library
       if (error instanceof DrawError) throw error;
-      throw new DrawError('invalid-state', `The commit was refused: ${String(error)}`, {
+      throw new DrawError('invalidState', `The commit was refused: ${String(error)}`, {
         cause: error,
       });
     }
@@ -662,7 +662,7 @@ class TransactionImpl implements Transaction {
   #refusal(): DrawError | null {
     if (this.#closed) {
       return new DrawError(
-        'transaction-closed',
+        'transactionClosed',
         'The function of draw.write has ended: its transaction takes no more writes',
       );
     }
@@ -683,11 +683,11 @@ class TransactionImpl implements Transaction {
   /** Throws while a write of the transaction is under way: what it reads is not yet known */
   #requireSettled(): void {
     if (this.#closed) {
-      throw new DrawError('transaction-closed', 'The function of draw.write has ended');
+      throw new DrawError('transactionClosed', 'The function of draw.write has ended');
     }
     if (this.#pending.size > 0) {
       throw new DrawError(
-        'write-not-finished',
+        'writeNotFinished',
         'A write of the transaction is under way: await it before reading',
       );
     }
@@ -1690,7 +1690,7 @@ class TransactionImpl implements Transaction {
           result.layerId;
         result.skipped = (written.skipped ?? []).map(({ index, reason }) => ({
           index,
-          error: new DrawError('invalid-input', reason),
+          error: new DrawError('invalidInput', reason),
         }));
         return true;
       });

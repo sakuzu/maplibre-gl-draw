@@ -47,7 +47,7 @@ export interface SharedVertexStore extends FeatureLockStore, LocalHiddenStore {
 /**
  * Geometry types eligible for the simultaneous movement of shared vertices
  *
- * They are the types whose vertices an edit `vertex-move` can move.
+ * They are the types whose vertices an edit `vertexMove` can move.
  */
 const VERTEX_MOVABLE_TYPES: ReadonlySet<string> = new Set<FeatureType>([
   'Point',

@@ -12,7 +12,7 @@
  * - A feature that is not there is left out and counted; a locked one is edited, as `set` edits
  *   it
  * - The edits apply in their order, all of them or none: an edit whose values the computation
- *   does not take throws invalid-input, and nothing is written
+ *   does not take throws invalidInput, and nothing is written
  * - A Store that gives its computation (`transforms`) has its edits computed by it
  * - The instance makes the selection (`{ selection: true }`) the IDs of the features selected;
  *   a Store given it throws
@@ -232,7 +232,7 @@ describe.each(CONTRACTS)('the edits that move, rotate and scale features of %s',
       { kind: 'set', featureId: 'point', patch: { properties: { name: 'Q' } } },
       { ...move, target: { featureIds: ['point'] } },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'line',
         vertices: [{ ring: 0, index: 0 }],
         positions: [[0, 0]],
@@ -331,7 +331,7 @@ describe.each(CONTRACTS)('the edits that move, rotate and scale features of %s',
           ]),
         ),
         what,
-      ).toBe('invalid-input');
+      ).toBe('invalidInput');
       expect(geometryOf(store, 'point'), what).toEqual(before);
       expect(notified, what).toHaveLength(0);
     }
@@ -373,7 +373,7 @@ describe.each(CONTRACTS)('the edits that move, rotate and scale features of %s',
           { kind: 'rotate', center: [0, 0], angleDegrees: 45, target: { featureIds: ['point'] } },
         ]),
       ),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(geometryOf(store, 'point')).toEqual({ type: 'Point', coordinates: [140.7, 35.6] });
     // A geometry the feature cannot have is not written
     const wrong: GeometryTransforms = {
@@ -387,7 +387,7 @@ describe.each(CONTRACTS)('the edits that move, rotate and scale features of %s',
           { kind: 'translate', from: [0, 0], to: [1, 1], target: { featureIds: ['point'] } },
         ]),
       ),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(geometryOf(other.store, 'point')).toEqual(features()[0]?.geometry);
   });
 
@@ -418,7 +418,7 @@ describe.each(CONTRACTS)('the edits that move, rotate and scale features of %s',
     const contract = make();
     filled(new DrawStore(contract));
     expect(codeOf(() => contract.applyEdits([{ ...edit, target: { selection: true } }]))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
   });
 

@@ -72,7 +72,7 @@ draw.options.get().snapping; // 現在の設定
 ```
 
 0 以下の刻みの角度のように型や値の合わない設定を渡すと、コード
-`invalid-input` の `DrawError` を投げ、何も変えません。
+`invalidInput` の `DrawError` を投げ、何も変えません。
 
 ### 吸着先
 
@@ -108,7 +108,7 @@ draw.options.get().snapping; // 現在の設定
 
 ### ガイド線
 
-`draw_line` と `draw_polygon` では、最後に置いた頂点からガイド
+`drawLine` と `drawPolygon` では、最後に置いた頂点からガイド
 線が出ます。1 つ目の頂点を置いた後は真北から刻みの角度ごとに、
 2 つ目の頂点を置いた後は直前の線分の延長方向と垂直方向にも
 出ます。許容距離の中に実際の頂点、交点、辺があれば、ガイドより
@@ -187,7 +187,7 @@ const removeRoads = draw.extensions.snapProviders.add(roads);
 
 ## 辺のなぞり
 
-`draw_line` と `draw_polygon` で、前のクリックと今回のクリック
+`drawLine` と `drawPolygon` で、前のクリックと今回のクリック
 がどちらも既存の地物の境界に吸着したときは、その 2 点の間に
 ある境界の頂点を挿入します。隣の区画を描くときは、共有する
 境界の角を 2 つクリックするだけでよく、境界を描き直す必要は
@@ -269,7 +269,7 @@ try {
   // 前面の面を背面の面から切り抜く。前面の面は残る
   await draw.write((tx) => tx.features.difference(back, [front]));
 } catch (error) {
-  if (error instanceof DrawError && error.code === 'invalid-input') {
+  if (error instanceof DrawError && error.code === 'invalidInput') {
     toast('nothing left');
   }
 }
@@ -295,15 +295,15 @@ await draw.write((tx) => tx.features.buffer(parcelId, -5));
 - 面は `Polygon`、`MultiPolygon`、`Circle` です。`split` の線は
   `LineString`、`MultiLineString`、`Freehand` です
 - 引数の誤りは `DrawError` で reject し、何も変えません。無い ID には
-  `not-found`、型の合わない地物 (`union` に渡した線や `buffer` に
-  渡した `Image`) や有限の数でない距離には `invalid-input` です
+  `notFound`、型の合わない地物 (`union` に渡した線や `buffer` に
+  渡した `Image`) や有限の数でない距離には `invalidInput` です
 - 拒んだときは reject し、何も変えません。文書が読み取り専用のときは
-  `not-editable`、地物のどれかがロックされているときは `locked` です
+  `notEditable`、地物のどれかがロックされているときは `locked` です
 - 入力の削除と結果の作成は 1 つの確定で、`change` が
   1 回届きます
 - 結果が空のときは何も変えません。`union`、重ならない面の
   `intersection`、すべてを切り抜いてしまう `difference`、距離 0 か
-  面の残らない `buffer` は `invalid-input` で reject します。面を
+  面の残らない `buffer` は `invalidInput` で reject します。面を
   分けない線を渡した `split` は `[]` を返します
 
 ### 結果の形
@@ -397,7 +397,7 @@ const merged = union(parcels);
 - 長さ、距離、半径、許容の単位はメートル、面積は平方メートル、
   方位と座標は度です
 - `null` は結果が空であることを表します。関数が受け取れない形の
-  入力には、コード `invalid-input` を持つ `GeometryError` を
+  入力には、コード `invalidInput` を持つ `GeometryError` を
   投げます
 
 <!-- docs-check:
@@ -416,7 +416,7 @@ if (shrunk === null) {
 - 壊れた入力は、先へ渡さずに入口で取り除きます。位置が 3 つに
   満たないリングや、有限の数でない座標は計算に届きません
 - 面を組み合わせる関数は、結果を計算できないとき、コード
-  `engine-failure` を持つ `GeometryError` を投げます
+  `engineFailure` を持つ `GeometryError` を投げます
 - 境界を共有するだけの面どうしは、重なっているとみなしません
 - ±180° の経線をまたぐ形と、極の周辺は対象外です。そこでは
   `buffer` は `null` を返します

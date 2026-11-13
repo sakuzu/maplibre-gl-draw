@@ -13,26 +13,26 @@
  *
  * What was given is wrong:
  *
- * - `invalid-input`: an input of the wrong shape or value
- * - `not-found`: an ID that does not exist
- * - `already-exists`: an ID that is already taken
- * - `unsupported-format`: a source that cannot be read
- * - `too-large`: what was asked for does not fit under a limit
+ * - `invalidInput`: an input of the wrong shape or value
+ * - `notFound`: an ID that does not exist
+ * - `alreadyExists`: an ID that is already taken
+ * - `unsupportedFormat`: a source that cannot be read
+ * - `tooLarge`: what was asked for does not fit under a limit
  *
  * The state does not allow it now:
  *
- * - `invalid-state`: a call that is not possible in the current situation, such as an undo with
+ * - `invalidState`: a call that is not possible in the current situation, such as an undo with
  *   nothing to undo, or any call on an instance that was removed
- * - `not-open`: the document is not open
- * - `not-editable`: the document cannot be written now (the instance is read-only)
+ * - `notOpen`: the document is not open
+ * - `notEditable`: the document cannot be written now (the instance is read-only)
  * - `locked`: a feature, a group or a layer written is locked
  *
  * The transaction:
  *
- * - `transaction-closed`: a write of a transaction whose function has ended
- * - `write-not-finished`: a read of a transaction while one of its writes is still under way
- * - `nested-write`: `draw.write` called in the synchronous part of the function of another
- * - `unsent-writes`: the document would be replaced while writes are not yet sent
+ * - `transactionClosed`: a write of a transaction whose function has ended
+ * - `writeNotFinished`: a read of a transaction while one of its writes is still under way
+ * - `nestedWrite`: `draw.write` called in the synchronous part of the function of another
+ * - `unsentWrites`: the document would be replaced while writes are not yet sent
  *
  * The storage:
  *
@@ -44,19 +44,19 @@
  * - `aborted`: stopped by the signal of the call
  */
 export type DrawErrorCode =
-  | 'invalid-input'
-  | 'not-found'
-  | 'already-exists'
-  | 'unsupported-format'
-  | 'too-large'
-  | 'invalid-state'
-  | 'not-open'
-  | 'not-editable'
+  | 'invalidInput'
+  | 'notFound'
+  | 'alreadyExists'
+  | 'unsupportedFormat'
+  | 'tooLarge'
+  | 'invalidState'
+  | 'notOpen'
+  | 'notEditable'
   | 'locked'
-  | 'transaction-closed'
-  | 'write-not-finished'
-  | 'nested-write'
-  | 'unsent-writes'
+  | 'transactionClosed'
+  | 'writeNotFinished'
+  | 'nestedWrite'
+  | 'unsentWrites'
   | 'refused'
   | 'credential'
   | 'permission'
@@ -64,7 +64,7 @@ export type DrawErrorCode =
   | 'aborted';
 
 /** The codes for which the same call may succeed when made again later */
-const RETRYABLE: ReadonlySet<DrawErrorCode> = new Set(['network', 'write-not-finished']);
+const RETRYABLE: ReadonlySet<DrawErrorCode> = new Set(['network', 'writeNotFinished']);
 
 /**
  * The one shape of a failure. What was called and failed throws it (a promise rejects with it);
@@ -108,13 +108,13 @@ export class DrawError extends Error {
 }
 
 /**
- * A `too-large` refusal of a share of a limit: `retryable` tells whether it can succeed later,
+ * A `tooLarge` refusal of a share of a limit: `retryable` tells whether it can succeed later,
  * once others hold less
  *
  * @internal
  */
 export function limitError(message: string, retryable: boolean): DrawError {
-  const error = new DrawError('too-large', message);
+  const error = new DrawError('tooLarge', message);
   Object.defineProperty(error, 'retryable', { value: retryable });
   return error;
 }

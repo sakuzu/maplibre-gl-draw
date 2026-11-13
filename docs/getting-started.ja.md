@@ -100,11 +100,11 @@ const draw = createDraw(map);
 
 ```ts
 document.querySelector('#draw-polygon')?.addEventListener('click', () => {
-  draw.setMode('draw_polygon');
+  draw.setMode('drawPolygon');
 });
 ```
 
-`draw_polygon` モードでは、利用者は次のように描きます。
+`drawPolygon` モードでは、利用者は次のように描きます。
 
 | 操作 | 結果 |
 | --- | --- |
@@ -150,12 +150,12 @@ properties }` です。多角形の図形の `coordinates` はリングの配列
 draw.mode.subscribe((mode) => {
   document
     .querySelector('#draw-polygon')
-    ?.classList.toggle('active', mode === 'draw_polygon');
+    ?.classList.toggle('active', mode === 'drawPolygon');
 });
 ```
 
-`draw_point`、`draw_line`、`draw_circle`、`draw_freehand` も同じように
-使います。`draw_image` では、さらにアプリケーションに画像を求めます。
+`drawPoint`、`drawLine`、`drawCircle`、`drawFreehand` も同じように
+使います。`drawImage` では、さらにアプリケーションに画像を求めます。
 すべてのモードの操作は [描画の手引き](guides/drawing.ja.md) にあります。
 
 ## 4. 変更を受け取る
@@ -192,7 +192,7 @@ API は、次の規則を押さえておくと分かりやすくなります。
   から解けるので、`await` の後に読めば新しい状態が、前に読めば前の状態が
   得られます
 - 失敗した書き込みは `DrawError` で reject します。無い ID のような誤った
-  引数 (`not-found`) も、読み取り専用のとき (`not-editable`) や
+  引数 (`notFound`) も、読み取り専用のとき (`notEditable`) や
   ロックされた地物 (`locked`) のように状態が拒む書き込みも同じです。
   そのとき取引は何も確定しません
 - イベントは確定してから発火するので、受け取る関数からは新しい状態が
@@ -251,7 +251,7 @@ if (saved !== null) {
 }
 ```
 
-読み取り専用のとき、`open` は `DrawError` (`not-editable`) で reject
+読み取り専用のとき、`open` は `DrawError` (`notEditable`) で reject
 します。GeoJSON を開くと、地物とグループを置き換え、レイヤーは残します。
 地物は `maplibre-gl-draw:layerId` が存在するレイヤーを指していれば
 そのレイヤーに (このライブラリーが書き出した GeoJSON は指しています)、

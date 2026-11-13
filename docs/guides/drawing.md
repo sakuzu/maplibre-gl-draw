@@ -16,7 +16,7 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map);
 
 // Click to add vertices; Enter or a click on the first vertex finishes
-draw.setMode('draw_polygon');
+draw.setMode('drawPolygon');
 
 draw.on('change', ({ features }) => {
   for (const id of features.created) {
@@ -41,19 +41,19 @@ There are seven built-in modes, listed in `MODES`. `select` is the default
 | Mode | Creates | How |
 | --- | --- | --- |
 | `select` | nothing | select, move, resize, rotate, edit vertices |
-| `draw_point` | `Point` | one click |
-| `draw_line` | `LineString` | clicks, then finish |
-| `draw_polygon` | `Polygon` | clicks, then finish |
-| `draw_circle` | `Circle` | click the center, click the radius |
-| `draw_freehand` | `Freehand` | drag a stroke |
-| `draw_image` | `Image` | the application picks a file (see below) |
+| `drawPoint` | `Point` | one click |
+| `drawLine` | `LineString` | clicks, then finish |
+| `drawPolygon` | `Polygon` | clicks, then finish |
+| `drawCircle` | `Circle` | click the center, click the radius |
+| `drawFreehand` | `Freehand` | drag a stroke |
+| `drawImage` | `Image` | the application picks a file (see below) |
 
 `draw.setMode(mode)` returns `true` when the mode is `mode` after the call.
 It returns `false`, and nothing changes, for a drawing mode while the
 interaction lock is on, and for a drawing mode while no layer can be
 written (every layer is locked or hidden; see
 [Layers and groups](layers.md)). A name with no mode behind it throws a
-`DrawError` with the code `not-found`.
+`DrawError` with the code `notFound`.
 
 `draw.getMode()` reads the current mode, and `draw.mode` tells every
 change of it (`draw.mode.subscribe`). Modes of your own are added with
@@ -67,11 +67,11 @@ leaves the mode for `select` only when nothing is being drawn.
 
 | Mode | Adds | Finishes | Escape | Backspace |
 | --- | --- | --- | --- | --- |
-| `draw_point` | click | the click | to select | - |
-| `draw_line` | click | Enter, last vertex | discard | last vertex |
-| `draw_polygon` | click | Enter, first vertex | discard | last vertex |
-| `draw_circle` | click, move | second click | discard | - |
-| `draw_freehand` | drag | release | discard | - |
+| `drawPoint` | click | the click | to select | - |
+| `drawLine` | click | Enter, last vertex | discard | last vertex |
+| `drawPolygon` | click | Enter, first vertex | discard | last vertex |
+| `drawCircle` | click, move | second click | discard | - |
+| `drawFreehand` | drag | release | discard | - |
 
 - A line needs two vertices and a polygon three before Enter, a double
   click or a click on the last (line) or first (polygon) vertex finishes
@@ -131,7 +131,7 @@ selection, and the mode returns to `select` with the new feature selected.
 `features.created`, and `draw.selection` tells the new selection.
 
 Freehand is different: every stroke (press, drag, release) becomes its own
-feature, the mode stays `draw_freehand` so that strokes can follow one
+feature, the mode stays `drawFreehand` so that strokes can follow one
 another, and the new features are not selected. A second finger landing
 during a stroke, or the browser cancelling the touch, discards the stroke.
 
@@ -148,7 +148,7 @@ first writable layer when the active one is locked or hidden.
 
 ### Images
 
-The library does not open a file dialog. In `draw_image`, a click on the
+The library does not open a file dialog. In `drawImage`, a click on the
 map (or `draw.mode.drawing.add`) asks the application for an image
 through the option `requestImage`, with the position to place it at, and
 the mode returns to `select` at once. The application shows its own file
@@ -177,7 +177,7 @@ const draw = createDraw(map, {
 });
 
 // Ask for an image to place at the center of the map now
-draw.mode.set('draw_image');
+draw.mode.set('drawImage');
 const center = map.getCenter();
 draw.mode.drawing.add([center.lng, center.lat]);
 ```
@@ -199,7 +199,7 @@ one stored file.
 The library does not take files dropped on the map. To read a dropped
 file, the application listens to the drop and imports it; see
 [Save and load](save-load.md). A dropped image is placed where it was
-dropped the same way: enter `draw_image`, call `draw.mode.drawing.add` at
+dropped the same way: enter `drawImage`, call `draw.mode.drawing.add` at
 the position of the drop, and give the dropped file from `requestImage`.
 
 ## Selecting and editing
@@ -495,7 +495,7 @@ draw.selection.set('feature', [line.id]);
 - The type it is drawn as is the type of its geometry, unless
   `properties['maplibre-gl-draw:featureType']` names another
 - While the instance is read-only the write rejects with a `DrawError`
-  (`not-editable`). A wrong input rejects with a `DrawError` too, and
+  (`notEditable`). A wrong input rejects with a `DrawError` too, and
   nothing is created
 - A circle is a `Point` geometry, the center, of the type `Circle`, with
   its radius in `properties['maplibre-gl-draw:radiusMeters']`
@@ -533,13 +533,13 @@ image), ready for the next; Escape still leaves it.
 `add` and `move` act as a click and a move at the position, `commit` as
 Enter, and `undo`, `redo` and `cancel` as their keys; `active` tells
 whether a shape is being drawn. Every method throws `DrawError` with the
-code `invalid-state` when the current mode is no drawing mode. `commit`
+code `invalidState` when the current mode is no drawing mode. `commit`
 returns the write of the feature it creates, with the `label` and `undo`
-of the options of `draw.write`, and rejects with `invalid-state` when the
+of the options of `draw.write`, and rejects with `invalidState` when the
 mode creates nothing from the shape (too few vertices):
 
 ```ts
-draw.mode.set('draw_line');
+draw.mode.set('drawLine');
 draw.mode.drawing.add([139.7, 35.68]);
 draw.mode.drawing.move([139.71, 35.69]);
 draw.mode.drawing.add([139.71, 35.69]);
@@ -554,7 +554,7 @@ automatic name and the reference zoom, and it is selected when it is
 finished, as a shape drawn with the pointer.
 
 ```ts
-draw.setMode('draw_line');
+draw.setMode('drawLine');
 draw.drawing.addVertex([139.7, 35.68]); // as a click there
 draw.drawing.moveTo([139.71, 35.69]); // the preview follows
 draw.drawing.addVertex([139.71, 35.69]);
@@ -572,7 +572,7 @@ draw.drawing.finish(); // as Enter; the mode goes back to select
   one near the first vertex of an area does not close it. Only a
   position exactly equal to the closing vertex finishes the shape
 - `addVertex` returns `false` when no drawing mode is active or nothing
-  took the click. What it does is up to the mode: in `draw_point` it
+  took the click. What it does is up to the mode: in `drawPoint` it
   creates the point, and on the closing vertex of a line or an area it
   finishes the shape
 - `finish` completes the shape as soon as it has enough vertices,

@@ -295,7 +295,7 @@ export function createModeDrawing(
   const { store } = engine.context;
   const requireDrawingMode = (): void => {
     if (!resource.isActive()) {
-      throw new DrawError('invalid-state', 'The current mode is no drawing mode');
+      throw new DrawError('invalidState', 'The current mode is no drawing mode');
     }
   };
 
@@ -332,8 +332,8 @@ export function createModeDrawing(
         checked = checkWriteOptions(options);
         requireDrawingMode();
         if (checked.signal.aborted) throw abortedError(checked.signal);
-        if (store.isReadOnly()) throw new DrawError('not-editable', 'The document is read-only');
-        if (!resource.isDrawing()) throw new DrawError('invalid-state', 'No shape is being drawn');
+        if (store.isReadOnly()) throw new DrawError('notEditable', 'The document is read-only');
+        if (!resource.isDrawing()) throw new DrawError('invalidState', 'No shape is being drawn');
       } catch (error) {
         return failedWrite(error);
       }
@@ -354,7 +354,7 @@ export function createModeDrawing(
       const made: Feature | null = asked.made;
       if (made === null) {
         return failedWrite(
-          new DrawError('invalid-state', 'The mode created no feature from the shape being drawn'),
+          new DrawError('invalidState', 'The mode created no feature from the shape being drawn'),
           id,
         );
       }

@@ -28,7 +28,7 @@ import type { AreaCoordinates, Coordinate, MultiPolygonCoordinates } from './typ
  *   in degrees
  * @returns `true` when the point lies inside an outer ring and inside none of its holes. The
  *   result for a point exactly on the boundary is not defined
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not of the expected type
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not of the expected type
  */
 export function pointInPolygon(
   point: Position | Point,
@@ -46,8 +46,8 @@ export function pointInPolygon(
  *   degrees
  * @returns `true` when the common part has an area. `false` when they only touch along an edge
  *   or at a vertex
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not a Polygon or a
- *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not a Polygon or a
+ *   MultiPolygon, and (`engineFailure`) when the boolean operation fails
  */
 export function overlaps(
   a: Polygon | MultiPolygon | { readonly geometry: Geometry },
@@ -169,8 +169,8 @@ function containsGeometry(outer: AreaCoordinates, inner: Geometry): boolean {
  *   degrees. It may share the boundary of `outer`
  * @returns `true` when no part of `inner` lies outside `outer`. `false` for a polygon without
  *   an area and for an empty geometry
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not of the expected
- *   type, and (`engine-failure`) when the boolean operation fails
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not of the expected
+ *   type, and (`engineFailure`) when the boolean operation fails
  */
 export function contains(
   outer: Polygon | MultiPolygon | { readonly geometry: Geometry },

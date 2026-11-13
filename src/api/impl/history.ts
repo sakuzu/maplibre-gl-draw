@@ -167,10 +167,10 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
       return queueCommit(store, () => {
         const from = direction === 'undo' ? undoSteps : redoSteps;
         const step = from.pop();
-        if (!step) throw new DrawError('invalid-state', `There is nothing to ${direction}`);
+        if (!step) throw new DrawError('invalidState', `There is nothing to ${direction}`);
         if (store.isReadOnly()) {
           from.push(step);
-          throw new DrawError('not-editable', 'The document is read-only');
+          throw new DrawError('notEditable', 'The document is read-only');
         }
         const parts: Inverse[] = [];
         applying = { direction, parts };

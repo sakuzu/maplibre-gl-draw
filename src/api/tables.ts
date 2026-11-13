@@ -242,7 +242,7 @@ const FEATURE_FIELDS = new RowFields(FEATURE_TABLE_COLUMNS);
 /**
  * The values checked: rows by their handles, values of fields of a row of a feature, one per row
  *
- * @throws `DrawError` with the code `invalid-input` when they have another shape, or a field
+ * @throws `DrawError` with the code `invalidInput` when they have another shape, or a field
  *   that is not one of a row of a feature
  * @internal
  */
@@ -263,7 +263,7 @@ export function checkRowValues(values: unknown): RowValues {
  * @param values - The rows by their handles, the values of each field, one per row, and the
  *   deletion of each row (non-zero for a row deleted)
  * @returns The values
- * @throws `DrawError` with the code `invalid-input` when they have another shape: a field that is
+ * @throws `DrawError` with the code `invalidInput` when they have another shape: a field that is
  *   not a name, or not one value per row
  */
 export function createRowValues(values: {
@@ -285,12 +285,12 @@ export function createRowValues(values: {
  * Checks that values of rows given as an object name their rows as core does (`handles`), so that
  * what is refused is said in the words of core; the tables check the rest
  *
- * @throws `DrawError` with the code `invalid-input` when they do not
+ * @throws `DrawError` with the code `invalidInput` when they do not
  */
 function checkHandles(values: unknown): void {
   if (typeof values !== 'object' || values === null || Array.isArray(values)) return;
   if (!((values as { readonly handles?: unknown }).handles instanceof Int32Array)) {
-    throw new DrawError('invalid-input', 'The handles must be an Int32Array');
+    throw new DrawError('invalidInput', 'The handles must be an Int32Array');
   }
 }
 
@@ -298,7 +298,7 @@ function checkHandles(values: unknown): void {
  * Reads values of rows as values of features, which `draw.features.restore` writes back
  *
  * @returns The same values
- * @throws `DrawError` with the code `invalid-input` when they are not values of rows of
+ * @throws `DrawError` with the code `invalidInput` when they are not values of rows of
  *   features: of another shape, or with a field that is not one of a row of a feature
  */
 export function featureValuesOf(rows: RowValues): FeatureValues {
@@ -310,7 +310,7 @@ export function featureValuesOf(rows: RowValues): FeatureValues {
  * notifies (`DocumentChange.previousValues`) and `draw.features.restore` returns
  *
  * @returns The same values, as rows by their handles and values of fields
- * @throws `DrawError` with the code `invalid-input` when they are not values of rows
+ * @throws `DrawError` with the code `invalidInput` when they are not values of rows
  */
 export function rowValuesOf(values: FeatureValues): RowValues {
   return checkRowValues(values);
@@ -406,10 +406,10 @@ export interface FeatureTablesWriter {
    * draws going by adding them a few at a time (a copy of a document adds them a block at a time).
    *
    * @returns The rows added, by layer
-   * @throws `DrawError` with the code `invalid-input` when an array of a page does not have one
+   * @throws `DrawError` with the code `invalidInput` when an array of a page does not have one
    *   entry per row, when a page is empty, or when its coordinates do not have the dimensions of
-   *   the layer (`FeatureTablesOptions.dimensionsOf`), `not-found` when a row names a group of
-   *   features that is not known, or `already-exists` when an id is already a row of the document
+   *   the layer (`FeatureTablesOptions.dimensionsOf`), `notFound` when a row names a group of
+   *   features that is not known, or `alreadyExists` when an id is already a row of the document
    *   (nothing is added then)
    */
   addPages(layerId: string, pages: readonly Page[]): RowsChange;
@@ -441,7 +441,7 @@ export interface FeatureTablesWriter {
    * than the dimensions is refused rather than cut.
    *
    * @returns The rows written, by layer
-   * @throws `DrawError`: `not-found` when a handle names no row; `invalid-input` when a field a
+   * @throws `DrawError`: `notFound` when a handle names no row; `invalidInput` when a field a
    *   new row needs is missing, when a parent is not an id, when a row is moved without
    *   a geometry to a layer of dimensions that would read its positions otherwise (only `xy` into
    *   any, and `xyz` into `xyzm`, keep them), or when a value cannot be held (nothing is written
@@ -465,7 +465,7 @@ export interface FeatureTablesWriter {
    * its layer until the token is let go of, so that writing it again with its handle puts it back
    * where it was.
    *
-   * @throws `DrawError` with the code `invalid-input` when a new group misses its id, its key or
+   * @throws `DrawError` with the code `invalidInput` when a new group misses its id, its key or
    *   its layer, or a value is not of its kind (nothing is written then)
    */
   writeGroups(patch: TableGroupPatch, options?: RowApplyOptions): void;
@@ -610,7 +610,7 @@ export interface TableStoreCopy {
  * @param source - The Store of the document (`draw.getStore()`)
  * @param options - The options of the tables of the new Store (the Worker that builds its next
  *   versions)
- * @throws `DrawError` with the code `invalid-input` when the Store does not hold its features as
+ * @throws `DrawError` with the code `invalidInput` when the Store does not hold its features as
  *   rows
  *
  * @example

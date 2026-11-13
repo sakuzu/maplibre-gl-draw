@@ -53,14 +53,14 @@ describe('requestImage', () => {
 
   it('is not asked when the image mode is entered', () => {
     const requests = askedPositions();
-    draw.mode.set('draw_image');
+    draw.mode.set('drawImage');
     expect(requests).toEqual([]);
-    expect(draw.mode.value).toBe('draw_image');
+    expect(draw.mode.value).toBe('drawImage');
   });
 
   it('is asked with the clicked position when the map is clicked in the image mode', () => {
     const requests = askedPositions();
-    draw.mode.set('draw_image');
+    draw.mode.set('drawImage');
     createSyntheticInput(engine).click([0.5, -0.25]);
     expect(requests).toEqual([[0.5, -0.25]]);
     expect(draw.mode.value).toBe('select');
@@ -68,7 +68,7 @@ describe('requestImage', () => {
 
   it('is asked with the position drawing.add gives', () => {
     const requests = askedPositions();
-    draw.mode.set('draw_image');
+    draw.mode.set('drawImage');
     draw.mode.drawing.add([0.25, 0.125]);
     expect(requests).toEqual([[0.25, 0.125]]);
     expect(draw.mode.value).toBe('select');
@@ -76,21 +76,21 @@ describe('requestImage', () => {
 
   it('is asked again for each click while the mode repeats, until Escape', () => {
     const requests = askedPositions();
-    draw.mode.set('draw_image', { repeat: true });
+    draw.mode.set('drawImage', { repeat: true });
     draw.mode.drawing.add([0.25, 0.125]);
     draw.mode.drawing.add([-0.25, 0.5]);
     expect(requests).toEqual([
       [0.25, 0.125],
       [-0.25, 0.5],
     ]);
-    expect(draw.mode.value).toBe('draw_image');
+    expect(draw.mode.value).toBe('drawImage');
     createSyntheticInput(engine).key('Escape');
     expect(draw.mode.value).toBe('select');
   });
 
   it('leaves the mode without asking when no layer can be written', () => {
     const requests = askedPositions();
-    draw.mode.set('draw_image');
+    draw.mode.set('drawImage');
     const [layer] = draw.layers.list();
     writesOf(draw).layers.update(layer.id, { locked: true });
     draw.mode.drawing.add([0.25, 0.125]);
@@ -185,7 +185,7 @@ describe('the snap of a mode is taken back with the mode', () => {
 
   it('is cleared when the mode is left', () => {
     const kinds = watchSnap();
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     createSyntheticInput(engine).move([0, 0]);
     expect(kinds).toEqual(['vertex']);
 
@@ -197,7 +197,7 @@ describe('the snap of a mode is taken back with the mode', () => {
 
   it('is cleared when the drawing is cancelled from outside', () => {
     const kinds = watchSnap();
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0.5, 0.5]);
     input.move([0, 0]);
@@ -206,7 +206,7 @@ describe('the snap of a mode is taken back with the mode', () => {
     expect(draw.drawing.cancel()).toBe(true);
 
     expect(kinds).toEqual(['vertex', null]);
-    expect(draw.getMode()).toBe('draw_line');
+    expect(draw.getMode()).toBe('drawLine');
   });
 
   it('is cleared when an Escape the mode does not take interrupts it', () => {

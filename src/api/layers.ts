@@ -45,20 +45,20 @@ export interface LayersCollection {
    * a layer of objects (`Layer.items`) and a layer held as rows alike, without making features.
    *
    * @returns The IDs, as a new array (empty past the last item)
-   * @throws `DrawError` with the code `not-found` when there is no layer with this ID, or
-   *   `invalid-input` when the range is not of non-negative integers
+   * @throws `DrawError` with the code `notFound` when there is no layer with this ID, or
+   *   `invalidInput` when the range is not of non-negative integers
    */
   listItems(id: string, options?: ItemListOptions): string[];
   /**
    * Counts the items of a layer: its features outside a group and its groups (the features of a
    * group are counted with `features.count({ groupId })`).
    *
-   * @throws `DrawError` with the code `not-found` when there is no layer with this ID
+   * @throws `DrawError` with the code `notFound` when there is no layer with this ID
    */
   countItems(id: string): number;
   /**
    * The stacking order: the IDs of every layer and of the other entries placed on it (the
-   * datasets whose order is `layer-order` and the entries the `isExternalEntry` option
+   * datasets whose order is `layerOrder` and the entries the `isExternalEntry` option
    * recognizes), from the back. An entry that is no longer one of those is left out. Each of
    * them is put elsewhere with `tx.layers.place`.
    *
@@ -75,7 +75,7 @@ export interface LayersCollection {
    * Changes the layer that drawn features go into.
    *
    * @returns True when it changed, false when the layer cannot take drawn features (a lock)
-   * @throws `DrawError` with the code `not-found` when there is no layer with this ID
+   * @throws `DrawError` with the code `notFound` when there is no layer with this ID
    */
   setActive(id: string): boolean;
 }

@@ -123,7 +123,7 @@ input?.addEventListener('change', async () => {
 
 - The format is read from the content: a document of the library or
   GeoJSON. Anything else rejects with a `DrawError` with the code
-  `unsupported-format`
+  `unsupportedFormat`
 - `draw.open` of a document of the library replaces everything; of
   GeoJSON, it takes the place of the features and groups and keeps the
   layers. It is one `change` with the source `'open'`, and the steps of
@@ -132,14 +132,14 @@ input?.addEventListener('change', async () => {
 - `tx.import` adds GeoJSON to the document: it is one commit and one
   step of undo with the other writes of its transaction. A document of
   the library is only opened, so `tx.import` refuses it with
-  `invalid-input`. It returns how many
+  `invalidInput`. It returns how many
   features it added (`count`), their layer (`layerId`) and the ones it
   left out (`skipped`)
-- While the document is read-only, both reject with `not-editable`
+- While the document is read-only, both reject with `notEditable`
 - The data is checked before the document changes, so a read that rejects
   leaves the drawing as it was
 - A document of the library is rejected as a whole, with the code
-  `invalid-input`, when something in it is malformed, refers to something
+  `invalidInput`, when something in it is malformed, refers to something
   missing, or has another version than the one the library writes
   (`4.0.0`)
 - A GeoJSON feature whose geometry cannot be used (missing, unsupported,
@@ -150,9 +150,9 @@ input?.addEventListener('change', async () => {
   color, an opacity outside 0 to 1) is dropped, and the feature is kept
 - An embedded image that is not a PNG, JPEG, WebP or GIF data URL of its
   declared type, or whose pixels cannot be decoded, rejects the read with
-  `invalid-input`. An image that has to be scaled down and that the
+  `invalidInput`. An image that has to be scaled down and that the
   browser cannot encode in one of those types rejects it with
-  `unsupported-format`
+  `unsupportedFormat`
 - A feature imported with an ID the document already holds gets a new ID
   (`duplicateIds: 'renew'`, when left out), so a file written by
   `toGeoJSON()` can be imported back into the same drawing. Nothing is
@@ -276,10 +276,10 @@ await draw.write(async (tx) => {
   input
 - A feature that `tx.import` would leave out, and one whose embedded
   image cannot be imported, is left out and listed in `skipped` with its
-  index, the code (`invalid-input`, or `unsupported-format` for an image
+  index, the code (`invalidInput`, or `unsupportedFormat` for an image
   the browser cannot encode) and the reason. Only an input that is not of
-  the format (`unsupported-format`) and a document of the library that
-  `draw.open` would refuse (`invalid-input`) reject the promise
+  the format (`unsupportedFormat`) and a document of the library that
+  `draw.open` would refuse (`invalidInput`) reject the promise
 
 With `idMap`, an application rewrites its own references before it
 writes the features. Here a feature keeps the ID of another one in
@@ -361,7 +361,7 @@ or read a file itself and hand the features to a dataset instead
 
 ## Images
 
-An image is placed by the image mode, `draw_image`, which asks the
+An image is placed by the image mode, `drawImage`, which asks the
 application for the file through the option `requestImage` and places it
 where the map was clicked in it ([Drawing and editing](drawing.md#images)).
 Code places an image as the GeoJSON written out carries it: a feature of
@@ -483,7 +483,7 @@ given
 with a `generateId` that makes IDs of that form. `tx.import` gives a
 feature, a group or a layer whose ID the store does not take a new ID,
 and a feature, a group or a layer created with such an ID
-(`tx.features.create` with `id`, say) is refused with `invalid-input`
+(`tx.features.create` with `id`, say) is refused with `invalidInput`
 before anything is written.
 
 The document it holds is the one `document.toJSON()` writes; its shape is

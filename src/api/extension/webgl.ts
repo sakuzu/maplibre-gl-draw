@@ -25,8 +25,8 @@ export interface Webgl {
    * Draws above every feature, overlay and selection box, once in a frame. Overlays of plugins go
    * in the order they were added.
    *
-   * @throws `DrawError` with the code `too-large` when the shares of the definitions added come to
-   *   more than 0.9 (the rest of the limit stays with the library), and `invalid-input` when
+   * @throws `DrawError` with the code `tooLarge` when the shares of the definitions added come to
+   *   more than 0.9 (the rest of the limit stays with the library), and `invalidInput` when
    *   `gpuShare` is not above 0 and at most 1
    */
   addOverlay(definition: GpuDefinition<(context: OverlayContext) => void>): void;
@@ -36,7 +36,7 @@ export interface Webgl {
    * once for them: the draws of a layer where they alternate do not follow its rows.
    *
    * @param featureType - A type added with `ctx.extensions.featureTypes`
-   * @throws `DrawError` as {@link Webgl.addOverlay} does, and with the code `not-found` for a type
+   * @throws `DrawError` as {@link Webgl.addOverlay} does, and with the code `notFound` for a type
    *   that was not added
    */
   addFeatureRenderer(featureType: string, definition: GpuDefinition<FeatureRenderer>): void;
@@ -145,9 +145,9 @@ export interface GpuRowBuffer {
  * The GPU resources of a part of an extension
  *
  * Every allocation is checked against the ledger of the instance before it is made, and refused
- * with `DrawError` of the code `too-large`, which holds nothing: `retryable` is true when only the
+ * with `DrawError` of the code `tooLarge`, which holds nothing: `retryable` is true when only the
  * room of the whole instance is short. Once a `gpu` has ended (`signal`), a call fails with the
- * code `invalid-state` and allocates nothing, so a result that arrives late leaves nothing behind.
+ * code `invalidState` and allocates nothing, so a result that arrives late leaves nothing behind.
  */
 export interface Gpu {
   /** The WebGL context, without the calls that make and delete resources */
@@ -177,7 +177,7 @@ export interface Gpu {
    *
    * @param format - The sized internal format
    * @param levels - The levels of mipmaps (1 when it is left out)
-   * @throws `DrawError` with the code `invalid-input` for a format that is not a sized one
+   * @throws `DrawError` with the code `invalidInput` for a format that is not a sized one
    */
   texture(width: number, height: number, format: number, levels?: number): WebGLTexture;
   vertexArray(): WebGLVertexArrayObject;
@@ -187,7 +187,7 @@ export interface Gpu {
   /**
    * Links a program, waiting for it.
    *
-   * @throws `DrawError` with the code `invalid-input` and the log in its message when it does not
+   * @throws `DrawError` with the code `invalidInput` and the log in its message when it does not
    *   compile or link; nothing is left behind
    */
   program(vertex: string, fragment: string): WebGLProgram;
@@ -224,7 +224,7 @@ export interface ProgramCompile {
   /**
    * The linked program.
    *
-   * @throws `DrawError` with the code `invalid-input` and the log in its message when it does not
+   * @throws `DrawError` with the code `invalidInput` and the log in its message when it does not
    *   compile or link
    */
   readonly program: WebGLProgram;

@@ -144,7 +144,7 @@ describe('the playground', () => {
       active: 'Notes',
       // The area with a hole: its outer ring and the hole
       selected: [['Courtyard block', 2]],
-      datasets: [['Density', 'below-store', 'graduated']],
+      datasets: [['Density', 'belowStore', 'graduated']],
     });
 
     await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();

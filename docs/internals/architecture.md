@@ -41,7 +41,7 @@ For using the library rather than changing it, start with the
 | --- | --- |
 | Feature | A shape drawn on the map |
 | Tentative | The shape being drawn, before it is committed |
-| Mode | The current tool (`select`, `draw_line` and so on) |
+| Mode | The current tool (`select`, `drawLine` and so on) |
 | Layer | Holds features and groups; order and visibility |
 | Group | Bundles features inside one layer |
 | Store | The single source of truth for all state |
@@ -652,8 +652,8 @@ own.
 
 The ModeManager runs `EngineModeHandler`s (`src/modes/handler.ts`), each
 created by an `EngineModeFactory`. Core has seven modes. `select` and
-`draw_image` run on the engine directly. `draw_point`, `draw_line`,
-`draw_polygon`, `draw_circle` and `draw_freehand` are written to the
+`drawImage` run on the engine directly. `drawPoint`, `drawLine`,
+`drawPolygon`, `drawCircle` and `drawFreehand` are written to the
 extension contract (`ModeHandler` and `ModeContext` of `src/api/extension/`)
 and added through `draw.extensions.modes`, like any mode an extension adds;
 `bridgeMode` (`src/api/impl/input.ts`) runs each as an engine handler and
@@ -710,7 +710,7 @@ looks the same: the Store does not change, no event is emitted, the current
 handler keeps running, and `false` is returned. A request is refused when:
 
 - no factory is registered for the name (a warning is logged;
-  `draw.setMode` throws `not-found` before asking),
+  `draw.setMode` throws `notFound` before asking),
 - the interaction lock is on and the mode is not `select`, or
 - the `canEnter` predicate rejects the new handler. `createContext` sets it
   to refuse a mode that declares `writesFeatures` while no layer can be
@@ -749,7 +749,7 @@ The events of the instance are `DrawEvents` (`src/api/events.ts`), emitted
 by one event hub per instance (`createEventHub` in
 `src/api/impl/events.ts`). The host subscribes with `draw.on`, an extension
 with `on` of its context, and the names carry no prefix (`change`). A name
-that is not one of `DrawEvents` is refused with `invalid-input`. A value
+that is not one of `DrawEvents` is refused with `invalidInput`. A value
 that changes over time (the selection, the vertex selection, the mode, the
 hidden items, the options, the sketches, the datasets, the shapes as they
 are drawn) is not an event: it is an `Observable` on its resource, which
@@ -1054,7 +1054,7 @@ the plugin adds.
 
 1. `draw.extensions.plugins.add(plugin)` runs `onAdd` and returns a
    function that removes the plugin. A name that is taken throws
-   `already-exists`.
+   `alreadyExists`.
 2. Removing it runs `onRemove`, then removes what it added through its
    context, gives back what it holds on the GPU, and ends the event
    subscriptions it made there.

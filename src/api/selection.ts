@@ -38,7 +38,7 @@ export interface SelectionResource extends Observable<SelectionValue> {
    *
    * @param type - The type of the items
    * @returns False when none of the items can be selected
-   * @throws `DrawError` with the code `not-found` when one of the IDs is not an item of this
+   * @throws `DrawError` with the code `notFound` when one of the IDs is not an item of this
    *   type
    */
   set(type: SelectionType, ids: readonly string[]): boolean;
@@ -47,7 +47,7 @@ export interface SelectionResource extends Observable<SelectionValue> {
    * bulk included: what is no longer there or cannot be seen is left out.
    *
    * @returns False when nothing of it can be selected (the selection is cleared then)
-   * @throws `DrawError` with the code `invalid-input` for a target the instance did not give
+   * @throws `DrawError` with the code `invalidInput` for a target the instance did not give
    */
   set(target: SelectionTarget): boolean;
   /**
@@ -56,14 +56,14 @@ export interface SelectionResource extends Observable<SelectionValue> {
    * more than 2,000 features are selected without their IDs listed (`value.ids` is `null`).
    *
    * @returns False when no feature can be selected
-   * @throws `DrawError` with the code `invalid-input` when the filter has another shape
+   * @throws `DrawError` with the code `invalidInput` when the filter has another shape
    */
   setAll(filter?: FeatureFilter): boolean;
   /**
    * Adds items of the selected type to the selection.
    *
    * @returns False when none of them can be added
-   * @throws `DrawError` with the code `not-found` when one of the IDs is not an item of the
+   * @throws `DrawError` with the code `notFound` when one of the IDs is not an item of the
    *   selected type
    */
   add(ids: readonly string[]): boolean;
@@ -82,8 +82,8 @@ export interface SelectionResource extends Observable<SelectionValue> {
    * @param options - At most `limit` features, read on after the feature `after`. Features
    *   selected without their IDs listed (`value.ids` is `null`) are read a page at a time: they
    *   need it
-   * @throws `DrawError` with the code `invalid-state` for features selected without their IDs
-   *   listed and no limit; `not-found` when `after` is not a selected feature; `invalid-input` when the filter
+   * @throws `DrawError` with the code `invalidState` for features selected without their IDs
+   *   listed and no limit; `notFound` when `after` is not a selected feature; `invalidInput` when the filter
    *   or the options have another shape
    */
   features(filter?: FeatureFilter, options?: FeatureListOptions): Feature[];
@@ -92,7 +92,7 @@ export interface SelectionResource extends Observable<SelectionValue> {
    * group or a layer, of the features in it. No feature is made for it, so it counts features
    * selected without their IDs listed too.
    *
-   * @throws `DrawError` with the code `invalid-input` when the filter has another shape
+   * @throws `DrawError` with the code `invalidInput` when the filter has another shape
    */
   count(filter?: FeatureFilter): number;
   /**
@@ -129,7 +129,7 @@ export interface VertexSelectionResource extends Observable<VertexSelection | nu
    * Selects vertices of a feature.
    *
    * @returns False when the vertices cannot be selected (a lock)
-   * @throws `DrawError` with the code `not-found` when the feature or one of the vertices
+   * @throws `DrawError` with the code `notFound` when the feature or one of the vertices
    *   does not exist
    */
   set(featureId: string, vertices: readonly VertexRef[]): boolean;

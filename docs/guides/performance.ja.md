@@ -223,7 +223,7 @@ draw.options.update({ rendering: { renderScale: 0.5 } });
 draw.options.update({ rendering: { renderScale: 1 } });
 ```
 
-正の数でない値を渡すと、コード `invalid-input` の `DrawError` を
+正の数でない値を渡すと、コード `invalidInput` の `DrawError` を
 投げ、何も変えません。描画はすぐに追随します。すでにズームに
 応じて大きさが変わるもの (基準のズームで描いた線) には、重ねて
 掛けません。自分で書いたオーバーレイや描画器は、係数を含めた

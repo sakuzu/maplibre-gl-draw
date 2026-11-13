@@ -11,27 +11,27 @@
  * what is drawn run once a frame is drawn, since what the drawing keeps is made again for the
  * frame after a change, not at the change.
  *
- * - `id-index`: the ids of the rows find their rows, and each row is read where its id says;
+ * - `idIndex`: the ids of the rows find their rows, and each row is read where its id says;
  *   the groups of the layers held as rows are found by their ids; the items of a layer of
  *   objects name features and groups of that layer, and the members of a group are its features
  * - `selection`: the rows marked as selected in bulk are the rows of the selection in bulk, and
  *   their copies in the row groups say so; what is selected is there and shown (its own flag,
  *   its group and its layer, and the local hiding); a selection with nothing in it has no type
- * - `write-marks`: a Store of rows has one write mark, which only goes up, and its tables have
+ * - `writeMarks`: a Store of rows has one write mark, which only goes up, and its tables have
  *   it; each frame of writes that wrote rows raised it once, and the rows it wrote and their row
  *   groups have its mark (each frame is read as it ends, from the creation of the checks on); no
  *   row and no row group has a mark past the one of the Store, nor a row a mark past its group
- * - `feature-cache`: a feature kept of a row (`feature-cache.ts`) is given only while its row has
+ * - `featureCache`: a feature kept of a row (`feature-cache.ts`) is given only while its row has
  *   the mark it was made at, and is the feature the row makes then: each one given is made again
  *   and compared, and so is each one kept at the check (a feature kept changed by its reader is
  *   found); what is kept is frozen from the creation of the checks on
  * - `drawing`: what the drawing keeps is made from the state it copies, as it is now (see the
  *   drawings, `checkCopies`)
- * - `drawing-writes`: the rows written in place in the chunks drawn in one draw (their
+ * - `drawingWrites`: the rows written in place in the chunks drawn in one draw (their
  *   coordinates, their styles, the rows packed again into their places) draw, as the GPU holds
  *   them, what the same rows packed afresh as a build of their chunk packs them draw (see
  *   `TableLayerRenderer.checkWrites`). Each frame
- * - `drawing-rebuild`: everything the drawing of the rows keeps (the chunks as the GPU holds
+ * - `drawingRebuild`: everything the drawing of the rows keeps (the chunks as the GPU holds
  *   them, the kind each row is drawn with, the state of the rows and its texture, the values of
  *   the styles) is what a drawing made again from the rows as they are now makes, its styles
  *   resolved afresh (see `TableLayerRenderer.checkRebuild`). It reads every row, so it runs once
@@ -42,7 +42,7 @@
  *   no other feature is drawn otherwise. The rows a sketch moves on the GPU are in its moving set,
  *   which moves by its edit. The features sketches create are not read. Once each notification of
  *   the Store has gone out and each operation of the sketches is done
- * - `sketch-commits`: when a sketch of this client is committed with no write of the Store since
+ * - `sketchCommits`: when a sketch of this client is committed with no write of the Store since
  *   the sketches were last applied, each feature it edits (and creates) that it drew, and that no
  *   sketch with an owner edits, is written with the geometry it was drawn with, to the bit
  *   (over a Store of rows, as the rows read them; the rows drawn on the GPU are not read). At each
@@ -53,7 +53,7 @@
  * drawing marked to be made again and is still making (a chunk being built, styles being
  * resolved again, writes waiting for the next frame).
  *
- * A check that fails throws `DrawError` with the code `invalid-state`, unless it is one of the
+ * A check that fails throws `DrawError` with the code `invalidState`, unless it is one of the
  * checks allowed to fail; every failure is given to `onFailure` first.
  */
 
@@ -76,19 +76,19 @@ export type { ConsistencyCheck, ConsistencyCheckOptions, ConsistencyFailure } fr
  * @internal
  */
 export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = [
-  'id-index',
+  'idIndex',
   'selection',
-  'write-marks',
-  'feature-cache',
+  'writeMarks',
+  'featureCache',
   'drawing',
-  'drawing-writes',
-  'drawing-rebuild',
+  'drawingWrites',
+  'drawingRebuild',
   'sketches',
-  'sketch-commits',
+  'sketchCommits',
 ];
 
 /**
- * The frames drawn between two runs of `drawing-rebuild`, which reads every row (1 runs it each
+ * The frames drawn between two runs of `drawingRebuild`, which reads every row (1 runs it each
  * frame)
  *
  * @internal
@@ -147,7 +147,7 @@ export function checkSketches(target: ConsistencyTarget): string[] {
 
 /**
  * The ids of the rows and the places they are read at, and the containment of the layers of
- * objects (`id-index`)
+ * objects (`idIndex`)
  *
  * @internal
  */
@@ -283,7 +283,7 @@ export function checkSelection(store: Store): string[] {
 
 /**
  * The write marks of a Store of rows: what its frames found since the last check, and the marks
- * of the rows and of their groups now (`write-marks`)
+ * of the rows and of their groups now (`writeMarks`)
  *
  * @internal
  */
@@ -319,7 +319,7 @@ export function checkWriteMarks(store: Store): string[] {
 
 /**
  * The features kept of rows: what the ones given since the last check found, and the ones kept
- * now (`feature-cache`)
+ * now (`featureCache`)
  *
  * @internal
  */
@@ -382,7 +382,7 @@ function hiddenReason(
  */
 export class ConsistencyChecks {
   /**
-   * The frames drawn between two runs of `drawing-rebuild` for the checks made from now on (the
+   * The frames drawn between two runs of `drawingRebuild` for the checks made from now on (the
    * tests set 1, to run it every frame)
    */
   static rebuildEvery = DRAWING_REBUILD_FRAMES;
@@ -402,14 +402,14 @@ export class ConsistencyChecks {
     this.#allowed = new Set(given.allowed ?? []);
     this.#onFailure = given.onFailure;
     // The frames of writes are read as they end, from now on
-    if (this.#run.has('write-marks')) writeMarkKeeperOf(target.store.tables)?.watch();
+    if (this.#run.has('writeMarks')) writeMarkKeeperOf(target.store.tables)?.watch();
     // The features kept are checked as they are given, from now on
-    if (this.#run.has('feature-cache')) {
+    if (this.#run.has('featureCache')) {
       featureTablesInternals(target.store.tables)?.featureCache.watch();
     }
     // The commits of the sketches are checked as they are made
-    if (this.#run.has('sketch-commits')) {
-      target.sketches?.setCommitCheck((problems) => this.#check('sketch-commits', () => problems));
+    if (this.#run.has('sketchCommits')) {
+      target.sketches?.setCommitCheck((problems) => this.#check('sketchCommits', () => problems));
     }
   }
 
@@ -428,23 +428,23 @@ export class ConsistencyChecks {
    * kept (once a notification went out)
    */
   afterNotify(): void {
-    this.#check('id-index', () => checkIdIndex(this.#target.store));
+    this.#check('idIndex', () => checkIdIndex(this.#target.store));
     this.#check('selection', () => checkSelection(this.#target.store));
-    this.#check('write-marks', () => checkWriteMarks(this.#target.store));
-    this.#check('feature-cache', () => checkFeatureCache(this.#target.store));
+    this.#check('writeMarks', () => checkWriteMarks(this.#target.store));
+    this.#check('featureCache', () => checkFeatureCache(this.#target.store));
     this.#check('sketches', () => checkSketches(this.#target));
   }
 
   /**
-   * Runs the checks of what is drawn (once a frame is drawn): `drawing-rebuild` once every few
+   * Runs the checks of what is drawn (once a frame is drawn): `drawingRebuild` once every few
    * frames
    */
   afterFrame(): void {
     const frame = this.#frames++;
     this.#check('drawing', this.#target.checkDrawing);
-    this.#check('drawing-writes', this.#target.checkDrawnWrites);
+    this.#check('drawingWrites', this.#target.checkDrawnWrites);
     if (frame % this.#rebuildEvery === 0) {
-      this.#check('drawing-rebuild', this.#target.checkDrawnRebuild);
+      this.#check('drawingRebuild', this.#target.checkDrawnRebuild);
     }
   }
 
@@ -456,7 +456,7 @@ export class ConsistencyChecks {
     this.#onFailure?.(failure);
     if (this.#allowed.has(check)) return;
     throw new DrawError(
-      'invalid-state',
+      'invalidState',
       `The state does not agree with itself (${check}): ${problems[0]}`,
       { cause: failure },
     );

@@ -162,7 +162,7 @@ export interface GpuParts {
    * The part of a definition, made when it is new.
    *
    * @param owner - The name its resources are recorded under
-   * @throws `DrawError` with the code `invalid-input` for a share out of range, and `too-large` when
+   * @throws `DrawError` with the code `invalidInput` for a share out of range, and `tooLarge` when
    *   the shares come to more than the extensions may take
    */
   add<R>(definition: GpuDefinition<R>, owner: string): GpuPart<R>;
@@ -185,7 +185,7 @@ export function createGpuParts(deps: GpuPartsDeps): GpuParts {
       }
       const share = definition.gpuShare;
       if (typeof share !== 'number' || !(share > 0) || share > 1) {
-        throw new DrawError('invalid-input', 'gpuShare must be above 0 and at most 1');
+        throw new DrawError('invalidInput', 'gpuShare must be above 0 and at most 1');
       }
       if (shares + share > EXTENSIONS_SHARE + SHARE_EPSILON) {
         throw limitError(

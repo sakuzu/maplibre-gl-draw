@@ -114,17 +114,17 @@ export type FeatureType =
  * The name of an interaction mode: one of the seven built-in modes, or a custom mode
  *
  * `select` selects and edits features, and each `draw_*` mode creates one feature type
- * (`draw_line` creates a LineString). Any other string names a custom mode, registered with
+ * (`drawLine` creates a LineString). Any other string names a custom mode, registered with
  * `registerMode` or {@link Plugin.modes}.
  */
 export type Mode =
   | 'select'
-  | 'draw_point'
-  | 'draw_line'
-  | 'draw_polygon'
-  | 'draw_image'
-  | 'draw_circle'
-  | 'draw_freehand'
+  | 'drawPoint'
+  | 'drawLine'
+  | 'drawPolygon'
+  | 'drawImage'
+  | 'drawCircle'
+  | 'drawFreehand'
   | (string & {});
 
 /**

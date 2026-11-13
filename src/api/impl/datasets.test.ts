@@ -80,27 +80,27 @@ describe('the collection', () => {
     expect(datasets.has('shops')).toBe(false);
   });
 
-  it('throws already-exists for a taken ID and invalid-input for wrong options', () => {
+  it('throws alreadyExists for a taken ID and invalidInput for wrong options', () => {
     datasets.add({ id: 'a', rows: [] });
-    expect(codeOf(() => datasets.add({ id: 'a', rows: [] }))).toBe('already-exists');
-    expect(codeOf(() => datasets.add({ id: 'b', table: 5 } as never))).toBe('invalid-input');
+    expect(codeOf(() => datasets.add({ id: 'a', rows: [] }))).toBe('alreadyExists');
+    expect(codeOf(() => datasets.add({ id: 'b', table: 5 } as never))).toBe('invalidInput');
     expect(
       codeOf(() => datasets.add({ id: 'b', rows: [], provider: async () => [] } as never)),
-    ).toBe('invalid-input');
-    expect(codeOf(() => datasets.add({ id: '', rows: [] }))).toBe('invalid-input');
+    ).toBe('invalidInput');
+    expect(codeOf(() => datasets.add({ id: '', rows: [] }))).toBe('invalidInput');
     expect(codeOf(() => datasets.add({ id: 'b', rows: [], order: 'top' as never }))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(
       codeOf(() => datasets.add({ id: 'b', rows: [], baseStyle: { fill: { fillColor: 'nope' } } })),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(codeOf(() => datasets.add({ id: 'b', rows: [], colour: 'red' } as never))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
   });
 
   it('adds an empty dataset, which reorder places at once and setRows fills later', () => {
-    const parcels = datasets.add({ id: 'parcels', order: 'layer-order' });
+    const parcels = datasets.add({ id: 'parcels', order: 'layerOrder' });
     expect(parcels.listRows()).toEqual([]);
     const [layer] = draw.layers.list();
     expect(writesOf(draw).layers.reorder(['parcels', layer.id])).toBe(true);
@@ -122,36 +122,36 @@ describe('the collection', () => {
           { id: 'c', rows: [] },
         ]),
       ),
-    ).toBe('already-exists');
+    ).toBe('alreadyExists');
     expect(
       codeOf(() => datasets.addMany([{ id: 'd', rows: [] }, { id: 'e', rows: 'x' } as never])),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(datasets.list().map((d) => d.id)).toEqual(['a', 'b']);
   });
 
-  it('removes several datasets, all of them or none, and throws not-found for an unknown ID', () => {
+  it('removes several datasets, all of them or none, and throws notFound for an unknown ID', () => {
     datasets.addMany([
       { id: 'a', rows: [] },
       { id: 'b', rows: [] },
     ]);
-    expect(codeOf(() => datasets.remove('none'))).toBe('not-found');
-    expect(codeOf(() => datasets.removeMany(['a', 'none']))).toBe('not-found');
+    expect(codeOf(() => datasets.remove('none'))).toBe('notFound');
+    expect(codeOf(() => datasets.removeMany(['a', 'none']))).toBe('notFound');
     expect(datasets.count()).toBe(2);
     expect(datasets.removeMany(['a', 'b'])).toBe(true);
     expect(datasets.count()).toBe(0);
   });
 
-  it('moves a dataset and throws not-found for an unknown ID', () => {
+  it('moves a dataset and throws notFound for an unknown ID', () => {
     datasets.addMany([
       { id: 'a', rows: [] },
       { id: 'b', rows: [] },
     ]);
     expect(datasets.move('b', { index: 0 })).toBe(true);
     expect(datasets.list().map((d) => d.id)).toEqual(['b', 'a']);
-    expect(datasets.move('a', { order: 'above-store' })).toBe(true);
-    expect(datasets.get('a')?.order).toBe('above-store');
-    expect(codeOf(() => datasets.move('none', {}))).toBe('not-found');
-    expect(codeOf(() => datasets.move('a', { index: -1 }))).toBe('invalid-input');
+    expect(datasets.move('a', { order: 'aboveStore' })).toBe(true);
+    expect(datasets.get('a')?.order).toBe('aboveStore');
+    expect(codeOf(() => datasets.move('none', {}))).toBe('notFound');
+    expect(codeOf(() => datasets.move('a', { index: -1 }))).toBe('invalidInput');
   });
 });
 

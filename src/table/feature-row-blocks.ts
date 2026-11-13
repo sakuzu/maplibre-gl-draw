@@ -86,7 +86,7 @@ export interface FeaturePageBuilder {
   /**
    * Adds a row
    *
-   * @throws an error with the code `invalid-input` when the id was already added, when the
+   * @throws an error with the code `invalidInput` when the id was already added, when the
    *   geometry is not a GeoJSON geometry of one of the six types, or when a value of the style or
    *   the attributes cannot be held (a number that is not finite, a function)
    */
@@ -94,7 +94,7 @@ export interface FeaturePageBuilder {
   /**
    * Puts the rows in the order of the table and cuts them into pages
    *
-   * @throws an error with the code `not-found` when a row names a group the options do not give
+   * @throws an error with the code `notFound` when a row names a group the options do not give
    */
   finish(): Page[];
 }
@@ -239,8 +239,8 @@ function rowsError(error: unknown): unknown {
 /**
  * Creates the builder of the pages of the features of one layer
  *
- * Its methods throw `DrawError`: with the code `invalid-input` when a row is refused (an id added
- * twice, a geometry or a value that cannot be held, more than 255 types), or `not-found` when a
+ * Its methods throw `DrawError`: with the code `invalidInput` when a row is refused (an id added
+ * twice, a geometry or a value that cannot be held, more than 255 types), or `notFound` when a
  * row names a group the options do not give.
  *
  * @internal
@@ -279,8 +279,8 @@ export function createFeaturePageBuilder(
  * Merges rows of pages of the features into new pages, in the order of the layer
  *
  * @returns The new pages (none for no row); their handles are those of the rows
- * @throws `DrawError` with the code `invalid-input` when a source holds styles not numbered yet,
- *   or `not-found` when a row names a group of features the keys do not give
+ * @throws `DrawError` with the code `invalidInput` when a source holds styles not numbered yet,
+ *   or `notFound` when a row names a group of features the keys do not give
  * @internal
  */
 export function mergeFeaturePages(merge: PageMerge): Page[] {

@@ -220,8 +220,8 @@ export function createEngine(
 
   // 2.6 Hit testing with a unified z traversal.
   // Walks the features of the Store and the datasets in a
-  // single stacking order (above-store -> the stacking order from the front ->
-  // below-store) and returns the frontmost one.
+  // single stacking order (aboveStore -> the stacking order from the front ->
+  // belowStore) and returns the frontmost one.
   // The select mode and the interception of the datasets see
   // the same result.
   // The providers of companion rendering and companion hits are held one per
@@ -345,7 +345,7 @@ export function createEngine(
 
   // 5. Set up the ModeManager
   modeManager.registerMode('select', () => new SelectMode());
-  modeManager.registerMode('draw_image', () => new DrawImageMode());
+  modeManager.registerMode('drawImage', () => new DrawImageMode());
 
   // 6.5 Create the host of the extensions of the extension contract, and add the built-in
   // modes written to that contract through it
@@ -373,11 +373,11 @@ export function createEngine(
         : [],
   });
   extensions.collections.modes.addMany([
-    { name: 'draw_point', factory: drawPointMode },
-    { name: 'draw_line', factory: drawLineMode },
-    { name: 'draw_polygon', factory: drawPolygonMode },
-    { name: 'draw_circle', factory: drawCircleMode },
-    { name: 'draw_freehand', factory: drawFreehandMode },
+    { name: 'drawPoint', factory: drawPointMode },
+    { name: 'drawLine', factory: drawLineMode },
+    { name: 'drawPolygon', factory: drawPolygonMode },
+    { name: 'drawCircle', factory: drawCircleMode },
+    { name: 'drawFreehand', factory: drawFreehandMode },
   ]);
 
   // The position of the click being handled, for what a click causes

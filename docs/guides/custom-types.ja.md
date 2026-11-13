@@ -72,7 +72,7 @@ await draw.write((tx) =>
   書きます。そのファイルを読むと、図形の種類にかかわらず型が戻ります
   ([データ形式](../reference/data-format.md))
 - 組み込みの型の名前は使われているので、
-  `draw.extensions.featureTypes.add` はそれらに `already-exists` を
+  `draw.extensions.featureTypes.add` はそれらに `alreadyExists` を
   投げます。組み込みの型の描き方を変えるには、その型を差し替えます
   ([組み込みの型の差し替え](#組み込みの型の差し替え))
 
@@ -235,7 +235,7 @@ ctx.point.draw(
   箱を描く型は、`styleRuleChannel: 'fill'` を宣言します。スタイルに
   その鍵を持つ地物は自分の色のままです
 - `defaultStyle` は地物のスタイルと同じように確かめられ、正しくないものは
-  `invalid-input` で拒まれます。型を足したときに写されるので、変えるには
+  `invalidInput` で拒まれます。型を足したときに写されるので、変えるには
   型を足し直します
 - `defaultStyle` を宣言しない型は、これまでどおり `style` の設定の既定から
   始まります
@@ -905,7 +905,7 @@ const ribbons = (options: { gpuShare: number }): Plugin => ({
 呼び出しの間だけ有効なので、呼び出しごとにそのときのものを渡して
 ください。`null` を渡すと、地形なしで描きます。ライブラリーが渡した
 ものでないオブジェクトを渡すと、`viewUniforms` と同じく、コード
-`invalid-input` の `DrawError` を投げます。
+`invalidInput` の `DrawError` を投げます。
 
 ```ts
 import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
@@ -1056,15 +1056,15 @@ void main() {
 `gpuShare` は `rendering.gpuLimitBytes` に対する割合で、0 より大きく 1 以下
 です。値はプラグインのオプションに置きます。プラグインはバイト数を持ちません。
 足した定義の割合の合計は 0.9 までで、残りはライブラリーのものです。超えると
-`addFeatureRenderer` と `addOverlay` はコード `too-large` の `DrawError` を
+`addFeatureRenderer` と `addOverlay` はコード `tooLarge` の `DrawError` を
 投げます。
 
-割合を超える割り当ては、コード `too-large` の `DrawError` を投げ、何も
+割合を超える割り当ては、コード `tooLarge` の `DrawError` を投げ、何も
 持ちません。`retryable` が true になるのは、インスタンス全体の空きが足りない
 時だけです。`draw.options.update` で `rendering.gpuLimitBytes` を変えると
 すぐに従います。持っているものは解放されず、次の割り当てが断られます。止まった
-`gpu` は `invalid-state` を投げるので、遅れて届いた結果は何も残しません。
-リンクできないプログラムは、ログをメッセージに入れた `invalid-input` を
+`gpu` は `invalidState` を投げるので、遅れて届いた結果は何も残しません。
+リンクできないプログラムは、ログをメッセージに入れた `invalidInput` を
 投げます。
 
 ### GPU に持つ行
@@ -1091,7 +1091,7 @@ void main() {
 ありません。ライブラリーは、断りと中断を時刻で見分けます。
 `stopAtMilliseconds` より前に、渡された行より少ない数で `add` が戻れば、
 残りを断ったことになります。その時刻を過ぎていれば、残りの行は後のフレームで
-渡し直されます。`add` を抜ける `too-large` も断りです。
+渡し直されます。`add` を抜ける `tooLarge` も断りです。
 
 断った行、付き物のある行、`false` を返した範囲は、同じ位置に `render` で
 描かれます。上限に達するとフレームは遅くなりますが、絵は変わりません。行を

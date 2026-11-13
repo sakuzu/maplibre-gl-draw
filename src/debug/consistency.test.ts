@@ -6,13 +6,13 @@
  *
  * - The option is checked, and only given at creation
  * - The checks of the document and of the selection run once each notification of the Store has
- *   gone out, and a failure throws `DrawError` (`invalid-state`) from the write that ended the
+ *   gone out, and a failure throws `DrawError` (`invalidState`) from the write that ended the
  *   transaction; a check allowed to fail is given to `onFailure` and not thrown, a check not run
  *   is not read
  * - Each check finds the state it is about broken
  * - The check of what is drawn runs once a frame is drawn
  * - Edits written by hand, a frame drawn after each, fail no check, those of the drawing of the
- *   rows run every frame (`drawing-writes`, `drawing-rebuild`)
+ *   rows run every frame (`drawingWrites`, `drawingRebuild`)
  * - The sequences of the reference model of the Store run on both Stores with every check on, and
  *   drawn, a frame after each step: the checks that fail now are listed (`KNOWN_BROKEN`)
  * - The checks of the drawing of the rows find a rule of the drawing broken in the test: a write
@@ -127,7 +127,7 @@ describe('the option debug.checks', () => {
     expect(() => createDraw(map, { debug: { checks: 'yes' as never } })).toThrow(DrawError);
     expect(() =>
       createDraw(map, { debug: { checks: { run: ['nothing' as ConsistencyCheck] } } }),
-    ).toThrow(/must be an array of id-index, selection, write-marks, feature-cache, drawing/);
+    ).toThrow(/must be an array of idIndex, selection, writeMarks, featureCache, drawing/);
     expect(() => createDraw(map, { debug: { other: true } as never })).toThrow(DrawError);
     const draw = createDraw(map, { debug: { checks: true } });
     expect(() => draw.options.update({ debug: {} } as never)).toThrow(/only be given when/);
@@ -168,7 +168,7 @@ describe('the option debug.checks', () => {
         thrown = error;
       }
       expect(thrown).toBeInstanceOf(DrawError);
-      expect((thrown as DrawError).code).toBe('invalid-state');
+      expect((thrown as DrawError).code).toBe('invalidState');
       expect((thrown as DrawError).message).toContain('(selection)');
       expect(failures.map((f) => f.check)).toEqual(['selection']);
       // The write was made
@@ -189,7 +189,7 @@ describe('the option debug.checks', () => {
     const only = createTableStore().store;
     const read = vi.fn((): string[] => ['broken']);
     const checks = new ConsistencyChecks(
-      { run: ['id-index'] },
+      { run: ['idIndex'] },
       { store: only, checkDrawing: read, checkDrawnWrites: read, checkDrawnRebuild: read },
     );
     checks.afterFrame();
@@ -198,7 +198,7 @@ describe('the option debug.checks', () => {
 });
 
 describe('each check finds the state it is about broken', () => {
-  it('write-marks: a frame that stamped rows and left the mark, marks past the Store and the group', () => {
+  it('writeMarks: a frame that stamped rows and left the mark, marks past the Store and the group', () => {
     const store = createTableStore().store;
     store.createLayer(layer('a'));
     store.createFeature(point('p', 0));
@@ -224,7 +224,7 @@ describe('each check finds the state it is about broken', () => {
     expect(problems[1]).toContain('past the mark');
   });
 
-  it('feature-cache: a feature kept changed by its reader, a row read where it is not', () => {
+  it('featureCache: a feature kept changed by its reader, a row read where it is not', () => {
     const store = createTableStore().store;
     store.createLayer(layer('a'));
     store.createFeature(point('p', 0));
@@ -257,7 +257,7 @@ describe('each check finds the state it is about broken', () => {
     );
   });
 
-  it('id-index: an item of a layer that names nothing, a member that is not in its group', () => {
+  it('idIndex: an item of a layer that names nothing, a member that is not in its group', () => {
     const items = ['p', 'g', 'gone'];
     const fake = {
       tables: undefined,
@@ -419,7 +419,7 @@ function drawnInstance(
       debug: {
         checks: {
           ...options.checks,
-          allowed: options.allowed ?? ['id-index', 'selection', 'drawing'],
+          allowed: options.allowed ?? ['idIndex', 'selection', 'drawing'],
           onFailure: (failure) => failures.push(failure),
         },
       },
@@ -598,7 +598,7 @@ const DRAWN_EDITS: Readonly<
     })!;
     writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId });
     const edit = (y: number) => ({
-      kind: 'vertex-move' as const,
+      kind: 'vertexMove' as const,
       featureId: l.id,
       vertices: [{ ring: 0, index: 1 }],
       positions: [[0.5, y]],
@@ -684,7 +684,7 @@ const DRAWN_EDITS: Readonly<
  * The checks a failure of which is noted and lets the edits go on (the checks of the drawing of
  * the rows are never allowed to fail on the edits and on the sequences drawn)
  */
-const OLD_CHECKS: ConsistencyCheck[] = ['id-index', 'selection', 'feature-cache', 'drawing'];
+const OLD_CHECKS: ConsistencyCheck[] = ['idIndex', 'selection', 'featureCache', 'drawing'];
 
 /** The edits whose checks fail now, by Store (and drawing), with the checks */
 const KNOWN_DRAWN: Readonly<
@@ -748,7 +748,7 @@ describe('the sequences of the reference model of the Store, with every check on
         const steps = randomSteps(seed, { length: 60 });
         runSteps(steps, () => {
           const { store, failures } = checked(kind === 'objects' ? 'objects' : 'rows', {
-            allowed: ['id-index', 'selection'],
+            allowed: ['idIndex', 'selection'],
             ...(kind === 'rows-bulk' && { selectionIdsLimit: 2 }),
           });
           const subject = storeSubject(store, () => {
@@ -843,7 +843,7 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
     make: (draw: ReturnType<typeof createDraw>, layerId: string) => () => void,
   ): string[] {
     const { draw, failures, frame } = drawnInstance('rows', {
-      allowed: ['id-index', 'selection', 'drawing', 'drawing-writes', 'drawing-rebuild'],
+      allowed: ['idIndex', 'selection', 'drawing', 'drawingWrites', 'drawingRebuild'],
     });
     const layerId = writesOf(draw).layers.create({ name: 'a' })!.id;
     const edit = make(draw, layerId);
@@ -867,7 +867,7 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
     ],
   };
 
-  it('drawing-rebuild: a write of the style of a row is not told to the drawing', () => {
+  it('drawingRebuild: a write of the style of a row is not told to the drawing', () => {
     const rowsWritten = TableLayerRenderer.prototype.rowsWritten;
     vi.spyOn(TableLayerRenderer.prototype, 'rowsWritten').mockImplementation(function (
       this: TableLayerRenderer,
@@ -882,10 +882,10 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
       const l = writesOf(draw).features.create({ type: 'LineString', geometry: line, layerId })!;
       return () => writesOf(draw).features.update(l.id, { style: { strokeColor: '#00aa44' } });
     });
-    expect(failed).toEqual(['drawing-rebuild']);
+    expect(failed).toEqual(['drawingRebuild']);
   });
 
-  it('drawing-rebuild: the styles of the rows are not resolved again for a new style rule', () => {
+  it('drawingRebuild: the styles of the rows are not resolved again for a new style rule', () => {
     vi.spyOn(
       TableLayerRenderer.prototype as unknown as {
         restyleGroup: (
@@ -915,10 +915,10 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
           },
         });
     });
-    expect(failed).toEqual(['drawing-rebuild']);
+    expect(failed).toEqual(['drawingRebuild']);
   });
 
-  it('drawing-writes: a write of the coordinates of a row in place is written wrong', () => {
+  it('drawingWrites: a write of the coordinates of a row in place is written wrong', () => {
     const patchCoords = RowsRenderer.prototype.patchCoords;
     vi.spyOn(RowsRenderer.prototype, 'patchCoords').mockImplementation(function (
       this: RowsRenderer,
@@ -942,7 +942,7 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
           geometry: { type: 'Point', coordinates: [0.3, 0.3] },
         });
     });
-    expect(failed).toEqual(['drawing-rebuild', 'drawing-writes']);
+    expect(failed).toEqual(['drawingRebuild', 'drawingWrites']);
   });
 });
 
@@ -966,7 +966,7 @@ describe('what the drawing keeps of what it writes to the GPU', () => {
   }
 
   it('is nothing without the checks of the drawing of the rows', () => {
-    for (const checks of [false, { run: ['id-index', 'drawing'] }] as const) {
+    for (const checks of [false, { run: ['idIndex', 'drawing'] }] as const) {
       const { chunks, states } = kept(checks === false ? false : { run: [...checks.run] });
       expect(chunks).toBeNull();
       expect(states).toBeNull();
@@ -974,7 +974,7 @@ describe('what the drawing keeps of what it writes to the GPU', () => {
   });
 
   it('is what the GPU holds while one of them runs', () => {
-    for (const run of [['drawing-writes'], ['drawing-rebuild'], undefined] as const) {
+    for (const run of [['drawingWrites'], ['drawingRebuild'], undefined] as const) {
       const { chunks, states } = kept(run ? { run: [...run] } : undefined);
       expect(chunks).not.toBeNull();
       expect(states).not.toBeNull();

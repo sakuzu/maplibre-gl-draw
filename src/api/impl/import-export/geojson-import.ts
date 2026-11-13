@@ -110,7 +110,7 @@ export interface IndexedConversion extends ConvertedFeatureResult {
 /**
  * Converts the features of a GeoJSON FeatureCollection: the step that a load and a parse share
  *
- * A feature that cannot be converted is skipped with `invalid-input` and its reason. The
+ * A feature that cannot be converted is skipped with `invalidInput` and its reason. The
  * embedded images are not decoded yet (see {@link decodeEmbeddedImages}).
  */
 export function convertGeoJSONFeatures(
@@ -124,7 +124,7 @@ export function convertGeoJSONFeatures(
   features.forEach((geoFeature: unknown, index) => {
     const converted = convertGeoJSONToFeature(geoFeature, layerId, generateId, options);
     if ('reason' in converted) {
-      skipped.push({ index, reason: 'invalid-input', detail: converted.reason });
+      skipped.push({ index, reason: 'invalidInput', detail: converted.reason });
     } else {
       for (const result of converted.results) results.push({ ...result, index });
     }
@@ -197,7 +197,7 @@ export async function prepareGeoJSON(
   // Unlike a malformed geometry, a bad image rejects the whole load: the image fields are
   // written only by this library's export, so a bad one means the file was altered, and the
   // load is refused rather than trusted in part. An image the browser cannot encode is refused
-  // as unsupported-format, the same as when an image file is loaded.
+  // as unsupportedFormat, the same as when an image file is loaded.
   const [failure] = await decodeEmbeddedImages(results);
   if (failure) {
     const { result, problem } = failure;
@@ -231,7 +231,7 @@ export async function prepareGeoJSON(
       for (let attempt = 0; isTaken(resolved); attempt++) {
         if (attempt >= MAX_ID_ATTEMPTS) {
           throw new DrawError(
-            'invalid-input',
+            'invalidInput',
             'Failed to generate a unique feature id for the GeoJSON import',
           );
         }

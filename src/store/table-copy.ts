@@ -46,7 +46,7 @@ interface LayerRows {
 /**
  * Copies a document held as rows into a new Store of rows
  *
- * @throws `DrawError` with the code `invalid-input` when the Store does not hold its features as
+ * @throws `DrawError` with the code `invalidInput` when the Store does not hold its features as
  *   rows
  * @internal
  */
@@ -56,7 +56,7 @@ export function copyTableStore(
 ): TableStoreCopyState {
   const internals = featureTablesInternals(source.tables);
   if (!internals || !source.tables) {
-    throw new DrawError('invalid-input', 'The Store to copy does not hold its features as rows');
+    throw new DrawError('invalidInput', 'The Store to copy does not hold its features as rows');
   }
   const { blockRows = PAGE_TARGET_ROWS, ...tableOptions } = options;
   // The computation of the edits of the Store copied (a Store has it, a view of one may not)

@@ -24,7 +24,7 @@ import type { GeometryInput, MultiPolygonCoordinates } from './types.js';
  *   to 3-1024)
  * @returns The Polygon, its ring starting due north of the center and running
  *   counter-clockwise, with the first position repeated at the end
- * @throws {@link GeometryError} (`invalid-input`) when the center is not a position or a
+ * @throws {@link GeometryError} (`invalidInput`) when the center is not a position or a
  *   Point or is not finite, and when the radius is negative or not finite
  */
 export function circle(
@@ -68,8 +68,8 @@ function bufferOf(
  * @returns A Polygon, or a MultiPolygon when the area falls apart. null when nothing remains,
  *   and when a vertex is so close to a pole or an edge so long in longitude (over 180 degrees)
  *   that the area cannot be drawn in longitude and latitude
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a geometry or a
- *   feature with one and when the distance is not a finite number, and (`engine-failure`)
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a geometry or a
+ *   feature with one and when the distance is not a finite number, and (`engineFailure`)
  *   when merging the parts fails
  *
  * @example

@@ -22,8 +22,8 @@ import type { PreparedTable, Table } from './types.js';
 /**
  * Creates the builder of the pages of one layer
  *
- * Its methods throw `DrawError`: with the code `invalid-input` when a row is refused (an id added
- * twice, a geometry or a value that cannot be held, more than 255 types), or `not-found` when a
+ * Its methods throw `DrawError`: with the code `invalidInput` when a row is refused (an id added
+ * twice, a geometry or a value that cannot be held, more than 255 types), or `notFound` when a
  * row names a group the options do not give.
  */
 export function createPageBuilder(options: PageBuilderOptions = {}): FeaturePageBuilder {
@@ -34,8 +34,8 @@ export function createPageBuilder(options: PageBuilderOptions = {}): FeaturePage
  * Merges rows of pages into new pages, in the order of the layer
  *
  * @returns The new pages (none for no row); their handles are those of the rows
- * @throws `DrawError` with the code `invalid-input` when a source holds styles not numbered yet,
- *   or `not-found` when a row names a group of features the keys do not give
+ * @throws `DrawError` with the code `invalidInput` when a source holds styles not numbered yet,
+ *   or `notFound` when a row names a group of features the keys do not give
  */
 export function mergePages(merge: PageMerge): Page[] {
   return mergeFeaturePages(merge);

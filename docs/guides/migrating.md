@@ -53,8 +53,8 @@ Four rules hold everywhere:
 - A method on several items (`createMany`, `deleteMany`, `moveMany`)
   is one transaction: all of them change, or none
 - A wrong argument (an unknown ID, an input of the wrong shape) throws
-  a `DrawError` with a `code` (`not-found`, `already-exists`,
-  `invalid-input`, `unsupported-format`, `invalid-state`). A write
+  a `DrawError` with a `code` (`notFound`, `alreadyExists`,
+  `invalidInput`, `unsupportedFormat`, `invalidState`). A write
   refused because of the state (read-only, a lock) returns `null` or
   `false`. In both cases nothing changes
 - Events are named `resource.pastParticiple`: `feature.created`,
@@ -104,8 +104,8 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map, { defaultMode: 'select' });
 ```
 
-The mode names (`select`, `draw_point`, `draw_line`, `draw_polygon`,
-`draw_circle`, `draw_freehand`, `draw_image`) do not change. `setMode`
+The mode names (`select`, `drawPoint`, `drawLine`, `drawPolygon`,
+`drawCircle`, `drawFreehand`, `drawImage`) do not change. `setMode`
 throws a `DrawError` for a mode it does not know.
 
 ### Features
@@ -177,7 +177,7 @@ import { DrawError } from '@sakuzu/maplibre-gl-draw';
 try {
   draw.features.update(featureId, { visible: false });
 } catch (error) {
-  if (error instanceof DrawError && error.code === 'not-found') {
+  if (error instanceof DrawError && error.code === 'notFound') {
     console.warn('the feature is gone');
   } else {
     throw error;
@@ -554,8 +554,8 @@ and `onRedoVertex`.
 
 ```ts
 // 1.0
-draw.registerMode('draw_marker', () => ({
-  modeName: 'draw_marker',
+draw.registerMode('drawMarker', () => ({
+  modeName: 'drawMarker',
   onStart(context) {},
   onClick(event) {
     context.store.createFeature({ /* ... */ });
@@ -578,7 +578,7 @@ const drawMarker: ModeFactory = (ctx) => ({
     return true;
   },
 });
-draw.extensions.modes.add('draw_marker', drawMarker);
+draw.extensions.modes.add('drawMarker', drawMarker);
 ```
 
 A custom feature type is a `FeatureTypeDefinition`: its `type`, the
@@ -754,7 +754,7 @@ The values of `properties` are `Value`s. A date, a time and the id of
 another feature are values of their own kinds (`CalendarDate`,
 `DateTime`, `TimeOfDay`, `Reference`, ...), which `JSON.stringify`
 writes as their JSON form (`{"$date": text}`). A `Date` is
-refused with `invalid-input`, since it is an instant and a day given as
+refused with `invalidInput`, since it is an instant and a day given as
 one shifts with the time zone: give a date-time or a day of its own. The
 values and their kinds come from `@sakuzu/tabane`, which the library
 depends on.
@@ -822,6 +822,13 @@ const kept = draw.selection.target;
 draw.selection.clear();
 draw.selection.set(kept);
 ```
+
+Every string value of the API is in camelCase. Compare the codes of
+errors, the names of modes and the orders of datasets with their new
+names: `'invalid-input'` is `'invalidInput'`, `'draw_point'` is
+`'drawPoint'`, and `'below-store'` is `'belowStore'`. The reasons a
+sketch ends, the kinds of the edits of vertices (`'vertexMove'`) and the
+checks of `debug.checks` are written the same way.
 
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and
@@ -896,7 +903,7 @@ await draw.write(
   make again the commits of this client, and `features.restore`,
   `features.releaseRestore` and `groups.restore` are gone
 - A write refused because of the state rejects with a `DrawError`, in
-  place of `null` and `false`: `not-editable` while read-only, `locked`
+  place of `null` and `false`: `notEditable` while read-only, `locked`
   for a locked item. A wrong argument rejects as well. Nothing of the
   transaction is committed then
 - `draw.metadata` is `draw.document.title`, `description` and
@@ -916,7 +923,7 @@ group, type, style, visibility and lock are keys of `properties`
 `readFeature(feature)` reads them under short names with the defaults
 filled in. A patch is `{ geometry?, properties?, unset? }`: a key is
 removed by naming it in `unset` (`unset.style` for the keys of the
-style), and a key given `undefined` is refused with `invalid-input`.
+style), and a key given `undefined` is refused with `invalidInput`.
 `featuresToGeoJSON` and `featureToGeoJSON` are gone, as a feature is
 GeoJSON already.
 
@@ -964,7 +971,7 @@ The native format is `4.0.0`: its features are GeoJSON Features, the
 title and the description are fields of the document, and `metadata`
 holds the values of the applications under their own prefix. 3.0 reads
 this version only: a document of the format `3.0.0` or earlier is
-refused with `invalid-input`.
+refused with `invalidInput`.
 
 ### An extension in 3.0
 
@@ -1056,7 +1063,7 @@ drawn. Each change below names what replaces what is gone.
   `gpu.transformFeedback`, `gpu.fence`, `gpu.program` and `gpu.compile` make
   them. `createProgram` is `gpu.program` and is gone from `/webgl`, a
   `QuadShader` is `new QuadShader(gpu, content)`, and a refusal is a
-  `DrawError` with the code `too-large`
+  `DrawError` with the code `tooLarge`
 - The render context has the screen of the view it draws, `ctx.screen` (the
   same object as the `screen` of a plugin), in place of `ctx.zoom` and
   `ctx.pixelRatio`: read `ctx.screen.zoom` and `ctx.screen.pixelRatio`
@@ -1186,7 +1193,7 @@ table below.
 | `new MapboxDraw()`, `map.addControl(draw)` | `createDraw(map)` |
 | `changeMode('simple_select')` | `setMode('select')` |
 | `changeMode('direct_select', ...)` | `setMode('select')` |
-| `changeMode('draw_line_string')` | `setMode('draw_line')` |
+| `changeMode('draw_line_string')` | `setMode('drawLine')` |
 | `add(featureCollection)` | `tx.import(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
@@ -1202,7 +1209,7 @@ table below.
 | terra-draw | This library |
 | --- | --- |
 | `new TerraDraw({ adapter, modes })` | `createDraw(map)` |
-| `setMode('linestring')` | `setMode('draw_line')` |
+| `setMode('linestring')` | `setMode('drawLine')` |
 | `getSnapshot()` | `document.toGeoJSON()` |
 | `addFeatures(features)` | `tx.import(featureCollection)` |
 | `removeFeatures(ids)` | `tx.features.delete(ids)` |

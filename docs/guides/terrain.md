@@ -29,7 +29,7 @@ map.on('load', () => {
 });
 
 const draw = createDraw(map);
-draw.setMode('draw_polygon');
+draw.setMode('drawPolygon');
 ```
 
 The polygon is drawn on the slopes and stays there while the map is

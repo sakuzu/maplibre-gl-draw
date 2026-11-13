@@ -7,7 +7,7 @@
 // It writes as core does: `draw.write(fn)` gives `fn` a transaction whose writes are checked when
 // they are called and kept, and commits them at once after `fn` ends, in a later microtask, then
 // tells `change`. A write that fails fails the whole transaction (nothing is committed), and a
-// write core refuses rejects with `DrawError` (`not-editable` while read-only, `locked` for a
+// write core refuses rejects with `DrawError` (`notEditable` while read-only, `locked` for a
 // locked feature). The writes of the transaction are mocks (`fake.tx`) to assert on, and
 // `fake.settle()` waits for the commits and what the interface does after them.
 
@@ -174,13 +174,13 @@ function placedFeature(f: Feature, layerId: string, groupId: string | undefined)
   return { ...f, properties } as Feature;
 }
 
-const invalid = (message: string) => new DrawError('invalid-input', message);
+const invalid = (message: string) => new DrawError('invalidInput', message);
 
 /**
  * A feature with a patch of core applied: `properties` merged key by key (the style under its key
  * too), then the keys of `unset` removed, and the keys of the defaults dropped as core reads them
  *
- * @throws DrawError `invalid-input` for an empty patch, a key given `undefined` or a key of the place
+ * @throws DrawError `invalidInput` for an empty patch, a key given `undefined` or a key of the place
  */
 function patched(f: Feature, patch: unknown): Feature {
   const p = patch as {
@@ -245,7 +245,7 @@ export interface FakeDocument {
   /** The datasets on the map, from the back */
   datasets?: FakeDatasetSpec[];
   /**
-   * The stacking order from the back, with the IDs of the `layer-order` datasets placed among the
+   * The stacking order from the back, with the IDs of the `layerOrder` datasets placed among the
    * layers; the layers in their order when left out
    */
   order?: string[];
@@ -254,7 +254,7 @@ export interface FakeDocument {
 /** A dataset of the stand-in */
 export interface FakeDatasetSpec {
   id: string;
-  /** `layer-order` when left out */
+  /** `layerOrder` when left out */
   order?: DatasetOrder;
   /** The number of its rows; 0 when left out */
   rows?: number;
@@ -278,7 +278,7 @@ function fakeDataset(spec: FakeDatasetSpec) {
   };
   return {
     id: spec.id,
-    order: spec.order ?? ('layer-order' as DatasetOrder),
+    order: spec.order ?? ('layerOrder' as DatasetOrder),
     interactive: true,
     get visible() {
       return visible;
@@ -352,7 +352,7 @@ interface Doc {
   layers: Map<string, ObjectLayer>;
   groups: Map<string, ObjectGroup>;
   features: Map<string, Feature>;
-  /** The stacking order from the back, datasets of `layer-order` among the layers */
+  /** The stacking order from the back, datasets of `layerOrder` among the layers */
   order: string[];
 }
 
@@ -380,11 +380,11 @@ function insertAt(list: readonly string[], id: string, to: { below?: string; abo
   const out = list.filter((x) => x !== id);
   if (to.below !== undefined) {
     const at = out.indexOf(to.below);
-    if (at === -1) throw new DrawError('not-found', `no item ${to.below} there`);
+    if (at === -1) throw new DrawError('notFound', `no item ${to.below} there`);
     out.splice(at + 1, 0, id);
   } else if (to.above !== undefined) {
     const at = out.indexOf(to.above);
-    if (at === -1) throw new DrawError('not-found', `no item ${to.above} there`);
+    if (at === -1) throw new DrawError('notFound', `no item ${to.above} there`);
     out.splice(at, 0, id);
   } else out.push(id);
   return out;
@@ -395,7 +395,7 @@ function placeOf(d: Doc, to: Placement): { layerId: string; groupId: string | un
   const p = to as { layerId?: string; groupId?: string; below?: string; above?: string };
   if (p.groupId !== undefined) {
     const g = d.groups.get(p.groupId);
-    if (!g) throw new DrawError('not-found', `no group ${p.groupId}`);
+    if (!g) throw new DrawError('notFound', `no group ${p.groupId}`);
     return { layerId: g.layerId, groupId: g.id };
   }
   if (p.layerId !== undefined) return { layerId: p.layerId, groupId: undefined };
@@ -404,7 +404,7 @@ function placeOf(d: Doc, to: Placement): { layerId: string; groupId: string | un
   if (f) return fieldsOf(f);
   const g = d.groups.get(neighbor);
   if (g) return { layerId: g.layerId, groupId: undefined };
-  throw new DrawError('not-found', `no item ${neighbor}`);
+  throw new DrawError('notFound', `no item ${neighbor}`);
 }
 
 // ============================================================================
@@ -575,11 +575,11 @@ export function fakeDraw(
   };
   const featureIn = (d: Doc, id: string) => {
     const f = d.features.get(id);
-    if (!f) throw new DrawError('not-found', `no feature ${id}`);
+    if (!f) throw new DrawError('notFound', `no feature ${id}`);
     return f;
   };
   const requireEditable = () => {
-    if (readOnly) throw new DrawError('not-editable', 'The document is read-only');
+    if (readOnly) throw new DrawError('notEditable', 'The document is read-only');
   };
   const updateOne = (d: Doc, id: string, patch: unknown) => {
     const f = featureIn(d, id);
@@ -646,7 +646,7 @@ export function fakeDraw(
             d.groups.set(groupId, { ...g, featureIds: insertAt(g.featureIds, id, to) });
           } else {
             const l = d.layers.get(layerId);
-            if (!l) throw new DrawError('not-found', `no layer ${layerId}`);
+            if (!l) throw new DrawError('notFound', `no layer ${layerId}`);
             d.layers.set(layerId, { ...l, items: insertAt(l.items, id, to) });
           }
         }
@@ -674,12 +674,12 @@ export function fakeDraw(
       },
       update: (d: Doc, id: string, patch: Partial<ObjectLayer>) => {
         const l = d.layers.get(id);
-        if (!l) throw new DrawError('not-found', `no layer ${id}`);
+        if (!l) throw new DrawError('notFound', `no layer ${id}`);
         d.layers.set(id, { ...l, ...patch });
         return d.layers.get(id) as ObjectLayer;
       },
       place: (d: Doc, id: string, to: { below?: string; above?: string }) => {
-        if (!d.layers.has(id)) throw new DrawError('not-found', `no layer ${id}`);
+        if (!d.layers.has(id)) throw new DrawError('notFound', `no layer ${id}`);
         d.order = insertAt(d.order, id, to);
       },
       /** Deletes layers with their features and groups */
@@ -691,7 +691,7 @@ export function fakeDraw(
               ? (target as readonly string[])
               : [...d.layers.keys()];
         for (const id of list) {
-          if (!d.layers.has(id)) throw new DrawError('not-found', `no layer ${id}`);
+          if (!d.layers.has(id)) throw new DrawError('notFound', `no layer ${id}`);
           for (const f of [...d.features.values()]) {
             if (fieldsOf(f).layerId === id) d.features.delete(f.id);
           }
@@ -725,7 +725,7 @@ export function fakeDraw(
       },
       update: (d: Doc, id: string, patch: Partial<ObjectGroup>) => {
         const g = d.groups.get(id);
-        if (!g) throw new DrawError('not-found', `no group ${id}`);
+        if (!g) throw new DrawError('notFound', `no group ${id}`);
         d.groups.set(id, { ...g, ...patch });
         return d.groups.get(id) as ObjectGroup;
       },
@@ -737,7 +737,7 @@ export function fakeDraw(
         const list = typeof target === 'string' ? [target] : target;
         for (const id of list) {
           const g = d.groups.get(id);
-          if (!g) throw new DrawError('not-found', `no group ${id}`);
+          if (!g) throw new DrawError('notFound', `no group ${id}`);
           const l = d.layers.get(g.layerId) as ObjectLayer;
           const at = l.items.indexOf(id);
           if (options.members === 'delete') deleteFeatures(d, g.featureIds);
@@ -756,7 +756,7 @@ export function fakeDraw(
       },
       place: (d: Doc, id: string, to: Placement) => {
         const g = d.groups.get(id);
-        if (!g) throw new DrawError('not-found', `no group ${id}`);
+        if (!g) throw new DrawError('notFound', `no group ${id}`);
         const { layerId } = placeOf(d, to);
         takeOut(d, id);
         d.groups.set(id, { ...g, layerId });
@@ -764,7 +764,7 @@ export function fakeDraw(
           d.features.set(fid, placedFeature(featureIn(d, fid), layerId, id));
         }
         const l = d.layers.get(layerId);
-        if (!l) throw new DrawError('not-found', `no layer ${layerId}`);
+        if (!l) throw new DrawError('notFound', `no layer ${layerId}`);
         d.layers.set(layerId, { ...l, items: insertAt(l.items, id, to) });
       },
     },
@@ -785,7 +785,7 @@ export function fakeDraw(
     (...args: A) => {
       const open = current;
       if (!open || open.closed) {
-        return Promise.reject(new DrawError('transaction-closed', 'The write has ended'));
+        return Promise.reject(new DrawError('transactionClosed', 'The write has ended'));
       }
       try {
         requireEditable();
@@ -1013,18 +1013,18 @@ export function fakeDraw(
       get: (id: string) => datasets.find((d) => d.id === id),
       // From the back: below the layers, among them, above them
       list: () =>
-        (['below-store', 'layer-order', 'above-store'] as const).flatMap((o) =>
+        (['belowStore', 'layerOrder', 'aboveStore'] as const).flatMap((o) =>
           datasets.filter((d) => d.order === o),
         ),
-      // Its order only, as core: a dataset that leaves `layer-order` leaves the stacking order,
+      // Its order only, as core: a dataset that leaves `layerOrder` leaves the stacking order,
       // and one that joins it goes to the front of it
       move: vi.fn((id: string, placement: { order?: DatasetOrder; index?: number }) => {
         const dataset = datasets.find((d) => d.id === id);
         if (!dataset) throw new Error(`no dataset ${id}`);
         const next = placement.order ?? dataset.order;
-        if (dataset.order === 'layer-order' && next !== 'layer-order') {
+        if (dataset.order === 'layerOrder' && next !== 'layerOrder') {
           doc.order = doc.order.filter((x) => x !== id);
-        } else if (dataset.order !== 'layer-order' && next === 'layer-order') {
+        } else if (dataset.order !== 'layerOrder' && next === 'layerOrder') {
           doc.order = [...doc.order, id];
         }
         dataset.order = next;

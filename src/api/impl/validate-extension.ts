@@ -5,7 +5,7 @@
  * The shape of an extension, checked before it is added
  *
  * `draw.extensions.*.add` hands every value to {@link validateExtension} before anything is
- * installed, so a value of the wrong shape is refused with `DrawError('invalid-input')` and
+ * installed, so a value of the wrong shape is refused with `DrawError('invalidInput')` and
  * nothing is added. The checks follow the contract types: a required member must be there with
  * the right type, and an optional member, when it is given, must have the right type too. The
  * name is checked by the collection itself.
@@ -97,7 +97,7 @@ const SHAPES: Readonly<
 /** The error for a value of the wrong shape */
 function wrongShape(kind: ExtensionKind, message: string, member?: string): DrawError {
   return new DrawError(
-    'invalid-input',
+    'invalidInput',
     member === undefined ? `The ${kind} ${message}` : `The ${kind} ${message} (${member})`,
   );
 }
@@ -234,7 +234,7 @@ function optionalStyleRuleChannel(kind: ExtensionKind, value: Record<string, unk
  * no `transformFields`, no `defaultStyle` and no `styleRuleChannel`, since a built-in type keeps
  * the fields, the defaults and the channel of its own
  *
- * @throws `DrawError` with the code `invalid-input` when it has
+ * @throws `DrawError` with the code `invalidInput` when it has
  * @internal
  */
 export function validateOverride(definition: {
@@ -270,7 +270,7 @@ export function validateOverride(definition: {
  *
  * @param kind - The kind of extension the value is added as
  * @param value - The value given to `add`
- * @throws `DrawError` with the code `invalid-input` when the value does not have the shape
+ * @throws `DrawError` with the code `invalidInput` when the value does not have the shape
  * @internal
  */
 export function validateExtension(kind: ExtensionKind, value: unknown): void {

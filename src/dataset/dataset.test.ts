@@ -161,8 +161,8 @@ function polygon(id: string, offset: number, extra?: Partial<Feature>): DatasetR
 /** Draws and returns the features pushed in the first frame */
 function drawOnce(manager: DatasetManager): Feature[][] {
   const { target, frames } = createBatchTarget();
-  manager.draw('below-store', target, {} as ProjectionData, 10);
-  manager.draw('above-store', target, {} as ProjectionData, 10);
+  manager.draw('belowStore', target, {} as ProjectionData, 10);
+  manager.draw('aboveStore', target, {} as ProjectionData, 10);
   return frames;
 }
 
@@ -248,7 +248,7 @@ describe('adding, removing and replacing a Dataset', () => {
     });
 
     const { batch, polygons } = createRealBatch();
-    manager.draw('below-store', batch, {} as ProjectionData, 10);
+    manager.draw('belowStore', batch, {} as ProjectionData, 10);
 
     expect(polygons.map((p) => p.featureId)).toEqual(['shown']);
   });
@@ -575,7 +575,7 @@ describe('the base style of a Dataset', () => {
       rows: [point('a', [0, 0])],
     });
 
-    const hit = manager.hitTestSide('below-store', [0, 0], 0.1, () => true);
+    const hit = manager.hitTestSide('belowStore', [0, 0], 0.1, () => true);
 
     expect(hit?.feature?.id).toBe('a');
     expect(hit?.feature?.style).toEqual({ pointColor: '#2d7ff9', pointRadius: 6 });
@@ -614,7 +614,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
 
     // The default marker is radius 6 + outline 2 = 8px. The click tolerance is about 2px
     const at = (px: number): string | null =>
-      manager.hitTestSide('below-store', [px * PX, 0], 2 * PX, pointTest)?.feature?.id ?? null;
+      manager.hitTestSide('belowStore', [px * PX, 0], 2 * PX, pointTest)?.feature?.id ?? null;
 
     expect(at(0)).toBe('a');
     expect(at(6)).toBe('a');
@@ -632,7 +632,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
     });
 
     const at = (px: number): string | null =>
-      manager.hitTestSide('below-store', [px * PX, 0], 2 * PX, pointTest)?.feature?.id ?? null;
+      manager.hitTestSide('belowStore', [px * PX, 0], 2 * PX, pointTest)?.feature?.id ?? null;
 
     // Radius 8 + outline 2 = 10px
     expect(at(9)).toBe('a');
@@ -652,7 +652,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
       rows: [point('big', [0, 0], { style: { pointRadius: 20 } })],
     });
 
-    const hit = manager.hitTestSide('below-store', [18 * PX, 0], 2 * PX, pointTest);
+    const hit = manager.hitTestSide('belowStore', [18 * PX, 0], 2 * PX, pointTest);
 
     expect(hit?.feature?.id).toBe('big');
   });
@@ -666,7 +666,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
     });
 
     const tolerances: number[] = [];
-    manager.hitTestSide('below-store', [0, 0], 2 * PX, recordingTest(tolerances));
+    manager.hitTestSide('belowStore', [0, 0], 2 * PX, recordingTest(tolerances));
 
     // The point widens to the size it is drawn at (8px), while the polygon keeps the tolerance
     expect(tolerances).toContain(2 * PX);
@@ -757,7 +757,7 @@ describe('a Dataset and the real batches (Multi and holes)', () => {
     });
 
     const { batch, polygons } = createRealBatch();
-    manager.draw('below-store', batch, {} as ProjectionData, 10);
+    manager.draw('belowStore', batch, {} as ProjectionData, 10);
 
     // 1 feature with a hole + the 2 parts of the MultiPolygon
     expect(polygons).toHaveLength(3);
@@ -777,7 +777,7 @@ describe('a Dataset and the real batches (Multi and holes)', () => {
     });
 
     const { batch, polygons } = createRealBatch();
-    manager.draw('below-store', batch, {} as ProjectionData, 10);
+    manager.draw('belowStore', batch, {} as ProjectionData, 10);
 
     expect(polygons).toHaveLength(1);
     // #ff0000 is resolved as the fill color

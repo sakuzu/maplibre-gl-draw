@@ -64,7 +64,7 @@ describe('a page that cannot be added', () => {
     writer.addPages('layer', groups(3));
     // Its ids are rows already
     expect(() => writer.addPages('layer', [...groups(2, { prefix: 'x' }), ...groups(2)])).toThrow(
-      expect.objectContaining({ code: 'already-exists' }),
+      expect.objectContaining({ code: 'alreadyExists' }),
     );
     expect(tables.get('layer')?.rowCount).toBe(3);
   });

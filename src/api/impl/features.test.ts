@@ -110,8 +110,8 @@ describe('reading', () => {
     expect(features.count({ layerId: 'l2' })).toBe(1);
   });
 
-  it('throws invalid-input for a filter with an unknown key', () => {
-    expect(codeOf(() => features.list({ name: 'x' } as never))).toBe('invalid-input');
+  it('throws invalidInput for a filter with an unknown key', () => {
+    expect(codeOf(() => features.list({ name: 'x' } as never))).toBe('invalidInput');
   });
 
   it('keeps the features shown by themselves, their group and their layer with shown', () => {
@@ -132,7 +132,7 @@ describe('reading', () => {
     // visible stays the feature's own flag
     expect(features.list({ visible: true, shown: false }).map((f) => f.id)).toEqual(['e', 'd']);
     expect(features.count({ shown: true })).toBe(3);
-    expect(codeOf(() => features.list({ shown: 'yes' } as never))).toBe('invalid-input');
+    expect(codeOf(() => features.list({ shown: 'yes' } as never))).toBe('invalidInput');
   });
 });
 
@@ -173,25 +173,25 @@ describe('create', () => {
 
   it('throws the codes of the contract and stores nothing', () => {
     features.create(point('a'));
-    expect(codeOf(() => features.create(point('a')))).toBe('already-exists');
-    expect(codeOf(() => features.create(point('l1')))).toBe('already-exists');
-    expect(codeOf(() => features.create(point('b', { layerId: 'none' })))).toBe('not-found');
-    expect(codeOf(() => features.create(point('b', { groupId: 'none' })))).toBe('not-found');
-    expect(codeOf(() => features.create({ ...point('b'), type: '' }))).toBe('invalid-input');
+    expect(codeOf(() => features.create(point('a')))).toBe('alreadyExists');
+    expect(codeOf(() => features.create(point('l1')))).toBe('alreadyExists');
+    expect(codeOf(() => features.create(point('b', { layerId: 'none' })))).toBe('notFound');
+    expect(codeOf(() => features.create(point('b', { groupId: 'none' })))).toBe('notFound');
+    expect(codeOf(() => features.create({ ...point('b'), type: '' }))).toBe('invalidInput');
     expect(codeOf(() => features.create({ ...point('b'), geometry: square(0, 0, 1, 1) }))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(codeOf(() => features.create(point('b', { style: { fillOpacity: 5 } })))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(codeOf(() => features.create({ ...point('b'), extra: 1 } as never))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
-    expect(codeOf(() => features.create(null as never))).toBe('invalid-input');
+    expect(codeOf(() => features.create(null as never))).toBe('invalidInput');
     expect(features.count()).toBe(1);
   });
 
-  it('throws invalid-input when the group is not in the layer given', () => {
+  it('throws invalidInput when the group is not in the layer given', () => {
     features.create(point('m'));
     store.createGroup({
       id: 'g',
@@ -202,14 +202,14 @@ describe('create', () => {
       locked: false,
     });
     expect(codeOf(() => features.create(point('n', { groupId: 'g', layerId: 'l2' })))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
   });
 
-  it('throws invalid-state when there is no layer to put it in', () => {
+  it('throws invalidState when there is no layer to put it in', () => {
     const empty = new MemoryStore();
     const collection = createFeatures(createResourceDeps(empty));
-    expect(codeOf(() => collection.create(point('a')))).toBe('invalid-state');
+    expect(codeOf(() => collection.create(point('a')))).toBe('invalidState');
   });
 
   it('returns null while read-only and stores nothing', () => {
@@ -230,9 +230,9 @@ describe('createMany', () => {
 
   it('creates none when one input is wrong', () => {
     expect(codeOf(() => features.createMany([point('a'), point('b', { layerId: 'x' })]))).toBe(
-      'not-found',
+      'notFound',
     );
-    expect(codeOf(() => features.createMany([point('a'), point('a')]))).toBe('already-exists');
+    expect(codeOf(() => features.createMany([point('a'), point('a')]))).toBe('alreadyExists');
     expect(features.count()).toBe(0);
   });
 
@@ -267,15 +267,15 @@ describe('update', () => {
     expect(updated?.geometry).toEqual({ type: 'Point', coordinates: [5, 5] });
   });
 
-  it('throws not-found and invalid-input, changing nothing', () => {
-    expect(codeOf(() => features.update('x', { visible: false }))).toBe('not-found');
-    expect(codeOf(() => features.update('a', { layerId: 'l2' } as never))).toBe('invalid-input');
+  it('throws notFound and invalidInput, changing nothing', () => {
+    expect(codeOf(() => features.update('x', { visible: false }))).toBe('notFound');
+    expect(codeOf(() => features.update('a', { layerId: 'l2' } as never))).toBe('invalidInput');
     // The type of a feature cannot change
-    expect(codeOf(() => features.update('a', { type: 'Circle' } as never))).toBe('invalid-input');
+    expect(codeOf(() => features.update('a', { type: 'Circle' } as never))).toBe('invalidInput');
     expect(codeOf(() => features.update('a', { geometry: square(0, 0, 1, 1) }))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
-    expect(codeOf(() => features.update('a', { visible: 'no' } as never))).toBe('invalid-input');
+    expect(codeOf(() => features.update('a', { visible: 'no' } as never))).toBe('invalidInput');
     expect(features.get('a')?.visible).toBe(true);
   });
 
@@ -342,7 +342,7 @@ describe('updateMany', () => {
           { id: 'x', patch: { visible: false } },
         ]),
       ),
-    ).toBe('not-found');
+    ).toBe('notFound');
     store.updateFeature('b', { locked: true });
     notifications.length = 0;
     expect(
@@ -366,8 +366,8 @@ describe('delete and deleteMany', () => {
     expect(features.has('a')).toBe(false);
   });
 
-  it('throws not-found, and refuses a locked feature and read-only', () => {
-    expect(codeOf(() => features.delete('x'))).toBe('not-found');
+  it('throws notFound, and refuses a locked feature and read-only', () => {
+    expect(codeOf(() => features.delete('x'))).toBe('notFound');
     expect(features.delete('c')).toBe(false);
     store.setReadOnly(true);
     expect(features.delete('a')).toBe(false);
@@ -375,7 +375,7 @@ describe('delete and deleteMany', () => {
   });
 
   it('deletes several in one notification, or none', () => {
-    expect(codeOf(() => features.deleteMany(['a', 'x']))).toBe('not-found');
+    expect(codeOf(() => features.deleteMany(['a', 'x']))).toBe('notFound');
     expect(features.deleteMany(['a', 'c'])).toBe(false);
     expect(features.count()).toBe(3);
     notifications.length = 0;
@@ -451,12 +451,12 @@ describe('move and moveMany', () => {
   });
 
   it('throws for a missing feature or target and a wrong target, moving nothing', () => {
-    expect(codeOf(() => features.move('x', { layerId: 'l2' }))).toBe('not-found');
-    expect(codeOf(() => features.moveMany(['a', 'x'], { layerId: 'l2' }))).toBe('not-found');
-    expect(codeOf(() => features.move('a', { layerId: 'x' }))).toBe('not-found');
-    expect(codeOf(() => features.move('a', { groupId: 'x' }))).toBe('not-found');
-    expect(codeOf(() => features.move('a', {} as never))).toBe('invalid-input');
-    expect(codeOf(() => features.move('a', { layerId: 'l2', index: -1 }))).toBe('invalid-input');
+    expect(codeOf(() => features.move('x', { layerId: 'l2' }))).toBe('notFound');
+    expect(codeOf(() => features.moveMany(['a', 'x'], { layerId: 'l2' }))).toBe('notFound');
+    expect(codeOf(() => features.move('a', { layerId: 'x' }))).toBe('notFound');
+    expect(codeOf(() => features.move('a', { groupId: 'x' }))).toBe('notFound');
+    expect(codeOf(() => features.move('a', {} as never))).toBe('invalidInput');
+    expect(codeOf(() => features.move('a', { layerId: 'l2', index: -1 }))).toBe('invalidInput');
     expect(features.get('a')?.layerId).toBe('l1');
   });
 
@@ -495,7 +495,7 @@ describe('isEditable', () => {
     expect(features.isEditable('c')).toBe(false);
     store.setReadOnly(true);
     expect(features.isEditable('a')).toBe(false);
-    expect(codeOf(() => features.isEditable('x'))).toBe('not-found');
+    expect(codeOf(() => features.isEditable('x'))).toBe('notFound');
   });
 });
 
@@ -544,9 +544,9 @@ describe('getAppliedStyle', () => {
           style: { pointStrokeWidth: -1 },
         }),
       ),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(codeOf(() => features.update(point.id, { style: { pointStrokeColor: 'nope' } }))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
   });
 
@@ -654,16 +654,16 @@ describe('the geometry verbs', () => {
     expect(features.buffer(['cut'], { distanceMeters: 0 })).toEqual([]);
   });
 
-  it('throws not-found and invalid-input', () => {
-    expect(codeOf(() => features.union(['a', 'x']))).toBe('not-found');
-    expect(codeOf(() => features.union(['a', 'cut']))).toBe('invalid-input');
-    expect(codeOf(() => features.union(['a']))).toBe('invalid-input');
-    expect(codeOf(() => features.union([]))).toBe('invalid-input');
-    expect(codeOf(() => features.intersection(['a']))).toBe('invalid-input');
-    expect(codeOf(() => features.difference('a', ['a']))).toBe('invalid-input');
-    expect(codeOf(() => features.split('a', 'b'))).toBe('invalid-input');
+  it('throws notFound and invalidInput', () => {
+    expect(codeOf(() => features.union(['a', 'x']))).toBe('notFound');
+    expect(codeOf(() => features.union(['a', 'cut']))).toBe('invalidInput');
+    expect(codeOf(() => features.union(['a']))).toBe('invalidInput');
+    expect(codeOf(() => features.union([]))).toBe('invalidInput');
+    expect(codeOf(() => features.intersection(['a']))).toBe('invalidInput');
+    expect(codeOf(() => features.difference('a', ['a']))).toBe('invalidInput');
+    expect(codeOf(() => features.split('a', 'b'))).toBe('invalidInput');
     expect(codeOf(() => features.buffer(['a'], { distanceMeters: Number.NaN }))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(features.count()).toBe(4);
   });

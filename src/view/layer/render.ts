@@ -35,11 +35,11 @@ import type { TableLayerRenderer } from './table-retained.js';
  * mix of layer ids and dataset ids, and for each entry it does the following.
  *
  * - A layer exists: draw it in retained / immediate mode as before
- * - A dataset whose order is 'layer-order' exists: draw that dataset
+ * - A dataset whose order is 'layerOrder' exists: draw that dataset
  * - Neither of them (an unknown id): skip it (not an error)
  *
  * In addition, datasets (display) have two insertion points outside the layer
- * loop. below-store is drawn before every layer (behind them) and above-store after every layer
+ * loop. belowStore is drawn before every layer (behind them) and aboveStore after every layer
  * (in front of them). Batching uses the same BatchManager as the Store. The per-layer frames
  * (beginFrame / endFrame) are closed inside the loop, so their state never mixes with a frame
  * opened outside it. The batch of a dataset is also closed at a layer boundary, so inserting
@@ -102,8 +102,8 @@ export function renderLayers(
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets
-  // below the order (below-store) are drawn only by the first segment and those above it
-  // (above-store) only by the last segment (the same thing is not drawn once per slot)
+  // below the order (belowStore) are drawn only by the first segment and those above it
+  // (aboveStore) only by the last segment (the same thing is not drawn once per slot)
   const layerOrder = range ? fullOrder.slice(range.from, range.to) : fullOrder;
   const drawBelow = range ? range.first : true;
   const drawAbove = range ? range.last : true;
@@ -153,7 +153,7 @@ export function renderLayers(
 
   // Insertion point 1: behind every layer of the Store
   if (drawBelow) {
-    datasets?.draw('below-store', r.batchManager, defaultProjectionData, zoom, viewportBounds);
+    datasets?.draw('belowStore', r.batchManager, defaultProjectionData, zoom, viewportBounds);
   }
 
   // Group the features by layer id (immediate mode only)
@@ -295,7 +295,7 @@ export function renderLayers(
   // tentative)
   if (drawAbove) {
     beforeEntry?.(ABOVE_STORE_ENTRY);
-    datasets?.draw('above-store', r.batchManager, defaultProjectionData, zoom, viewportBounds);
+    datasets?.draw('aboveStore', r.batchManager, defaultProjectionData, zoom, viewportBounds);
   }
 }
 

@@ -230,7 +230,7 @@ writing it. Its changes are listed after those of 3.0.0.
   with itself (the ids of the rows and the places they are read at, the
   selection, and what the drawing keeps), once each notification of the
   store has gone out and once each draw of the map is done. A check that fails
-  throws `DrawError` with the code `invalid-state`, unless it is allowed
+  throws `DrawError` with the code `invalidState`, unless it is allowed
   to fail; each failure is given to `onFailure`.
 - `ScreenContext.metersPerPixel(lngLat)`: the meters a CSS pixel spans on
   the ground at a position, in the view drawn last, as the engine lays
@@ -271,7 +271,7 @@ writing it. Its changes are listed after those of 3.0.0.
   store applies (`Store.applyEdits`); a rotation of a single feature of a
   `Point` turns it around its position. A store of your own reads them
   with `draw.extensions.featureTypes.get`. A definition given to
-  `override` cannot have them (`invalid-input`).
+  `override` cannot have them (`invalidInput`).
 - `HandleContext`: what the `handles` of a feature type and of a handle
   provider, and `globalHandles`, receive: the screen, the selection box
   the library draws (`selectionBox`, as `draw.rendered.getSelectionBox`
@@ -289,11 +289,11 @@ writing it. Its changes are listed after those of 3.0.0.
   `features.getAppliedStyle` answers it with the color of the layer rule
   (in the channel of the type) and the style of the feature over it. It
   is checked as the style of a feature is, and a definition given to
-  `override` cannot have it (`invalid-input`).
+  `override` cannot have it (`invalidInput`).
 - `FeatureTypeDefinition.styleRuleChannel` (`'fill'`, `'stroke'` or
   `'point'`): the key of the look the color of a layer rule goes to for
   the features of a custom type. A definition given to `override` cannot
-  have it (`invalid-input`).
+  have it (`invalidInput`).
 - `draw.extensions.featureTypes.getStyleRuleChannel(type)`: the channel a
   layer rule colors for a type, built-in or custom (its declaration, or
   the geometry of its definition), the one judgment the library colors
@@ -343,10 +343,18 @@ writing it. Its changes are listed after those of 3.0.0.
   created with an ID given (`create` and `createMany` of the features,
   the groups and the layers, a sketch that creates a feature, the new
   layer and group of a load) that it does not take is refused with
-  `invalid-input` before anything is written.
+  `invalidInput` before anything is written.
 
 ### Changed in 3.0.0
 
+- Every string value of the API is in camelCase: the codes of `DrawError`
+  and `GeometryError` (`invalid-input` is `invalidInput`), the names of the
+  modes (`draw_point` is `drawPoint`), the reasons a sketch ends
+  (`SketchEndReason`), the kinds of the edits of vertices (`vertexMove`,
+  `vertexInsert`, `vertexDelete`), the orders of a dataset (`belowStore`,
+  `aboveStore`, `layerOrder`), the checks of `debug.checks`
+  (`ConsistencyCheck`) and the name of the plugin that shows the snapping
+  (`snapIndicator`)
 - `selection.get()` is `selection.value` (`SelectionValue`): the type, the
   number of the features, their layers and extent, and the IDs, `null` past
   2,000 features in a store that holds its features as rows. Nothing selected
@@ -425,10 +433,10 @@ writing it. Its changes are listed after those of 3.0.0.
   `gpu.rows`, out of the share, under what the device has left (`draw.memory`).
   `gpuShare` is a fraction of
   `rendering.gpuLimitBytes`, above 0 and at most 1, and the shares added may
-  sum to at most 0.9. A refusal is a `DrawError` with the new code `too-large`
+  sum to at most 0.9. A refusal is a `DrawError` with the new code `tooLarge`
   (`retryable` when only the room of the whole instance is short), a `gpu`
-  that stopped throws `invalid-state`, and a program that does not link throws
-  `invalid-input` with the log in the message. The types are in `/webgl`
+  that stopped throws `invalidState`, and a program that does not link throws
+  `invalidInput` with the log in the message. The types are in `/webgl`
   (`Gpu`, `GpuContext`, `GpuDefinition`, `FeatureRenderer`, `OverlayContext`,
   `ProgramCompile`, `RowRef`), which no longer exports `createProgram`, and
   `createRowStateTexture(gpu, rows)` returns the texture or throws.
@@ -447,7 +455,7 @@ writing it. Its changes are listed after those of 3.0.0.
   once (for the type, or for each part of each renderer). The parts of
   `/webgl` that draw on the terrain (`setTerrain`,
   `terrainTessellationStep`, `drawQuadOnTerrain`) throw a
-  `DrawError` with the code `invalid-input` for an object the instance did
+  `DrawError` with the code `invalidInput` for an object the instance did
   not give a renderer, as `viewUniforms` does (`null` still draws without
   terrain); they drew without terrain.
 
@@ -473,7 +481,7 @@ writing it. Its changes are listed after those of 3.0.0.
 - The values of `properties` are `Value`s (`DrawProperties`). A bigint
   is held as a number or a `BigInteger`, a `Uint8Array` as `Bytes`, and
   a `Date`, a `Map`, an instance of another class, a function or a
-  string with a lone surrogate is refused with `invalid-input`.
+  string with a lone surrogate is refused with `invalidInput`.
 - `document.load` of a text keeps an integer outside the range of a
   number as a `BigInteger`, the values of a document of the library are
   read from their JSON form, and a `Reference` to a feature that takes a
@@ -504,7 +512,7 @@ writing it. Its changes are listed after those of 3.0.0.
   another field carries the lists as they are.
 - A store that holds its features as rows refuses what would make or
   place every feature at once: `features.list` without a `limit`, and a
-  place by `index`, throw a `DrawError` with the code `invalid-state`.
+  place by `index`, throw a `DrawError` with the code `invalidState`.
 - `TableGeometry.dimensions` takes the names of GeoArrow (`'xy'`,
   `'xyz'`, `'xym'` or `'xyzm'`, `CoordinateDimensions`) instead of `2` or
   `3`.
@@ -770,6 +778,9 @@ writing it. Its changes are listed after those of 3.0.0.
 | `RenderContext.gl` | `gpu.gl` |
 | `createProgram` of `/webgl` | `gpu.program` |
 | `new QuadShader(gl, ...)` | `new QuadShader(gpu, content)` |
+| `'invalid-input'` and the other codes of errors | `'invalidInput'` and so on |
+| `'draw_point'` and the other names of modes | `'drawPoint'` and so on |
+| `'below-store'` and the other orders of datasets | `'belowStore'` and so on |
 
 ### Added in 2.3.0
 

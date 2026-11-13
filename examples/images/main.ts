@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // images: pictures placed on the map.
-// The Image tool of the toolbar (the mode `draw_image`) asks the page for a file with the option
+// The Image tool of the toolbar (the mode `drawImage`) asks the page for a file with the option
 // requestImage; the page opens a file picker and gives the file, which the library places where
 // the image was asked for. Code places an image by importing a GeoJSON feature of the type Image that
 // carries the picture. The page opens with that image selected, so the panel on the right shows
@@ -24,7 +24,7 @@ const map = new maplibregl.Map({
   center: IMAGE_CENTER,
   zoom: 15.5,
 });
-// 1. The library opens no file dialog. A click in `draw_image` calls requestImage with where the
+// 1. The library opens no file dialog. A click in `drawImage` calls requestImage with where the
 // image goes (the Image tool and the I key give the center of the map at once); the page lets the
 // user pick a file and gives it, and the library places it there, in the active layer at the
 // zoom of the map, as one commit. A picker left without a file gives nothing: the request is stopped by

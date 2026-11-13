@@ -80,7 +80,7 @@ function run(options: {
   /** Whether to re-establish the state after an external renderer (false = before the fix) */
   restore: boolean;
   layerAware?: boolean;
-  /** Whether to put a dataset at above-store */
+  /** Whether to put a dataset at aboveStore */
   dataset?: boolean;
 }): string[] {
   const paintLog: string[] = [];
@@ -144,7 +144,7 @@ function run(options: {
     : undefined;
   manager?.add({
     id: 'data',
-    order: 'above-store',
+    order: 'aboveStore',
     rows: [toRow({ id: 'data-1', type: 'Point', coordinates: [0, 0] })],
   });
 
@@ -201,7 +201,7 @@ describe('ownership of the blend state (renderLayers)', () => {
     expect(log).toEqual(['a@core', 'b@core']);
   });
 
-  it('a dataset (above-store) is drawn with the contract state', () => {
+  it('a dataset (aboveStore) is drawn with the contract state', () => {
     const features = [makeFeature('marker', 'Marker', 'layer-1')];
     const log = run({
       features,

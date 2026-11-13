@@ -77,7 +77,7 @@ changed, saved and read like any other feature.
   whatever the kind of the geometry
   ([data format](../reference/data-format.md))
 - The names of the built-in types are taken:
-  `draw.extensions.featureTypes.add` throws `already-exists` for them.
+  `draw.extensions.featureTypes.add` throws `alreadyExists` for them.
   To change how a built-in type is drawn, override it
   ([overriding a built-in type](#overriding-a-built-in-type))
 
@@ -248,7 +248,7 @@ sketches applied:
   `fillColor` declares `styleRuleChannel: 'fill'`. A feature whose style
   sets the key keeps its own color
 - `defaultStyle` is checked as the style of a feature is, and an invalid
-  one is refused with `invalid-input`. It is copied when the type is
+  one is refused with `invalidInput`. It is copied when the type is
   added: change it by adding the type again
 - A type that declares no `defaultStyle` starts from the defaults of the
   `style` option, as before
@@ -961,7 +961,7 @@ call, or its `terrain`: `setTerrain(ctx)` on a
 The render context is valid for its draw call only, so pass the one of
 each call. Given `null`, they draw without terrain; given an object the
 library did not hand out, they throw a `DrawError` with the code
-`invalid-input`, as `viewUniforms` does.
+`invalidInput`, as `viewUniforms` does.
 
 ```ts
 import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
@@ -1118,15 +1118,15 @@ or the plugin is added again; the rest of the drawing goes on.
 most 1. The value belongs in the options of the plugin, which holds no
 number of bytes. The shares of the definitions added may sum to at most 0.9, as
 the rest stays with the library: past it `addFeatureRenderer` and
-`addOverlay` throw a `DrawError` with the code `too-large`.
+`addOverlay` throw a `DrawError` with the code `tooLarge`.
 
-An allocation past the share throws a `DrawError` with the code `too-large`
+An allocation past the share throws a `DrawError` with the code `tooLarge`
 and holds nothing; its `retryable` is true only when the room of the whole
 instance is short. A change of `rendering.gpuLimitBytes` through
 `draw.options.update` is followed at once: what is held is not released,
 and the next allocation is refused. A `gpu` that has stopped throws
-`invalid-state`, so a result that arrives late leaves nothing behind. A
-program that does not link throws `invalid-input` with the log in the
+`invalidState`, so a result that arrives late leaves nothing behind. A
+program that does not link throws `invalidInput` with the log in the
 message.
 
 ### Rows held on the GPU
@@ -1156,7 +1156,7 @@ by the limit of the device (`draw.memory`), and given back with the range,
 so a range has nothing to release. The library tells a refusal from a stop
 by the clock: `add` back before `stopAtMilliseconds` with fewer rows than
 given refused them, and past it the rows left are given again in a later
-frame. A `too-large` thrown through `add` is a refusal too.
+frame. A `tooLarge` thrown through `add` is a refusal too.
 
 A row refused, a row with a companion and a range that answers `false` are
 drawn by `render` in the same place, so reaching the limit makes frames

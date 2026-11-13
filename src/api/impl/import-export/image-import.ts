@@ -32,7 +32,7 @@ export async function prepareImage(
 ): Promise<PreparedLoad> {
   const coordinate = options.coordinate;
   if (!coordinate) {
-    throw new DrawError('invalid-input', 'Image files require coordinate option');
+    throw new DrawError('invalidInput', 'Image files require coordinate option');
   }
 
   const { store, autoNameGenerator, generateFeatureId, getCurrentLayerId } = deps;
@@ -41,7 +41,7 @@ export async function prepareImage(
     processed = await processImageFile(file);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new DrawError('unsupported-format', `The image cannot be read: ${message}`, {
+    throw new DrawError('unsupportedFormat', `The image cannot be read: ${message}`, {
       cause: error,
     });
   }

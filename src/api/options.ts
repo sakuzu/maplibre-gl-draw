@@ -521,7 +521,7 @@ export interface DebugOptions {
    * and what is drawn, once each draw of the map is done (what the drawing of the rows keeps
    * against a drawing made again from the rows once every few draws; while those checks run, the
    * drawing keeps a copy of what it writes to the GPU). `true` runs every check. A check that
-   * fails throws `DrawError` with the code `invalid-state`, from the write or the transaction
+   * fails throws `DrawError` with the code `invalidState`, from the write or the transaction
    * that ended (or from the draw), unless it is one of the checks allowed to fail.
    */
   checks?: boolean | ConsistencyCheckOptions;
@@ -539,7 +539,7 @@ export interface OptionsResource extends Observable<Readonly<RuntimeOptions>> {
    * Changes the options given: snapping, tracing, shared vertices, the scale of the drawing
    * and the rest of {@link RuntimeOptions}.
    *
-   * @throws `DrawError` with the code `invalid-input` when a value has the wrong type
+   * @throws `DrawError` with the code `invalidInput` when a value has the wrong type
    */
   update(patch: Partial<RuntimeOptions>): void;
 }

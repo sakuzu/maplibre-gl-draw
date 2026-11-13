@@ -99,13 +99,13 @@ describe('the kasane subpath', () => {
     const builder = createPageBuilder();
     const row = { id: 'a', type: 'Point', geometry: null, key: 'a0' };
     builder.addRow(row);
-    expect(codeOf(() => builder.addRow(row))).toBe('invalid-input');
+    expect(codeOf(() => builder.addRow(row))).toBe('invalidInput');
     const { tables, writer } = createFeatureTables();
     expect(codeOf(() => writer.addPages('l', [{ ...builder.finish()[0], length: 0 }]))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(codeOf(() => writer.writeRows({ handles: Int32Array.of(99), fields: new Map() }))).toBe(
-      'not-found',
+      'notFound',
     );
     // A handle given to a new id, written without what a new row needs
     const [handle] = writer.allocateHandles({
@@ -119,7 +119,7 @@ describe('the kasane subpath', () => {
           fields: new Map([['hidden', [false]]]),
         }),
       ),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(codeOf(() => mergePages({ sources: [], rows: Int32Array.of(0, 0) }))).toBeDefined();
     expect(tables.get('l')).toBeUndefined();
   });
@@ -139,9 +139,7 @@ describe('the kasane subpath', () => {
       expect(error).toBeInstanceOf(DrawError);
       const cause = (error as { cause?: unknown }).cause;
       expect(cause).toBeInstanceOf(KasaneError);
-      // The tables write their codes in camelCase, core in kebab-case
-      const kebab = (cause as KasaneError).code.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
-      expect((error as DrawError).code).toBe(kebab);
+      expect((error as DrawError).code).toBe((cause as KasaneError).code);
       expect((error as DrawError).message).toBe((cause as KasaneError).message);
       return { error: error as DrawError, cause: cause as KasaneError };
     };
@@ -151,24 +149,24 @@ describe('the kasane subpath', () => {
     const builder = createPageBuilder();
     builder.addRow(row);
     const twice = wrapped(() => builder.addRow(row));
-    expect(twice.error.code).toBe('invalid-input');
+    expect(twice.error.code).toBe('invalidInput');
     expect(twice.error.message).toBe('PageBuilder: the id "a" is added twice');
     const withFunction = createPageBuilder();
     withFunction.addRow({ ...row, properties: { f: () => 1 } });
     const value = wrapped(() => withFunction.finish());
-    expect(value.error.code).toBe('invalid-input');
+    expect(value.error.code).toBe('invalidInput');
     // An error of Tabane is held by the error of the tables
     expect(value.cause.cause).toBeInstanceOf(TabaneError);
     const grouped = createPageBuilder();
     grouped.addRow({ ...row, group: 7 });
     grouped.addRow({ ...row, id: 'b', group: 7 });
-    expect(wrapped(() => grouped.finish()).error.code).toBe('not-found');
+    expect(wrapped(() => grouped.finish()).error.code).toBe('notFound');
 
     // The merge: a source whose styles are not numbered
     const blocks = builder.finish();
     expect(
       wrapped(() => mergePages({ sources: blocks, rows: Int32Array.of(0, 0) })).error.code,
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
 
     // The writer: values of a row it cannot hold
     const { tables, writer } = createFeatureTables();
@@ -179,17 +177,17 @@ describe('the kasane subpath', () => {
     const surrogate = wrapped(() =>
       writer.writeRows({ handles, fields: new Map([['properties:x', ['\ud800']]]) }),
     );
-    expect(surrogate.error.code).toBe('invalid-input');
+    expect(surrogate.error.code).toBe('invalidInput');
     expect(surrogate.error.message).toBe('ValueOverrides: a string with a lone surrogate');
     const notValue = wrapped(() =>
       writer.writeRows({ handles, fields: new Map([['properties:x', [() => 1]]]) }),
     );
-    expect(notValue.error.code).toBe('invalid-input');
+    expect(notValue.error.code).toBe('invalidInput');
     expect(notValue.cause.cause).toBeInstanceOf(TabaneError);
   });
 
   it('lets through as it is what a function given to the tables throws', () => {
-    const own = new TabaneError('invalid-input', 'an error of the caller');
+    const own = new TabaneError('invalidInput', 'an error of the caller');
     const point = { type: 'Point' as const, coordinates: [1, 2] };
     const builder = createPageBuilder({
       coordinateSystem: {

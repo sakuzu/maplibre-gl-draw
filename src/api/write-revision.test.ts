@@ -146,7 +146,7 @@ describe('an import and a group of one transaction', () => {
       });
       const error = await write.catch((caught: unknown) => caught);
       expect(error).toBeInstanceOf(DrawError);
-      expect((error as DrawError).code).toBe('already-exists');
+      expect((error as DrawError).code).toBe('alreadyExists');
       expect(draw.features.count()).toBe(2);
       expect(draw.groups.count()).toBe(0);
     });

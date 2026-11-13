@@ -131,7 +131,7 @@ const ms = (value: number): string => `${Math.round(value).toLocaleString('en')}
 
 // 3. The cells, 250,000 hexagons over 12 km of the city (made in data.ts), given at once as
 // rows once the map has loaded, without outlines, colored by their value from pale yellow to
-// blue. With the order `layer-order` they stand in the stacking order of the layers, behind
+// blue. With the order `layerOrder` they stand in the stacking order of the layers, behind
 // the survey area. They take no clicks, so the lines drawn snap to the buildings, not to them.
 // The console says how long they took to make, to give and to reach the first draw
 const BY_VALUE: StyleRule = {
@@ -151,7 +151,7 @@ const cellsShown = new Promise<number>((resolve) => {
       rows,
       styleRule: BY_VALUE,
       baseStyle: { fill: { fillOpacity: 0.45, strokeWidth: 0 } },
-      order: 'layer-order',
+      order: 'layerOrder',
     });
     // At the back of the stacking order: just below the entry at the back
     const back = draw.layers.getOrder().find((id) => id !== 'cells');
@@ -197,7 +197,7 @@ const points = draw.datasets.add({
     point: { pointRadius: 2.5, pointStrokeColor: '#ffffff', pointStrokeWidth: 0.5 },
   },
   collisionThinning: THINNING,
-  order: 'above-store',
+  order: 'aboveStore',
   interactive: true,
 });
 
@@ -292,14 +292,14 @@ const buildingsAndPlaces = Promise.all([
   fetchRows('tokyo-buildings.geojson'),
   fetchRows('tokyo-places.geojson'),
 ]).then(([buildings, places]) => {
-  // 7. The buildings, given at once. `layer-order` places the dataset in the stacking order of
+  // 7. The buildings, given at once. `layerOrder` places the dataset in the stacking order of
   // the layers, here between the survey area and the route, in front of the cells
   draw.datasets.add({
     id: 'buildings',
     rows: buildings,
     styleRule: BY_AREA,
     baseStyle: { fill: { fillOpacity: 0.85, strokeColor: '#ffffff', strokeWidth: 0.5 } },
-    order: 'layer-order',
+    order: 'layerOrder',
     interactive: true,
   });
   void draw.write((tx) => tx.layers.place('buildings', { below: survey.id }));
@@ -312,7 +312,7 @@ const buildingsAndPlaces = Promise.all([
     styleRule: byCategory(places),
     baseStyle: { point: { pointRadius: 4, pointStrokeColor: '#ffffff', pointStrokeWidth: 1 } },
     collisionThinning: { enabled: true, fullDisplayZoom: 18, marginPx: 8 },
-    order: 'above-store',
+    order: 'aboveStore',
     interactive: true,
   });
 

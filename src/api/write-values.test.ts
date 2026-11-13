@@ -64,7 +64,7 @@ describe('the values of an application', () => {
     for (const metadata of [{ basemap: 'x' }, { 'app:x': undefined }, { 'app:x': new Date() }]) {
       expect(
         await codeOf(draw.write((tx) => tx.document.update({ metadata: metadata as never }))),
-      ).toBe('invalid-input');
+      ).toBe('invalidInput');
     }
   });
 
@@ -93,7 +93,7 @@ describe('the values of an application', () => {
 describe('the stacking order', () => {
   it('takes a dataset placed among the layers, before it is on the order', async () => {
     const layerId = draw.layers.getActive()?.id as string;
-    draw.datasets.add({ id: 'cells', rows: [], order: 'layer-order' });
+    draw.datasets.add({ id: 'cells', rows: [], order: 'layerOrder' });
     await draw.write((tx) => tx.layers.place('cells', { below: layerId }));
     const order = draw.layers.getOrder();
     expect(order.indexOf('cells')).toBe(order.indexOf(layerId) + 1);
@@ -131,7 +131,7 @@ describe('the format read', () => {
 
   it('refuses a version that has no upgrade', async () => {
     const earlier = { ...draw.document.toJSON(), version: '1.0.0' };
-    expect(await codeOf(draw.open(earlier))).toBe('invalid-input');
+    expect(await codeOf(draw.open(earlier))).toBe('invalidInput');
   });
 
   it('writes the title and the description in the metadata', async () => {
@@ -152,7 +152,7 @@ describe('the image the image mode asks for', () => {
     });
     const changes: unknown[] = [];
     draw.on('change', (change) => changes.push(change));
-    draw.mode.set('draw_image');
+    draw.mode.set('drawImage');
     draw.mode.drawing.add([0, 0]);
     await vi.waitFor(() => expect(draw.features.count()).toBe(1));
     expect(asked).toHaveLength(1);

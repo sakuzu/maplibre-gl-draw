@@ -57,7 +57,7 @@
   //
   // A dataset is a row of the stack, not an item of the document: it has the eye and no lock, and
   // a press on it does nothing (the selection stays). It is dragged among the layers: one in front
-  // of or behind every layer is moved to `layer-order` (`datasets.move`) before the reorder, and
+  // of or behind every layer is moved to `layerOrder` (`datasets.move`) before the reorder, and
   // back to its own order when the reorder is refused. A layer of more
   // features than the limit lists none: its one child counts them, and has no eye, no lock and no
   // grip, and a press on it does nothing. The eye and the lock are drawn here (LayerTree's
@@ -238,14 +238,14 @@
     }
   }
 
-  // A dataset in front of or behind every layer joins the stacking order (layer-order) before the
+  // A dataset in front of or behind every layer joins the stacking order (layerOrder) before the
   // reorder, and goes back to its own order when the reorder is refused
   async function reorderLayers(order: string[], join?: MoveJoin) {
-    if (join) draw.datasets.move(join.id, { order: 'layer-order' });
+    if (join) draw.datasets.move(join.id, { order: 'layerOrder' });
     // Each entry of the stacking order (a layer, a dataset placed among the layers) just above
     // the one before it, from the back, in one commit
     const entries = order.filter(
-      (id) => draw.layers.get(id) !== undefined || draw.datasets.get(id)?.order === 'layer-order',
+      (id) => draw.layers.get(id) !== undefined || draw.datasets.get(id)?.order === 'layerOrder',
     );
     const done = await write(draw, async (tx) => {
       for (let i = 1; i < entries.length; i++) {

@@ -134,12 +134,12 @@ const EVENTS: ReadonlySet<string> = new Set(Object.keys(EVENT_KEYS));
 /**
  * Throws unless the name is one of the events of `draw.on`
  *
- * @throws DrawError `invalid-input` for any other name
+ * @throws DrawError `invalidInput` for any other name
  * @internal
  */
 export function requireEventName(event: unknown): asserts event is keyof DrawEvents {
   if (typeof event !== 'string' || !EVENTS.has(event)) {
-    throw new DrawError('invalid-input', `There is no event ${String(event)}`);
+    throw new DrawError('invalidInput', `There is no event ${String(event)}`);
   }
 }
 
@@ -157,7 +157,7 @@ export function createEventHub(): EventHub {
     once: boolean,
   ): (() => void) => {
     if (typeof listener !== 'function') {
-      throw new DrawError('invalid-input', 'The listener must be a function');
+      throw new DrawError('invalidInput', 'The listener must be a function');
     }
     const entry: Entry = { listener, once };
     const list = listeners.get(event) ?? [];
@@ -234,7 +234,7 @@ export function observe<T>(
     },
     subscribe(run) {
       if (typeof run !== 'function') {
-        throw new DrawError('invalid-input', 'The function to call must be a function');
+        throw new DrawError('invalidInput', 'The function to call must be a function');
       }
       const call = (): void => {
         try {
@@ -847,5 +847,5 @@ function toDrawError(error: unknown): DrawError {
   const wrapped = drawErrorOf(error);
   if (wrapped instanceof DrawError) return wrapped;
   const message = error instanceof Error ? error.message : String(error);
-  return new DrawError('unsupported-format', message, { cause: error });
+  return new DrawError('unsupportedFormat', message, { cause: error });
 }

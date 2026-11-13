@@ -41,43 +41,43 @@ describe('createDraw', () => {
     const other = createDraw(createMapStub().map, {
       store,
       initDefaultLayer: false,
-      defaultMode: 'draw_point',
+      defaultMode: 'drawPoint',
     });
     expect(other.getStore()).toBe(store);
     expect(other.layers.count()).toBe(0);
     other.destroy();
   });
 
-  it('throws invalid-input for an unknown option or a value of the wrong type', () => {
+  it('throws invalidInput for an unknown option or a value of the wrong type', () => {
     const map = createMapStub().map;
     for (const options of [{ unknown: 1 }, { snapping: { enabled: 'yes' } }, { style: 'red' }]) {
       try {
         createDraw(map, options as never);
         expect.unreachable();
       } catch (error) {
-        expect((error as DrawError).code).toBe('invalid-input');
+        expect((error as DrawError).code).toBe('invalidInput');
       }
     }
   });
 });
 
 describe('the mode', () => {
-  it('changes the mode and throws not-found for a mode that does not exist', () => {
+  it('changes the mode and throws notFound for a mode that does not exist', () => {
     expect(draw.getMode()).toBe('select');
-    expect(draw.setMode('draw_line')).toBe(true);
-    expect(draw.getMode()).toBe('draw_line');
+    expect(draw.setMode('drawLine')).toBe(true);
+    expect(draw.getMode()).toBe('drawLine');
     expect(() => draw.setMode('nothing')).toThrow(DrawError);
     try {
       draw.setMode('nothing');
     } catch (error) {
-      expect((error as DrawError).code).toBe('not-found');
+      expect((error as DrawError).code).toBe('notFound');
     }
-    expect(draw.getMode()).toBe('draw_line');
+    expect(draw.getMode()).toBe('drawLine');
   });
 
   it('returns false for a drawing mode under the interaction lock', () => {
     draw.setInteractionLocked(true);
-    expect(draw.setMode('draw_point')).toBe(false);
+    expect(draw.setMode('drawPoint')).toBe(false);
     expect(draw.getMode()).toBe('select');
   });
 });
@@ -97,7 +97,7 @@ describe('read-only and the interaction lock', () => {
   });
 
   it('turns the lock on and back to select, and off again', () => {
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     draw.setInteractionLocked(true);
     expect(draw.isInteractionLocked()).toBe(true);
     expect(draw.getMode()).toBe('select');
@@ -227,10 +227,10 @@ describe('a transaction of the Store, as the internal writes make it', () => {
 });
 
 describe('draw.write', () => {
-  it('fails with invalid-input for options that are not an object, and runs nothing', async () => {
+  it('fails with invalidInput for options that are not an object, and runs nothing', async () => {
     const fn = vi.fn(() => 1);
     const run = async () => draw.write(fn, 'remote' as never);
-    await expect(run()).rejects.toMatchObject({ name: 'DrawError', code: 'invalid-input' });
+    await expect(run()).rejects.toMatchObject({ name: 'DrawError', code: 'invalidInput' });
     expect(fn).not.toHaveBeenCalled();
   });
 });

@@ -21,7 +21,7 @@ import type { EmbeddedFileProblem } from './embedded-file.js';
 import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
 
 function fail(message: string): never {
-  throw new DrawError('invalid-input', `Invalid native data: ${message}`);
+  throw new DrawError('invalidInput', `Invalid native data: ${message}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

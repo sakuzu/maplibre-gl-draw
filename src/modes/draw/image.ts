@@ -19,7 +19,7 @@ import { resolveCommitLayer } from './commit-layer.js';
  * @internal
  */
 export class DrawImageMode implements EngineModeHandler {
-  readonly modeName: Mode = 'draw_image';
+  readonly modeName: Mode = 'drawImage';
   readonly writesFeatures = true;
 
   private context!: EngineModeContext;

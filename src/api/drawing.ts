@@ -47,7 +47,7 @@ export interface DrawingResource {
    * @param position - The position, as `[longitude, latitude]` in degrees
    * @returns True when the mode (or a plugin) took the click; false when no drawing mode is
    *   active or nothing took it
-   * @throws `DrawError` with the code `invalid-input` when the position is not two finite
+   * @throws `DrawError` with the code `invalidInput` when the position is not two finite
    *   numbers
    */
   addVertex(position: Position): boolean;
@@ -57,7 +57,7 @@ export interface DrawingResource {
    * nothing when no drawing mode is active.
    *
    * @param position - The position, as `[longitude, latitude]` in degrees
-   * @throws `DrawError` with the code `invalid-input` when the position is not two finite
+   * @throws `DrawError` with the code `invalidInput` when the position is not two finite
    *   numbers
    */
   moveTo(position: Position): void;
@@ -103,7 +103,7 @@ export interface DrawingResource {
  * and then to the mode. The position is used as it is: nothing snaps it. A click of the image
  * mode asks the application for the image to place there (`requestImage`).
  *
- * Every method throws `DrawError` with the code `invalid-state` when the current mode is no
+ * Every method throws `DrawError` with the code `invalidState` when the current mode is no
  * drawing mode (`commit` rejects with it).
  */
 export interface Drawing<P extends object = Properties> {
@@ -116,7 +116,7 @@ export interface Drawing<P extends object = Properties> {
    * tolerance applies: a vertex a few pixels from the last one is placed.
    *
    * @param at - The position, as `[longitude, latitude]` in degrees
-   * @throws `DrawError` with the code `invalid-input` when the position is not two finite numbers
+   * @throws `DrawError` with the code `invalidInput` when the position is not two finite numbers
    */
   add(at: Position): void;
   /**
@@ -124,7 +124,7 @@ export interface Drawing<P extends object = Properties> {
    * follows it.
    *
    * @param at - The position, as `[longitude, latitude]` in degrees
-   * @throws `DrawError` with the code `invalid-input` when the position is not two finite numbers
+   * @throws `DrawError` with the code `invalidInput` when the position is not two finite numbers
    */
   move(at: Position): void;
   /** Removes the last vertex of the shape being drawn; nothing when there is none */
@@ -137,8 +137,8 @@ export interface Drawing<P extends object = Properties> {
    * (back to select, or on to the next shape when it was set with `repeat`).
    *
    * @returns The write of the feature created
-   * @throws `DrawError` (the promise rejects) with the code `invalid-state` when no shape is being
-   *   drawn or the mode creates nothing from it (too few vertices), `invalid-input` when an option
+   * @throws `DrawError` (the promise rejects) with the code `invalidState` when no shape is being
+   *   drawn or the mode creates nothing from it (too few vertices), `invalidInput` when an option
    *   has the wrong type, or `aborted` when the signal is aborted already
    */
   commit(options?: WriteOptions): Write<Feature<P>>;

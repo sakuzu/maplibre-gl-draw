@@ -63,12 +63,12 @@ type HitTestTopmost = (
 
 The traversal walks from the front to the back:
 
-1. The datasets on the `above-store` side, from the front
+1. The datasets on the `aboveStore` side, from the front
 2. The stacking order (`store.getLayerOrder()`) from its end, which is the
    front. When an entry is a layer, the features of that layer are tested
-   from the front. When it is a dataset with `order: 'layer-order'`,
+   from the front. When it is a dataset with `order: 'layerOrder'`,
    that dataset is tested. An ID that is neither is skipped
-3. The datasets on the `below-store` side, from the front
+3. The datasets on the `belowStore` side, from the front
 
 The first hit ends the traversal. The Store side is hit-tested once per
 call, at the moment the first layer entry is met; its hits are then looked
@@ -692,13 +692,13 @@ where input is dispatched: the InputRouter intercepts the click and the
 - When not a single dataset is visible, the interception returns at
   once and the traversal is not performed
 - The event fires only when the frontmost hit is a dataset. It does not
-  fire when a Store feature is in front. A `below-store` dataset is
+  fire when a Store feature is in front. A `belowStore` dataset is
   blocked by the Store features above it, while a dataset on the
-  `above-store` side, or in front within the stacking order, wins over the
+  `aboveStore` side, or in front within the stacking order, wins over the
   Store features behind it
 - A dataset with `interactive: false` blocks hits but fires nothing
 - Among datasets, front and back are the reverse of the draw order.
-  `above-store` is in front of `below-store`, and a `layer-order`
+  `aboveStore` is in front of `belowStore`, and a `layerOrder`
   dataset is where its entry sits in the stacking order. On the same
   side a dataset added later is in front, and within a dataset a
   feature later in the array is in front

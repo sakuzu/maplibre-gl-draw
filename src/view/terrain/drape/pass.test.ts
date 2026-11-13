@@ -4,8 +4,8 @@
 /**
  * Verification of the element supply of the analytic drape
  *
- * The promise about the stacking order is "datasets (below-store) -> the
- * Store's stack -> datasets (above-store)", and inside the stack layers and
+ * The promise about the stacking order is "datasets (belowStore) -> the
+ * Store's stack -> datasets (aboveStore)", and inside the stack layers and
  * participating datasets are mixed (the same as view/layer/render.ts).
  */
 
@@ -111,11 +111,11 @@ function fakeDataset(
 }
 
 describe('the stacking order of collectDrapeElements', () => {
-  it('lays them out in the order below-store -> the stack -> above-store', () => {
+  it('lays them out in the order belowStore -> the stack -> aboveStore', () => {
     const storeFeature = polygon('store-1', 'layer-1');
     const store = fakeStore([storeFeature], ['layer-1'], new Set(['layer-1']));
-    const below = fakeDataset('below', 'below-store', [polygon('b-1', 'below')]);
-    const above = fakeDataset('above', 'above-store', [polygon('a-1', 'above')]);
+    const below = fakeDataset('below', 'belowStore', [polygon('b-1', 'below')]);
+    const above = fakeDataset('above', 'aboveStore', [polygon('a-1', 'above')]);
 
     const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [
       above,
@@ -134,14 +134,14 @@ describe('the stacking order of collectDrapeElements', () => {
       ['layer-1', 'ext:x', 'layer-2'],
       new Set(['layer-1', 'layer-2']),
     );
-    const below = fakeDataset('below', 'below-store', [polygon('b-1', 'below')]);
-    const above = fakeDataset('above', 'above-store', [polygon('a-1', 'above')]);
+    const below = fakeDataset('below', 'belowStore', [polygon('b-1', 'below')]);
+    const above = fakeDataset('above', 'aboveStore', [polygon('a-1', 'above')]);
 
     const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [
       below,
       above,
     ]);
-    // The stack begins after the single below-store element. A break (ext:x) has a position
+    // The stack begins after the single belowStore element. A break (ext:x) has a position
     // too
     expect(result.entryStarts.get('layer-1')).toBe(1);
     expect(result.entryStarts.get('ext:x')).toBe(2);
@@ -156,7 +156,7 @@ describe('the stacking order of collectDrapeElements', () => {
       ['layer-1', 'coll', 'layer-2'],
       new Set(['layer-1', 'layer-2']),
     );
-    const coll = fakeDataset('coll', 'layer-order', [polygon('c-1', 'coll')]);
+    const coll = fakeDataset('coll', 'layerOrder', [polygon('c-1', 'coll')]);
 
     const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [coll]);
     expect(result.elements.map((e) => e.source)).toEqual([2, 1, 3]);
@@ -176,7 +176,7 @@ describe('the stacking order of collectDrapeElements', () => {
   it('does not put a hidden dataset on', () => {
     const store = fakeStore([], [], new Set());
     const hidden: DrapeDatasetSource = {
-      ...fakeDataset('hidden', 'above-store', [polygon('h-1', 'hidden')]),
+      ...fakeDataset('hidden', 'aboveStore', [polygon('h-1', 'hidden')]),
       visible: false,
     };
     const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [hidden]);
@@ -186,7 +186,7 @@ describe('the stacking order of collectDrapeElements', () => {
 
   it('puts a dataset that was put on into drapedDatasets', () => {
     const store = fakeStore([], [], new Set());
-    const coll = fakeDataset('coll', 'above-store', [polygon('c-1', 'coll')]);
+    const coll = fakeDataset('coll', 'aboveStore', [polygon('c-1', 'coll')]);
     const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [coll]);
     expect([...result.drapedDatasets]).toEqual(['coll']);
   });
@@ -314,7 +314,7 @@ describe('the line width convention', () => {
 describe('the key of the selection highlight', () => {
   it('gives a dataset element a key of the dataset ID and the feature ID', () => {
     const store = fakeStore([], [], new Set());
-    const dataset = fakeDataset('c1', 'above-store', [polygon('a-1', 'c1')]);
+    const dataset = fakeDataset('c1', 'aboveStore', [polygon('a-1', 'c1')]);
 
     const { elements } = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [
       dataset,
@@ -444,7 +444,7 @@ describe('dashed outlines on the drape', () => {
   });
 
   it('puts the dashed features of a dataset on', () => {
-    const dataset = fakeDataset('d-1', 'above-store', [polygon('p-1', 'd-1'), line('l-1', 'd-1')]);
+    const dataset = fakeDataset('d-1', 'aboveStore', [polygon('p-1', 'd-1'), line('l-1', 'd-1')]);
     const store = fakeStore([], [], new Set());
     const { elements } = collectDrapeElements(
       store,

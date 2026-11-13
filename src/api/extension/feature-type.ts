@@ -172,7 +172,7 @@ export interface FeatureTypeDefinition {
    *
    * It is checked as the style of a feature is, and copied when the type is added. A definition
    * given to `override` cannot have it (a built-in type keeps the defaults of the `style`
-   * option): `override` throws `invalid-input`.
+   * option): `override` throws `invalidInput`.
    */
   readonly defaultStyle?: FeatureStyle;
   /**
@@ -186,7 +186,7 @@ export interface FeatureTypeDefinition {
    * A type that draws a box on a Point filled with `fillColor` declares `'fill'` so that the rule
    * colors its fill. `draw.features.getAppliedStyle` and the render context
    * (`ctx.appliedStyle(feature)`) answer with it. A definition given to `override` cannot have it
-   * (a built-in type keeps the channel of its type): `override` throws `invalid-input`.
+   * (a built-in type keeps the channel of its type): `override` throws `invalidInput`.
    */
   readonly styleRuleChannel?: 'fill' | 'stroke' | 'point';
   /**
@@ -273,7 +273,7 @@ export interface FeatureTypeDefinition {
    *
    * Without it, the resize and the rotation change the geometry of the features only, whatever
    * keys they have. A definition given to `override` cannot have it (a built-in type keeps its own
-   * fields): `override` throws `invalid-input`.
+   * fields): `override` throws `invalidInput`.
    */
   readonly transformFields?: TransformFields;
   /**

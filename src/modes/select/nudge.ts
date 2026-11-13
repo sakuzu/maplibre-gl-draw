@@ -138,7 +138,7 @@ export class Nudge {
     try {
       updates = sketches.updatesOf(id);
     } catch (error) {
-      if (!(error instanceof DrawError) || error.code !== 'invalid-input') throw error;
+      if (!(error instanceof DrawError) || error.code !== 'invalidInput') throw error;
       sketches.remove(id);
       return;
     }
@@ -173,7 +173,7 @@ export class Nudge {
     try {
       id = sketches.add({ edits: [editOf(target, from, from)] })?.id ?? null;
     } catch (error) {
-      if (!(error instanceof DrawError) || error.code !== 'invalid-input') throw error;
+      if (!(error instanceof DrawError) || error.code !== 'invalidInput') throw error;
       id = null;
     }
     if (id === null) return null;

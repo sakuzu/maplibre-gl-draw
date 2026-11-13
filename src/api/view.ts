@@ -20,8 +20,8 @@ export interface View {
    * drawn once the document is shown again (`draw.document.setShown`). A source given while
    * another is read replaces it: the one read before is not shown.
    *
-   * @throws `DrawError` (the promise rejects) with the code `unsupported-format` when the source
-   *   cannot be read, `invalid-input` when it is not valid, or `aborted` when the signal stopped it
+   * @throws `DrawError` (the promise rejects) with the code `unsupportedFormat` when the source
+   *   cannot be read, `invalidInput` when it is not valid, or `aborted` when the signal stopped it
    */
   preview(source: OpenSource | null, options?: TaskOptions): Promise<void>;
 }

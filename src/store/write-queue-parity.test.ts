@@ -298,7 +298,7 @@ const CASES: readonly Case[] = [
     run: (s) => {
       s.drag();
       s.note('started');
-      s.store.setMode('draw_point');
+      s.store.setMode('drawPoint');
       s.note('the mode set');
       s.store.setLocallyHidden('l1', true);
       s.note('hidden here');
@@ -429,7 +429,7 @@ const CASES: readonly Case[] = [
     run: (s) => {
       s.restore();
       s.note('started');
-      s.store.setMode('draw_point');
+      s.store.setMode('drawPoint');
       s.note('the mode set');
       s.store.setSelection('feature', ['l2']);
       s.note('selected');

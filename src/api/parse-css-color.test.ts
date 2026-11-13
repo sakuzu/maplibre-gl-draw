@@ -8,7 +8,7 @@
  *   in a new array each time
  * - It answers `null` for a value that is not a color the library reads, whatever its type
  * - It takes exactly the colors the check of a style takes: a color it reads is accepted in the
- *   style of a feature, and a value it does not read is refused with `invalid-input`
+ *   style of a feature, and a value it does not read is refused with `invalidInput`
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -94,7 +94,7 @@ describe('parseCssColor and the check of a style', () => {
         thrown = error;
       }
       expect(thrown).toBeInstanceOf(DrawError);
-      expect((thrown as DrawError).code).toBe('invalid-input');
+      expect((thrown as DrawError).code).toBe('invalidInput');
     }
   });
 });

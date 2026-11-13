@@ -154,7 +154,7 @@ const R: LngLat = [0.5, 0.6];
 describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, makeStore) => {
   it('places a point with a click, in one change, and selects it (DR-1)', () => {
     const view = open(makeStore());
-    expect(view.draw.setMode('draw_point')).toBe(true);
+    expect(view.draw.setMode('drawPoint')).toBe(true);
     clicks(view, P);
     expect(view.changes).toHaveLength(1);
     const [point] = created(view, view.changes);
@@ -166,7 +166,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
 
   it('finishes a line with Enter, in one change, and selects it (DR-2)', () => {
     const view = open(makeStore());
-    view.draw.setMode('draw_line');
+    view.draw.setMode('drawLine');
     clicks(view, P, Q, R);
     expect(view.changes).toHaveLength(0);
     createSyntheticInput(view.engine).key('Enter');
@@ -181,7 +181,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
 
   it('finishes a line with a double click on its last vertex, in one change (DR-2)', () => {
     const view = open(makeStore());
-    view.draw.setMode('draw_line');
+    view.draw.setMode('drawLine');
     clicks(view, P, Q);
     doubleClick(view, R);
     expect(view.changes).toHaveLength(1);
@@ -193,7 +193,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
 
   it('finishes an area with a click on its first vertex, in one change (DR-2)', () => {
     const view = open(makeStore());
-    view.draw.setMode('draw_polygon');
+    view.draw.setMode('drawPolygon');
     clicks(view, P, Q, R, P);
     expect(view.changes).toHaveLength(1);
     const [area] = created(view, view.changes);
@@ -207,7 +207,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
 
   it('places a circle by its center and a point of its edge, in one change (DR-3)', () => {
     const view = open(makeStore());
-    view.draw.setMode('draw_circle');
+    view.draw.setMode('drawCircle');
     clicks(view, P, Q);
     expect(view.changes).toHaveLength(1);
     const [shape] = created(view, view.changes);
@@ -223,7 +223,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
 
   it('draws a freehand stroke with a drag, in one change, and stays (DR-4)', () => {
     const view = open(makeStore());
-    view.draw.setMode('draw_freehand');
+    view.draw.setMode('drawFreehand');
     const router = view.engine.inputRouter;
     const { engine } = view;
     router.dispatch(event<MouseNormalizedEvent>(engine, 'mousemove', P));
@@ -237,7 +237,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(stroke?.type).toBe('Freehand');
     expect(stroke?.geometry.type).toBe('LineString');
     expectPositions(coordinatesOf(stroke), [P, Q, R]);
-    expect(view.draw.getMode()).toBe('draw_freehand');
+    expect(view.draw.getMode()).toBe('drawFreehand');
     expect(view.draw.selection.value.ids).toEqual([]);
   });
 
@@ -250,7 +250,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
         return new Promise<Blob>(() => {});
       },
     });
-    view.draw.mode.set('draw_image');
+    view.draw.mode.set('drawImage');
     view.draw.mode.drawing.add([0, 0]);
     vi.runAllTimers();
     expect(requested).toHaveLength(1);

@@ -255,7 +255,7 @@ export class RowStateSets {
    */
   setMoving(handles: Int32Array, set: number): void {
     if (!Number.isInteger(set) || set < 0 || set > MOVE_SETS) {
-      throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
+      throw new DrawError('invalidInput', `RowStateSets: no moving set ${set}`);
     }
     // The rows counted out of their sets and into this one, each once
     let max = -1;
@@ -340,7 +340,7 @@ export class RowStateSets {
   /** Sets the translation of a moving set (degrees of longitude and latitude) */
   setTranslation(set: number, dLng: number, dLat: number): void {
     if (!Number.isInteger(set) || set < 1 || set > MOVE_SETS) {
-      throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
+      throw new DrawError('invalidInput', `RowStateSets: no moving set ${set}`);
     }
     this.translations[set * 2] = dLng;
     this.translations[set * 2 + 1] = dLat;
@@ -363,7 +363,7 @@ export class RowStateSets {
    */
   setTransform(set: number, transform: EnuEdit | null): void {
     if (!Number.isInteger(set) || set < 1 || set > MOVE_SETS) {
-      throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
+      throw new DrawError('invalidInput', `RowStateSets: no moving set ${set}`);
     }
     this.transforms[set] = transform;
     this.translationRevision++;

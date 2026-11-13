@@ -123,7 +123,7 @@ describe('the moves of features held as rows', () => {
       DrawError,
     );
     expect(() => writesOf(draw).features.move('s0', { layerId: 'rows', index: 2 })).toThrow(
-      expect.objectContaining({ code: 'invalid-state' }),
+      expect.objectContaining({ code: 'invalidState' }),
     );
     expect(items()).toEqual(['s0', 's1', 's2', 's3', 's4']);
   });

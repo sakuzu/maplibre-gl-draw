@@ -175,11 +175,9 @@ export function createGroups(deps: ResourceDeps): GroupResource {
     restore(id) {
       if (typeof id !== 'string') throw invalidInput('The ID must be a string');
       if (store.getGroup(id)) {
-        throw new DrawError(
-          'already-exists',
-          `There is a group with the ID ${JSON.stringify(id)}`,
-          { ids: [id] },
-        );
+        throw new DrawError('alreadyExists', `There is a group with the ID ${JSON.stringify(id)}`, {
+          ids: [id],
+        });
       }
       // A Store of objects keeps no group it deleted; a Store of rows keeps the ones this client
       // deleted, by the token of the deletion, and the ones its deleted rows kept still name
@@ -190,7 +188,7 @@ export function createGroups(deps: ResourceDeps): GroupResource {
       const layer = store.getLayer(layerId);
       if (!layer) throw notFound('layer', layerId);
       if (isTaken(store, id)) {
-        throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+        throw new DrawError('alreadyExists', `The ID ${JSON.stringify(id)} is already taken`, {
           ids: [id],
         });
       }

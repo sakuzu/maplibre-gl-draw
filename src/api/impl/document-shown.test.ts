@@ -162,7 +162,7 @@ describe('another document shown in place of the document', () => {
     input.click([1, 0]);
     expect(draw.selection.value.ids).toEqual(['p1']);
     draw.selection.clear();
-    draw.setMode('draw_point');
+    draw.setMode('drawPoint');
     draw.document.setShown(version().store);
     expect(draw.getMode()).toBe('select');
     // A click is not taken: the map pans and zooms as it does

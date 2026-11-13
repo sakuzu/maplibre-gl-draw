@@ -92,7 +92,7 @@ export interface Filter<P extends object = Properties> {
 
 /**
  * The features a write names by the values of the document: at least one key, and no key given
- * `undefined` (`invalid-input`), so that a filter never names every feature unawares
+ * `undefined` (`invalidInput`), so that a filter never names every feature unawares
  */
 export type Where<P extends object = Properties> = {
   [K in keyof Filter<P>]-?: Required<Pick<Filter<P>, K>> & Partial<Omit<Filter<P>, K>>;
@@ -103,7 +103,7 @@ export interface All {
   readonly all: true;
 }
 
-/** Many features: IDs (not none: `invalid-input`), a filter, the selection, or all of them */
+/** Many features: IDs (not none: `invalidInput`), a filter, the selection, or all of them */
 export type Many<P extends object = Properties> =
   | readonly string[]
   | Where<P>
@@ -159,8 +159,8 @@ export interface Scale {
  * except `features.get` and `has`, which read what it wrote of a feature by its ID.
  *
  * One write of it that fails fails the whole transaction, even when its error is caught: nothing
- * is committed. Once the function has ended, a call fails with `transaction-closed`. A read while
- * one of its writes is still under way (a `tx.import` not awaited) throws `write-not-finished`.
+ * is committed. Once the function has ended, a call fails with `transactionClosed`. A read while
+ * one of its writes is still under way (a `tx.import` not awaited) throws `writeNotFinished`.
  */
 export interface Transaction<P extends object = Properties> {
   /** The ID of the commit it makes */
@@ -240,7 +240,7 @@ export interface TransactionLayers extends LayersCollection {
   delete(target: string | readonly string[] | All): Promise<number>;
   /**
    * Puts a layer just below or above another. An entry of the stacking order that is not a layer
-   * (a dataset whose order is `layer-order`, an entry of the application) is placed the same way,
+   * (a dataset whose order is `layerOrder`, an entry of the application) is placed the same way,
    * and can be the neighbor
    */
   place(id: string, to: Neighbor): Promise<void>;

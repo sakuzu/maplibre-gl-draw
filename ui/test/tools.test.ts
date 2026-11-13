@@ -28,12 +28,12 @@ describe('the built-in tools', () => {
   it('map one to one to the built-in modes of core', () => {
     expect(Object.fromEntries(TOOL_IDS.map((id) => [id, BUILTIN_TOOLS[id].mode]))).toEqual({
       select: 'select',
-      point: 'draw_point',
-      line: 'draw_line',
-      polygon: 'draw_polygon',
-      circle: 'draw_circle',
-      freehand: 'draw_freehand',
-      image: 'draw_image',
+      point: 'drawPoint',
+      line: 'drawLine',
+      polygon: 'drawPolygon',
+      circle: 'drawCircle',
+      freehand: 'drawFreehand',
+      image: 'drawImage',
     });
   });
 
@@ -60,7 +60,7 @@ describe('the built-in tools', () => {
   it('take their names from the words', () => {
     expect(toSpec('polygon', { ...en, polygon: 'Area' })).toEqual({
       id: 'polygon',
-      mode: 'draw_polygon',
+      mode: 'drawPolygon',
       label: 'Area',
       icon: 'polygon',
       shortcut: 'A',

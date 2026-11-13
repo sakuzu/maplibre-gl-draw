@@ -148,7 +148,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const getDraw = (): Draw => {
     if (!attached) {
       throw new DrawError(
-        'invalid-state',
+        'invalidState',
         'The draw instance is not attached to its extensions yet',
       );
     }
@@ -401,7 +401,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
         },
         addFeatureRenderer(featureType, definition) {
           if (!registries.featureTypes.has(featureType)) {
-            throw new DrawError('not-found', `There is no feature type ${featureType}`);
+            throw new DrawError('notFound', `There is no feature type ${featureType}`);
           }
           const part = gpuParts.add(definition, plugin.name);
           const remove = customLayer.registerFeatureRenderer(

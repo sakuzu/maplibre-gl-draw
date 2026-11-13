@@ -113,7 +113,7 @@ The polygon is drawn behind the drawn features, colored by its
 ## Three ways to give the rows
 
 Choose by the form your data is in. Give only one of the three; giving
-two throws a `DrawError` with the code `invalid-input`. With none of them
+two throws a `DrawError` with the code `invalidInput`. With none of them
 the dataset starts empty: it can be placed at once, and its rows come
 later with `setRows` or `setTable`.
 
@@ -424,14 +424,14 @@ parcels.setZoomScale((zoom) => ({
 
 | order | Position | In the layer panel of the standard UI |
 | --- | --- | --- |
-| `below-store` | Behind every layer (the default) | Dropped: `layer-order` |
-| `above-store` | In front of every layer | Dropped: `layer-order` |
-| `layer-order` | At its ID in the stacking order | Dragged in the order |
+| `belowStore` | Behind every layer (the default) | Dropped: `layerOrder` |
+| `aboveStore` | In front of every layer | Dropped: `layerOrder` |
+| `layerOrder` | At its ID in the stacking order | Dragged in the order |
 
-An `above-store` dataset is drawn behind the selection handles. The layer
+An `aboveStore` dataset is drawn behind the selection handles. The layer
 panel of the standard UI lets every dataset be dragged among the layers:
-it moves a `below-store` or `above-store` dataset dropped there to
-`layer-order` with `draw.datasets.move`, then places the layers with
+it moves a `belowStore` or `aboveStore` dataset dropped there to
+`layerOrder` with `draw.datasets.move`, then places the layers with
 `tx.layers.place`; when the write is refused (read-only), the dataset
 goes back to its own order.
 
@@ -445,11 +445,11 @@ again, with the datasets from the back to the front; a move that leaves
 everything where it was tells nothing.
 
 ```ts
-draw.datasets.move('parcels', { order: 'above-store' });
+draw.datasets.move('parcels', { order: 'aboveStore' });
 draw.datasets.move('parcels', { index: 0 }); // backmost of its side
 ```
 
-A `layer-order` dataset is drawn only while its ID is in the stacking
+A `layerOrder` dataset is drawn only while its ID is in the stacking
 order of the document (`draw.getStore().getLayerOrder()`), and it is
 placed by that order alone. The entry comes with a document opened,
 whose stacking order (`layerOrder`) keeps the ID at its position, or from
@@ -460,7 +460,7 @@ neighbor of a layer.
 ```ts
 // Empty until its rows are given with setRows or setTable; drawn at the
 // position of 'parcels' in the stacking order of the document
-draw.datasets.add({ id: 'parcels', order: 'layer-order' });
+draw.datasets.add({ id: 'parcels', order: 'layerOrder' });
 ```
 
 Removing the dataset does not edit the stacking order. An ID left there
@@ -750,7 +750,7 @@ it.
   provider for the part in view and thinned, 250,000 hexagonal cells
   given at once, and the buildings and the places of central Tokyo from
   Overture Maps. The buildings, colored by the area of their footprint,
-  are `layer-order` between two layers of the drawing, and the cells
+  are `layerOrder` between two layers of the drawing, and the cells
   behind them. A click on a row is reported, and the lines drawn snap to
   the buildings
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.md)

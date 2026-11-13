@@ -188,7 +188,7 @@ export class GpuResources implements Gpu {
     const size = typeof data === 'number';
     const bytes = size ? data : data.byteLength;
     if (!Number.isFinite(bytes) || bytes < 0) {
-      throw new DrawError('invalid-input', 'The size of a buffer is a number of bytes');
+      throw new DrawError('invalidInput', 'The size of a buffer is a number of bytes');
     }
     this.#reserve(bytes);
     const target = options?.target ?? gl.ARRAY_BUFFER;
@@ -210,7 +210,7 @@ export class GpuResources implements Gpu {
     this.#open();
     const perTexel = texelBytes(gl, format);
     if (perTexel === undefined) {
-      throw new DrawError('invalid-input', `${format} is not a sized format of a texture`);
+      throw new DrawError('invalidInput', `${format} is not a sized format of a texture`);
     }
     const bytes = levelsBytes(width, height, levels, perTexel);
     this.#reserve(bytes);
@@ -254,7 +254,7 @@ export class GpuResources implements Gpu {
     try {
       program = createProgram(this.#gl, vertex, fragment);
     } catch (error) {
-      throw new DrawError('invalid-input', (error as Error).message);
+      throw new DrawError('invalidInput', (error as Error).message);
     }
     this.#keep(program, 'program', 0);
     return program;
@@ -324,7 +324,7 @@ export class GpuResources implements Gpu {
 
   #open(): void {
     if (this.#closed) {
-      throw new DrawError('invalid-state', `The GPU resources of ${this.#owner} are gone`);
+      throw new DrawError('invalidState', `The GPU resources of ${this.#owner} are gone`);
     }
   }
 
@@ -348,7 +348,7 @@ export class GpuResources implements Gpu {
   /** A context that is lost makes nothing */
   #made<T>(object: T | null): T {
     if (object) return object;
-    throw new DrawError('invalid-state', 'The WebGL context is lost');
+    throw new DrawError('invalidState', 'The WebGL context is lost');
   }
 
   #keep(object: object, kind: GpuObjectKind, bytes: number): void {
@@ -390,7 +390,7 @@ class LinkedProgram implements ProgramCompile {
     try {
       this.#program = this.#link.take();
     } catch (error) {
-      this.#failed = new DrawError('invalid-input', (error as Error).message);
+      this.#failed = new DrawError('invalidInput', (error as Error).message);
       this.#linked(null);
       throw this.#failed;
     }
@@ -401,6 +401,6 @@ class LinkedProgram implements ProgramCompile {
   /** Lets go of a program not taken */
   close(): void {
     this.#link.dispose();
-    this.#failed ??= new DrawError('invalid-state', 'The program was given back before it linked');
+    this.#failed ??= new DrawError('invalidState', 'The program was given back before it linked');
   }
 }

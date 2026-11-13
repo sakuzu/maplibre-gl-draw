@@ -117,7 +117,7 @@ input?.addEventListener('change', async () => {
 ```
 
 - 形式は中身から判断します。ライブラリーの文書でも GeoJSON でもなければ、
-  コード `unsupported-format` の `DrawError` で失敗します
+  コード `unsupportedFormat` の `DrawError` で失敗します
 - ライブラリーの文書の `draw.open` はすべてを置き換え、GeoJSON の
   `draw.open` は地物とグループを置き換えてレイヤーは残します。出どころ
   `'open'` の 1 回の `change` になり、undo の段は捨てられます。読んだ地物の
@@ -125,13 +125,13 @@ input?.addEventListener('change', async () => {
 - `tx.import` は GeoJSON を文書に足します。同じ取引のほかの書き込みと
   一緒に 1 つの確定と undo の 1 段になります。足した地物の数 (`count`)、
   そのレイヤー (`layerId`)、除いた地物 (`skipped`) を返します。ライブラリーの文書は開くだけなので、
-  `tx.import` は `invalid-input` で受け付けません
-- 読み取り専用のあいだは、どちらも `not-editable` で失敗します
+  `tx.import` は `invalidInput` で受け付けません
+- 読み取り専用のあいだは、どちらも `notEditable` で失敗します
 - データは文書を変える前に検証するので、失敗した読み込みでは、描いた
   ものはそのまま残ります
 - ライブラリーの文書は、どこかの形が不正なとき、存在しないものを参照
   しているとき、ライブラリーが書く版 (`4.0.0`) でないときは、全体を
-  受け付けず、コード `invalid-input` で失敗します
+  受け付けず、コード `invalidInput` で失敗します
 - 形状が使えない GeoJSON の地物 (形状が無い、対応していない、
   有限でない数を含む、位置が 1 つだけの線、閉じていないリングなど) は
   除かれ、その番号と `DrawError` が `skipped` に載ります。残りは読みます
@@ -139,8 +139,8 @@ input?.addEventListener('change', async () => {
   不透明度) は捨て、地物は残します
 - 埋め込まれた画像が、宣言した型の PNG、JPEG、WebP、GIF のデータ URL
   でないとき、または画素をデコードできないときは、読み込み全体を
-  `invalid-input` で受け付けません。縮小が必要な画像を、ブラウザーが
-  それらの型で書き出せないときは `unsupported-format` で受け付けません
+  `invalidInput` で受け付けません。縮小が必要な画像を、ブラウザーが
+  それらの型で書き出せないときは `unsupportedFormat` で受け付けません
 - 文書にすでにある ID の地物を取り込むと、新しい ID を振ります
   (`duplicateIds: 'renew'`。省いたときの既定です)。そのため、
   `toGeoJSON()` で書き出したファイルを同じ描画に取り込み直せます。
@@ -262,10 +262,10 @@ await draw.write(async (tx) => {
   そのファイルを持っていません。画像のあるソースは `tx.import` で書きます
 - 地物に名前は付けません。地物は入力の順に並びます
 - `tx.import` なら除く地物と、埋め込まれた画像を取り込めない地物は除き、
-  その番号、コード (`invalid-input`。ブラウザーが書き出せない画像は
-  `unsupported-format`)、理由を `skipped` に載せます。promise が失敗
-  するのは、入力がその形式でないとき (`unsupported-format`) と、
-  `draw.open` なら受け付けないライブラリーの文書のとき (`invalid-input`)
+  その番号、コード (`invalidInput`。ブラウザーが書き出せない画像は
+  `unsupportedFormat`)、理由を `skipped` に載せます。promise が失敗
+  するのは、入力がその形式でないとき (`unsupportedFormat`) と、
+  `draw.open` なら受け付けないライブラリーの文書のとき (`invalidInput`)
   だけです
 
 アプリケーションは、地物を書き込む前に、自分の参照を `idMap` で
@@ -349,7 +349,7 @@ container.addEventListener('drop', async (event) => {
 
 ## 画像
 
-画像は画像のモード `draw_image` が置きます。このモードはオプション
+画像は画像のモード `drawImage` が置きます。このモードはオプション
 `requestImage` でアプリケーションにファイルを求め、このモードで地図を
 クリックした位置に置きます ([描画と編集](drawing.ja.md#画像))。コードから画像を置くときは、
 書き出した GeoJSON と同じ形にします。型が `Image` の地物に、画像を
@@ -466,7 +466,7 @@ ID だけを渡します)、その形の ID を作る `generateId` と一緒に
 渡します。`tx.import` は、ストアが受けない ID の地物、グループ、
 レイヤーに新しい ID を付けます。そのような ID で地物、グループ、
 レイヤーを作ると (`id` を付けた `tx.features.create` など)、何も書かずに
-`invalid-input` で拒みます。
+`invalidInput` で拒みます。
 
 ストアが持つ文書は、`document.toJSON()` が書き出すものと同じです。形は
 [データ形式のリファレンス](../reference/data-format.md) にあります。

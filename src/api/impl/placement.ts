@@ -62,7 +62,7 @@ function optionalNeighbor(value: unknown, name: string): string | null | undefin
 /**
  * Checks a move target and looks up what it names
  *
- * @throws DrawError `invalid-input` for a target of the wrong shape, `not-found` for a layer
+ * @throws DrawError `invalidInput` for a target of the wrong shape, `notFound` for a layer
  *   or a group that does not exist
  * @internal
  */
@@ -115,7 +115,7 @@ export function resolveMoveTarget(store: Store, to: MoveTarget): ResolvedTarget 
 /**
  * The place of a target in a layer or a group, by the items around it
  *
- * @throws DrawError `invalid-state` for a position by index in a layer held as rows
+ * @throws DrawError `invalidState` for a position by index in a layer held as rows
  *
  * @internal
  */
@@ -214,7 +214,7 @@ export function moveGroups(
  *
  * @returns false when the move is refused (read-only, the interaction lock, a feature or the
  *   target locked)
- * @throws DrawError `invalid-state` for a position by index in a layer held as rows
+ * @throws DrawError `invalidState` for a position by index in a layer held as rows
  * @internal
  */
 export function moveBulkSelection(store: Store, to: MoveTarget): boolean {
@@ -237,7 +237,7 @@ export function moveBulkSelection(store: Store, to: MoveTarget): boolean {
   }
   const blocks = groupBlocks(store, rows);
   if (target.index !== undefined && blocks.length > 0) {
-    // Raises invalid-state: a layer held as rows takes a place by the items around it
+    // Raises invalidState: a layer held as rows takes a place by the items around it
     placementOf(store, blocks[0].layerId, undefined, { index: target.index }, new Set());
   }
   store.transact(() => {

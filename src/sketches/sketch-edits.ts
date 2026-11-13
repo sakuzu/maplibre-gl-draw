@@ -31,7 +31,7 @@ export type CreateEdit = Extract<SketchEdit, { kind: 'create' }>;
 type FeaturesEdit = Extract<FeatureEdit, { kind: TransformEdit['kind'] }>;
 
 /** The edits of the vertices of one feature */
-type VertexEdit = Extract<FeatureEdit, { kind: 'vertex-move' | 'vertex-insert' | 'vertex-delete' }>;
+type VertexEdit = Extract<FeatureEdit, { kind: 'vertexMove' | 'vertexInsert' | 'vertexDelete' }>;
 
 /** The keys of an edit `create` */
 const CREATE_KEYS: readonly string[] = [
@@ -87,7 +87,7 @@ export function isSelectionEdit(edit: SketchEdit): boolean {
  * vertices taken. The feature of a `create` is checked when it is made (`prepareFeature`).
  *
  * @param vertexIds Whether the Store gives its vertices IDs (an ID of a vertex is taken then)
- * @throws DrawError `invalid-input` when an edit has the wrong shape or values the computation
+ * @throws DrawError `invalidInput` when an edit has the wrong shape or values the computation
  *   does not take
  * @internal
  */
@@ -181,9 +181,7 @@ export function featureIdsOfEdit(
  * @internal
  */
 export function isVertexEdit(edit: SketchEdit): edit is VertexEdit {
-  return (
-    edit.kind === 'vertex-move' || edit.kind === 'vertex-insert' || edit.kind === 'vertex-delete'
-  );
+  return edit.kind === 'vertexMove' || edit.kind === 'vertexInsert' || edit.kind === 'vertexDelete';
 }
 
 /**
@@ -237,7 +235,7 @@ export function withoutVertices(
       out.push(edit);
       continue;
     }
-    if (edit.kind === 'vertex-insert') {
+    if (edit.kind === 'vertexInsert') {
       if (keep((edit.after ?? edit.before) as VertexTarget)) out.push(edit);
       else dropped++;
       continue;
@@ -255,11 +253,11 @@ export function withoutVertices(
 
 /** An edit of vertices with the vertices at the indices given only */
 function keptVertices(
-  edit: Extract<VertexEdit, { kind: 'vertex-move' | 'vertex-delete' }>,
+  edit: Extract<VertexEdit, { kind: 'vertexMove' | 'vertexDelete' }>,
   kept: readonly number[],
 ): SketchEdit {
   const vertices = kept.map((i) => edit.vertices[i]);
-  if (edit.kind === 'vertex-delete') return { ...edit, vertices };
+  if (edit.kind === 'vertexDelete') return { ...edit, vertices };
   return { ...edit, vertices, positions: kept.map((i) => edit.positions[i]) };
 }
 
@@ -273,7 +271,7 @@ export function verticesOf(edits: readonly SketchEdit[], featureId: string): Ver
   const out: VertexTarget[] = [];
   for (const edit of edits) {
     if (!isVertexEdit(edit) || edit.featureId !== featureId) continue;
-    if (edit.kind === 'vertex-insert') out.push((edit.after ?? edit.before) as VertexTarget);
+    if (edit.kind === 'vertexInsert') out.push((edit.after ?? edit.before) as VertexTarget);
     else out.push(...edit.vertices);
   }
   return out;
@@ -292,7 +290,7 @@ export function mapVertices(
 ): SketchEdit[] {
   return edits.map((edit) => {
     if (!isVertexEdit(edit) || edit.featureId !== featureId) return edit;
-    if (edit.kind === 'vertex-insert') {
+    if (edit.kind === 'vertexInsert') {
       return edit.after !== undefined
         ? { ...edit, after: replace(edit.after) }
         : { ...edit, before: replace(edit.before as VertexTarget) };
@@ -381,7 +379,7 @@ export function featureEditsOf(
 
 /** The error for an input of the wrong shape or value */
 function invalidInput(message: string): DrawError {
-  return new DrawError('invalid-input', message);
+  return new DrawError('invalidInput', message);
 }
 
 /** Whether the value is a plain object (not null, not an array) */

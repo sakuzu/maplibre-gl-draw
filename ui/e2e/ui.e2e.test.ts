@@ -68,10 +68,10 @@ describe('the toolbar', () => {
     const bar = page.locator('[data-role="drawbar"]');
 
     await bar.getByRole('button', { name: 'Polygon', exact: true }).click();
-    expect(await mode()).toBe('draw_polygon');
+    expect(await mode()).toBe('drawPolygon');
 
     await page.keyboard.press('l');
-    expect(await mode()).toBe('draw_line');
+    expect(await mode()).toBe('drawLine');
 
     // The first vertex of a line, on an empty part of the map, gives the canvas the focus
     const empty = await pageOf(page, [139.79, 35.665]);
@@ -80,7 +80,7 @@ describe('the toolbar', () => {
     // Escape drops the line being drawn, then leaves the tool
     await page.keyboard.press('Escape');
     await settle(page);
-    expect(await mode()).toBe('draw_line');
+    expect(await mode()).toBe('drawLine');
     await page.keyboard.press('Escape');
     await settle(page);
     expect(await mode()).toBe('select');
@@ -442,7 +442,7 @@ describe('the layer panel', () => {
   it('drags a dataset added with the default order among the layers', async () => {
     page = await openPage(browser, site);
     const panel = page.locator('[data-role="layer-panel"]');
-    // Two datasets behind every layer (below-store, the default of datasets.add); the later one
+    // Two datasets behind every layer (belowStore, the default of datasets.add); the later one
     // in front
     const layerId = await page.evaluate(() => {
       const w = window as unknown as E2EWindow;
@@ -486,8 +486,8 @@ describe('the layer panel', () => {
       });
     await until(placed, {
       order: [layerId, 'roads'],
-      roads: 'layer-order',
-      parcels: 'below-store',
+      roads: 'layerOrder',
+      parcels: 'belowStore',
     });
     await until(
       () => roots.evaluateAll((els) => els.map((el) => el.getAttribute('data-node'))),

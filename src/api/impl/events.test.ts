@@ -278,7 +278,7 @@ describe('change', () => {
     draw.on('change', (change) => received.push(change));
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([0, 0]);
     draw.drawing.moveTo([1, 1]);
     draw.setMode('select');
@@ -445,11 +445,11 @@ describe('the observables of the state of this client', () => {
     const values = told(draw.mode);
     const heard: string[] = [];
     const stop = draw.mode.subscribe((mode) => heard.push(mode));
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     stop();
     draw.setMode('select');
-    expect(values).toEqual(['select', 'draw_polygon', 'select']);
-    expect(heard).toEqual(['select', 'draw_polygon']);
+    expect(values).toEqual(['select', 'drawPolygon', 'select']);
+    expect(heard).toEqual(['select', 'drawPolygon']);
     expect(draw.mode.value).toBe('select');
   });
 
@@ -561,7 +561,7 @@ describe('the signals of the engine', () => {
     expect(failure.source).toBe('image');
     expect(failure.featureId).toBe('img');
     expect(failure.error).toBeInstanceOf(DrawError);
-    expect(failure.error.code).toBe('unsupported-format');
+    expect(failure.error.code).toBe('unsupportedFormat');
     expect((failure.error as { cause?: unknown }).cause).toBe(cause);
   });
 
@@ -584,7 +584,7 @@ describe('the signals of the engine', () => {
     expect(clicks[1]).toEqual({ lngLat: [-0.5, -0.5], point: [350, 350], hit: null });
 
     // Not in a drawing mode
-    draw.setMode('draw_point');
+    draw.setMode('drawPoint');
     input.click([0.5, 0.5]);
     expect(payloadsOf(signals, 'map.clicked')).toHaveLength(2);
   });
@@ -698,7 +698,7 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
     );
 
   it('is told at each change, and ends committed with the feature it creates', () => {
-    local.setMode('draw_line');
+    local.setMode('drawLine');
     const input = createSyntheticInput(engine);
     const signals = record(local);
     input.click([0, 0]);
@@ -731,7 +731,7 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
   });
 
   it('ends cancelled once when the drawing is cancelled, and nothing when there was none', () => {
-    local.setMode('draw_line');
+    local.setMode('drawLine');
     const input = createSyntheticInput(engine);
     const signals = record(local);
     input.click([0, 0]);
@@ -792,7 +792,7 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
   });
 
   it('holds the placed vertices of a built-in line', () => {
-    local.setMode('draw_line');
+    local.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.5, 0.5]);
@@ -802,7 +802,7 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
   });
 
   it('holds the radius of a circle', () => {
-    local.setMode('draw_circle');
+    local.setMode('drawCircle');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.01, 0]);

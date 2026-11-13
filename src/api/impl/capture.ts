@@ -32,7 +32,7 @@ function pageCanvas(width: number, height: number): CaptureCanvas {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d');
-    if (!context) throw new DrawError('invalid-state', 'A canvas of 2D cannot be made here');
+    if (!context) throw new DrawError('invalidState', 'A canvas of 2D cannot be made here');
     return {
       draw: (source, sx, sy, sw, sh) =>
         context.drawImage(source, sx, sy, sw, sh, 0, 0, width, height),
@@ -43,7 +43,7 @@ function pageCanvas(width: number, height: number): CaptureCanvas {
   if (typeof OffscreenCanvas !== 'undefined') {
     const canvas = new OffscreenCanvas(width, height);
     const context = canvas.getContext('2d');
-    if (!context) throw new DrawError('invalid-state', 'A canvas of 2D cannot be made here');
+    if (!context) throw new DrawError('invalidState', 'A canvas of 2D cannot be made here');
     return {
       draw: (source, sx, sy, sw, sh) =>
         context.drawImage(source, sx, sy, sw, sh, 0, 0, width, height),
@@ -51,7 +51,7 @@ function pageCanvas(width: number, height: number): CaptureCanvas {
         canvas.convertToBlob({ type, ...(quality !== undefined && { quality }) }),
     };
   }
-  throw new DrawError('invalid-state', 'There is no canvas to copy the map onto here');
+  throw new DrawError('invalidState', 'There is no canvas to copy the map onto here');
 }
 
 /** The options checked */
@@ -123,7 +123,7 @@ export function captureImage(
         canvas.draw(source, (fullWidth - sw) / 2, (fullHeight - sh) / 2, sw, sh);
       } catch (error) {
         setEditingHidden(false);
-        reject(error instanceof DrawError ? error : new DrawError('invalid-state', String(error)));
+        reject(error instanceof DrawError ? error : new DrawError('invalidState', String(error)));
         return;
       }
       // The pixels are copied: the next frames draw the state of this client again
@@ -131,13 +131,10 @@ export function captureImage(
       canvas.encode(type, checked.quality).then(
         (blob) => {
           if (blob) resolve(blob);
-          else
-            reject(new DrawError('invalid-state', `An image of the type ${type} cannot be made`));
+          else reject(new DrawError('invalidState', `An image of the type ${type} cannot be made`));
         },
         (error) =>
-          reject(
-            error instanceof DrawError ? error : new DrawError('invalid-state', String(error)),
-          ),
+          reject(error instanceof DrawError ? error : new DrawError('invalidState', String(error))),
       );
     };
     map.on('render', onRender);

@@ -211,7 +211,7 @@ export function orientedGeometry<G extends Geometry>(geometry: G): G {
  * of the library, the rings oriented. Its own checks are of the GeoJSON shape; the rest (the
  * geometry against the type, the layer, the ID) is checked as an input of the Store is.
  *
- * @throws DrawError `invalid-input` for anything but a GeoJSON Feature, a `null` geometry, a
+ * @throws DrawError `invalidInput` for anything but a GeoJSON Feature, a `null` geometry, a
  *   GeometryCollection, or a value of the library of the wrong type
  * @internal
  */
@@ -286,7 +286,7 @@ function booleanOf(value: unknown, key: string): boolean {
  * removed without being named), the fields of the library read from their keys
  *
  * @param feature - The feature the patch is given to (a `unset` of the style removes its keys)
- * @throws DrawError `invalid-input` for an empty patch, a value `undefined`, a key of the place
+ * @throws DrawError `invalidInput` for an empty patch, a value `undefined`, a key of the place
  *   (`layerId`, `groupId`, `featureType`: `place` puts a feature elsewhere), or a value of the
  *   library of the wrong type
  * @internal

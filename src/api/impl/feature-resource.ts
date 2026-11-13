@@ -47,9 +47,9 @@ export interface FeatureResource {
    * @param filter - Keeps only the features that match every key given
    * @param options - The number of features made at most, and the feature read last
    * @returns The features, from the back (fewer than `limit` once the last page is read)
-   * @throws `DrawError` with the code `invalid-state` when the Store holds its features as rows
-   *   and no limit is given, `not-found` when there is no feature `after` (it was deleted
-   *   meanwhile), or `invalid-input` when the filter or the options have the wrong shape
+   * @throws `DrawError` with the code `invalidState` when the Store holds its features as rows
+   *   and no limit is given, `notFound` when there is no feature `after` (it was deleted
+   *   meanwhile), or `invalidInput` when the filter or the options have the wrong shape
    *
    * @example Reading every feature, a page at a time
    * ```ts
@@ -95,16 +95,16 @@ export interface FeatureResource {
    * feature nor its group nor its layer is locked. A refused edit returns `null` or `false`
    * for the same reasons.
    *
-   * @throws `DrawError` with the code `not-found` when there is no feature with this ID
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID
    */
   isEditable(id: string): boolean;
   /**
    * Creates a feature and returns it as it was stored.
    *
    * @returns The new feature, or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape or its
-   *   ID is not one the Store takes (`Store.acceptsId`), `already-exists` when its ID is taken,
-   *   `not-found` when its layer or group does not exist, or `invalid-state` when the input
+   * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape or its
+   *   ID is not one the Store takes (`Store.acceptsId`), `alreadyExists` when its ID is taken,
+   *   `notFound` when its layer or group does not exist, or `invalidState` when the input
    *   names no layer and the document has no layer to put it in
    */
   create(input: StoredFeatureInput): StoredFeature | null;
@@ -124,8 +124,8 @@ export interface FeatureResource {
    * removed.
    *
    * @returns The changed feature, or `null` when the change is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no feature with this ID, or
-   *   `invalid-input` when the patch has the wrong shape
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID, or
+   *   `invalidInput` when the patch has the wrong shape
    */
   update(id: string, patch: StoredFeaturePatch): StoredFeature | null;
   /**
@@ -141,14 +141,14 @@ export interface FeatureResource {
    * Deletes a feature.
    *
    * @returns True when it was deleted, false when the deletion is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no feature with this ID
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID
    */
   delete(id: string): boolean;
   /**
    * Deletes several features in one transaction: all of them or none.
    *
    * @returns True when they were deleted, false when the deletion is refused
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist; nothing
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing
    *   is deleted then
    */
   deleteMany(ids: readonly string[]): boolean;
@@ -157,8 +157,8 @@ export interface FeatureResource {
    * target sets its position there.
    *
    * @returns True when it moved, false when the move is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when the feature or the target does not
-   *   exist, or `invalid-state` when the target is a position by `index` in a layer held as rows
+   * @throws `DrawError` with the code `notFound` when the feature or the target does not
+   *   exist, or `invalidState` when the target is a position by `index` in a layer held as rows
    *   (which takes the items around the place instead)
    */
   move(id: string, to: MoveTarget): boolean;
@@ -184,9 +184,9 @@ export interface FeatureResource {
    * @param values - The values to write back
    * @returns The values the features had before (written back, they redo the write), or `null`
    *   when the write is refused (read-only, a lock)
-   * @throws `DrawError` with the code `invalid-state` when the Store does not hold its features
-   *   as rows, `invalid-input` when the values are not values of features held as rows, or
-   *   `not-found` when they name a feature that is no longer there (a deletion let go of)
+   * @throws `DrawError` with the code `invalidState` when the Store does not hold its features
+   *   as rows, `invalidInput` when the values are not values of features held as rows, or
+   *   `notFound` when they name a feature that is no longer there (a deletion let go of)
    *
    * @example Undoing the last write of this client
    * ```ts
@@ -205,8 +205,8 @@ export interface FeatureResource {
    * (`DocumentChange.restoreToken`), once nothing will write them back: the Store no longer keeps
    * them, and `restore` can no longer bring them back.
    *
-   * @throws `DrawError` with the code `invalid-state` when the Store does not hold its features
-   *   as rows, or `invalid-input` when the token is not one
+   * @throws `DrawError` with the code `invalidState` when the Store does not hold its features
+   *   as rows, or `invalidInput` when the token is not one
    */
   releaseRestore(token: RestoreToken): void;
   /**
@@ -228,8 +228,8 @@ export interface FeatureResource {
    * Joins areas into one feature and returns it; the result replaces the features given.
    *
    * @returns The new feature, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when fewer than two areas are given or one of the features is not an
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when fewer than two areas are given or one of the features is not an
    *   area
    */
   union(ids: readonly string[]): StoredFeature | null;
@@ -240,16 +240,16 @@ export interface FeatureResource {
    * @param id - The area to subtract from
    * @param subtractIds - The areas to subtract
    * @returns The resulting feature, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when one of the features is not an area
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when one of the features is not an area
    */
   difference(id: string, subtractIds: readonly string[]): StoredFeature | null;
   /**
    * Keeps the part where areas overlap and returns it; the result replaces the features given.
    *
    * @returns The resulting feature, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when fewer than two areas are given or one of the features is not an
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when fewer than two areas are given or one of the features is not an
    *   area
    */
   intersection(ids: readonly string[]): StoredFeature | null;
@@ -259,8 +259,8 @@ export interface FeatureResource {
    * @param id - The area to split
    * @param lineId - The line to split along
    * @returns The new features, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when the features are not an area and a line
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when the features are not an area and a line
    */
   split(id: string, lineId: string): StoredFeature[] | null;
   /**
@@ -271,8 +271,8 @@ export interface FeatureResource {
    *   `segments` the number of segments of a full circle, as in the buffer of the geometry
    *   entry
    * @returns The new features, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when the distance is not a finite number
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when the distance is not a finite number
    */
   buffer(
     ids: readonly string[],

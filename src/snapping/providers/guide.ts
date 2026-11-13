@@ -4,7 +4,7 @@
 /**
  * Built-in snapping provider (construction guides)
  *
- * It works only while drawing (draw_line / draw_polygon); it reads the confirmed
+ * It works only while drawing (drawLine / drawPolygon); it reads the confirmed
  * vertices from the Tentative of the Store and returns the guides as segment
  * candidates with kind: 'guide'. Because they are segment candidates, the
  * computation of the point closest to the cursor can be left to SnapService.
@@ -46,7 +46,7 @@ import {
 } from '../types.js';
 
 /** The drawing modes that produce guides */
-const GUIDE_MODES = new Set(['draw_line', 'draw_polygon']);
+const GUIDE_MODES = new Set(['drawLine', 'drawPolygon']);
 
 /** The length of a guide (pixels). The cut-off that keeps it from being an infinite line */
 const GUIDE_LENGTH_PIXELS = 4096;

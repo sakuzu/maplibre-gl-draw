@@ -53,19 +53,19 @@ export interface ResourceDeps {
 
 /** The error for an ID that names nothing of its kind */
 export function notFound(kind: string, id: unknown): DrawError {
-  return new DrawError('not-found', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
+  return new DrawError('notFound', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
     ids: typeof id === 'string' ? [id] : [],
   });
 }
 
 /** The error for an input of the wrong shape or value */
 export function invalidInput(message: string, options?: DrawErrorOptions): DrawError {
-  return new DrawError('invalid-input', message, options);
+  return new DrawError('invalidInput', message, options);
 }
 
 /** The error for a call the state of the instance or of its Store does not allow */
 export function invalidState(message: string, options?: DrawErrorOptions): DrawError {
-  return new DrawError('invalid-state', message, options);
+  return new DrawError('invalidState', message, options);
 }
 
 // ============================================================================
@@ -171,8 +171,8 @@ export function isTaken(store: Store, id: string): boolean {
 
 /**
  * Checks the ID given to a new feature, group or layer, before anything is written: a non-empty
- * string (`invalid-input`), that names nothing yet, here or in the same write (`already-exists`),
- * and that the Store takes (`Store.acceptsId`; `invalid-input`)
+ * string (`invalidInput`), that names nothing yet, here or in the same write (`alreadyExists`),
+ * and that the Store takes (`Store.acceptsId`; `invalidInput`)
  *
  * @param pending - The IDs taken by the other entries of the same write
  * @param alsoTaken - Whether the ID is taken in a way of its own kind (an entry of the stacking
@@ -188,13 +188,13 @@ export function requireNewId(
 ): string {
   const id = requireId(value);
   if (isTaken(store, id) || pending.has(id) || alsoTaken?.(id) === true) {
-    throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+    throw new DrawError('alreadyExists', `The ID ${JSON.stringify(id)} is already taken`, {
       ids: [id],
     });
   }
   if (store.acceptsId?.(id) === false) {
     throw new DrawError(
-      'invalid-input',
+      'invalidInput',
       `The Store does not take the ID ${JSON.stringify(id)} (leave the ID out, and one is made)`,
       { ids: [id] },
     );

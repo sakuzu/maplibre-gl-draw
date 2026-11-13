@@ -12,12 +12,12 @@
  *
  * The traversal goes from the front in the following order.
  *
- * 1. The datasets on the above-store side (from the front side)
+ * 1. The datasets on the aboveStore side (from the front side)
  * 2. The stacking order (`store.getLayerOrder()`) from the end = from the front. When an
  *    entry is a layer, the features of that layer are tested from the front, and when it
- *    is a dataset with order: 'layer-order', that dataset is tested. An ID that is
+ *    is a dataset with order: 'layerOrder', that dataset is tested. An ID that is
  *    neither is skipped
- * 3. The datasets on the below-store side (from the front side)
+ * 3. The datasets on the belowStore side (from the front side)
  *
  * The test uses only test() (a boolean) of each strategy, and distance() is not used to
  * arbitrate between entries. Visibility is decided by visible / the local hidden state /
@@ -485,9 +485,9 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       return null;
     };
 
-    // 1. The above-store side
+    // 1. The aboveStore side
     const above = onCopies(
-      (copy) => datasets?.hitTestSide('above-store', copy, tolerance, test) ?? null,
+      (copy) => datasets?.hitTestSide('aboveStore', copy, tolerance, test) ?? null,
     );
     if (above) return toTopHit(above);
 
@@ -551,9 +551,9 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       if (entry) return toTopHit(entry);
     }
 
-    // 3. The below-store side
+    // 3. The belowStore side
     const below = onCopies(
-      (copy) => datasets?.hitTestSide('below-store', copy, tolerance, test) ?? null,
+      (copy) => datasets?.hitTestSide('belowStore', copy, tolerance, test) ?? null,
     );
     return below ? toTopHit(below) : null;
   };

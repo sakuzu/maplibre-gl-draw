@@ -130,7 +130,7 @@ export function drapeLayerSource(layerIndex: number, datasetCount: number): numb
  */
 export interface DrapeDatasetSource {
   readonly id: string;
-  readonly order: 'below-store' | 'layer-order' | 'above-store';
+  readonly order: 'belowStore' | 'layerOrder' | 'aboveStore';
   readonly visible: boolean;
   /** The version of the contents, the style and the thinning (when it changes, the index is
    * rebuilt) */
@@ -146,9 +146,9 @@ export interface DrapeDatasetSource {
 /**
  * Collects the elements of the analytic drape from the Store and the datasets
  *
- * The draw order is datasets (below-store) -> the Store's stack (a mixture of
+ * The draw order is datasets (belowStore) -> the Store's stack (a mixture of
  * layers and the datasets that take part in the stack) -> datasets
- * (above-store). It is aligned with the draw order in `view/layer/render.ts`.
+ * (aboveStore). It is aligned with the draw order in `view/layer/render.ts`.
  *
  * It is not narrowed down by the view. Narrowing it down would change the element order every
  * time the view moves and require rebuilding the tile indices (the narrowing down within a
@@ -200,7 +200,7 @@ export function collectDrapeElements(
   }
 
   for (const dataset of datasets) {
-    if (dataset.order !== 'below-store') continue;
+    if (dataset.order !== 'belowStore') continue;
     collectDataset(context, dataset, sourceOf.get(dataset.id) ?? 0);
   }
 
@@ -210,7 +210,7 @@ export function collectDrapeElements(
     const layer = store.getLayer(layerId);
     if (!layer) {
       const dataset = byId.get(layerId);
-      if (dataset && dataset.order === 'layer-order') {
+      if (dataset && dataset.order === 'layerOrder') {
         collectDataset(context, dataset, sourceOf.get(dataset.id) ?? 0);
       }
       continue;
@@ -229,7 +229,7 @@ export function collectDrapeElements(
 
   const aboveStoreStart = context.elements.length;
   for (const dataset of datasets) {
-    if (dataset.order !== 'above-store') continue;
+    if (dataset.order !== 'aboveStore') continue;
     collectDataset(context, dataset, sourceOf.get(dataset.id) ?? 0);
   }
 

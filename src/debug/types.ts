@@ -7,26 +7,26 @@
  */
 
 /**
- * A check of the state of an instance: the ids of the rows (`id-index`), the selection
- * (`selection`), the marks the rows are written with (`write-marks`), the features kept of rows
- * (`feature-cache`), what is drawn (`drawing`), the rows written in place where they are drawn
- * against the same rows drawn afresh (`drawing-writes`), everything the drawing of the rows keeps
- * against a drawing made again from the rows (`drawing-rebuild`), the sketches drawn in the places of
+ * A check of the state of an instance: the ids of the rows (`idIndex`), the selection
+ * (`selection`), the marks the rows are written with (`writeMarks`), the features kept of rows
+ * (`featureCache`), what is drawn (`drawing`), the rows written in place where they are drawn
+ * against the same rows drawn afresh (`drawingWrites`), everything the drawing of the rows keeps
+ * against a drawing made again from the rows (`drawingRebuild`), the sketches drawn in the places of
  * the features they edit (`sketches`), what a sketch drew against what its commit wrote
- * (`sketch-commits`)
+ * (`sketchCommits`)
  *
  * @experimental
  */
 export type ConsistencyCheck =
-  | 'id-index'
+  | 'idIndex'
   | 'selection'
-  | 'write-marks'
-  | 'feature-cache'
+  | 'writeMarks'
+  | 'featureCache'
   | 'drawing'
-  | 'drawing-writes'
-  | 'drawing-rebuild'
+  | 'drawingWrites'
+  | 'drawingRebuild'
   | 'sketches'
-  | 'sketch-commits';
+  | 'sketchCommits';
 
 /**
  * A check that failed, and what it found

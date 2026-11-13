@@ -111,7 +111,7 @@ describe('drawing', () => {
     expect(draw.drawing.addVertex([0, 0])).toBe(false);
     expect(draw.drawing.finish()).toBe(false);
 
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     expect(draw.drawing.isActive()).toBe(true);
     expect(draw.drawing.isDrawing()).toBe(false);
     expect(draw.drawing.addVertex([0, 0])).toBe(true);
@@ -135,7 +135,7 @@ describe('drawing', () => {
 
   it('draws an area, with the preview following moveTo and the vertices undone and redone', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     const previews: unknown[] = [];
     // The shape being drawn is a sketch of this client of an edit create
     const shown = ({ sketch }: { sketch: Sketch }) => {
@@ -172,7 +172,7 @@ describe('drawing', () => {
   it('writes the reference zoom while scaleWithZoom is on, and none after it is turned off', () => {
     draw = createDraw(createMapStub().map);
     const drawLine = () => {
-      draw.setMode('draw_line');
+      draw.setMode('drawLine');
       draw.drawing.addVertex([0, 0]);
       draw.drawing.addVertex([1, 0.5]);
       draw.drawing.finish();
@@ -189,7 +189,7 @@ describe('drawing', () => {
 
   it('places a point with one vertex, and cancels a shape in progress', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_point');
+    draw.setMode('drawPoint');
     expect(draw.drawing.isActive()).toBe(true);
     expect(draw.drawing.addVertex([0.25, -0.5])).toBe(true);
     expect(draw.features.list({ type: 'Point' })[0].geometry).toEqual({
@@ -197,7 +197,7 @@ describe('drawing', () => {
       coordinates: [0.25, -0.5],
     });
 
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([0, 0]);
     expect(draw.drawing.cancel()).toBe(true);
     expect(draw.drawing.isDrawing()).toBe(false);
@@ -224,7 +224,7 @@ describe('drawing', () => {
     });
     expect(contextDrawing).toBe(draw.drawing);
 
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([1, 1]);
     expect(clicks).toEqual([{ lngLat: [1, 1], snapped: { lngLat: [1, 1] }, point: [500, 200] }]);
     consume = true;
@@ -255,7 +255,7 @@ describe('drawing', () => {
       unproject: () => ({ lng: 50, lat: 50 }),
     });
     try {
-      draw.setMode('draw_line');
+      draw.setMode('drawLine');
       draw.drawing.addVertex([1, 1]);
     } finally {
       setViewProjector(stub.map as never, null);
@@ -266,7 +266,7 @@ describe('drawing', () => {
   it('places the exact positions, with no click tolerance, and finishes wherever they are', () => {
     // One degree is 100 px on the stub: the vertices are 3 px apart on the screen
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([0, 0]);
     draw.drawing.moveTo([0.03, 0]);
     expect(draw.drawing.addVertex([0.03, 0])).toBe(true);
@@ -282,7 +282,7 @@ describe('drawing', () => {
     });
 
     // A vertex of an area 3 px from the first one does not close it
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     for (const position of [
       [0, 0],
       [1, 0],
@@ -313,7 +313,7 @@ describe('drawing', () => {
     const engine = createEngine(createMapStub().map);
     draw = createDrawOnEngine(engine);
     const input = createSyntheticInput(engine);
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     for (const position of [
       [0, 0],
       [1, 0],
@@ -342,7 +342,7 @@ describe('drawing', () => {
 
   it('ignores a vertex at exactly the last position, and closes an area on its first one', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     for (const position of [
       [0, 0],
       [1, 0],
@@ -369,7 +369,7 @@ describe('drawing', () => {
 
   it('refuses a position that is not two finite numbers', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     expect(() => draw.drawing.addVertex([Number.NaN, 0])).toThrow(DrawError);
     expect(() => draw.drawing.moveTo([0] as unknown as [number, number])).toThrow(DrawError);
   });
@@ -380,23 +380,23 @@ describe('mode.set', () => {
     draw = createDraw(createMapStub().map);
     const told: string[] = [];
     draw.mode.subscribe((mode) => told.push(mode));
-    draw.mode.set('draw_line');
-    expect(draw.mode.value).toBe('draw_line');
-    expect(draw.getMode()).toBe('draw_line');
+    draw.mode.set('drawLine');
+    expect(draw.mode.value).toBe('drawLine');
+    expect(draw.getMode()).toBe('drawLine');
     draw.mode.set('select');
-    expect(told).toEqual(['select', 'draw_line', 'select']);
+    expect(told).toEqual(['select', 'drawLine', 'select']);
   });
 
-  it('throws not-found for a mode that is not there, and invalid-input for wrong options', () => {
+  it('throws notFound for a mode that is not there, and invalidInput for wrong options', () => {
     draw = createDraw(createMapStub().map);
     expect(() => draw.mode.set('draw_nothing')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
-    expect(() => draw.mode.set('draw_line', { repeat: 'yes' as unknown as boolean })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+    expect(() => draw.mode.set('drawLine', { repeat: 'yes' as unknown as boolean })).toThrow(
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(() => draw.mode.set(1 as unknown as string)).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(draw.mode.value).toBe('select');
   });
@@ -404,7 +404,7 @@ describe('mode.set', () => {
   it('changes nothing for a drawing mode while the interaction lock is on', () => {
     draw = createDraw(createMapStub().map);
     draw.setInteractionLocked(true);
-    draw.mode.set('draw_point');
+    draw.mode.set('drawPoint');
     expect(draw.mode.value).toBe('select');
   });
 
@@ -412,11 +412,11 @@ describe('mode.set', () => {
     const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
     draw = createDrawOnEngine(engine);
     engine.enterDefaultMode();
-    draw.mode.set('draw_line', { repeat: true });
+    draw.mode.set('drawLine', { repeat: true });
     draw.mode.drawing.add([0, 0]);
     draw.mode.drawing.add([1, 0.5]);
     void draw.mode.drawing.commit();
-    expect(draw.mode.value).toBe('draw_line');
+    expect(draw.mode.value).toBe('drawLine');
     expect(draw.mode.drawing.active).toBe(false);
     draw.mode.drawing.add([2, 0]);
     draw.mode.drawing.add([3, 0.5]);
@@ -425,7 +425,7 @@ describe('mode.set', () => {
     // Escape in the middle of a shape drops it; Escape with nothing drawn leaves the mode
     draw.mode.drawing.add([4, 0]);
     createSyntheticInput(engine).key('Escape');
-    expect(draw.mode.value).toBe('draw_line');
+    expect(draw.mode.value).toBe('drawLine');
     createSyntheticInput(engine).key('Escape');
     expect(draw.mode.value).toBe('select');
     expect(draw.features.list({ type: 'LineString' })).toHaveLength(2);
@@ -433,20 +433,20 @@ describe('mode.set', () => {
 
   it('keeps the point mode with repeat, one point for each click', () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_point', { repeat: true });
+    draw.mode.set('drawPoint', { repeat: true });
     draw.mode.drawing.add([0.25, -0.5]);
     draw.mode.drawing.add([0.5, -0.25]);
     expect(draw.features.list({ type: 'Point' })).toHaveLength(2);
-    expect(draw.mode.value).toBe('draw_point');
+    expect(draw.mode.value).toBe('drawPoint');
     // Another mode set without repeat does not repeat
-    draw.mode.set('draw_point');
+    draw.mode.set('drawPoint');
     draw.mode.drawing.add([0.75, 0]);
     expect(draw.mode.value).toBe('select');
   });
 
   it('leaves a repeated mode for select once no layer can be written', async () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_point', { repeat: true });
+    draw.mode.set('drawPoint', { repeat: true });
     const [layer] = draw.layers.list();
     await draw.write((tx) => tx.layers.update(layer.id, { locked: true }));
     draw.mode.drawing.add([0.5, -0.25]);
@@ -456,7 +456,7 @@ describe('mode.set', () => {
 
   it('starts the repeated mode again only when the next shape can be written', async () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_line', { repeat: true });
+    draw.mode.set('drawLine', { repeat: true });
     draw.mode.drawing.add([0, 0]);
     const [layer] = draw.layers.list();
     // The layer is locked in the middle of the shape: the shape is dropped and the mode is left
@@ -469,7 +469,7 @@ describe('mode.set', () => {
 
   it('places one point and goes back to select without repeat', () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_point');
+    draw.mode.set('drawPoint');
     draw.mode.drawing.add([0.25, -0.5]);
     expect(draw.features.list({ type: 'Point' })).toHaveLength(1);
     expect(draw.mode.value).toBe('select');
@@ -477,7 +477,7 @@ describe('mode.set', () => {
 });
 
 describe('mode.drawing', () => {
-  it('throws invalid-state outside a drawing mode', async () => {
+  it('throws invalidState outside a drawing mode', async () => {
     draw = createDraw(createMapStub().map);
     const { drawing } = draw.mode;
     expect(drawing.active).toBe(false);
@@ -488,19 +488,19 @@ describe('mode.drawing', () => {
       () => drawing.redo(),
       () => drawing.cancel(),
     ]) {
-      expect(run).toThrow(expect.objectContaining({ code: 'invalid-state' }));
+      expect(run).toThrow(expect.objectContaining({ code: 'invalidState' }));
     }
-    await expect(drawing.commit()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(drawing.commit()).rejects.toMatchObject({ code: 'invalidState' });
   });
 
   it('refuses a position that is not two finite numbers', () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_line');
+    draw.mode.set('drawLine');
     expect(() => draw.mode.drawing.add([Number.NaN, 0])).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(() => draw.mode.drawing.move([0] as unknown as [number, number])).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 
@@ -518,7 +518,7 @@ describe('mode.drawing', () => {
         created: change.features.created,
       }),
     );
-    draw.mode.set('draw_polygon');
+    draw.mode.set('drawPolygon');
     const { drawing } = draw.mode;
     drawing.add([0, 0]);
     expect(drawing.active).toBe(true);
@@ -553,26 +553,26 @@ describe('mode.drawing', () => {
 
   it('commits with undo false as no step of undo', async () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_line');
+    draw.mode.set('drawLine');
     draw.mode.drawing.add([0, 0]);
     draw.mode.drawing.add([1, 0.5]);
     await draw.mode.drawing.commit({ undo: false });
     expect(draw.features.count()).toBe(1);
-    await expect(draw.undo()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(draw.undo()).rejects.toMatchObject({ code: 'invalidState' });
   });
 
   it('rejects a commit of too few vertices and keeps the shape', async () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_line');
+    draw.mode.set('drawLine');
     draw.mode.drawing.add([0, 0]);
-    await expect(draw.mode.drawing.commit()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(draw.mode.drawing.commit()).rejects.toMatchObject({ code: 'invalidState' });
     expect(draw.mode.drawing.active).toBe(true);
     expect(draw.features.count()).toBe(0);
   });
 
   it('rejects a commit stopped by its signal, or with wrong options, and keeps the shape', async () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_line');
+    draw.mode.set('drawLine');
     draw.mode.drawing.add([0, 0]);
     draw.mode.drawing.add([1, 0.5]);
     const controller = new AbortController();
@@ -581,7 +581,7 @@ describe('mode.drawing', () => {
       code: 'aborted',
     });
     await expect(draw.mode.drawing.commit({ label: 1 as unknown as string })).rejects.toMatchObject(
-      { code: 'invalid-input' },
+      { code: 'invalidInput' },
     );
     expect(draw.mode.drawing.active).toBe(true);
     expect(draw.features.count()).toBe(0);
@@ -589,34 +589,34 @@ describe('mode.drawing', () => {
 
   it('rejects a commit while the document is read-only', async () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_line');
+    draw.mode.set('drawLine');
     draw.mode.drawing.add([0, 0]);
     draw.mode.drawing.add([1, 0.5]);
     draw.setReadOnly(true);
-    await expect(draw.mode.drawing.commit()).rejects.toMatchObject({ code: 'not-editable' });
+    await expect(draw.mode.drawing.commit()).rejects.toMatchObject({ code: 'notEditable' });
     expect(draw.features.count()).toBe(0);
   });
 
   it('cancels the shape and stays in the mode', () => {
     draw = createDraw(createMapStub().map);
-    draw.mode.set('draw_line');
+    draw.mode.set('drawLine');
     draw.mode.drawing.add([0, 0]);
     draw.mode.drawing.cancel();
     expect(draw.mode.drawing.active).toBe(false);
-    expect(draw.mode.value).toBe('draw_line');
+    expect(draw.mode.value).toBe('drawLine');
     // Nothing to cancel is nothing
     draw.mode.drawing.cancel();
-    expect(draw.mode.value).toBe('draw_line');
+    expect(draw.mode.value).toBe('drawLine');
   });
 
-  it('throws invalid-state once the instance is destroyed, and commit rejects with it', async () => {
+  it('throws invalidState once the instance is destroyed, and commit rejects with it', async () => {
     draw = createDraw(createMapStub().map);
     const { mode } = draw;
     draw.destroy();
-    expect(() => mode.set('draw_line')).toThrow(expect.objectContaining({ code: 'invalid-state' }));
+    expect(() => mode.set('drawLine')).toThrow(expect.objectContaining({ code: 'invalidState' }));
     expect(() => mode.drawing.add([0, 0])).toThrow(
-      expect.objectContaining({ code: 'invalid-state' }),
+      expect.objectContaining({ code: 'invalidState' }),
     );
-    await expect(mode.drawing.commit()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(mode.drawing.commit()).rejects.toMatchObject({ code: 'invalidState' });
   });
 });

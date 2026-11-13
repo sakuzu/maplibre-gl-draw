@@ -159,7 +159,7 @@ async function toggleMillion(): Promise<void> {
       other: '#9e9e9e',
     },
     baseStyle: { point: { pointRadius: 2, pointStrokeWidth: 0 } },
-    order: 'above-store',
+    order: 'aboveStore',
     interactive: true,
   });
   million.on('clicked', ({ row, rowIndex }) => {

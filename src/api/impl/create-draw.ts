@@ -158,7 +158,7 @@ export function createDrawOnEngine(
   const layerResource = createLayers(
     deps,
     (id) =>
-      engine.datasets.get(id)?.order === 'layer-order' || context.isExternalEntry?.(id) === true,
+      engine.datasets.get(id)?.order === 'layerOrder' || context.isExternalEntry?.(id) === true,
   );
   const layers = pick(layerResource, [
     'get',
@@ -228,7 +228,7 @@ export function createDrawOnEngine(
         const failure =
           error instanceof DrawError
             ? error
-            : new DrawError('unsupported-format', String(error), { cause: error });
+            : new DrawError('unsupportedFormat', String(error), { cause: error });
         events.emit('error', { error: failure, source: 'image' });
       } finally {
         if (imageRequest === controller) imageRequest = null;
@@ -390,7 +390,7 @@ export function createDrawOnEngine(
       }
     },
   };
-  // After destroy, every method but destroy throws invalid-state
+  // After destroy, every method but destroy throws invalidState
   const draw = guardAfterDestroy(members, () => destroyed, {
     asyncMembers: ASYNC_MEMBERS,
     skip: new Set(['destroy']),

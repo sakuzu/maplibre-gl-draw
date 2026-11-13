@@ -85,16 +85,14 @@ describe('create and reading', () => {
     expect(layers.count()).toBe(3);
   });
 
-  it('throws already-exists and invalid-input, creating nothing', () => {
+  it('throws alreadyExists and invalidInput, creating nothing', () => {
     layers.create({ id: 'a' });
-    expect(codeOf(() => layers.create({ id: 'a' }))).toBe('already-exists');
-    expect(codeOf(() => layers.create({ opacity: 2 }))).toBe('invalid-input');
-    expect(codeOf(() => layers.create({ styleRule: { kind: 'x' } as never }))).toBe(
-      'invalid-input',
-    );
-    expect(codeOf(() => layers.create({ index: 1.5 }))).toBe('invalid-input');
-    expect(codeOf(() => layers.create({ order: [] } as never))).toBe('invalid-input');
-    expect(codeOf(() => layers.createMany([{ id: 'b' }, { id: 'b' }]))).toBe('already-exists');
+    expect(codeOf(() => layers.create({ id: 'a' }))).toBe('alreadyExists');
+    expect(codeOf(() => layers.create({ opacity: 2 }))).toBe('invalidInput');
+    expect(codeOf(() => layers.create({ styleRule: { kind: 'x' } as never }))).toBe('invalidInput');
+    expect(codeOf(() => layers.create({ index: 1.5 }))).toBe('invalidInput');
+    expect(codeOf(() => layers.create({ order: [] } as never))).toBe('invalidInput');
+    expect(codeOf(() => layers.createMany([{ id: 'b' }, { id: 'b' }]))).toBe('alreadyExists');
     expect(layers.count()).toBe(1);
   });
 
@@ -122,10 +120,10 @@ describe('update', () => {
     expect(updated).toBe(store.getLayer('a'));
   });
 
-  it('throws not-found and invalid-input', () => {
-    expect(codeOf(() => layers.update('x', { name: 'x' }))).toBe('not-found');
-    expect(codeOf(() => layers.update('a', { items: [] } as never))).toBe('invalid-input');
-    expect(codeOf(() => layers.update('a', { name: 3 } as never))).toBe('invalid-input');
+  it('throws notFound and invalidInput', () => {
+    expect(codeOf(() => layers.update('x', { name: 'x' }))).toBe('notFound');
+    expect(codeOf(() => layers.update('a', { items: [] } as never))).toBe('invalidInput');
+    expect(codeOf(() => layers.update('a', { name: 3 } as never))).toBe('invalidInput');
   });
 
   it('refuses a change of a locked layer but lets its lock and visibility change', () => {
@@ -166,8 +164,8 @@ describe('delete and deleteMany', () => {
     expect(store.getFeature('p')).toBeUndefined();
   });
 
-  it('throws not-found, and refuses a layer that holds a lock and read-only', () => {
-    expect(codeOf(() => layers.delete('x'))).toBe('not-found');
+  it('throws notFound, and refuses a layer that holds a lock and read-only', () => {
+    expect(codeOf(() => layers.delete('x'))).toBe('notFound');
     expect(layers.delete('b')).toBe(false);
     store.setReadOnly(true);
     expect(layers.delete('a')).toBe(false);
@@ -175,7 +173,7 @@ describe('delete and deleteMany', () => {
   });
 
   it('deletes several in one notification, or none', () => {
-    expect(codeOf(() => layers.deleteMany(['a', 'x']))).toBe('not-found');
+    expect(codeOf(() => layers.deleteMany(['a', 'x']))).toBe('notFound');
     expect(layers.deleteMany(['a', 'b'])).toBe(false);
     notifications.length = 0;
     expect(layers.deleteMany(['a', 'c'])).toBe(true);
@@ -196,9 +194,9 @@ describe('reorder', () => {
   });
 
   it('throws unless every layer is listed once', () => {
-    expect(codeOf(() => layers.reorder(['a', 'b']))).toBe('invalid-input');
-    expect(codeOf(() => layers.reorder(['a', 'b', 'b']))).toBe('invalid-input');
-    expect(codeOf(() => layers.reorder(['a', 'b', 'x']))).toBe('not-found');
+    expect(codeOf(() => layers.reorder(['a', 'b']))).toBe('invalidInput');
+    expect(codeOf(() => layers.reorder(['a', 'b', 'b']))).toBe('invalidInput');
+    expect(codeOf(() => layers.reorder(['a', 'b', 'x']))).toBe('notFound');
   });
 
   it('places the entries it is told may stand in the stacking order', () => {
@@ -208,9 +206,9 @@ describe('reorder', () => {
     expect(store.getLayerOrder()).toEqual(['c', 'kept', 'dataset', 'b', 'a', 'base']);
     expect(layers.reorder(['base', 'a', 'b', 'dataset', 'c'])).toBe(true);
     expect(store.getLayerOrder()).toEqual(['base', 'kept', 'a', 'b', 'dataset', 'c']);
-    expect(codeOf(() => layers.reorder(['a', 'b', 'c', 'kept']))).toBe('not-found');
-    expect(codeOf(() => layers.reorder(['a', 'b', 'c', 'base', 'base']))).toBe('invalid-input');
-    expect(codeOf(() => layers.reorder(['a', 'b', 'base']))).toBe('invalid-input');
+    expect(codeOf(() => layers.reorder(['a', 'b', 'c', 'kept']))).toBe('notFound');
+    expect(codeOf(() => layers.reorder(['a', 'b', 'c', 'base', 'base']))).toBe('invalidInput');
+    expect(codeOf(() => layers.reorder(['a', 'b', 'base']))).toBe('invalidInput');
   });
 
   it('gives the stacking order as reorder takes it, without the entries it would refuse', () => {
@@ -239,9 +237,9 @@ describe('the active layer', () => {
     expect(layers.getActive()?.id).toBe('b');
   });
 
-  it('throws not-found and refuses a locked layer', () => {
+  it('throws notFound and refuses a locked layer', () => {
     layers.createMany([{ id: 'a' }, { id: 'c', locked: true }]);
-    expect(codeOf(() => layers.setActive('x'))).toBe('not-found');
+    expect(codeOf(() => layers.setActive('x'))).toBe('notFound');
     expect(layers.setActive('c')).toBe(false);
     expect(layers.getActive()?.id).toBe('a');
   });

@@ -44,7 +44,7 @@ export interface DocumentResource {
    * in `draw.memory`.
    *
    * @param store - The Store of the document to show, or `null` to show the document again
-   * @throws `DrawError` with the code `invalid-input` when the Store does not hold its features
+   * @throws `DrawError` with the code `invalidInput` when the Store does not hold its features
    *   as rows, or is the Store of the instance
    */
   setShown(store: StoreView | null): void;

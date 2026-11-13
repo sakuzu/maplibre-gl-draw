@@ -280,13 +280,13 @@ number instead, with a hint to select them on the map, and its own row
 works as before (the eye, the lock, the active layer). `features` sets
 the limit as a number, and `false` lists no features, only the groups.
 The datasets (`draw.datasets`) are rows of the stack too, in their place
-among the layers: those of `above-store` in front of every layer, those
-of `layer-order` where `layers.getOrder()` places them, and those of
-`below-store` behind every layer. A dataset row shows its ID (core gives
+among the layers: those of `aboveStore` in front of every layer, those
+of `layerOrder` where `layers.getOrder()` places them, and those of
+`belowStore` behind every layer. A dataset row shows its ID (core gives
 a dataset no name), with the eye (`setVisible`) and no lock; a press on
 it leaves the selection as it is. Every dataset is dragged among the
-layers: one of `above-store` or `below-store` dropped there is moved to
-`layer-order` (`draw.datasets.move`) and placed where it was dropped
+layers: one of `aboveStore` or `belowStore` dropped there is moved to
+`layerOrder` (`draw.datasets.move`) and placed where it was dropped
 (`draw.layers.reorder`), and goes back to its own order when the reorder
 is refused. Basemap, under it, is the back of the stack (see
 [Basemaps](#basemaps)). The legend shows the rows of the style rule

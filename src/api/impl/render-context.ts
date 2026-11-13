@@ -457,7 +457,7 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
   };
 
   const above: EngineOverlayRenderer = {
-    name: 'extension-overlays',
+    name: 'extensionOverlays',
     order: 'overlay',
     onAdd,
     draw(projectionData, zoom, context) {
@@ -469,7 +469,7 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
     hasPendingWork: () => overlays.some((entry) => entry.overlay.hasPendingWork?.() === true),
   };
   const perLayer: LayeredOverlayRenderer = {
-    name: 'extension-overlays-per-layer',
+    name: 'extensionOverlaysPerLayer',
     order: 'overlay',
     // The resources are created and released by the other renderer
     onAdd() {},

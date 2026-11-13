@@ -77,7 +77,7 @@ describe('draw.rendered', () => {
     draw.sketches.add({
       edits: [
         {
-          kind: 'vertex-move',
+          kind: 'vertexMove',
           featureId: a.id,
           vertices: [{ ring: 0, index: 1 }],
           positions: [[2, 2]],

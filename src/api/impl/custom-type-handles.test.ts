@@ -628,7 +628,7 @@ describe('the fields a custom type declares', () => {
         render,
         transformFields: { angleDegreesKey: ANGLE },
       }),
-    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
     expect(view.draw.extensions.featureTypes.has('Point')).toBe(false);
   });
 

@@ -47,7 +47,7 @@ const FILTER_KEYS = ['visible', 'locked'] as const;
  * Creates `draw.layers`
  *
  * @param isStackEntry - Whether an ID that is not a layer may stand in the stacking order: a
- *   dataset whose order is `layer-order`, or an entry the `isExternalEntry` option recognizes
+ *   dataset whose order is `layerOrder`, or an entry the `isExternalEntry` option recognizes
  * @internal
  */
 export function createLayers(

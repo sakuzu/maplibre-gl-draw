@@ -152,8 +152,8 @@ const FILTERS: Array<FeatureFilter | undefined> = [
 
 describe('features.list and features.count over a Store of rows', () => {
   it('refuses to list without a limit, and makes no feature to count', () => {
-    expect(codeOf(() => fromRows.list())).toBe('invalid-state');
-    expect(codeOf(() => fromRows.list({ layerId: 'l1' }))).toBe('invalid-state');
+    expect(codeOf(() => fromRows.list())).toBe('invalidState');
+    expect(codeOf(() => fromRows.list({ layerId: 'l1' }))).toBe('invalidState');
     expect(fromRows.count()).toBe(7);
   });
 
@@ -226,17 +226,15 @@ describe('features.list and features.count over a Store of rows', () => {
     );
   });
 
-  it('throws not-found for a feature to read after that is not there', () => {
-    expect(codeOf(() => fromRows.list(undefined, { limit: 2, after: 'nothing' }))).toBe(
-      'not-found',
-    );
+  it('throws notFound for a feature to read after that is not there', () => {
+    expect(codeOf(() => fromRows.list(undefined, { limit: 2, after: 'nothing' }))).toBe('notFound');
     expect(codeOf(() => fromObjects.list(undefined, { limit: 2, after: 'nothing' }))).toBe(
-      'not-found',
+      'notFound',
     );
     rows.deleteFeature('c');
     objects.deleteFeature('c');
-    expect(codeOf(() => fromRows.list(undefined, { limit: 2, after: 'c' }))).toBe('not-found');
-    expect(codeOf(() => fromObjects.list(undefined, { limit: 2, after: 'c' }))).toBe('not-found');
+    expect(codeOf(() => fromRows.list(undefined, { limit: 2, after: 'c' }))).toBe('notFound');
+    expect(codeOf(() => fromObjects.list(undefined, { limit: 2, after: 'c' }))).toBe('notFound');
   });
 
   it('gives the features of the rows as the Store reads them', () => {
@@ -285,21 +283,21 @@ describe('features.list and features.count over a Store of rows', () => {
 
   it('checks the limit and the filter', () => {
     for (const limit of [-1, 1.5, Number.NaN, '3']) {
-      expect(codeOf(() => fromRows.list(undefined, { limit } as never))).toBe('invalid-input');
-      expect(codeOf(() => fromObjects.list(undefined, { limit } as never))).toBe('invalid-input');
+      expect(codeOf(() => fromRows.list(undefined, { limit } as never))).toBe('invalidInput');
+      expect(codeOf(() => fromObjects.list(undefined, { limit } as never))).toBe('invalidInput');
     }
     expect(codeOf(() => fromRows.list(undefined, { limit: 1, other: 1 } as never))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(codeOf(() => fromRows.list(undefined, { limit: 1, after: 3 } as never))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(codeOf(() => fromObjects.list(undefined, { limit: 1, after: 3 } as never))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
-    expect(codeOf(() => fromRows.count({ name: 'x' } as never))).toBe('invalid-input');
-    expect(codeOf(() => fromRows.count({ shown: 'yes' } as never))).toBe('invalid-input');
-    expect(codeOf(() => fromRows.count({ bbox: [0, 0, 1] } as never))).toBe('invalid-input');
+    expect(codeOf(() => fromRows.count({ name: 'x' } as never))).toBe('invalidInput');
+    expect(codeOf(() => fromRows.count({ shown: 'yes' } as never))).toBe('invalidInput');
+    expect(codeOf(() => fromRows.count({ bbox: [0, 0, 1] } as never))).toBe('invalidInput');
   });
 });
 

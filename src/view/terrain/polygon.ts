@@ -40,7 +40,7 @@ import { tilingSignature } from './tiling.js';
  *
  * @param terrain - The render context of the draw call, or its `terrain`
  * @returns The step, or `null` when the terrain is disabled
- * @throws `DrawError` with the code `invalid-input` when it is an object the instance did not
+ * @throws `DrawError` with the code `invalidInput` when it is an object the instance did not
  *   give a renderer, as `viewUniforms` does
  */
 export function terrainTessellationStep(

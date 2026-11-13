@@ -61,16 +61,16 @@ export type DatasetRow = GeoJSONFeature<GeoJSONGeometry | null> & {
 /**
  * Where a dataset is drawn relative to the layers of the Store.
  *
- * below-store / above-store refer to the position relative to all of the layers of the Store.
- * layer-order means "taking part in the same stacking order as the layers of the Store".
+ * belowStore / aboveStore refer to the position relative to all of the layers of the Store.
+ * layerOrder means "taking part in the same stacking order as the layers of the Store".
  *
- * - below-store: behind all of the layers of the Store (the default)
- * - above-store: in front of all of the layers of the Store (behind the selection UI)
- * - layer-order: drawn at the position where its own dataset id is placed within the
+ * - belowStore: behind all of the layers of the Store (the default)
+ * - aboveStore: in front of all of the layers of the Store (behind the selection UI)
+ * - layerOrder: drawn at the position where its own dataset id is placed within the
  *   stacking order of the Store (`store.getLayerOrder()`). While it is not on the order it is
  *   not drawn
  */
-export type DatasetOrder = 'below-store' | 'above-store' | 'layer-order';
+export type DatasetOrder = 'belowStore' | 'aboveStore' | 'layerOrder';
 
 /**
  * The destination of a move of a dataset (`draw.datasets.move`): a side and a position
@@ -79,7 +79,7 @@ export type DatasetOrder = 'below-store' | 'above-store' | 'layer-order';
  * order is the side (in front of or behind the Store) and index is the position within that
  * side. index 0 is the backmost and out-of-range values are clamped. Both can be omitted.
  *
- * When it is moved to order: 'layer-order', the stacking order is decided by the layer order of
+ * When it is moved to order: 'layerOrder', the stacking order is decided by the layer order of
  * the Store alone and index takes no part in it.
  */
 export interface DatasetPlacement {
@@ -136,7 +136,7 @@ export type DatasetZoomScale = (zoom: number) => { scale: number; opacity: numbe
 export interface DatasetOptions {
   /**
    * The dataset id. It must be unique among the datasets of the draw
-   * instance; a duplicate makes the addition throw. With `order: 'layer-order'` it is
+   * instance; a duplicate makes the addition throw. With `order: 'layerOrder'` it is
    * also the id placed in the layer order of the Store
    */
   id: string;
@@ -172,7 +172,7 @@ export interface DatasetOptions {
    * The only difference is whether click / hover are fired.
    */
   interactive?: boolean;
-  /** Where it is drawn relative to the Store (`'below-store'` by default) */
+  /** Where it is drawn relative to the Store (`'belowStore'` by default) */
   order?: DatasetOrder;
   /** The size and opacity factors per zoom (no factors when omitted) */
   zoomScale?: DatasetZoomScale;

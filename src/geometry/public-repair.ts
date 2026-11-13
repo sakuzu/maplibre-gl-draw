@@ -27,8 +27,8 @@ import { metersToDegrees, toRadians } from './units.js';
  * @returns A Polygon, or a MultiPolygon when the result falls apart (a figure eight becomes two
  *   parts), with outer rings counter-clockwise and holes clockwise. null when nothing with an
  *   area remains
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
- *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a Polygon or a
+ *   MultiPolygon, and (`engineFailure`) when the boolean operation fails
  */
 export function makeValid(
   polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
@@ -45,7 +45,7 @@ export function makeValid(
  *   in degrees. Only the orientation changes; self-intersections are left as they are (see
  *   {@link makeValid})
  * @returns A geometry of the same type as the input
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a Polygon or a
  *   MultiPolygon
  */
 export function rewind(polygon: Polygon | { readonly geometry: Polygon }): Polygon;
@@ -101,7 +101,7 @@ function simplifyInMeters(
  * @returns A geometry of the same type. The ends of a line always remain, and a ring that
  *   would keep fewer than 4 positions is kept as it is. The result may intersect itself (see
  *   {@link makeValid})
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a LineString, a
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a LineString, a
  *   Polygon or a MultiPolygon, and when the tolerance is not a finite number
  *
  * @example

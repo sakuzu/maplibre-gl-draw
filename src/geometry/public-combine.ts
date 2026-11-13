@@ -19,8 +19,8 @@ import { splitArea } from './split.js';
  *   are left out
  * @returns A Polygon, or a MultiPolygon when the union falls apart, with self-intersections
  *   resolved and the rings oriented as RFC 7946 recommends. null when nothing has an area
- * @throws {@link GeometryError} (`invalid-input`) when an element is not a Polygon or a
- *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
+ * @throws {@link GeometryError} (`invalidInput`) when an element is not a Polygon or a
+ *   MultiPolygon, and (`engineFailure`) when the boolean operation fails
  *
  * @example
  * ```ts
@@ -48,8 +48,8 @@ export function union(
  * @returns A Polygon or a MultiPolygon in the form {@link union} returns. null when the
  *   polygons share no area (touching boundaries included), when one has no area, and for an
  *   empty array
- * @throws {@link GeometryError} (`invalid-input`) when an element is not a Polygon or a
- *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
+ * @throws {@link GeometryError} (`invalidInput`) when an element is not a Polygon or a
+ *   MultiPolygon, and (`engineFailure`) when the boolean operation fails
  */
 export function intersection(
   polygons: readonly (Polygon | MultiPolygon | { readonly geometry: Geometry })[],
@@ -67,8 +67,8 @@ export function intersection(
  *   coordinates in degrees
  * @returns A Polygon or a MultiPolygon in the form {@link union} returns; a removed area inside
  *   the subject becomes a hole. null when nothing remains
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not a Polygon or a
- *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not a Polygon or a
+ *   MultiPolygon, and (`engineFailure`) when the boolean operation fails
  */
 export function difference(
   subject: Polygon | MultiPolygon | { readonly geometry: Geometry },
@@ -89,8 +89,8 @@ export function difference(
  *   1e-9 degrees count as one
  * @returns One Polygon per piece, holes kept. When the line does not cut across, the polygon
  *   itself (one Polygon per part of a MultiPolygon). An empty array when it has no area
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not of the expected
- *   type, and (`engine-failure`) when the boolean operation fails
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not of the expected
+ *   type, and (`engineFailure`) when the boolean operation fails
  */
 export function split(
   polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },

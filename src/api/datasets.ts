@@ -28,7 +28,7 @@ export type DatasetRow = GeoJSONFeature<Geometry | null> & {
  * Where a dataset is stacked: below the layers of the document, above them, or inside the
  * layer order.
  */
-export type DatasetOrder = 'below-store' | 'above-store' | 'layer-order';
+export type DatasetOrder = 'belowStore' | 'aboveStore' | 'layerOrder';
 
 /** Where a dataset goes in the stacking order. */
 export interface DatasetPlacement {
@@ -106,7 +106,7 @@ export interface DatasetEvents {
 /**
  * What `datasets.add` takes. The rows are given in one of three ways, told apart by the name
  * of the field: `rows`, `table` or `provider`. With none of them the dataset starts empty: it
- * can be placed at once (`tx.layers.place` takes its ID when its order is `layer-order`), and
+ * can be placed at once (`tx.layers.place` takes its ID when its order is `layerOrder`), and
  * its rows are given later with `setRows` or `setTable`.
  */
 export type DatasetOptions = {
@@ -248,8 +248,8 @@ export interface DatasetsCollection extends Observable<readonly Dataset[]> {
   /**
    * Adds a dataset and returns it.
    *
-   * @throws `DrawError` with the code `already-exists` when the ID is taken, or
-   *   `invalid-input` when the options are wrong
+   * @throws `DrawError` with the code `alreadyExists` when the ID is taken, or
+   *   `invalidInput` when the options are wrong
    */
   add(options: DatasetOptions): Dataset;
   /**
@@ -263,14 +263,14 @@ export interface DatasetsCollection extends Observable<readonly Dataset[]> {
    * Removes a dataset.
    *
    * @returns True when it was removed
-   * @throws `DrawError` with the code `not-found` when there is no dataset with this ID
+   * @throws `DrawError` with the code `notFound` when there is no dataset with this ID
    */
   remove(id: string): boolean;
   /**
    * Removes several datasets in one transaction: all of them or none.
    *
    * @returns True when they were removed
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist; nothing
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing
    *   is removed then
    */
   removeMany(ids: readonly string[]): boolean;
@@ -278,7 +278,7 @@ export interface DatasetsCollection extends Observable<readonly Dataset[]> {
    * Moves a dataset in the stacking order.
    *
    * @returns True when it moved
-   * @throws `DrawError` with the code `not-found` when there is no dataset with this ID
+   * @throws `DrawError` with the code `notFound` when there is no dataset with this ID
    */
   move(id: string, placement: DatasetPlacement): boolean;
 }

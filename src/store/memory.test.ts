@@ -400,7 +400,7 @@ describe('MemoryStore', () => {
       });
 
       it('keeps an ID that is not a layer (a dataset taking part)', () => {
-        // The stacking order also contains datasets (order: 'layer-order').
+        // The stacking order also contains datasets (order: 'layerOrder').
         // Removing an ID that cannot be resolved as a layer would make the position of the
         // dataset disappear from the sequence, so it is kept as it is.
         store.setLayerOrder(['layer-1', 'dataset-a', 'layer-2', 'layer-3']);
@@ -1045,9 +1045,9 @@ describe('MemoryStore', () => {
     it('sets and gets the mode', () => {
       expect(store.getMode()).toBe('select');
 
-      store.setMode('draw_point');
+      store.setMode('drawPoint');
 
-      expect(store.getMode()).toBe('draw_point');
+      expect(store.getMode()).toBe('drawPoint');
     });
 
     it('setting the same mode does not notify a change', () => {
@@ -1063,10 +1063,10 @@ describe('MemoryStore', () => {
       const listener = vi.fn();
       store.subscribe(listener);
 
-      store.setMode('draw_polygon');
+      store.setMode('drawPolygon');
 
       const changes: StoreChange = listener.mock.calls[0][0];
-      expect(changes.mode?.mode).toBe('draw_polygon');
+      expect(changes.mode?.mode).toBe('drawPolygon');
       expect(changes.mode?.previous).toBe('select');
     });
   });

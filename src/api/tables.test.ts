@@ -35,6 +35,6 @@ describe('createRowValues and checkRowValues', () => {
   it('refuse a deletion that is not a Uint8Array, null among them', () => {
     expect(() =>
       createRowValues({ handles: Int32Array.of(3), fields: new Map(), deleted: null } as never),
-    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
   });
 });

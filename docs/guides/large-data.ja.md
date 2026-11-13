@@ -114,7 +114,7 @@ parcels.on('clicked', ({ row }) => {
 ## 行を渡す 3 つの方法
 
 手元のデータの形に合わせて選びます。渡せるのは 3 つのうち 1 つだけ
-で、2 つ渡すとコード `invalid-input` の `DrawError` になります。
+で、2 つ渡すとコード `invalidInput` の `DrawError` になります。
 どれも渡さなければ、データセットは空で始まります。すぐに置くことが
 でき、行は後から `setRows` か `setTable` で渡します。
 
@@ -421,14 +421,14 @@ parcels.setZoomScale((zoom) => ({
 
 | order | 位置 | 標準の UI のレイヤーパネル |
 | --- | --- | --- |
-| `below-store` | すべてのレイヤーの後ろ (既定) | 落とすと `layer-order` |
-| `above-store` | すべてのレイヤーの前 | 落とすと `layer-order` |
-| `layer-order` | 重なりの順の中の自分の ID の位置 | 重なりの順の中で移動 |
+| `belowStore` | すべてのレイヤーの後ろ (既定) | 落とすと `layerOrder` |
+| `aboveStore` | すべてのレイヤーの前 | 落とすと `layerOrder` |
+| `layerOrder` | 重なりの順の中の自分の ID の位置 | 重なりの順の中で移動 |
 
-`above-store` のデータセットは選択のハンドルの後ろに描かれます。標準の
+`aboveStore` のデータセットは選択のハンドルの後ろに描かれます。標準の
 UI のレイヤーパネルでは、どのデータセットもレイヤーの間へドラッグでき
-ます。パネルは、レイヤーの間に落とされた `below-store` か
-`above-store` のデータセットを `draw.datasets.move` で `layer-order` に
+ます。パネルは、レイヤーの間に落とされた `belowStore` か
+`aboveStore` のデータセットを `draw.datasets.move` で `layerOrder` に
 移してから、レイヤーを `tx.layers.place` で置きます。書き込みが
 断られたとき (読み取り専用) は、データセットを元の order に戻します。
 
@@ -441,11 +441,11 @@ UI のレイヤーパネルでは、どのデータセットもレイヤーの�
 何も知らせません。
 
 ```ts
-draw.datasets.move('parcels', { order: 'above-store' });
+draw.datasets.move('parcels', { order: 'aboveStore' });
 draw.datasets.move('parcels', { index: 0 }); // その側でいちばん後ろ
 ```
 
-`layer-order` のデータセットは、その ID が文書の重なりの順
+`layerOrder` のデータセットは、その ID が文書の重なりの順
 (`draw.getStore().getLayerOrder()`) にある間だけ描かれ、位置もその
 順だけで決まります。この項目は、開いた文書 (その重なりの順
 `layerOrder` は ID を位置ごと保ちます) か、`store` オプションで渡した
@@ -455,7 +455,7 @@ draw.datasets.move('parcels', { index: 0 }); // その側でいちばん後ろ
 ```ts
 // 行は後から setRows か setTable で渡すまで空。文書の重なりの順の
 // 'parcels' の位置に描かれる
-draw.datasets.add({ id: 'parcels', order: 'layer-order' });
+draw.datasets.add({ id: 'parcels', order: 'layerOrder' });
 ```
 
 データセットを取り除いても、重なりの順は書き換えません。データセットの
@@ -740,7 +740,7 @@ async function whenPictureComplete(): Promise<void> {
   描いたものと並べて表示します。作った 100 万の点は見えている範囲の分を
   `provider` が渡して間引き、六角形のセル 25 万個は一度に渡します。
   Overture Maps の東京都心の建物と場所も置きます。建物は外形の面積で
-  塗り分け、`layer-order` で描いたものの 2 つのレイヤーの間に置き、
+  塗り分け、`layerOrder` で描いたものの 2 つのレイヤーの間に置き、
   セルはその奥に置きます。行のクリックを知らせ、描いた線は建物に
   スナップします
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.ja.md)

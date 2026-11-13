@@ -187,7 +187,7 @@ describe('the select mode', () => {
 describe('the drawing modes', () => {
   it('prevents Backspace only when it removes the last vertex', () => {
     const view = open();
-    view.draw.setMode('draw_line');
+    view.draw.setMode('drawLine');
     expect(view.press('Backspace')).toBe(false);
     const input = createSyntheticInput(view.engine);
     input.click([2, 2]);
@@ -195,12 +195,12 @@ describe('the drawing modes', () => {
     expect(view.press('Backspace')).toBe(true);
     expect(view.press('Backspace')).toBe(true);
     expect(view.press('Backspace')).toBe(false);
-    expect(view.draw.getMode()).toBe('draw_line');
+    expect(view.draw.getMode()).toBe('drawLine');
   });
 
   it('prevents Enter only when it finishes the shape', () => {
     const view = open();
-    view.draw.setMode('draw_line');
+    view.draw.setMode('drawLine');
     expect(view.press('Enter')).toBe(false);
     const input = createSyntheticInput(view.engine);
     input.click([2, 2]);
@@ -213,17 +213,17 @@ describe('the drawing modes', () => {
 
   it('prevents Escape, which drops the shape or leaves the mode', () => {
     const view = open();
-    view.draw.setMode('draw_polygon');
+    view.draw.setMode('drawPolygon');
     createSyntheticInput(view.engine).click([2, 2]);
     expect(view.press('Escape')).toBe(true);
-    expect(view.draw.getMode()).toBe('draw_polygon');
+    expect(view.draw.getMode()).toBe('drawPolygon');
     expect(view.press('Escape')).toBe(true);
     expect(view.draw.getMode()).toBe('select');
   });
 
   it('leaves a key the mode has no use for alone', () => {
     const view = open();
-    view.draw.setMode('draw_circle');
+    view.draw.setMode('drawCircle');
     expect(view.press('Enter')).toBe(false);
     expect(view.press('Escape')).toBe(true);
   });

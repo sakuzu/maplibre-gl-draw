@@ -100,11 +100,11 @@ to `setMode`.
 
 ```ts
 document.querySelector('#draw-polygon')?.addEventListener('click', () => {
-  draw.setMode('draw_polygon');
+  draw.setMode('drawPolygon');
 });
 ```
 
-In `draw_polygon` mode the user draws like this.
+In `drawPolygon` mode the user draws like this.
 
 | Action | Result |
 | --- | --- |
@@ -151,12 +151,12 @@ function with the value now at once, and again each time it changes.
 draw.mode.subscribe((mode) => {
   document
     .querySelector('#draw-polygon')
-    ?.classList.toggle('active', mode === 'draw_polygon');
+    ?.classList.toggle('active', mode === 'drawPolygon');
 });
 ```
 
-`draw_point`, `draw_line`, `draw_circle` and `draw_freehand` are used
-the same way; `draw_image` also asks your application for the image. The
+`drawPoint`, `drawLine`, `drawCircle` and `drawFreehand` are used
+the same way; `drawImage` also asks your application for the image. The
 [drawing guide](guides/drawing.md) has the actions of every mode.
 
 ## 4. Subscribe to changes
@@ -195,8 +195,8 @@ A few rules make the API easy to reason about.
   The promise settles once the commit is made, so a read after `await`
   gives the new state, and a read before it the state before
 - A write that fails rejects with a `DrawError`: a wrong argument, such as
-  an ID that does not exist (`not-found`), or a write the state refuses,
-  such as one while the drawing is read-only (`not-editable`) or of a
+  an ID that does not exist (`notFound`), or a write the state refuses,
+  such as one while the drawing is read-only (`notEditable`) or of a
   locked feature (`locked`). Nothing of the transaction is committed then
 - Events fire after the commit is made, so a listener sees the new state
 - `draw.on` returns a function that unsubscribes
@@ -254,7 +254,7 @@ if (saved !== null) {
 }
 ```
 
-`open` rejects with a `DrawError` (`not-editable`) when the drawing is
+`open` rejects with a `DrawError` (`notEditable`) when the drawing is
 read-only. Opening GeoJSON replaces the features and the groups and keeps
 the layers. A feature goes into the layer it names in
 `maplibre-gl-draw:layerId` when that layer exists (a GeoJSON written by

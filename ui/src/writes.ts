@@ -38,7 +38,7 @@ export async function writeOrThrow(
     await draw.write(fn);
     return true;
   } catch (error) {
-    if (error instanceof DrawError && (error.code === 'not-editable' || error.code === 'locked')) {
+    if (error instanceof DrawError && (error.code === 'notEditable' || error.code === 'locked')) {
       return false;
     }
     throw error;

@@ -775,7 +775,7 @@ describe('bbox, metersToDegrees and pixelsToMeters', () => {
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(GeometryError);
-      expect((error as GeometryError).code).toBe('invalid-input');
+      expect((error as GeometryError).code).toBe('invalidInput');
       expect((error as GeometryError).operation).toBe('bbox');
     }
   });
@@ -942,7 +942,7 @@ describe('inputs that carry a geometry', () => {
         expect.unreachable();
       } catch (error) {
         expect(error).toBeInstanceOf(GeometryError);
-        expect((error as GeometryError).code).toBe('invalid-input');
+        expect((error as GeometryError).code).toBe('invalidInput');
       }
     }
   });

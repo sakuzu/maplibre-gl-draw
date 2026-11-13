@@ -19,7 +19,7 @@ selected.
 
 ## Code
 
-The library opens no file dialog. A click in `draw_image` calls the
+The library opens no file dialog. A click in `drawImage` calls the
 option `requestImage` with where to place the image (the Image tool gives
 the center of the map as soon as it is pressed); the page opens a file
 picker and gives the file, and the library places it there, in the

@@ -135,7 +135,7 @@ export function rowFeature(
   const dims = context.dimensionsOf(layerId);
   if (dims !== 'xy') {
     throw new DrawError(
-      'invalid-state',
+      'invalidState',
       `FeatureTables: a row of a layer of ${dims} coordinates is not a feature`,
     );
   }

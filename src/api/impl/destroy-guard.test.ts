@@ -36,15 +36,15 @@ describe('guardAfterDestroy', () => {
         thrown = error;
       }
       expect(thrown).toBeInstanceOf(DrawError);
-      expect((thrown as DrawError).code).toBe('invalid-state');
+      expect((thrown as DrawError).code).toBe('invalidState');
       expect((thrown as DrawError).message).toBe('the row is not read');
       expect((thrown as { cause?: unknown }).cause).toBe(tables);
     }
   });
 
   it('lets through a DrawError and what a function given to a method throws', () => {
-    const own = new DrawError('invalid-input', 'x');
-    const caller = new TabaneError('invalid-input', 'an error of the caller');
+    const own = new DrawError('invalidInput', 'x');
+    const caller = new TabaneError('invalidInput', 'an error of the caller');
     const guarded = guardAfterDestroy(
       {
         check: (): never => {

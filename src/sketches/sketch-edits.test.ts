@@ -42,7 +42,7 @@ describe('checkSketchEdits', () => {
         DEFAULT_TRANSFORMS,
       ),
     ).not.toThrow();
-    const byId: SketchEdit = { kind: 'vertex-delete', featureId: 'a', vertices: ['v1'] };
+    const byId: SketchEdit = { kind: 'vertexDelete', featureId: 'a', vertices: ['v1'] };
     expect(() => checkSketchEdits([byId], true, DEFAULT_TRANSFORMS)).not.toThrow();
     expect(() => checkSketchEdits([byId], false, DEFAULT_TRANSFORMS)).toThrow(/by its place/);
     expect(() =>
@@ -78,7 +78,7 @@ describe('what is left of the edits', () => {
   it('leaves out the vertices gone and the insertions next to them', () => {
     const edits: SketchEdit[] = [
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'a',
         vertices: ['1', '2'],
         positions: [
@@ -86,14 +86,14 @@ describe('what is left of the edits', () => {
           [1, 1],
         ],
       },
-      { kind: 'vertex-insert', featureId: 'a', after: '2', position: [3, 3] },
-      { kind: 'vertex-delete', featureId: 'b', vertices: ['2'] },
+      { kind: 'vertexInsert', featureId: 'a', after: '2', position: [3, 3] },
+      { kind: 'vertexDelete', featureId: 'b', vertices: ['2'] },
     ];
     const { edits: left, dropped } = withoutVertices(edits, 'a', (v) => v !== '2');
     expect(dropped).toBe(2);
     expect(left).toEqual([
-      { kind: 'vertex-move', featureId: 'a', vertices: ['1'], positions: [[0, 0]] },
-      { kind: 'vertex-delete', featureId: 'b', vertices: ['2'] },
+      { kind: 'vertexMove', featureId: 'a', vertices: ['1'], positions: [[0, 0]] },
+      { kind: 'vertexDelete', featureId: 'b', vertices: ['2'] },
     ]);
   });
 });
@@ -163,7 +163,7 @@ describe('featureEditsOf', () => {
     const edits: SketchEdit[] = [
       { kind: 'translate', target: { selection: true }, from: [0, 0], to: [1, 1] },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'a',
         vertices: ['x', 'y'],
         positions: [
@@ -186,7 +186,7 @@ describe('featureEditsOf', () => {
     expect(out).toEqual([
       { kind: 'translate', target: { featureIds: ['s'] }, from: [0, 0], to: [1, 1] },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'a',
         vertices: [{ ring: 0, index: 4 }],
         positions: [[0, 0]],

@@ -85,7 +85,7 @@ export interface GeoJSONRows {
  *
  * @param features - The features of a FeatureCollection
  * @returns The rows and the features left out
- * @throws `DrawError` with the code `invalid-input` when a value of the properties is not a
+ * @throws `DrawError` with the code `invalidInput` when a value of the properties is not a
  *   value, as a load throws
  * @experimental
  */

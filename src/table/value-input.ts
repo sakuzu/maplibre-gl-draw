@@ -14,7 +14,7 @@ import { drawErrorOf } from './draw-error-of.js';
  * The value given, in the one form the library holds
  *
  * @param what - What the value is, for the message of the error
- * @throws `DrawError` with the code `invalid-input` when it is not a value
+ * @throws `DrawError` with the code `invalidInput` when it is not a value
  */
 export function drawValueOfInput(value: unknown, what: string): Value {
   try {

@@ -74,7 +74,7 @@ export interface Registry<T> {
     entries: readonly (readonly [string, T])[],
     options?: { readonly overriding?: boolean },
   ): () => void;
-  /** Removes the named values, all of them or none; throws not-found for a missing name */
+  /** Removes the named values, all of them or none; throws notFound for a missing name */
   remove(names: readonly string[]): boolean;
   /** Whether the value is the one installed under the name */
   holds(name: string, value: T): boolean;
@@ -120,7 +120,7 @@ export function createRegistry<T>(installer: Installer<T>): Registry<T> {
         const takenElsewhere = !options?.overriding && installer.isTakenElsewhere?.(name);
         if (seen.has(name) || entries.has(name) || takenElsewhere) {
           throw new DrawError(
-            'already-exists',
+            'alreadyExists',
             `There is already a ${installer.kind} named ${JSON.stringify(name)}`,
           );
         }

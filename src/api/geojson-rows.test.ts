@@ -305,7 +305,7 @@ describe('rowsOfGeoJSON', () => {
     const bad = [VALID, feature({ type: 'Point', coordinates: [0, 0] }, { s: '\uD800' })];
     const { doc } = documentOf();
     const collection: FeatureCollection = { type: 'FeatureCollection', features: bad };
-    await expect(doc.load(collection)).rejects.toMatchObject({ code: 'invalid-input' });
+    await expect(doc.load(collection)).rejects.toMatchObject({ code: 'invalidInput' });
     expect(() => rowsOfGeoJSON(bad)).toThrow(DrawError);
     expect(() => rowsOfGeoJSON(bad)).toThrow(/lone surrogate/);
   });

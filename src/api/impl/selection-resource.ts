@@ -31,7 +31,7 @@ export interface SelectionWrites extends SelectionResource {
    *   is left as it is)
    * @returns False when nothing is changed (every feature is locked, too), or the change is
    *   refused (read-only, the interaction lock)
-   * @throws `DrawError` with the code `invalid-input` when a patch has another shape or changes
+   * @throws `DrawError` with the code `invalidInput` when a patch has another shape or changes
    *   the geometry
    */
   update(
@@ -62,7 +62,7 @@ export interface SelectionWrites extends SelectionResource {
    * Moves what is selected.
    *
    * @returns False when nothing is selected or the move is refused
-   * @throws `DrawError` with the code `not-found` when the target does not exist
+   * @throws `DrawError` with the code `notFound` when the target does not exist
    */
   move(to: MoveTarget): boolean;
 }

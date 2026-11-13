@@ -78,7 +78,7 @@ function movedVerticesOf(state: VertexState, kind: string): MovedVertices {
 
 /**
  * A move of vertices: the vertices of the feature grabbed, and the ones of the features that
- * follow along through a shared vertex, by the edits `vertex-move` of the sketch of the drag. Each
+ * follow along through a shared vertex, by the edits `vertexMove` of the sketch of the drag. Each
  * edit names the vertices it moves and where they go, so a vertex another writer moves meanwhile
  * stays where it put it
  *
@@ -106,7 +106,7 @@ export class VertexDrag implements SketchDrag {
 
   movesNothing(edits: readonly SketchEdit[]): boolean {
     return edits.every((edit, i) => {
-      if (edit.kind !== 'vertex-move') return false;
+      if (edit.kind !== 'vertexMove') return false;
       const from = (this.start[i] as typeof edit | undefined)?.positions;
       return edit.positions.every(
         (position, k) => position[0] === from?.[k]?.[0] && position[1] === from?.[k]?.[1],
@@ -117,7 +117,7 @@ export class VertexDrag implements SketchDrag {
   /** The edits that move the vertices by a distance in degrees */
   #editsBy(dx: number, dy: number): readonly SketchEdit[] {
     return this.#moved.map(({ featureId, vertices, from }) => ({
-      kind: 'vertex-move',
+      kind: 'vertexMove',
       featureId,
       vertices,
       positions: from.map((position): Coordinate => [position[0] + dx, position[1] + dy]),
@@ -127,7 +127,7 @@ export class VertexDrag implements SketchDrag {
 
 /**
  * A drag of a midpoint: a vertex inserted after the one of the hit, which follows the pointer, by
- * the edit `vertex-insert` of the sketch of the drag
+ * the edit `vertexInsert` of the sketch of the drag
  *
  * @internal
  */
@@ -156,7 +156,7 @@ export class MidpointDrag implements SketchDrag {
 
   #editsAt(lngLat: { lng: number; lat: number }): readonly SketchEdit[] {
     const position: Coordinate = [lngLat.lng, lngLat.lat];
-    return [{ kind: 'vertex-insert', featureId: this.featureId, after: this.after, position }];
+    return [{ kind: 'vertexInsert', featureId: this.featureId, after: this.after, position }];
   }
 }
 

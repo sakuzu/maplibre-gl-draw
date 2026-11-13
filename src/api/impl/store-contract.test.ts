@@ -139,7 +139,7 @@ describe('a Store of the application', () => {
     draw.vertexSelection.set(line.id, [{ ring: 0, index: 1 }]);
     draw.hidden.add(point.id);
     writesOf(draw).groups.create({ members: [line.id] });
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0.2, 0.2]);
     input.click([0.4, 0.2]);
@@ -169,7 +169,7 @@ describe('a Store of the application', () => {
     host.calls.length = 0;
     draw.selection.set('feature', [feature.id]);
     draw.hidden.add(feature.id);
-    draw.setMode('draw_point');
+    draw.setMode('drawPoint');
     draw.setMode('select');
     draw.setInteractionLocked(true);
     draw.setReadOnly(true);
@@ -206,7 +206,7 @@ describe('a Store of the application that knows numbers of names beyond what it 
     const ownDraw = createDrawOnEngine(own, { store });
     own.enterDefaultMode();
 
-    ownDraw.setMode('draw_point');
+    ownDraw.setMode('drawPoint');
     createSyntheticInput(own).click([0.2, 0.2]);
 
     expect(store.listLayers().map((layer) => layer.name)).toEqual(['Layer 7']);

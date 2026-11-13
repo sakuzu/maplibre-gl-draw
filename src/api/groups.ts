@@ -45,8 +45,8 @@ export interface GroupsCollection {
    * are counted with `features.count({ groupId })`.
    *
    * @returns The IDs, as a new array (empty past the last feature)
-   * @throws `DrawError` with the code `not-found` when there is no group with this ID, or
-   *   `invalid-input` when the range is not of non-negative integers
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID, or
+   *   `invalidInput` when the range is not of non-negative integers
    */
   listMembers(id: string, options?: ItemListOptions): string[];
 }

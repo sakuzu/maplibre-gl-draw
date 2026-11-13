@@ -11,14 +11,14 @@
 // move), at that node's position in core's list plus one, or at the back (0) when nothing in the
 // tree is behind it.
 //
-// - a layer, or a dataset placed among the layers (`layer-order`): the layers in their new order
+// - a layer, or a dataset placed among the layers (`layerOrder`): the layers in their new order
 //   from the back, each put just above the one before it (`tx.layers.place`, one commit). The
 //   rows of the root that are not entries of the stacking order (the datasets in front of or
 //   behind every layer) are left out, and so are the entries the tree does not show, whose
 //   positions core keeps. A dataset among the layers keeps its place in core: the place takes
 //   layers only (its place among them is not written yet)
-// - a dataset in front of or behind every layer (`above-store`, `below-store`): it joins the
-//   stacking order first (`join`: the panel moves it to `layer-order`, and back to its own order
+// - a dataset in front of or behind every layer (`aboveStore`, `belowStore`): it joins the
+//   stacking order first (`join`: the panel moves it to `layerOrder`, and back to its own order
 //   when the reorder is refused), then the same order of the layers
 // - a group or a feature: put next to the item behind it (`below`), or the item in front of it
 //   at the back (`above`), in its new layer or group (`tx.groups.place`, `tx.features.place`)

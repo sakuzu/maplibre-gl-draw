@@ -203,7 +203,7 @@ export class QuadShader<C extends QuadDrapeContent = QuadImageContent> {
    *
    * @param terrain - The render context of the draw call, or its `terrain`; `null` draws without
    *   terrain
-   * @throws `DrawError` with the code `invalid-input` when it is an object the instance did not
+   * @throws `DrawError` with the code `invalidInput` when it is an object the instance did not
    *   give a renderer, as `viewUniforms` does
    */
   setTerrain(terrain: RenderContext | TerrainSurface | null): void {
@@ -578,7 +578,7 @@ void main() {
  * @param content - What the quad shows
  * @param opacity - The opacity, 0..1
  * @returns true if it was painted; false when the caller must draw it another way
- * @throws `DrawError` with the code `invalid-input` when `terrain` is an object the instance did
+ * @throws `DrawError` with the code `invalidInput` when `terrain` is an object the instance did
  *   not give a renderer, as `viewUniforms` does
  */
 export function drawQuadOnTerrain(

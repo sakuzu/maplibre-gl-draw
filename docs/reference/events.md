@@ -30,7 +30,7 @@ draw.once('change', ({ commit, label }) => console.log(commit, label));
 `on` and `once` return the function that unsubscribes. `off(event,
 listener)` removes a listener given to either of them. A name that is not
 one of the events below, and a listener that is not a function, throw a
-`DrawError` with the code `invalid-input`.
+`DrawError` with the code `invalidInput`.
 
 An extension subscribes with `on`, `off` and `once` of its context. They
 take the same names and payloads, and the subscriptions end by themselves
@@ -135,7 +135,7 @@ reads it ([Using it with a framework](../guides/frameworks.md)).
 
 A subscriber that throws is logged with `console.error`, and stops neither
 the other subscribers nor the operation that changed the value. A `run`
-that is not a function throws a `DrawError` with the code `invalid-input`.
+that is not a function throws a `DrawError` with the code `invalidInput`.
 `draw.destroy()` drops every subscriber.
 
 ## Transactions
@@ -370,7 +370,7 @@ own MapLibre layers between the divisions places them again here (see
 The image of an Image feature could not be decoded, or the image the image
 mode asked for with `requestImage` could not be placed. `source` is
 `image`, `featureId` names the feature of an image that could not be
-decoded, and `error` is a `DrawError` (with the code `unsupported-format`
+decoded, and `error` is a `DrawError` (with the code `unsupportedFormat`
 when what failed was not one) whose `cause` holds what was thrown. It fires
 once per image, and a feature is drawn without it.
 

@@ -248,7 +248,7 @@ interface Drawing {
 
 const DRAWINGS: Drawing[] = [
   {
-    mode: 'draw_point',
+    mode: 'drawPoint',
     begin: (page) => moveTo(page, D),
     finish: (page) => clickAt(page, D),
     drop: (page) => press(page, 'Escape'),
@@ -262,7 +262,7 @@ const DRAWINGS: Drawing[] = [
     snapsToOther: true,
   },
   {
-    mode: 'draw_line',
+    mode: 'drawLine',
     begin: async (page) => {
       await clickAt(page, A);
       await clickAt(page, B);
@@ -279,12 +279,12 @@ const DRAWINGS: Drawing[] = [
     created: { type: 'LineString', positions: 3 },
     createdColor: I_LINE,
     modeAfter: 'select',
-    modeAfterDrop: 'draw_line',
+    modeAfterDrop: 'drawLine',
     selects: true,
     snapsToOther: true,
   },
   {
-    mode: 'draw_polygon',
+    mode: 'drawPolygon',
     begin: async (page) => {
       await clickAt(page, A);
       await clickAt(page, B);
@@ -301,12 +301,12 @@ const DRAWINGS: Drawing[] = [
     created: { type: 'Polygon', positions: 4 },
     createdColor: I_OUTLINE,
     modeAfter: 'select',
-    modeAfterDrop: 'draw_polygon',
+    modeAfterDrop: 'drawPolygon',
     selects: true,
     snapsToOther: true,
   },
   {
-    mode: 'draw_circle',
+    mode: 'drawCircle',
     begin: async (page) => {
       await clickAt(page, B);
       await moveTo(page, C);
@@ -321,12 +321,12 @@ const DRAWINGS: Drawing[] = [
     created: { type: 'Circle', positions: 1 },
     createdColor: I_FILL,
     modeAfter: 'select',
-    modeAfterDrop: 'draw_circle',
+    modeAfterDrop: 'drawCircle',
     selects: true,
     snapsToOther: true,
   },
   {
-    mode: 'draw_freehand',
+    mode: 'drawFreehand',
     begin: async (page) => {
       const p = await pageOfMap(page, A);
       await page.mouse.move(p.x, p.y);
@@ -347,8 +347,8 @@ const DRAWINGS: Drawing[] = [
     lastPreview: null,
     created: { type: 'Freehand', positions: -1 },
     createdColor: I_LINE,
-    modeAfter: 'draw_freehand',
-    modeAfterDrop: 'draw_freehand',
+    modeAfter: 'drawFreehand',
+    modeAfterDrop: 'drawFreehand',
     selects: false,
     // The moves of a stroke are not snapped
     snapsToOther: false,
@@ -408,14 +408,14 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
     const drawn = await frame(page, COLORS);
     const recorded = await events(page);
     // The shape being drawn: its lines and its vertices, and nothing of a feature
-    if (d.lastPreview === null && d.mode === 'draw_point') {
+    if (d.lastPreview === null && d.mode === 'drawPoint') {
       expect((drawn[I_PREVIEW] as Drawn).count).toBe(0);
     } else {
       expect((drawn[I_PREVIEW] as Drawn).count).toBeGreaterThan(200);
     }
-    if (d.mode === 'draw_line' || d.mode === 'draw_polygon') {
+    if (d.mode === 'drawLine' || d.mode === 'drawPolygon') {
       expect((drawn[I_PREVIEW_VERTEX] as Drawn).count).toBeGreaterThan(100);
-    } else if (d.mode === 'draw_circle') {
+    } else if (d.mode === 'drawCircle') {
       // The outlines of the marker of the center and of the handle of the radius
       expect((drawn[I_PREVIEW_VERTEX] as Drawn).count).toBeGreaterThan(20);
     } else {
@@ -428,7 +428,7 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
     // Told as it is drawn, written nowhere
     const told = previews(recorded);
     if (d.lastPreview === null) {
-      if (d.mode === 'draw_point') expect(told).toEqual([]);
+      if (d.mode === 'drawPoint') expect(told).toEqual([]);
       else expect(told.length).toBeGreaterThan(2);
     } else {
       expect(last(told)).toBe(d.lastPreview);
@@ -465,7 +465,7 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
       timeout: SCENES_TIMEOUT,
     }, async () => {
       await middle(d);
-      if (d.mode !== 'draw_freehand') await hover(d);
+      if (d.mode !== 'drawFreehand') await hover(d);
       await mark(page);
       await d.finish(page);
       const done = await frame(page, COLORS);
@@ -484,7 +484,7 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
       // Both Stores tell the feature created by its ID in the one change
       expect(featureEvents(recorded)).toEqual(['created', 'D']);
       expect(recorded.find((e) => e.name === 'created')?.id).toBe(created.id);
-      if (d.mode !== 'draw_point') expect(last(previews(recorded))).toBe('cleared');
+      if (d.mode !== 'drawPoint') expect(last(previews(recorded))).toBe('cleared');
       else expect(previews(recorded)).toEqual([]);
       expect(await modeOf(page)).toBe(d.modeAfter);
       expect(await selectedIds(page)).toEqual(d.selects ? [created.id] : []);
@@ -505,7 +505,7 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
       }
       expect((dropped[I_FRAME] as Drawn).count).toBe(0);
       expect(featureEvents(recorded)).toEqual([]);
-      if (d.mode !== 'draw_point') expect(previews(recorded)).toEqual(['cleared']);
+      if (d.mode !== 'drawPoint') expect(previews(recorded)).toEqual(['cleared']);
       else expect(previews(recorded)).toEqual([]);
       expect((await listed(page)).map((f) => f.id)).toEqual(['n']);
       expect(await modeOf(page)).toBe(d.modeAfterDrop);

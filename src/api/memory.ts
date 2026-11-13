@@ -74,7 +74,7 @@ export interface MemoryResource {
    * the device: 400 MiB on an iPhone, 500 MiB on an iPad, 1 GiB elsewhere. Nothing is refused by
    * it: the host decides what to stop.
    *
-   * @throws `DrawError` with the code `invalid-input` when the bytes are not a number above 0
+   * @throws `DrawError` with the code `invalidInput` when the bytes are not a number above 0
    */
   setLimit(bytes: number | null): void;
   /**
@@ -82,7 +82,7 @@ export interface MemoryResource {
    * held as rows when the Store of the instance holds its features as rows, as features
    * otherwise.
    *
-   * @throws `DrawError` with the code `invalid-input` when a number is negative or not finite
+   * @throws `DrawError` with the code `invalidInput` when a number is negative or not finite
    */
   estimate(size: DocumentSize): MemoryBytes;
 }

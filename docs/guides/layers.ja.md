@@ -16,7 +16,7 @@ const draw = createDraw(map);
 // (読み取り専用のあいだ書き込みは reject する)
 const notes = await draw.write((tx) => tx.layers.create({ name: 'Notes' }));
 draw.layers.setActive(notes.id);
-draw.setMode('draw_point');
+draw.setMode('drawPoint');
 
 // 後で: ロックして、地物を選べるが編集できないようにする
 await draw.write((tx) => tx.layers.update(notes.id, { locked: true }));
@@ -40,9 +40,9 @@ await draw.write((tx) => tx.layers.update(notes.id, { locked: true }));
 書き込みは `draw.write` の中で行います ([はじめに](../getting-started.ja.md))。
 `create` と `update` は書いたとおりのレイヤーを、`delete` は 1 つの ID、
 複数の ID、`{ all: true }` のどれかを受け取り、削除した数を返します。
-読み取り専用のあいだ、書き込みはコード `not-editable` の `DrawError` で
+読み取り専用のあいだ、書き込みはコード `notEditable` の `DrawError` で
 reject します ([読み取り専用](read-only.ja.md))。無い ID を渡すと
-`not-found` で reject します。そのとき取引は何も確定しません。
+`notFound` で reject します。そのとき取引は何も確定しません。
 
 ```ts
 const roads = await draw.write((tx) =>
@@ -334,7 +334,7 @@ draw.on('layerStack.changed', placeMapLayers);
 - 自前の項目が無ければ並びは 1 つで、`maplibre-gl-draw-layer` です
 - 並びが増減したときや範囲が変わったときに `layerStack.changed` が
   届きます。そのときに地図のレイヤーを置き直してください
-- `order: 'layer-order'` のデータセットは、同じ順の中の自分の ID の位置に
+- `order: 'layerOrder'` のデータセットは、同じ順の中の自分の ID の位置に
   描かれます ([大量のデータを表示する](large-data.ja.md))
 
 ## 関連する例

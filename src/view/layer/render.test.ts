@@ -235,12 +235,12 @@ describe('renderLayers and datasets', () => {
     makeFeature('poly-2', 'Polygon', 'layer-1'),
   ];
 
-  it('below-store is drawn before every layer of the Store', () => {
+  it('belowStore is drawn before every layer of the Store', () => {
     const display = createDisplay();
     display.add({
       id: 'disp',
       rows: [toRow({ id: 'disp-1', type: 'Point', coordinates: [0, 0] })],
-      order: 'below-store',
+      order: 'belowStore',
     });
 
     const paintOrder = runRenderLayers(storeFeatures, ['layer-1'], display);
@@ -248,12 +248,12 @@ describe('renderLayers and datasets', () => {
     expect(paintOrder).toEqual(['disp-1', 'poly-1', 'poly-2']);
   });
 
-  it('above-store is drawn after every layer of the Store', () => {
+  it('aboveStore is drawn after every layer of the Store', () => {
     const display = createDisplay();
     display.add({
       id: 'disp',
       rows: [toRow({ id: 'disp-1', type: 'Point', coordinates: [0, 0] })],
-      order: 'above-store',
+      order: 'aboveStore',
     });
 
     const paintOrder = runRenderLayers(storeFeatures, ['layer-1'], display);
@@ -266,12 +266,12 @@ describe('renderLayers and datasets', () => {
     display.add({
       id: 'under',
       rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
-      order: 'below-store',
+      order: 'belowStore',
     });
     display.add({
       id: 'over',
       rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
-      order: 'above-store',
+      order: 'aboveStore',
     });
 
     const features = [
@@ -290,7 +290,7 @@ describe('renderLayers and datasets', () => {
     expect(withDisplay).toEqual(withoutDisplay);
   });
 
-  describe('insertion into the stacking order (order: layer-order)', () => {
+  describe('insertion into the stacking order (order: layerOrder)', () => {
     const layered = [
       makeFeature('poly-bottom', 'Polygon', 'layer-bottom'),
       makeFeature('poly-top', 'Polygon', 'layer-top'),
@@ -301,7 +301,7 @@ describe('renderLayers and datasets', () => {
       display.add({
         id: 'middle',
         rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
-        order: 'layer-order',
+        order: 'layerOrder',
       });
 
       const paintOrder = runRenderLayers(
@@ -319,7 +319,7 @@ describe('renderLayers and datasets', () => {
       display.add({
         id: 'middle',
         rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
-        order: 'layer-order',
+        order: 'layerOrder',
       });
 
       const paintOrder = runRenderLayers(
@@ -332,12 +332,12 @@ describe('renderLayers and datasets', () => {
       expect(paintOrder).toEqual(['mid-1', 'poly-bottom', 'poly-top']);
     });
 
-    it('a layer-order dataset that is not on the order is not drawn', () => {
+    it('a layerOrder dataset that is not on the order is not drawn', () => {
       const display = createDisplay();
       display.add({
         id: 'orphan',
         rows: [toRow({ id: 'orphan-1', type: 'Point', coordinates: [0, 0] })],
-        order: 'layer-order',
+        order: 'layerOrder',
       });
 
       const paintOrder = runRenderLayers(storeFeatures, ['layer-1'], display);
@@ -350,7 +350,7 @@ describe('renderLayers and datasets', () => {
       display.add({
         id: 'middle',
         rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
-        order: 'layer-order',
+        order: 'layerOrder',
       });
 
       const paintOrder = runRenderLayers(
@@ -374,22 +374,22 @@ describe('renderLayers and datasets', () => {
       expect(paintOrder).toEqual(['poly-bottom', 'poly-top']);
     });
 
-    it('a dataset on the order coexists with below-store / above-store', () => {
+    it('a dataset on the order coexists with belowStore / aboveStore', () => {
       const display = createDisplay();
       display.add({
         id: 'under',
         rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
-        order: 'below-store',
+        order: 'belowStore',
       });
       display.add({
         id: 'middle',
         rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
-        order: 'layer-order',
+        order: 'layerOrder',
       });
       display.add({
         id: 'over',
         rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
-        order: 'above-store',
+        order: 'aboveStore',
       });
 
       const paintOrder = runRenderLayers(
@@ -426,7 +426,7 @@ describe('viewport of renderLayers', () => {
     display.add({
       id: 'over',
       rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
-      order: 'above-store',
+      order: 'aboveStore',
     });
     managerBoundsCalls = 0;
 

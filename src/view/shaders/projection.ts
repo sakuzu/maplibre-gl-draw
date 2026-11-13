@@ -177,7 +177,7 @@ export class ProjectionUniformManager {
    *
    * @param terrain - The render context of the draw call, or its `terrain`; `null` draws without
    *   terrain
-   * @throws `DrawError` with the code `invalid-input` when it is an object the instance did not
+   * @throws `DrawError` with the code `invalidInput` when it is an object the instance did not
    *   give a renderer, as `viewUniforms` does
    */
   setTerrain(terrain: RenderContext | TerrainSurface | null): void {

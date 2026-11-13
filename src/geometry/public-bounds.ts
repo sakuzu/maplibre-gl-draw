@@ -18,7 +18,7 @@ import type { BBox } from './types.js';
  *   Every position counts, the holes and the members of a collection included; a position
  *   that is not finite is skipped. Crossing the ±180 degree meridian is not handled
  * @returns The box in degrees
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a geometry or a feature
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a geometry or a feature
  *   with one, and when it has no finite position
  *
  * @example

@@ -3,7 +3,7 @@
 
 /**
  * The guard of a destroyed instance: once `destroy()` has run, every method of the draw instance
- * and of its collections throws `DrawError('invalid-state')` instead of reaching an engine that
+ * and of its collections throws `DrawError('invalidState')` instead of reaching an engine that
  * has released everything. Before, an error of the tables of rows a method reaches is thrown as
  * a `DrawError` of the same code (`drawErrorOf`)
  */
@@ -14,7 +14,7 @@ import { DrawError } from '../errors.js';
 
 /** The error of a call made after destroy */
 function destroyedError(path: string): DrawError {
-  return new DrawError('invalid-state', `The draw instance is destroyed: ${path} cannot be called`);
+  return new DrawError('invalidState', `The draw instance is destroyed: ${path} cannot be called`);
 }
 
 /** Whether the value is a plain object whose members are guarded in turn */
@@ -26,7 +26,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * Copies an object with every method (at any depth of plain objects) guarded: a call after
- * `isDestroyed()` turned true throws `DrawError('invalid-state')`, or rejects with it for a
+ * `isDestroyed()` turned true throws `DrawError('invalidState')`, or rejects with it for a
  * method that returns a promise. A getter is guarded the same way. An error of the tables of rows
  * a call throws is thrown as a `DrawError` (what a function given to the call throws, as it is)
  *

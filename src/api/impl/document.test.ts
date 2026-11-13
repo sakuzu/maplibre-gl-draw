@@ -58,7 +58,7 @@ describe('draw.metadata', () => {
     expect(metadata.get()).toEqual({ title: 'Map', description: 'About' });
   });
 
-  it('throws invalid-input for a field of the wrong type, and refuses read-only', () => {
+  it('throws invalidInput for a field of the wrong type, and refuses read-only', () => {
     expect(() => metadata.update({ title: 3 } as never)).toThrow(DrawError);
     store.setReadOnly(true);
     expect(metadata.update({ title: 'x' })).toBeNull();
@@ -113,9 +113,9 @@ describe('draw.document', () => {
   });
 
   it('rejects with the codes of the contract, changing nothing', async () => {
-    await expect(doc.load('not json')).rejects.toMatchObject({ code: 'unsupported-format' });
+    await expect(doc.load('not json')).rejects.toMatchObject({ code: 'unsupportedFormat' });
     await expect(doc.load({ hello: 1 } as never)).rejects.toMatchObject({
-      code: 'unsupported-format',
+      code: 'unsupportedFormat',
     });
     const broken = nativeDocument({
       version: '4.0.0',
@@ -129,8 +129,8 @@ describe('draw.document', () => {
         },
       ],
     });
-    await expect(doc.load(broken as never)).rejects.toMatchObject({ code: 'invalid-input' });
-    await expect(doc.load(geojson, { layerId: 'x' })).rejects.toMatchObject({ code: 'not-found' });
+    await expect(doc.load(broken as never)).rejects.toMatchObject({ code: 'invalidInput' });
+    await expect(doc.load(geojson, { layerId: 'x' })).rejects.toMatchObject({ code: 'notFound' });
     expect(store.listFeatures().map((f) => f.id)).toEqual(['a']);
   });
 
@@ -151,16 +151,16 @@ describe('draw.document', () => {
     };
     await expect(doc.load(brokenImage as never)).rejects.toMatchObject({
       name: 'DrawError',
-      code: 'invalid-input',
+      code: 'invalidInput',
     });
     const notAnImage = new File(['not an image'], 'x.png', { type: 'image/png' });
     await expect(doc.load(notAnImage, { coordinate: [0, 0] })).rejects.toMatchObject({
       name: 'DrawError',
-      code: 'unsupported-format',
+      code: 'unsupportedFormat',
     });
     await expect(doc.load(notAnImage)).rejects.toMatchObject({
       name: 'DrawError',
-      code: 'invalid-input',
+      code: 'invalidInput',
     });
     expect(store.listFeatures().map((f) => f.id)).toEqual(['a']);
   });
@@ -283,7 +283,7 @@ describe('document.loadMany', () => {
     store.subscribe((change) => notifications.push(change));
     const failure = doc.loadMany([{ source: point('p', [3, 4]) }, { source: 'not json' }]);
     await expect(failure).rejects.toBeInstanceOf(DrawError);
-    await expect(failure).rejects.toMatchObject({ code: 'unsupported-format' });
+    await expect(failure).rejects.toMatchObject({ code: 'unsupportedFormat' });
     expect(notifications).toEqual([]);
     expect(store.listFeatures()).toHaveLength(1);
   });
@@ -353,7 +353,7 @@ describe('document.loadMany', () => {
         { source: point('r', [1, 1]), options: { layerId: 'M' } },
         { source: point('s', [1, 1]), options: { layer: { id: 'M' } } },
       ]),
-    ).rejects.toMatchObject({ code: 'not-found' });
+    ).rejects.toMatchObject({ code: 'notFound' });
     expect(store.getLayer('M')).toBeUndefined();
   });
 
@@ -370,16 +370,16 @@ describe('document.loadMany', () => {
       ]),
     ];
     for (const load of refused.slice(0, 4)) {
-      await expect(load).rejects.toMatchObject({ code: 'invalid-input' });
+      await expect(load).rejects.toMatchObject({ code: 'invalidInput' });
     }
-    await expect(refused[4]).rejects.toMatchObject({ code: 'already-exists' });
+    await expect(refused[4]).rejects.toMatchObject({ code: 'alreadyExists' });
     expect(store.listLayers().map((layer) => layer.id)).toEqual(['l1']);
     expect(store.listFeatures().map((feature) => feature.id)).toEqual(['a']);
   });
 
   it('returns null while read-only, and refuses items that are not objects with a source', async () => {
-    await expect(doc.loadMany([1] as never)).rejects.toMatchObject({ code: 'invalid-input' });
-    await expect(doc.loadMany({} as never)).rejects.toMatchObject({ code: 'invalid-input' });
+    await expect(doc.loadMany([1] as never)).rejects.toMatchObject({ code: 'invalidInput' });
+    await expect(doc.loadMany({} as never)).rejects.toMatchObject({ code: 'invalidInput' });
     store.setReadOnly(true);
     expect(await doc.loadMany([{ source: point('p', [3, 4]) }])).toBeNull();
     expect(store.listFeatures()).toHaveLength(1);

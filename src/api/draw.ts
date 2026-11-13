@@ -105,8 +105,8 @@ export interface Draw {
      * while no layer can be written. With `repeat`, a drawing mode stays the current one once it
      * has created a feature (or asked for an image), ready for the next; Escape still leaves it.
      *
-     * @throws `DrawError` with the code `not-found` when there is no mode with this name, or
-     *   `invalid-input` when an option has the wrong type
+     * @throws `DrawError` with the code `notFound` when there is no mode with this name, or
+     *   `invalidInput` when an option has the wrong type
      */
     set(mode: Mode, options?: { readonly repeat?: boolean }): void;
     /** The shape the current drawing mode is drawing, driven from code */
@@ -118,7 +118,7 @@ export interface Draw {
    * Changes the mode.
    *
    * @returns False when the mode cannot be entered now
-   * @throws `DrawError` with the code `not-found` when there is no mode with this name
+   * @throws `DrawError` with the code `notFound` when there is no mode with this name
    */
   setMode(mode: Mode): boolean;
 
@@ -149,7 +149,7 @@ export interface Draw {
    * before the promise settles reads the document before it. Stopped by `signal` before it is
    * committed, nothing is written. Keep `fn` short: make the long calls (a `fetch`) before it.
    *
-   * Calling `write` in the synchronous part of `fn` throws `nested-write`: give `tx` to a function
+   * Calling `write` in the synchronous part of `fn` throws `nestedWrite`: give `tx` to a function
    * instead.
    *
    * ```ts
@@ -159,21 +159,21 @@ export interface Draw {
    * ```
    *
    * @returns A promise of what `fn` returned, settled once the commit is made here
-   * @throws `DrawError` with the code `nested-write` when called in the synchronous part of the
+   * @throws `DrawError` with the code `nestedWrite` when called in the synchronous part of the
    *   function of another write
    */
   write<T>(fn: (tx: Transaction) => T | Promise<T>, options?: WriteOptions): Write<T>;
   /**
    * Takes back the last commit of this client: a commit of its own, told with the source `undo`.
    *
-   * @throws `DrawError` (the promise rejects) with the code `invalid-state` when there is nothing
+   * @throws `DrawError` (the promise rejects) with the code `invalidState` when there is nothing
    *   to undo
    */
   undo(options?: TaskOptions): Write<void>;
   /**
    * Makes again the last commit undone, told with the source `redo`.
    *
-   * @throws `DrawError` (the promise rejects) with the code `invalid-state` when there is nothing
+   * @throws `DrawError` (the promise rejects) with the code `invalidState` when there is nothing
    *   to redo
    */
   redo(options?: TaskOptions): Write<void>;
@@ -183,9 +183,9 @@ export interface Draw {
    * `change` with the source `open`, and the steps of undo are dropped. A source is added to the
    * document with `tx.import`.
    *
-   * @throws `DrawError` (the promise rejects) with the code `unsupported-format` when the source
-   *   cannot be read, `invalid-input` when it is not valid, `not-editable` when the document is
-   *   read-only, or `invalid-state` when no source is given (there is no storage to open from)
+   * @throws `DrawError` (the promise rejects) with the code `unsupportedFormat` when the source
+   *   cannot be read, `invalidInput` when it is not valid, `notEditable` when the document is
+   *   read-only, or `invalidState` when no source is given (there is no storage to open from)
    */
   open(source?: OpenSource, options?: TaskOptions): Promise<OpenResult>;
 
@@ -194,7 +194,7 @@ export interface Draw {
    * Subscribes to an event.
    *
    * @returns The function that unsubscribes
-   * @throws `DrawError` with the code `invalid-input` when there is no event of this name
+   * @throws `DrawError` with the code `invalidInput` when there is no event of this name
    */
   on<K extends keyof DrawEvents>(event: K, listener: (payload: DrawEvents[K]) => void): () => void;
   /** Unsubscribes from an event. */
@@ -229,8 +229,8 @@ export interface Draw {
    * too large to draw a second time is taken so.
    *
    * @returns The image, once encoded
-   * @throws `DrawError` (the promise rejects) with the code `invalid-input` when an option has the
-   *   wrong type, or `invalid-state` when there is no canvas to copy the map onto or the type
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when an option has the
+   *   wrong type, or `invalidState` when there is no canvas to copy the map onto or the type
    *   cannot be encoded
    */
   captureImage(options?: CaptureImageOptions): Promise<Blob>;
@@ -247,7 +247,7 @@ export interface Draw {
   /**
    * Removes the instance from the map and releases everything it holds. A second call does
    * nothing; every other method of the instance and of its collections then throws `DrawError`
-   * with the code `invalid-state` (`write`, `open`, `undo` and `redo` reject with it).
+   * with the code `invalidState` (`write`, `open`, `undo` and `redo` reject with it).
    */
   destroy(): void;
 }

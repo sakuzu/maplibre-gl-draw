@@ -64,7 +64,7 @@ function viewOf(ctx: RenderContext): BoundView {
   const view = views.get(ctx);
   if (!view) {
     throw new DrawError(
-      'invalid-input',
+      'invalidInput',
       'The render context is not one the instance gave a renderer in a draw call',
     );
   }
@@ -77,7 +77,7 @@ function viewOf(ctx: RenderContext): BoundView {
  * center of the view, which `ProjectionUniformManager.setUniforms` takes.
  *
  * @param ctx - The render context of the draw call
- * @throws `DrawError` with the code `invalid-input` when the render context is not one the
+ * @throws `DrawError` with the code `invalidInput` when the render context is not one the
  *   instance gave a renderer
  */
 export function viewUniforms(ctx: RenderContext): ViewUniforms {
@@ -92,7 +92,7 @@ export function viewUniforms(ctx: RenderContext): ViewUniforms {
  *
  * @param ctx - The render context of the draw call
  * @param position - The position the offsets are taken from, `[lng, lat]` in degrees
- * @throws `DrawError` with the code `invalid-input` when the render context is not one the
+ * @throws `DrawError` with the code `invalidInput` when the render context is not one the
  *   instance gave a renderer
  */
 export function offsetUniformsAt(ctx: RenderContext, position: Position): OffsetUniforms {

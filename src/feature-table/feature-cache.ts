@@ -25,7 +25,7 @@
  *   while no id has got or lost a handle since they were found by it
  *
  * A feature given is shared by the reads of its row: it is not to be changed. While it is checked
- * (`watch`, the check `feature-cache` of `DrawOptions.debug.checks`), what is kept is frozen, and
+ * (`watch`, the check `featureCache` of `DrawOptions.debug.checks`), what is kept is frozen, and
  * compared with the feature its row makes when it is given again.
  */
 

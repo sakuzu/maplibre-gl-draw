@@ -51,12 +51,12 @@ try {
     }),
   );
 } catch (error) {
-  // not-editable。何も変わらない
+  // notEditable。何も変わらない
   if (error instanceof DrawError) console.log(error.code);
 }
 ```
 
-- 断った書き込みは、コード `not-editable` の `DrawError` で reject し、
+- 断った書き込みは、コード `notEditable` の `DrawError` で reject し、
   その取引は何も確定しません。`tx` のすべての書き込み、`draw.open`、
   `draw.undo`、`draw.redo` が対象です
 - 引数の誤りは、読み取り専用かどうかにかかわらず、その `DrawError` で
@@ -149,7 +149,7 @@ draw.hidden.clear(); // この端末が隠したものをすべて表示する
 - `features.list`、`document.toJSON()`、`document.toGeoJSON()` は
   これを無視します。変わるのはこの端末の見え方で、データではありません
 - `hidden.add` は文書の ID だけを受け取り、それ以外の ID にはコード
-  `not-found` の `DrawError` を投げます
+  `notFound` の `DrawError` を投げます
 - 地物、グループ、レイヤーを削除すると、その ID は集まりから外れます
 
 データセットはこれに加わりません。データセットは、その `setVisible` で

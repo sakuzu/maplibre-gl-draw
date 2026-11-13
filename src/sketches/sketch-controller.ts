@@ -99,7 +99,7 @@ const INPUT_KEYS: readonly string[] = ['id', 'edits', 'owner'];
 const PATCH_KEYS: readonly string[] = ['edits'];
 
 /** The order the reasons a feature is left out are told in, when several leave a sketch empty */
-const DROP_REASONS: readonly SketchEndReason[] = ['deleted', 'locked', 'layer-unavailable'];
+const DROP_REASONS: readonly SketchEndReason[] = ['deleted', 'locked', 'layerUnavailable'];
 
 /**
  * The events of the sketches
@@ -162,7 +162,7 @@ export interface DraggedFeatures {
 type MovingEdit = Extract<SketchEdit, { kind: TransformEdit['kind'] }>;
 
 /** The edit of a sketch of the vertices of one feature */
-type VertexEdit = Extract<SketchEdit, { kind: 'vertex-move' | 'vertex-insert' | 'vertex-delete' }>;
+type VertexEdit = Extract<SketchEdit, { kind: 'vertexMove' | 'vertexInsert' | 'vertexDelete' }>;
 
 /** A sketch and what is kept with it */
 interface Entry {
@@ -321,7 +321,7 @@ export class SketchController {
    * What a sketch of this client edits over the features as they are now: the fields each feature
    * takes, as a write of it gives them
    *
-   * @throws DrawError `not-found` when there is no sketch with this ID; `invalid-input` when an
+   * @throws DrawError `notFound` when there is no sketch with this ID; `invalidInput` when an
    *   edit gives a feature what it cannot have
    */
   updatesOf(id: string): FeatureUpdate[] {
@@ -489,7 +489,7 @@ export class SketchController {
    * Ends a sketch for a reason (the input of a mode ends its sketch so: `deselected`), without
    * writing it
    *
-   * @throws DrawError `not-found` when there is no sketch with this ID
+   * @throws DrawError `notFound` when there is no sketch with this ID
    */
   end(id: string, reason: Exclude<SketchEndReason, 'committed'>): void {
     this.#requireAll([id]);
@@ -551,11 +551,11 @@ export class SketchController {
    * Ends a sketch of this client written by the one that made it: what it drew goes first, `write`
    * writes it through the writes of the Store (from `updatesOf`, or as it writes the rows selected
    * in bulk), and the sketch ends `committed`, told once it is written. What it drew is compared
-   * with what is written (`sketch-commits`)
+   * with what is written (`sketchCommits`)
    *
    * @param keepRows Whether the rows it edits are given to `write`, the ones in a moving set staying
    *   there for it to take them out (a write in steps takes each row out as it writes it)
-   * @throws DrawError `not-found` when there is no sketch with this ID
+   * @throws DrawError `notFound` when there is no sketch with this ID
    */
   commitWith(id: string, write: (kept: TableSelection | null) => void, keepRows = false): void {
     const [entry] = this.#requireAll([id]);
@@ -601,7 +601,7 @@ export class SketchController {
       else {
         id = requireId(input.id);
         if (this.#entries.has(id) || taken.has(id)) {
-          throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+          throw new DrawError('alreadyExists', `The ID ${JSON.stringify(id)} is already taken`, {
             ids: [id],
           });
         }
@@ -701,7 +701,7 @@ export class SketchController {
    * Checks the edits of a sketch and what it is kept with: the features and the vertices they
    * name are there and take the edits (each edit applied over the features as they are now)
    *
-   * @throws DrawError `invalid-input` for edits that cannot apply, `not-found` for a feature, a
+   * @throws DrawError `invalidInput` for edits that cannot apply, `notFound` for a feature, a
    *   layer or a group that is not there
    */
   #prepare(id: string, given: unknown, owner: string | null): Prepared {
@@ -831,7 +831,7 @@ export class SketchController {
   /**
    * Writes sketches of this client in one transaction: the features they create created in their
    * places, and their edits given to the Store (`applyEdits`, once for each sketch). A sketch that
-   * creates a feature in a layer that cannot be written ends (`layer-unavailable`) and nothing is
+   * creates a feature in a layer that cannot be written ends (`layerUnavailable`) and nothing is
    * written then
    */
   #commitEntries(entries: readonly Entry[]): boolean {
@@ -843,7 +843,7 @@ export class SketchController {
       ),
     );
     if (unavailable.length > 0) {
-      for (const entry of unavailable) this.#end(entry.sketch.id, 'layer-unavailable');
+      for (const entry of unavailable) this.#end(entry.sketch.id, 'layerUnavailable');
       return false;
     }
     const writes = entries.map((entry) => {
@@ -882,7 +882,7 @@ export class SketchController {
       entry.dropped += dropped ?? 0;
       this.#queue('sketch.removed', {
         sketch: entry.sketch,
-        reason: dropped === null ? 'read-only' : 'committed',
+        reason: dropped === null ? 'readOnly' : 'committed',
         dropped: entry.dropped,
       });
     });
@@ -945,7 +945,7 @@ export class SketchController {
       if (changes.reset === true) {
         this.#nudged = null;
         for (const entry of [...this.#entries.values()]) {
-          this.#end(entry.sketch.id, 'document-replaced');
+          this.#end(entry.sketch.id, 'documentReplaced');
         }
         return;
       }
@@ -960,7 +960,7 @@ export class SketchController {
       const readOnly = store.isReadOnly();
       if (readOnly && !this.#readOnly) {
         for (const entry of [...this.#entries.values()]) {
-          if (entry.sketch.owner === null) this.#end(entry.sketch.id, 'read-only');
+          if (entry.sketch.owner === null) this.#end(entry.sketch.id, 'readOnly');
         }
       }
       this.#readOnly = readOnly;
@@ -1097,7 +1097,7 @@ export class SketchController {
         continue;
       }
       if (entry.shapes.get(featureId) !== vertexShapeOf(feature.geometry)) {
-        this.#end(entry.sketch.id, 'vertices-removed');
+        this.#end(entry.sketch.id, 'verticesRemoved');
         return;
       }
     }
@@ -1105,7 +1105,7 @@ export class SketchController {
     const hadVertices = vertexFeatureIds(entry.sketch.edits).size > 0;
     if (verticesDropped > 0 && hadVertices && vertexFeatureIds(edits).size === 0) {
       entry.dropped += dropped;
-      this.#end(entry.sketch.id, 'vertices-removed');
+      this.#end(entry.sketch.id, 'verticesRemoved');
       return;
     }
     if (edits.length === 0 && entry.sketch.edits.length > 0) {
@@ -1113,7 +1113,7 @@ export class SketchController {
       const reasons = new Set(gone.values());
       this.#end(
         entry.sketch.id,
-        DROP_REASONS.find((reason) => reasons.has(reason)) ?? 'vertices-removed',
+        DROP_REASONS.find((reason) => reasons.has(reason)) ?? 'verticesRemoved',
       );
       return;
     }
@@ -1522,13 +1522,13 @@ export class SketchController {
 
   /**
    * Why a feature cannot take a sketch of this client: locked (itself, its group or its layer),
-   * hidden or in a layer that cannot be written (`layer-unavailable`); null when it can
+   * hidden or in a layer that cannot be written (`layerUnavailable`); null when it can
    */
   #unavailable(feature: Feature): SketchEndReason | null {
     const store = this.#store;
     if (isFeatureLocked(feature, store)) return 'locked';
-    if (!this.#shown(feature)) return 'layer-unavailable';
-    if (!isWritableLayer(store.getLayer(feature.layerId), store)) return 'layer-unavailable';
+    if (!this.#shown(feature)) return 'layerUnavailable';
+    if (!isWritableLayer(store.getLayer(feature.layerId), store)) return 'layerUnavailable';
     return null;
   }
 
@@ -1608,10 +1608,10 @@ function positionsGiven(entry: Entry, given: readonly SketchEdit[]): SketchEdit[
   return entry.sketch.edits.map((edit) => {
     if (!isVertexEdit(edit)) return edit;
     const next = byFeature.get(edit.featureId);
-    if (edit.kind === 'vertex-insert') {
-      return next?.kind === 'vertex-insert' ? { ...edit, position: next.position } : edit;
+    if (edit.kind === 'vertexInsert') {
+      return next?.kind === 'vertexInsert' ? { ...edit, position: next.position } : edit;
     }
-    if (edit.kind !== 'vertex-move' || next?.kind !== 'vertex-move') return edit;
+    if (edit.kind !== 'vertexMove' || next?.kind !== 'vertexMove') return edit;
     if (next.positions.length === edit.positions.length) {
       return { ...edit, positions: next.positions };
     }
@@ -1689,12 +1689,12 @@ function sameBits(a: unknown, b: unknown): boolean {
 
 /** The error for an input of the wrong shape or value */
 function invalidInput(message: string): DrawError {
-  return new DrawError('invalid-input', message);
+  return new DrawError('invalidInput', message);
 }
 
 /** The error for an ID of no sketch, or of no feature */
 function notFound(id: unknown, kind = 'sketch'): DrawError {
-  return new DrawError('not-found', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
+  return new DrawError('notFound', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
     ids: typeof id === 'string' ? [id] : [],
   });
 }

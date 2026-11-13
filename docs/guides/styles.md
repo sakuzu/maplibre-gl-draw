@@ -75,7 +75,7 @@ await draw.write((tx) =>
 `tx.features.update` merges the style key by key: the keys you give
 change, and the others stay. A key named in `unset.style` is removed, so
 the feature takes the rule color or the default again; a key given as
-`undefined` is refused (`invalid-input`).
+`undefined` is refused (`invalidInput`).
 
 ```ts
 // Thicker, and back to the color of the rule
@@ -89,7 +89,7 @@ await draw.write((tx) =>
 
 - Colors are CSS colors (`#1e88e5`, `rgb(30 136 229)`, `hsl(...)`,
   `tomato`); opacities run from 0 to 1. A value of the wrong type or
-  form rejects the write with a `DrawError` with the code `invalid-input`
+  form rejects the write with a `DrawError` with the code `invalidInput`
 - `parseCssColor(value)` reads a color as the library reads it, and
   gives `[red, green, blue, alpha]` from 0 to 1, or `null` for a value
   the library does not take as a color. An extension checks a color of

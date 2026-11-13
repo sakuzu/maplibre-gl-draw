@@ -144,7 +144,7 @@ export { DRAW_PROPERTY_PREFIX } from '../shared/properties.js';
  * date-time a {@link DateTime}, the id of another feature a {@link Reference}, ...). What is given
  * is held in one form: a bigint becomes a number or a {@link BigInteger}, a `Uint8Array`
  * {@link Bytes}. Anything else (a `Date`, a `Map`, an instance of another class, a function, a
- * string with a lone surrogate) is refused with `invalid-input`. An `interface` of the
+ * string with a lone surrogate) is refused with `invalidInput`. An `interface` of the
  * application can be given as it is.
  */
 // biome-ignore lint/suspicious/noExplicitAny: the one shape that takes an interface of the application
@@ -289,7 +289,7 @@ export interface FeatureRow<P extends object = Properties> {
  * const { layerId, visible, style } = readFeature(draw.features.get(id));
  * ```
  *
- * @throws `DrawError` with the code `invalid-input` for something that is not a feature
+ * @throws `DrawError` with the code `invalidInput` for something that is not a feature
  */
 export function readFeature(feature: {
   readonly geometry: Geometry;
@@ -303,9 +303,9 @@ export function readFeature(feature: {
  * is given as it is.
  *
  * - an `id` that is a number becomes its string; one is made when there is none. An `id` taken
- *   fails with `already-exists`
+ *   fails with `alreadyExists`
  * - `properties` of `null` are empty attributes; the keys are kept as they are
- * - a `null` geometry and a GeometryCollection fail with `invalid-input`
+ * - a `null` geometry and a GeometryCollection fail with `invalidInput`
  * - the rings of a polygon are put in the right-hand rule
  * - without `maplibre-gl-draw:layerId` it goes into the active layer
  */
@@ -317,10 +317,10 @@ export type FeatureInput<P extends object = Properties> = GeoJSONFeature<
 /**
  * A change of a feature: only the keys given change. `properties` is merged key by key, and so is
  * the style under `maplibre-gl-draw:style`. A key is removed by naming it in `unset`; a key given
- * `undefined`, an empty `properties` and an empty patch fail with `invalid-input`, so that nothing
+ * `undefined`, an empty `properties` and an empty patch fail with `invalidInput`, so that nothing
  * is removed without being named. A value a type needs (the radius of a Circle) cannot be
- * removed (`invalid-input`). The place of a feature (`maplibre-gl-draw:layerId`, `groupId`,
- * `featureType`) is not changed here (`invalid-input`): `place` puts a feature elsewhere.
+ * removed (`invalidInput`). The place of a feature (`maplibre-gl-draw:layerId`, `groupId`,
+ * `featureType`) is not changed here (`invalidInput`): `place` puts a feature elsewhere.
  */
 export type FeaturePatch<P extends object = Properties> = {
   [K in keyof FeaturePatchFields<P>]-?: Required<Pick<FeaturePatchFields<P>, K>> &
@@ -638,12 +638,12 @@ export interface StoredFeaturePatch {
  *
  * - `set` changes the fields of `patch` as `features.update` does: the keys of `properties`
  *   and `style` one by one (a key given as `undefined` is removed), the geometry whole.
- * - `vertex-move` puts each vertex of `vertices` at the position of the same index in
+ * - `vertexMove` puts each vertex of `vertices` at the position of the same index in
  *   `positions` (the two have the same length).
- * - `vertex-insert` adds a vertex at `position`, just after the vertex `after` or just before
+ * - `vertexInsert` adds a vertex at `position`, just after the vertex `after` or just before
  *   the vertex `before` (exactly one of the two is given), in its line or ring. A point and the
  *   points of a MultiPoint take no vertex.
- * - `vertex-delete` deletes the vertices, and keeps the lines and the rings of the geometry with
+ * - `vertexDelete` deletes the vertices, and keeps the lines and the rings of the geometry with
  *   enough positions; a point of a MultiPoint goes with its vertex.
  *
  * - `translate` moves the features of `target` from the point `from` to the point `to`, in the
@@ -675,7 +675,7 @@ export type FeatureEdit =
       patch: StoredFeaturePatch;
     }
   | {
-      kind: 'vertex-move';
+      kind: 'vertexMove';
       /** The feature */
       featureId: string;
       /** The vertices to move */
@@ -684,7 +684,7 @@ export type FeatureEdit =
       positions: readonly Position[];
     }
   | {
-      kind: 'vertex-insert';
+      kind: 'vertexInsert';
       /** The feature */
       featureId: string;
       /** The vertex the new one follows */
@@ -695,7 +695,7 @@ export type FeatureEdit =
       position: Position;
     }
   | {
-      kind: 'vertex-delete';
+      kind: 'vertexDelete';
       /** The feature */
       featureId: string;
       /** The vertices to delete */
@@ -928,7 +928,7 @@ export interface GroupFilter {
  * of the group. `index` is the position within the destination, 0 at the back; the front
  * when it is left out. A place can be given by the items it goes between instead
  * ({@link ItemPlacement}: `{ layerId, groupId?, below?, above? }`), which is how a layer held as
- * rows is moved into: a position by `index` there is refused (`invalid-state`).
+ * rows is moved into: a position by `index` there is refused (`invalidState`).
  */
 export type MoveTarget =
   | { layerId: string; index?: number }
@@ -1083,7 +1083,7 @@ export interface LoadOptions {
   /**
    * A layer to create for the features, written in the same transaction as them; every
    * feature goes into it, as with `layerId`, and `LoadResult.layerId` gives its ID. It cannot
-   * be given together with `layerId` (`invalid-input`), nor with a document of the library,
+   * be given together with `layerId` (`invalidInput`), nor with a document of the library,
    * which brings its own layers.
    */
   layer?: LayerInput;
@@ -1274,15 +1274,15 @@ export interface ParsedDocument {
  * with `maplibre-gl-draw:groupId` form a new group. A {@link Reference} in `properties` names the
  * new ID; `idMap` gives the new ID of each ID of the input, for an ID kept as a string in
  * `properties`, which is left as it is. A feature that cannot be read is left out
- * and reported in `skipped`, with `invalid-input`; so is a feature whose embedded image is not
+ * and reported in `skipped`, with `invalidInput`; so is a feature whose embedded image is not
  * a PNG / JPEG / WebP / GIF data URL of its declared type or cannot be decoded, and one whose
- * image the browser cannot encode when it scales it down, with `unsupported-format`.
+ * image the browser cannot encode when it scales it down, with `unsupportedFormat`.
  *
  * @param input - A FeatureCollection, a Feature or a geometry
  * @param options - The generator of the IDs, the layer and the reading of Multi geometries
  * @returns What was read
- * @throws `DrawError` with the code `unsupported-format` when the input is not GeoJSON, or
- *   `invalid-input` when an option has the wrong type
+ * @throws `DrawError` with the code `unsupportedFormat` when the input is not GeoJSON, or
+ *   `invalidInput` when an option has the wrong type
  */
 export function parseGeoJSON(
   input: GeoJSONFeatureCollection | GeoJSONFeature | Geometry,
@@ -1301,14 +1301,14 @@ export function parseGeoJSON(
  * `idMap` gives the new ID of each ID of the input, for an ID kept as a string, which is left as
  * it is. The values of `properties` are read from their JSON form (`valueFromJSON`). A feature
  * whose image file cannot be imported is left
- * out and reported in `skipped`, with `invalid-input` or `unsupported-format` as for
+ * out and reported in `skipped`, with `invalidInput` or `unsupportedFormat` as for
  * {@link parseGeoJSON}, and a group whose features are all left out is left out too.
  *
  * @param input - A document of the library, as `document.toJSON` writes it
  * @param options - The generator of the IDs and the layer
  * @returns What was read
- * @throws `DrawError` with the code `unsupported-format` when the input is not a document of
- *   the library, or `invalid-input` when it is malformed, has another major version, or an
+ * @throws `DrawError` with the code `unsupportedFormat` when the input is not a document of
+ *   the library, or `invalidInput` when it is malformed, has another major version, or an
  *   option has the wrong type
  */
 export function parseNative(input: DrawDocument, options?: ParseOptions): Promise<ParsedDocument> {

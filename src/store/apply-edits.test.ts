@@ -6,11 +6,11 @@
  * rows alike
  *
  * - `set` merges `properties` and `style` key by key and writes the other fields whole
- * - `vertex-move`, `vertex-insert` and `vertex-delete` change the vertices named by their places,
+ * - `vertexMove`, `vertexInsert` and `vertexDelete` change the vertices named by their places,
  *   the two ends of a closed ring as one vertex
  * - The edits apply in their order, as one transaction, all of them or none; an edit of a feature
  *   that is not there is left out and counted
- * - Read-only refuses them with null; an edit that cannot apply throws invalid-input
+ * - Read-only refuses them with null; an edit that cannot apply throws invalidInput
  * - The notification is the one of the same writes made with `updateFeature`
  */
 
@@ -157,13 +157,13 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     const { store } = watched(make);
     store.applyEdits([
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'point',
         vertices: [{ ring: 0, index: 0 }],
         positions: [[3, 3]],
       },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'line',
         vertices: [
           { ring: 0, index: 1 },
@@ -175,13 +175,13 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
         ],
       },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'area',
         vertices: [{ ring: 0, index: 4 }],
         positions: [[-1, -1]],
       },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'points',
         vertices: [{ part: 1, ring: 0, index: 0 }],
         positions: [[7, 7]],
@@ -212,19 +212,19 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     const { store } = watched(make);
     store.applyEdits([
       {
-        kind: 'vertex-insert',
+        kind: 'vertexInsert',
         featureId: 'line',
         after: { ring: 0, index: 0 },
         position: [0.5, 0],
       },
       {
-        kind: 'vertex-insert',
+        kind: 'vertexInsert',
         featureId: 'line',
         before: { ring: 0, index: 0 },
         position: [-1, 0],
       },
       {
-        kind: 'vertex-insert',
+        kind: 'vertexInsert',
         featureId: 'area',
         before: { ring: 0, index: 0 },
         position: [-1, 2],
@@ -241,7 +241,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
 
     const { store: other } = watched(make);
     other.applyEdits([
-      { kind: 'vertex-insert', featureId: 'area', after: { ring: 0, index: 4 }, position: [2, -1] },
+      { kind: 'vertexInsert', featureId: 'area', after: { ring: 0, index: 4 }, position: [2, -1] },
     ]);
     expect(coordinatesOf(other, 'area')).toEqual([
       [
@@ -258,18 +258,18 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
   it('deletes vertices, the first of a closed ring with its last position', () => {
     const { store } = watched(make);
     store.applyEdits([
-      { kind: 'vertex-insert', featureId: 'area', after: { ring: 0, index: 1 }, position: [5, 2] },
+      { kind: 'vertexInsert', featureId: 'area', after: { ring: 0, index: 1 }, position: [5, 2] },
       // The last position of the ring is its first vertex
       {
-        kind: 'vertex-delete',
+        kind: 'vertexDelete',
         featureId: 'area',
         vertices: [
           { ring: 0, index: 5 },
           { ring: 0, index: 2 },
         ],
       },
-      { kind: 'vertex-delete', featureId: 'line', vertices: [{ ring: 0, index: 1 }] },
-      { kind: 'vertex-delete', featureId: 'points', vertices: [{ part: 0, ring: 0, index: 0 }] },
+      { kind: 'vertexDelete', featureId: 'line', vertices: [{ ring: 0, index: 1 }] },
+      { kind: 'vertexDelete', featureId: 'points', vertices: [{ part: 0, ring: 0, index: 0 }] },
     ]);
     expect(coordinatesOf(store, 'area')).toEqual([
       [
@@ -289,9 +289,9 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
   it('applies the edits in their order, in one notification', () => {
     const { store, notified } = watched(make);
     store.applyEdits([
-      { kind: 'vertex-insert', featureId: 'line', after: { ring: 0, index: 2 }, position: [3, 0] },
+      { kind: 'vertexInsert', featureId: 'line', after: { ring: 0, index: 2 }, position: [3, 0] },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'line',
         vertices: [{ ring: 0, index: 3 }],
         positions: [[3, 1]],
@@ -314,7 +314,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     store.deleteFeature('line');
     const result = store.applyEdits([
       { kind: 'set', featureId: 'line', patch: { visible: false } },
-      { kind: 'vertex-delete', featureId: 'missing', vertices: [{ ring: 0, index: 0 }] },
+      { kind: 'vertexDelete', featureId: 'missing', vertices: [{ ring: 0, index: 0 }] },
       { kind: 'set', featureId: 'point', patch: { visible: false } },
     ]);
     expect(result).toEqual({ dropped: 2 });
@@ -333,13 +333,13 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     expect(notified).toHaveLength(0);
   });
 
-  it('throws invalid-input for an edit that cannot apply, writing none of the edits', () => {
+  it('throws invalidInput for an edit that cannot apply, writing none of the edits', () => {
     const wrong: Array<[string, FeatureEdit]> = [
-      ['a vertex by its id', { kind: 'vertex-delete', featureId: 'line', vertices: ['v1'] }],
+      ['a vertex by its id', { kind: 'vertexDelete', featureId: 'line', vertices: ['v1'] }],
       [
         'a vertex out of range',
         {
-          kind: 'vertex-move',
+          kind: 'vertexMove',
           featureId: 'line',
           vertices: [{ ring: 0, index: 3 }],
           positions: [[0, 0]],
@@ -347,12 +347,12 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       ],
       [
         'a ring the feature does not have',
-        { kind: 'vertex-delete', featureId: 'area', vertices: [{ ring: 1, index: 0 }] },
+        { kind: 'vertexDelete', featureId: 'area', vertices: [{ ring: 1, index: 0 }] },
       ],
       [
         'positions that do not match the vertices',
         {
-          kind: 'vertex-move',
+          kind: 'vertexMove',
           featureId: 'line',
           vertices: [{ ring: 0, index: 0 }],
           positions: [],
@@ -361,18 +361,18 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       [
         'both after and before',
         {
-          kind: 'vertex-insert',
+          kind: 'vertexInsert',
           featureId: 'line',
           after: { ring: 0, index: 0 },
           before: { ring: 0, index: 1 },
           position: [0, 0],
         },
       ],
-      ['neither after nor before', { kind: 'vertex-insert', featureId: 'line', position: [0, 0] }],
+      ['neither after nor before', { kind: 'vertexInsert', featureId: 'line', position: [0, 0] }],
       [
         'a vertex inserted into a point',
         {
-          kind: 'vertex-insert',
+          kind: 'vertexInsert',
           featureId: 'point',
           after: { ring: 0, index: 0 },
           position: [0, 0],
@@ -381,7 +381,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       [
         'a line left with one position',
         {
-          kind: 'vertex-delete',
+          kind: 'vertexDelete',
           featureId: 'line',
           vertices: [
             { ring: 0, index: 0 },
@@ -392,7 +392,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       [
         'a ring left with too few positions',
         {
-          kind: 'vertex-delete',
+          kind: 'vertexDelete',
           featureId: 'area',
           vertices: [
             { ring: 0, index: 1 },
@@ -403,7 +403,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       [
         'the last point of a MultiPoint',
         {
-          kind: 'vertex-delete',
+          kind: 'vertexDelete',
           featureId: 'points',
           vertices: [
             { part: 0, ring: 0, index: 0 },
@@ -414,7 +414,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       [
         'a vertex given two positions',
         {
-          kind: 'vertex-move',
+          kind: 'vertexMove',
           featureId: 'area',
           vertices: [
             { ring: 0, index: 0 },
@@ -429,7 +429,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       [
         'a position of three numbers',
         {
-          kind: 'vertex-move',
+          kind: 'vertexMove',
           featureId: 'line',
           vertices: [{ ring: 0, index: 0 }],
           positions: [[0, 0, 1]],
@@ -459,7 +459,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
       expect(
         codeOf(() => store.applyEdits(edits)),
         what,
-      ).toBe('invalid-input');
+      ).toBe('invalidInput');
       expect(store.getFeature('point')?.visible, what).toBe(true);
       expect(store.getFeature('point')?.properties, what).toEqual(before?.properties);
       expect(notified, what).toHaveLength(0);
@@ -471,7 +471,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     edited.store.applyEdits([
       { kind: 'set', featureId: 'point', patch: { properties: { kind: undefined } } },
       {
-        kind: 'vertex-move',
+        kind: 'vertexMove',
         featureId: 'line',
         vertices: [{ ring: 0, index: 1 }],
         positions: [[1, 5]],

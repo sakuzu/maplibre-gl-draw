@@ -463,7 +463,7 @@ export class SelectModeDragHandler {
     try {
       updates = sketches.updatesOf(id);
     } catch (error) {
-      if (!(error instanceof DrawError) || error.code !== 'invalid-input') throw error;
+      if (!(error instanceof DrawError) || error.code !== 'invalidInput') throw error;
       sketches.remove(id);
       done();
       return;
@@ -565,7 +565,7 @@ function addSketch(sketches: SketchController, edits: readonly SketchEdit[]): st
   try {
     return sketches.add({ edits })?.id ?? null;
   } catch (error) {
-    if (!(error instanceof DrawError) || error.code !== 'invalid-input') throw error;
+    if (!(error instanceof DrawError) || error.code !== 'invalidInput') throw error;
     return null;
   }
 }

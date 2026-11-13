@@ -119,14 +119,14 @@ afterAll(async () => {
 describe('drawing with the real pointer on a flat map', () => {
   it('draws a point with a click, and Escape leaves the mode without one', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_point');
+    await setMode(page, 'drawPoint');
     await click(page, at(-50, 20));
     const [point] = await features(page);
     expect(point.type).toBe('Point');
     expectNear(coordinatesOf(point) as number[], await lngLatOf(page, at(-50, 20)));
     expect(await mode(page)).toBe('select');
 
-    await setMode(page, 'draw_point');
+    await setMode(page, 'drawPoint');
     await page.mouse.move(at(80, 80).x, at(80, 80).y);
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
@@ -135,7 +135,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('draws a line with clicks and a click on the last vertex, and Escape discards one', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_line');
+    await setMode(page, 'drawLine');
     await click(page, at(-100, 0));
     await click(page, at(0, -60));
     await click(page, at(100, 0));
@@ -146,21 +146,21 @@ describe('drawing with the real pointer on a flat map', () => {
     expectNear((coordinatesOf(line) as number[][])[1], await lngLatOf(page, at(0, -60)));
     expect(await mode(page)).toBe('select');
 
-    await setMode(page, 'draw_line');
+    await setMode(page, 'drawLine');
     await click(page, at(-100, 100));
     await click(page, at(0, 120));
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
     expect(await isDrawing(page)).toBe(false);
     // The first Escape discards the line being drawn, the second leaves the mode
-    expect(await mode(page)).toBe('draw_line');
+    expect(await mode(page)).toBe('drawLine');
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
   });
 
   it('finishes a line with a double click on a new position', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_line');
+    await setMode(page, 'drawLine');
     await click(page, at(-100, 0));
     await click(page, at(0, -60));
     await page.mouse.dblclick(at(100, 0).x, at(100, 0).y);
@@ -173,7 +173,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('draws a polygon closed on its first vertex, and Escape discards one', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     await click(page, at(-80, -60));
     await click(page, at(80, -60));
     await click(page, at(80, 60));
@@ -185,13 +185,13 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(ring).toHaveLength(5);
     expectNear(ring[2], await lngLatOf(page, at(80, 60)));
 
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     await click(page, at(120, 100));
     await click(page, at(200, 100));
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
     expect(await isDrawing(page)).toBe(false);
-    expect(await mode(page)).toBe('draw_polygon');
+    expect(await mode(page)).toBe('drawPolygon');
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
   });
@@ -199,7 +199,7 @@ describe('drawing with the real pointer on a flat map', () => {
   it('finishes a polygon with a double click, on its last vertex or on a new position', async () => {
     await clearAll(page);
     const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     await click(page, at(-80, -60));
     await click(page, at(80, -60));
     await click(page, at(80, 60));
@@ -215,7 +215,7 @@ describe('drawing with the real pointer on a flat map', () => {
     expectNear(outerRing(triangle)[1], await lngLatOf(page, at(80, 60)));
 
     await clearAll(page);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     await click(page, at(-80, -60));
     await click(page, at(80, -60));
     await click(page, at(80, 60));
@@ -231,7 +231,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('draws a circle from its center and radius, and Escape discards one', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_circle');
+    await setMode(page, 'drawCircle');
     await click(page, at(0, 0));
     await page.mouse.move(at(60, 0).x, at(60, 0).y, { steps: 4 });
     await click(page, at(60, 0));
@@ -239,7 +239,7 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(circle.type).toBe('Circle');
     expect(await mode(page)).toBe('select');
 
-    await setMode(page, 'draw_circle');
+    await setMode(page, 'drawCircle');
     await click(page, at(-150, -100));
     await page.mouse.move(at(-100, -100).x, at(-100, -100).y, { steps: 4 });
     await press(page, 'Escape');
@@ -249,7 +249,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('draws an area from code with draw.drawing, through the input of the plugins', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     const seen = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       const clicks: string[] = [];
@@ -285,12 +285,12 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('draws a freehand stroke with a drag, and Escape during a stroke discards it', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_freehand');
+    await setMode(page, 'drawFreehand');
     await drag(page, at(-120, 80), at(120, 40), 16);
     const [stroke] = await features(page);
     expect(stroke.type).toBe('Freehand');
     expect((coordinatesOf(stroke) as number[][]).length).toBeGreaterThan(2);
-    expect(await mode(page)).toBe('draw_freehand');
+    expect(await mode(page)).toBe('drawFreehand');
 
     // Escape while the button is down cancels the drag (dragcancel), and the release that
     // follows draws nothing
@@ -310,7 +310,7 @@ describe('drawing with the real pointer on a flat map', () => {
   it('leaves the pan on after a freehand click, and a double click does not zoom the map', async () => {
     await clearAll(page);
     const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
-    await setMode(page, 'draw_freehand');
+    await setMode(page, 'drawFreehand');
     await click(page, at(0, 0));
     expect(
       await page.evaluate(() => (window as unknown as E2EWindow).map.dragPan.isEnabled()),
@@ -332,7 +332,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('selects a polygon with a click and moves it with a drag', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     for (const p of [at(-40, -40), at(40, -40), at(40, 40), at(-40, 40), at(-40, -40)]) {
       await click(page, p);
     }
@@ -348,7 +348,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('moves a vertex of the selected polygon with a drag on its handle', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     for (const p of [at(-40, -40), at(40, -40), at(40, 40), at(-40, 40), at(-40, -40)]) {
       await click(page, p);
     }
@@ -365,7 +365,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('keeps the vertices of a ring a drag turns: Delete takes the vertex dragged, a drag the next', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     // Drawn clockwise on the map: held counter-clockwise from its first vertex
     for (const p of [at(-40, -40), at(40, -40), at(40, 40), at(-40, 40), at(-40, -40)]) {
       await click(page, p);
@@ -407,7 +407,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('moves a selected point with a drag anywhere in its frame: the marker and the margin', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_point');
+    await setMode(page, 'drawPoint');
     await click(page, at(0, 0));
     const [before] = await features(page);
     await click(page, at(0, 0));
@@ -422,7 +422,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('does not move a feature when the press stays within the drag threshold', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_point');
+    await setMode(page, 'drawPoint');
     await click(page, at(0, 0));
     const [before] = await features(page);
 
@@ -435,9 +435,9 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('deletes the selection with the Delete key', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_point');
+    await setMode(page, 'drawPoint');
     await click(page, at(30, 30));
-    await setMode(page, 'draw_point');
+    await setMode(page, 'drawPoint');
     await click(page, at(-30, -30));
     const [first, second] = await features(page);
 
@@ -449,7 +449,7 @@ describe('drawing with the real pointer on a flat map', () => {
 
   it('stops editing while read-only and resumes when it is turned off', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     for (const p of [at(-40, -40), at(40, -40), at(40, 40), at(-40, 40), at(-40, -40)]) {
       await click(page, p);
     }
@@ -462,7 +462,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await press(page, 'Delete');
     expect(await features(page)).toEqual([before]);
     // Entering a drawing mode is local state and passes; the drawing is not written
-    await setMode(page, 'draw_point');
+    await setMode(page, 'drawPoint');
     await click(page, at(150, 150));
     expect(await features(page)).toEqual([before]);
     await setMode(page, 'select');
@@ -486,9 +486,9 @@ describe('a thin line and the stroke of a polygon under the real pointer', () =>
 
   it('selects a line drawn far under one pixel wide, and a polygon by its stroke and its fill', async () => {
     await clearAll(page);
-    await setMode(page, 'draw_line');
+    await setMode(page, 'drawLine');
     for (const p of [at(-200, -40), at(-40, -120), at(-40, -120)]) await click(page, p);
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     for (const p of [at(40, 40), at(200, 40), at(200, 200), at(40, 200), at(40, 40)]) {
       await click(page, p);
     }
@@ -639,9 +639,9 @@ describe('the snap indicator belongs to the input of the mode', () => {
     await clearAll(page);
   });
 
-  /** Enters draw_line and snaps to the point with the real pointer */
+  /** Enters drawLine and snaps to the point with the real pointer */
   async function snapInDrawLine(): Promise<void> {
-    await setMode(page, 'draw_line');
+    await setMode(page, 'drawLine');
     await page.mouse.move(at(20, 20).x, at(20, 20).y);
     await page.mouse.move(at(4, 0).x, at(4, 0).y);
     await settle(page);
@@ -675,14 +675,14 @@ describe('the snap indicator belongs to the input of the mode', () => {
 });
 
 describe('the stacking order on a real map', () => {
-  it('places external entries and layer-order datasets with reorder, and the runs follow', async () => {
+  it('places external entries and layerOrder datasets with reorder, and the runs follow', async () => {
     const result = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       draw.options.update({ isExternalEntry: (id) => id.startsWith('base:') });
       const [first] = draw.layers.list();
       const itemsBefore = [...(first as ObjectLayer).items];
       (window as unknown as E2EWrites).e2e.writesOf(draw).layers.create({ id: 'e2e-second' });
-      draw.datasets.add({ id: 'e2e-parcels', rows: [], order: 'layer-order' });
+      draw.datasets.add({ id: 'e2e-parcels', rows: [], order: 'layerOrder' });
       (window as unknown as E2EWrites).e2e
         .writesOf(draw)
         .layers.reorder([first.id, 'base:roads', 'e2e-parcels', 'e2e-second']);
@@ -729,7 +729,7 @@ describe('drawing on a pitched and rotated map', () => {
       (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: false } }),
     );
     const corners = [at(-60, -30), at(60, -40), at(70, 60), at(-70, 50)];
-    await setMode(page, 'draw_polygon');
+    await setMode(page, 'drawPolygon');
     for (const p of [...corners, corners[0]]) await click(page, p);
     const [polygon] = await features(page);
     const ring = outerRing(polygon);

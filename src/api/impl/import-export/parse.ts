@@ -83,7 +83,7 @@ async function asParse(read: () => Promise<ParsedStore>): Promise<ParsedStore> {
     const wrapped = drawErrorOf(error);
     if (wrapped instanceof DrawError) throw wrapped;
     const message = error instanceof Error ? error.message : String(error);
-    throw new DrawError('invalid-input', message, { cause: error });
+    throw new DrawError('invalidInput', message, { cause: error });
   }
 }
 
@@ -102,7 +102,7 @@ export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<Pa
     const { generateId, layerId, flattenMulti } = resolveOptions(options);
     const collection = toFeatureCollection(input);
     if (collection === null) {
-      throw new DrawError('unsupported-format', 'The input is not GeoJSON');
+      throw new DrawError('unsupportedFormat', 'The input is not GeoJSON');
     }
 
     // The conversion of a load, with new IDs for every feature and file
@@ -179,7 +179,7 @@ export function parseNativeInput(input: unknown, options?: unknown): Promise<Par
   return asParse(async () => {
     const { generateId, layerId } = resolveOptions(options);
     if (!isNativeFormat(input)) {
-      throw new DrawError('unsupported-format', 'The input is not a document of the library');
+      throw new DrawError('unsupportedFormat', 'The input is not a document of the library');
     }
 
     // The validation of a load: a malformed document throws, and an image that cannot be

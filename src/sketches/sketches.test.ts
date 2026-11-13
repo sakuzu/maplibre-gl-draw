@@ -17,7 +17,7 @@
  *   found again by their IDs, or by their places while the shape stays
  * - a feature created in its place (`below`), and a sketch ended when its layer cannot be written
  * - the reads of the features as they are drawn, with the sketches (`draw.rendered`)
- * - the checks `sketches` and `sketch-commits` pass, and fail when what they check is broken
+ * - the checks `sketches` and `sketchCommits` pass, and fail when what they check is broken
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -77,7 +77,7 @@ function vertexIdStore(): Store {
         edits.map((edit) => {
           if (!('featureId' in edit) || edit.kind === 'set') return edit;
           const id = edit.featureId;
-          if (edit.kind === 'vertex-insert') {
+          if (edit.kind === 'vertexInsert') {
             return edit.after !== undefined
               ? { ...edit, after: resolve(id, edit.after) }
               : { ...edit, before: resolve(id, edit.before) };
@@ -122,7 +122,7 @@ function storeOf(kind: Kind): Store {
 }
 
 /** An instance over a Store of a kind, with every check of the state on */
-function open(kind: Kind, allowed: Array<'sketches' | 'sketch-commits'> = []): Opened {
+function open(kind: Kind, allowed: Array<'sketches' | 'sketchCommits'> = []): Opened {
   const store = storeOf(kind);
   const failures: ConsistencyFailure[] = [];
   const options = {
@@ -174,7 +174,7 @@ const move = (
   to: [number, number],
   vertex: VertexRef | string = { ring: 0, index: 1 },
 ): SketchEdit => ({
-  kind: 'vertex-move',
+  kind: 'vertexMove',
   featureId,
   vertices: [vertex as VertexRef],
   positions: [to],
@@ -211,14 +211,14 @@ for (const kind of KINDS) {
       const a = line(draw);
       const b = line(draw, 10);
       expect(() => draw.sketches.add({ edits: [move('none', [0, 0])] })).toThrow(
-        expect.objectContaining({ code: 'not-found' }),
+        expect.objectContaining({ code: 'notFound' }),
       );
       expect(() => draw.sketches.add({ edits: [{ kind: 'nothing' } as never] })).toThrow(
-        expect.objectContaining({ code: 'invalid-input' }),
+        expect.objectContaining({ code: 'invalidInput' }),
       );
       expect(() =>
         draw.sketches.add({ edits: [move(a.id, [0, 0], { ring: 0, index: 9 })] }),
-      ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+      ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
       writesOf(draw).features.update(a.id, { locked: true });
       expect(draw.sketches.add({ edits: [move(a.id, [1, 1])] })).toBeNull();
       // A sketch with an owner passes no gate
@@ -235,7 +235,7 @@ for (const kind of KINDS) {
       writesOf(draw).layers.update('default-layer', { locked: false });
       expect(draw.sketches.add({ id: 'd', edits: [move(b.id, [11, 1])] })).not.toBeNull();
       expect(() => draw.sketches.add({ id: 'd', edits: [] })).toThrow(
-        expect.objectContaining({ code: 'already-exists' }),
+        expect.objectContaining({ code: 'alreadyExists' }),
       );
       expect(failures).toEqual([]);
     });
@@ -274,7 +274,7 @@ for (const kind of KINDS) {
       expect(writesOf(draw).features.get(b.id)?.geometry).toEqual(shown?.geometry);
       expect(coordinatesOf(writesOf(draw).features.get(b.id))[0][1]).toBeGreaterThan(0.9);
       expect(() => draw.sketches.commit(sketch.id)).toThrow(
-        expect.objectContaining({ code: 'not-found' }),
+        expect.objectContaining({ code: 'notFound' }),
       );
       expect(failures).toEqual([]);
     });
@@ -372,7 +372,7 @@ for (const kind of KINDS) {
         events
           .filter(([name]) => name === 'sketch.removed')
           .map(([, p]) => (p as InstanceSignals['sketch.removed']).reason),
-      ).toEqual(['deleted', 'layer-unavailable']);
+      ).toEqual(['deleted', 'layerUnavailable']);
       expect(failures).toEqual([]);
     });
 
@@ -445,13 +445,13 @@ for (const kind of KINDS) {
           { source: 'remote' },
         );
         expect(events[events.length - 1]?.[1]).toMatchObject({
-          reason: 'vertices-removed',
+          reason: 'verticesRemoved',
           dropped: 1,
         });
       } else {
         // Taken by its place: the shape changed, the sketch ends
         expect(events[events.length - 1]?.[0]).toBe('sketch.removed');
-        expect(events[events.length - 1]?.[1]).toMatchObject({ reason: 'vertices-removed' });
+        expect(events[events.length - 1]?.[1]).toMatchObject({ reason: 'verticesRemoved' });
       }
       expect(draw.sketches.count()).toBe(0);
       expect(failures).toEqual([]);
@@ -485,7 +485,7 @@ for (const kind of KINDS) {
       events.length = 0;
       expect(draw.sketches.commit(third.id)).toBe(false);
       expect(events).toEqual([
-        ['sketch.removed', { sketch: third, reason: 'layer-unavailable', dropped: 0 }],
+        ['sketch.removed', { sketch: third, reason: 'layerUnavailable', dropped: 0 }],
       ]);
       expect((third.edits[0] as { feature: { geometry: unknown } }).feature.geometry).toEqual({
         type: 'Point',
@@ -552,7 +552,7 @@ for (const kind of KINDS) {
       expect(engine.context.shapes.drawing()?.coordinates).toEqual([[5, 5]]);
       // Not yet a feature: committing it throws, and changes nothing
       expect(() => draw.sketches.commit(sketch.id)).toThrow(
-        expect.objectContaining({ code: 'invalid-input' }),
+        expect.objectContaining({ code: 'invalidInput' }),
       );
       expect(draw.sketches.has(sketch.id)).toBe(true);
       draw.sketches.update(sketch.id, {
@@ -585,7 +585,7 @@ for (const kind of KINDS) {
       events.length = 0;
       draw.setReadOnly(true);
       expect(events.map(([, p]) => (p as InstanceSignals['sketch.removed']).reason)).toEqual([
-        'read-only',
+        'readOnly',
       ]);
       expect(draw.sketches.list()).toEqual([theirs]);
       draw.setReadOnly(false);
@@ -604,7 +604,7 @@ for (const kind of KINDS) {
       expect(draw.sketches.count()).toBe(0);
       expect(() =>
         draw.sketches.addMany([{ edits: [move(a.id, [1, 1])] }, { edits: [move(a.id, [1, 2])] }]),
-      ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+      ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
       const [d1, d2] = draw.sketches.addMany([
         { edits: [move(a.id, [1, 1])] },
         { edits: [move(b.id, [11, 1])] },
@@ -614,14 +614,14 @@ for (const kind of KINDS) {
           { id: d1.id, patch: { edits: [move(a.id, [1, 3])] } },
           { id: 'none', patch: {} },
         ]),
-      ).toThrow(expect.objectContaining({ code: 'not-found' }));
+      ).toThrow(expect.objectContaining({ code: 'notFound' }));
       expect(draw.sketches.get(d1.id)).toBe(d1);
       const [u1] = draw.sketches.updateMany([
         { id: d1.id, patch: { edits: [move(a.id, [1, 3])] } },
       ]) as Sketch[];
       expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 3]);
       expect(() => draw.sketches.removeMany([d2.id, 'none'])).toThrow(
-        expect.objectContaining({ code: 'not-found' }),
+        expect.objectContaining({ code: 'notFound' }),
       );
       expect(draw.sketches.count()).toBe(2);
       const applyEdits = vi.spyOn(
@@ -678,7 +678,7 @@ for (const kind of KINDS) {
     });
 
     it('runs the checks of the sketches, which find what is drawn broken', () => {
-      const { engine, draw, failures } = open(kind, ['sketches', 'sketch-commits']);
+      const { engine, draw, failures } = open(kind, ['sketches', 'sketchCommits']);
       const a = line(draw);
       const shape: SketchEdit = {
         kind: 'set',
@@ -733,7 +733,7 @@ for (const kind of KINDS) {
         [],
       );
       expect(draw.sketches.commit(second.id)).toBe(true);
-      expect(failures.map((f) => f.check)).toContain('sketch-commits');
+      expect(failures.map((f) => f.check)).toContain('sketchCommits');
     });
   });
 }

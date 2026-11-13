@@ -37,7 +37,7 @@ import { toDegrees, toRadians } from './units.js';
  * @param to The second point, a position `[lng, lat]` in degrees or a Point
  * @returns The distance in meters on the sphere of {@link EARTH_RADIUS_METERS}. NaN when a
  *   coordinate is not finite
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not a position or a
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not a position or a
  *   Point
  *
  * @example
@@ -58,7 +58,7 @@ export function distance(from: Position | Point, to: Position | Point): number {
  * @param to The end, a position `[lng, lat]` in degrees or a Point
  * @returns The bearing at the start in degrees, clockwise from north, in [0, 360). 0 when the
  *   points are identical
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not a position or a
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not a position or a
  *   Point
  */
 export function bearing(from: Position | Point, to: Position | Point): number {
@@ -74,7 +74,7 @@ export function bearing(from: Position | Point, to: Position | Point): number {
  * @param bearingDegrees The initial bearing in degrees, clockwise from north
  * @returns The position `[lng, lat]` in degrees. The longitude continues from the origin
  *   and is not wrapped into [-180, 180]
- * @throws {@link GeometryError} (`invalid-input`) when the origin is not a position or a
+ * @throws {@link GeometryError} (`invalidInput`) when the origin is not a position or a
  *   Point
  */
 export function destination(
@@ -94,7 +94,7 @@ export function destination(
  * @param to The second point, a position `[lng, lat]` in degrees or a Point
  * @returns The position `[lng, lat]` in degrees, at the same distance in meters from both
  *   points. The longitude continues from `from`
- * @throws {@link GeometryError} (`invalid-input`) when an argument is not a position or a
+ * @throws {@link GeometryError} (`invalidInput`) when an argument is not a position or a
  *   Point
  */
 export function midpoint(from: Position | Point, to: Position | Point): Position {
@@ -120,7 +120,7 @@ export function midpoint(from: Position | Point, to: Position | Point): Position
  * @param distanceMeters The distance from the start in meters. 0 or less gives the start,
  *   and a distance longer than the line gives its end
  * @returns The position `[lng, lat]` in degrees
- * @throws {@link GeometryError} (`invalid-input`) when the line is not a LineString or has no
+ * @throws {@link GeometryError} (`invalidInput`) when the line is not a LineString or has no
  *   position, and when the distance is not a finite number
  */
 export function along(
@@ -217,7 +217,7 @@ function nearestOnSegment(p: Coordinate, a: Coordinate, b: Coordinate): Coordina
  *   distance from `point` in meters; and `segmentIndex`, the segment it lies on, counted from
  *   0 across the lines of a MultiLineString in order (segment `i` of a LineString joins its
  *   positions `i` and `i + 1`)
- * @throws {@link GeometryError} (`invalid-input`) when the line is not a LineString or a
+ * @throws {@link GeometryError} (`invalidInput`) when the line is not a LineString or a
  *   MultiLineString or has no position, and when the point is not a position or a Point
  */
 export function nearestPointOnLine(
@@ -254,7 +254,7 @@ export function nearestPointOnLine(
  *   coordinates in degrees
  * @returns The sum of the great-circle distances of the segments, in meters. 0 for a line
  *   with fewer than 2 positions
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a LineString or a
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a LineString or a
  *   MultiLineString
  */
 export function length(
@@ -271,8 +271,8 @@ export function length(
  * @param polygon The Polygon or MultiPolygon, or a feature whose geometry is one; coordinates
  *   in degrees. Self-intersections are resolved and ring orientation does not matter
  * @returns The area in square meters, holes subtracted. 0 when nothing with an area remains
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
- *   MultiPolygon, and (`engine-failure`) when resolving its self-intersections fails
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a Polygon or a
+ *   MultiPolygon, and (`engineFailure`) when resolving its self-intersections fails
  *
  * @example
  * ```ts
@@ -295,7 +295,7 @@ export function area(polygon: Polygon | MultiPolygon | { readonly geometry: Geom
  *   in degrees. An open ring is measured as if closed; a ring with fewer than 3 positions or a
  *   position that is not finite is left out
  * @returns The sum of the great-circle lengths of every ring, in meters
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a Polygon or a
  *   MultiPolygon
  */
 export function perimeter(
@@ -317,7 +317,7 @@ export function perimeter(
  * @returns The centroid as a Point, in degrees; it can fall outside a concave polygon (see
  *   {@link pointOnSurface}). The mean of the positions when the area is 0. null when there is
  *   no position
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a Polygon or a
  *   MultiPolygon
  */
 export function centroid(
@@ -336,7 +336,7 @@ export function centroid(
  * @returns The {@link centroid} when it lies inside, otherwise the middle of the widest
  *   section of the polygon along the parallel of the centroid, as a Point in degrees. null
  *   when there is no position
- * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
+ * @throws {@link GeometryError} (`invalidInput`) when the input is not a Polygon or a
  *   MultiPolygon
  */
 export function pointOnSurface(

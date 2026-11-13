@@ -113,7 +113,7 @@ function writeBlocksWithDrawErrors(input: Parameters<typeof writeBlocks>[0]): Ta
  * }
  * ```
  *
- * @throws `DrawError` with the code `invalid-input` when a row cannot be written: a geometry that
+ * @throws `DrawError` with the code `invalidInput` when a row cannot be written: a geometry that
  *   is not of one of the six GeoJSON types a row holds, a position of more values than the
  *   dimensions, a value that is not one
  * @experimental

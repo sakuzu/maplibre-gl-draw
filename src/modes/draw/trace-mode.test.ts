@@ -164,7 +164,7 @@ beforeEach(() => {
 
 describe('tracing of the line drawing mode', () => {
   it('inserts the vertices in between when snapping to two vertices of the same polygon', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.click(P2);
@@ -175,7 +175,7 @@ describe('tracing of the line drawing mode', () => {
 
   it('continues the trace onto the adjoining feature connected by a shared vertex', () => {
     addNeighbor();
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     // From P0 (target) to N0 (neighbor) it spans the edges of two polygons
     input.click(P0);
@@ -186,7 +186,7 @@ describe('tracing of the line drawing mode', () => {
   });
 
   it('can trace from a click snapped to the middle of an edge as well', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     // The midpoint of P0-P1 (it is 20px away from the vertices at both ends, so it snaps to
     // the edge)
@@ -199,7 +199,7 @@ describe('tracing of the line drawing mode', () => {
   });
 
   it('inserts nothing when both points are snapped onto the same edge', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     // 12px from the vertices at both ends of the edge, past the tolerance of a vertex (10px)
     const a: Coordinate = [ORIGIN.lng + STEP * 0.3, ORIGIN.lat];
@@ -212,7 +212,7 @@ describe('tracing of the line drawing mode', () => {
   });
 
   it('does not trace when a click that does not snap is inserted in between', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.click(AWAY);
@@ -223,7 +223,7 @@ describe('tracing of the line drawing mode', () => {
   });
 
   it('previews the trace path on a mouse move', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.move(P2);
@@ -235,7 +235,7 @@ describe('tracing of the line drawing mode', () => {
   });
 
   it('makes the preview disappear as well when the cursor leaves the snap', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.move(P2);
@@ -246,7 +246,7 @@ describe('tracing of the line drawing mode', () => {
 
   it('inserts nothing when tracing is disabled', () => {
     draw.options.update({ tracing: { enabled: false } });
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.click(P2);
@@ -256,7 +256,7 @@ describe('tracing of the line drawing mode', () => {
   });
 
   it('does not trace on the click right after going back with Backspace', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.click(AWAY);
@@ -291,7 +291,7 @@ describe('preference of the trace anchor', () => {
   }
 
   it('returns the snap target of the confirmed click', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
     expect(preference()).toBeNull();
 
     input.click(P0);
@@ -301,7 +301,7 @@ describe('preference of the trace anchor', () => {
 
   it('also returns datasetId for a snap target originating from data', () => {
     putDataset();
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(D0);
 
@@ -310,7 +310,7 @@ describe('preference of the trace anchor', () => {
 
   it('the trace also holds between boundaries of data', () => {
     putDataset();
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(D0);
     input.click(D2);
@@ -320,7 +320,7 @@ describe('preference of the trace anchor', () => {
   });
 
   it('goes back to null after a click that does not snap', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.click(AWAY);
@@ -329,7 +329,7 @@ describe('preference of the trace anchor', () => {
   });
 
   it('goes back together with the state of the mode when confirmed (Enter)', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
     const handler = modeManager.getHandler();
 
     input.click(P0);
@@ -340,7 +340,7 @@ describe('preference of the trace anchor', () => {
   });
 
   it('goes back on a cancel (Escape) as well', () => {
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
     input.key('Escape');
@@ -350,15 +350,15 @@ describe('preference of the trace anchor', () => {
 
   it('returns nothing when tracing is disabled', () => {
     draw.options.update({ tracing: { enabled: false } });
-    modeManager.setMode('draw_line');
+    modeManager.setMode('drawLine');
 
     input.click(P0);
 
     expect(preference()).toBeNull();
   });
 
-  it('returns the same way for draw_polygon as well', () => {
-    modeManager.setMode('draw_polygon');
+  it('returns the same way for drawPolygon as well', () => {
+    modeManager.setMode('drawPolygon');
 
     input.click(P0);
 
@@ -368,7 +368,7 @@ describe('preference of the trace anchor', () => {
 
 describe('tracing of the polygon drawing mode', () => {
   it('takes in the vertices by tracing along the boundary', () => {
-    modeManager.setMode('draw_polygon');
+    modeManager.setMode('drawPolygon');
 
     input.click(P0);
     input.click(P2);
@@ -381,7 +381,7 @@ describe('tracing of the polygon drawing mode', () => {
   });
 
   it('keeps the shape of a closed ring in the preview as well', () => {
-    modeManager.setMode('draw_polygon');
+    modeManager.setMode('drawPolygon');
 
     input.click(P0);
     input.move(P2);

@@ -294,7 +294,7 @@ const STORE_METHODS = [
 /**
  * Checks the options of `createDraw`
  *
- * @throws `DrawError` with the code `invalid-input` for an unknown option or a value of the
+ * @throws `DrawError` with the code `invalidInput` for an unknown option or a value of the
  *   wrong type
  * @internal
  */
@@ -728,13 +728,13 @@ export function toEngineOptions(
 
 /**
  * Whether the checks asked for compare what is written to the GPU with the rows
- * (`drawing-writes`, `drawing-rebuild`): the drawing keeps it only then
+ * (`drawingWrites`, `drawingRebuild`): the drawing keeps it only then
  */
 function keepsDrawnCopies(options: DrawOptions): boolean {
   const checks = options.debug?.checks;
   if (!checks) return false;
   const run = checks === true ? undefined : checks.run;
-  return run === undefined || run.includes('drawing-writes') || run.includes('drawing-rebuild');
+  return run === undefined || run.includes('drawingWrites') || run.includes('drawingRebuild');
 }
 
 // ============================================================================

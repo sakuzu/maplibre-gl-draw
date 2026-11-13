@@ -132,7 +132,7 @@ describe('a part on the GPU', () => {
   it('refuses a format it cannot count', () => {
     const { gl, calls } = counted();
     const { gpu } = open(gl);
-    expect(refusal(() => gpu.texture(4, 4, 12345)).code).toBe('invalid-input');
+    expect(refusal(() => gpu.texture(4, 4, 12345)).code).toBe('invalidInput');
     expect(calls).toEqual([]);
   });
 
@@ -140,7 +140,7 @@ describe('a part on the GPU', () => {
     const { gl, calls } = counted();
     const { gpu, ledger } = open(gl);
     const error = refusal(() => gpu.buffer(501));
-    expect(error.code).toBe('too-large');
+    expect(error.code).toBe('tooLarge');
     expect(error.retryable).toBe(false);
     expect(calls).toEqual([]);
     expect(ledger.snapshot().bytes).toBe(0);
@@ -152,7 +152,7 @@ describe('a part on the GPU', () => {
     const other = {};
     ledger.record(other, 'others', 'buffer', 800);
     const error = refusal(() => gpu.buffer(300));
-    expect(error.code).toBe('too-large');
+    expect(error.code).toBe('tooLarge');
     expect(error.retryable).toBe(true);
     expect(calls).toEqual([]);
     ledger.release(other);
@@ -175,7 +175,7 @@ describe('a part on the GPU', () => {
     ledger.limitBytes = 500;
     expect(gpu.memory().limitBytes).toBe(250);
     expect(alive.size).toBe(1);
-    expect(refusal(() => gpu.buffer(1)).code).toBe('too-large');
+    expect(refusal(() => gpu.buffer(1)).code).toBe('tooLarge');
     ledger.limitBytes = 2_000;
     gpu.buffer(500);
   });
@@ -197,7 +197,7 @@ describe('a part on the GPU', () => {
     const { gl, alive } = counted({ linkFails: true });
     const { gpu, ledger } = open(gl);
     const error = refusal(() => gpu.program('v', 'f'));
-    expect(error.code).toBe('invalid-input');
+    expect(error.code).toBe('invalidInput');
     expect(error.message).toContain('the program does not link');
     expect(alive.size).toBe(0);
     expect(ledger.snapshot().objects).toBe(0);
@@ -208,8 +208,8 @@ describe('a part on the GPU', () => {
     const { gpu, ledger } = open(gl);
     const compile = gpu.compile('v', 'f', { varyings: ['out'] });
     expect(compile.done).toBe(true);
-    expect(refusal(() => compile.program).code).toBe('invalid-input');
-    expect(refusal(() => compile.program).code).toBe('invalid-input');
+    expect(refusal(() => compile.program).code).toBe('invalidInput');
+    expect(refusal(() => compile.program).code).toBe('invalidInput');
     expect(alive.size).toBe(0);
     expect(ledger.snapshot().objects).toBe(0);
   });
@@ -225,7 +225,7 @@ describe('a part on the GPU', () => {
     gpu.close();
     expect(alive.size).toBe(0);
     expect(ledger.snapshot().objects).toBe(0);
-    expect(refusal(() => waiting.program).code).toBe('invalid-state');
+    expect(refusal(() => waiting.program).code).toBe('invalidState');
   });
 });
 
@@ -247,8 +247,8 @@ describe('however a part ends, nothing of it stays', () => {
   it('a lost context, that makes nothing', () => {
     const { gl, alive } = counted({ lost: true });
     const { gpu, ledger } = open(gl);
-    expect(refusal(() => gpu.buffer(10)).code).toBe('invalid-state');
-    expect(refusal(() => gpu.vertexArray()).code).toBe('invalid-state');
+    expect(refusal(() => gpu.buffer(10)).code).toBe('invalidState');
+    expect(refusal(() => gpu.vertexArray()).code).toBe('invalidState');
     expect(alive.size).toBe(0);
     expect(ledger.snapshot().objects).toBe(0);
   });
@@ -293,7 +293,7 @@ describe('however a part ends, nothing of it stays', () => {
       () => gpu.compile('v', 'f'),
       () => gpu.openRows(() => 1),
     ]) {
-      expect(refusal(late).code).toBe('invalid-state');
+      expect(refusal(late).code).toBe('invalidState');
     }
     expect(calls).toEqual([]);
     expect(alive.size).toBe(0);
@@ -310,7 +310,7 @@ describe('the rows of a part', () => {
     rows.buffer(4_000);
     expect(ledger.outsideRowBytes).toBe(500);
     const error = refusal(() => rows.buffer(1_001));
-    expect(error.code).toBe('too-large');
+    expect(error.code).toBe('tooLarge');
     expect(error.retryable).toBe(true);
     expect(rows.memory().limitBytes).toBe(5_000);
   });
@@ -350,7 +350,7 @@ describe('`rows` of a part', () => {
     expect(ledger.snapshot().byOwner).toEqual({ acme: 4_100 });
     expect(gpu.memory().gpuBytes).toBe(100);
     expect(gpu.rows.memory().gpuBytes).toBe(4_000);
-    expect(refusal(() => gpu.rows.buffer(1_001)).code).toBe('too-large');
+    expect(refusal(() => gpu.rows.buffer(1_001)).code).toBe('tooLarge');
     gpu.close();
     expect(alive.size).toBe(0);
     expect(ledger.snapshot().objects).toBe(0);

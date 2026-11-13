@@ -78,6 +78,6 @@ export async function loadDocument({ draw }: ShowcaseContext): Promise<void> {
     rows: createDensityGrid(),
     styleRule: DENSITY_RULE,
     baseStyle: DENSITY_BASE_STYLE,
-    order: 'below-store',
+    order: 'belowStore',
   });
 }

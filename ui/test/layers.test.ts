@@ -216,8 +216,8 @@ describe('the datasets in the layer tree', () => {
         layers: [layer('l1'), layer('l2')],
         datasets: [
           { id: 'buildings', rows: 12_345 },
-          { id: 'places', order: 'above-store', rows: 7 },
-          { id: 'roads', order: 'below-store', rows: 3, visible: false },
+          { id: 'places', order: 'aboveStore', rows: 7 },
+          { id: 'roads', order: 'belowStore', rows: 3, visible: false },
           { id: 'unplaced' },
         ],
         order: ['l1', 'buildings', 'l2'],
@@ -266,17 +266,17 @@ describe('the datasets in the layer tree', () => {
       order: ['l1', 'l2', 'buildings'],
     });
     // The dataset in front of every layer dropped between the layers: it joins the stacking order
-    // there, and goes back to above-store when the reorder is refused
+    // there, and goes back to aboveStore when the reorder is refused
     expect(planMove({ id: 'places', parentId: null, index: 1 }, nodes)).toEqual({
       kind: 'layers',
       order: ['l1', 'buildings', 'places', 'l2'],
-      join: { id: 'places', order: 'above-store' },
+      join: { id: 'places', order: 'aboveStore' },
     });
     // The dataset behind every layer dropped in front of them all
     expect(planMove({ id: 'roads', parentId: null, index: 0 }, nodes)).toEqual({
       kind: 'layers',
       order: ['l1', 'buildings', 'l2', 'roads'],
-      join: { id: 'roads', order: 'below-store' },
+      join: { id: 'roads', order: 'belowStore' },
     });
   });
 });
@@ -499,13 +499,13 @@ describe('the legend', () => {
         datasets: [
           {
             id: 'water',
-            order: 'below-store',
+            order: 'belowStore',
             rows: 3,
             styleRule: { kind: 'single', color: '#00f' },
           },
           { id: 'buildings', rows: 12, styleRule: area },
           { id: 'roads', rows: 5 },
-          { id: 'places', order: 'above-store', rows: 7, rowType: 'Point', styleRule: area },
+          { id: 'places', order: 'aboveStore', rows: 7, rowType: 'Point', styleRule: area },
           // Not listed by the stacking order, so not drawn
           { id: 'stray', rows: 1, styleRule: area },
         ],

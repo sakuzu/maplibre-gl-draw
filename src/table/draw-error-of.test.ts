@@ -14,9 +14,9 @@ import { drawErrorOf } from './draw-error-of.js';
 describe('drawErrorOf', () => {
   it('wraps an error of the tables or of Tabane in a DrawError of its reason and message', () => {
     for (const [error, code] of [
-      [new KasaneError('alreadyExists', 'taken'), 'already-exists'],
-      [new KasaneError('invalidState', 'not now'), 'invalid-state'],
-      [new TabaneError('invalid-input', 'not a value'), 'invalid-input'],
+      [new KasaneError('alreadyExists', 'taken'), 'alreadyExists'],
+      [new KasaneError('invalidState', 'not now'), 'invalidState'],
+      [new TabaneError('invalidInput', 'not a value'), 'invalidInput'],
     ] as const) {
       const wrapped = drawErrorOf(error) as DrawError;
       expect(wrapped).toBeInstanceOf(DrawError);
@@ -39,12 +39,12 @@ describe('drawErrorOf', () => {
     expect(thrown).toBeInstanceOf(KasaneError);
     const wrapped = drawErrorOf(thrown) as DrawError;
     expect(wrapped).toBeInstanceOf(DrawError);
-    expect(wrapped.code).toBe('invalid-input');
+    expect(wrapped.code).toBe('invalidInput');
     expect((wrapped as { cause?: unknown }).cause).toBe(thrown);
   });
 
   it('leaves a DrawError and any other error as they are', () => {
-    const own = new DrawError('not-found', 'x');
+    const own = new DrawError('notFound', 'x');
     expect(drawErrorOf(own)).toBe(own);
     const other = new TypeError('x');
     expect(drawErrorOf(other)).toBe(other);

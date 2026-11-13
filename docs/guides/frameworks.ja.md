@@ -26,7 +26,7 @@ UI を含めた書き方は、React、Vue、バンドラーを使わないペー
 `destroy()` は、インスタンスが追加したレイヤーとリスナーを
 取り除き、プラグインとほかの拡張を外し、地図に対して変えた設定を
 元に戻します。2 回目以降の呼び出しは何もしません。ほかのメソッドを
-その後に呼ぶと、コード `invalid-state` の `DrawError` が投げられる
+その後に呼ぶと、コード `invalidState` の `DrawError` が投げられる
 ので、遅れて届いたコールバックは片付いた地図に触れる前に分かります。
 `draw.on` は購読を解除する関数を返すので、コンポーネントより長く生きる
 インスタンスを購読するときは、その関数で後始末ができます。
@@ -66,7 +66,7 @@ export function DrawMap() {
 
   return (
     <>
-      <button onClick={() => drawRef.current?.setMode('draw_polygon')}>
+      <button onClick={() => drawRef.current?.setMode('drawPolygon')}>
         Polygon
       </button>
       <div ref={container} style={{ height: 400 }} />
@@ -113,7 +113,7 @@ export function DrawMap() {
   });
 </script>
 
-<button onclick={() => draw?.setMode('draw_polygon')}>Polygon</button>
+<button onclick={() => draw?.setMode('drawPolygon')}>Polygon</button>
 <div bind:this={container} style="height: 400px"></div>
 ```
 
@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <button @click="draw?.setMode('draw_polygon')">Polygon</button>
+  <button @click="draw?.setMode('drawPolygon')">Polygon</button>
   <div ref="container" style="height: 400px"></div>
 </template>
 ```

@@ -164,7 +164,7 @@ export interface SnapIndicatorRendererDeps {
  * @internal
  */
 export class SnapIndicatorRenderer implements EngineOverlayRenderer {
-  readonly name = 'snap-indicator';
+  readonly name = 'snapIndicator';
   readonly order = 'overlay' as const;
 
   private snapService: SnapService;

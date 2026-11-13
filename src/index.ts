@@ -22,7 +22,7 @@
  * import { createDraw } from '@sakuzu/maplibre-gl-draw';
  *
  * const draw = createDraw(map);
- * draw.setMode('draw_polygon');
+ * draw.setMode('drawPolygon');
  * draw.on('change', ({ features }) => {
  *   for (const id of features.created) console.log(id, draw.features.get(id)?.geometry);
  * });

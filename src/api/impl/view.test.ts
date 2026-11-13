@@ -144,7 +144,7 @@ describe('draw.view.preview', () => {
   it('refuses what cannot be read, and a signal that stopped it, showing nothing', async () => {
     const draw = live();
     await expect(draw.view.preview('not json')).rejects.toMatchObject({
-      code: 'unsupported-format',
+      code: 'unsupportedFormat',
     });
     const stopped = new AbortController();
     stopped.abort();

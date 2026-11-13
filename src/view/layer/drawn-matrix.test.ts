@@ -1002,7 +1002,7 @@ const drawThroughMode: Step = {
     const { draw } = run.client;
     const geometry = geometryOf(run.shape) as { type: string; coordinates: unknown };
     const mode =
-      run.shape === 'Polygon' ? 'draw_polygon' : run.shape === 'LineString' ? 'draw_line' : null;
+      run.shape === 'Polygon' ? 'drawPolygon' : run.shape === 'LineString' ? 'drawLine' : null;
     if (!mode) throw new Error(`no mode for ${run.shape}`);
     let made: { id: string } | undefined;
     // A Store of rows tells the row created, a Store of objects the feature created

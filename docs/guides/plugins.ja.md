@@ -52,8 +52,8 @@ const removeLogger = draw.extensions.plugins.add(logger);
 `count`、`has` で名前から引けます。`add` は、足したものを外す関数を
 返します。
 
-使われている名前を渡すと、コード `already-exists` の `DrawError` が
-投げられます。無い名前を `remove` に渡すと `not-found` です。
+使われている名前を渡すと、コード `alreadyExists` の `DrawError` が
+投げられます。無い名前を `remove` に渡すと `notFound` です。
 `addMany` と `removeMany` は、全部を行うか何も行わないかのどちらかです。
 
 ## Plugin オブジェクト
@@ -164,7 +164,7 @@ await ctx.draw.write(
 
 決まりはインスタンスと同じです。もう無い ID のような誤った引数は
 `DrawError` で reject します。読み取り専用やロックのために拒まれた
-書き込みは `not-editable` か `locked` で reject します。どちらの場合も
+書き込みは `notEditable` か `locked` で reject します。どちらの場合も
 取引は何も確定しません。変化の後に反応するプラグインは、対象がもう無い
 かもしれないので、先に `has` で確かめます。
 
@@ -350,8 +350,8 @@ function createShortcuts(): Plugin {
     input: {
       onKeyDown(event) {
         if (!ctx || event.modifiers.ctrl || event.modifiers.meta) return false;
-        if (event.key === 'p') return ctx.draw.setMode('draw_point');
-        if (event.key === 'l') return ctx.draw.setMode('draw_line');
+        if (event.key === 'p') return ctx.draw.setMode('drawPoint');
+        if (event.key === 'l') return ctx.draw.setMode('drawLine');
         return false;
       },
     },
@@ -472,8 +472,8 @@ const drawRectangle: ModeFactory = (ctx) => {
   };
 };
 
-draw.extensions.modes.add('draw_rectangle', drawRectangle);
-draw.setMode('draw_rectangle');
+draw.extensions.modes.add('drawRectangle', drawRectangle);
+draw.setMode('drawRectangle');
 ```
 
 1 回目のクリックで角を置き、ポインターに合わせて長方形が見え、2 回目の
@@ -575,7 +575,7 @@ draw.setMode('draw_rectangle');
   ものが返され、購読が終わります
 - 有効なモードを外すと、先に `select` に入ります
 - 組み込みのモードと地物の型の名前は使われているので、`add` はそれら
-  に `already-exists` を投げます
+  に `alreadyExists` を投げます
 - 拡張は、足したインスタンスに属します。ページにあるほかの draw の
   インスタンスからは見えません
 - `draw.destroy()` は、先にプラグインを外し、それからほかの拡張を

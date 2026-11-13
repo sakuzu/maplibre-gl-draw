@@ -287,7 +287,7 @@ export function createFeatureTablesWriter(
    * Refuses a write whose parent of a row is neither a layer of the Store nor a group, before
    * anything is written: the tables would hold the row in a table of that id
    *
-   * @throws `DrawError` with the code `not-found`
+   * @throws `DrawError` with the code `notFound`
    */
   const checkParents = (values: RowValues): void => {
     const parents = values.fields.get('parent');
@@ -296,7 +296,7 @@ export function createFeatureTablesWriter(
       if (typeof parent !== 'string' || parent === '' || values.deleted?.[i]) return;
       if (isLayer(parent) || internals.groups.handleOfId(parent) >= 0) return;
       throw new DrawError(
-        'not-found',
+        'notFound',
         `FeatureTables: the parent "${parent}" is unknown (neither a layer nor a group)`,
       );
     });
@@ -417,7 +417,7 @@ export function createFeatureTablesWriter(
  * The values of groups as the tables take them: the names of the groups are kept by the Store
  * (`TableGroupField`), so they are checked and taken out
  *
- * @throws `DrawError` with the code `invalid-input` when a name is not a string
+ * @throws `DrawError` with the code `invalidInput` when a name is not a string
  */
 function withoutNames(patch: TableGroupPatch): TablesGroupPatch {
   const names = patch.fields.get('name');
@@ -425,7 +425,7 @@ function withoutNames(patch: TableGroupPatch): TablesGroupPatch {
   names.forEach((name, i) => {
     if (name !== undefined && typeof name !== 'string' && !patch.deleted?.[i]) {
       throw new DrawError(
-        'invalid-input',
+        'invalidInput',
         `FeatureTables: the name of the group ${patch.handles[i]} is not a string`,
       );
     }

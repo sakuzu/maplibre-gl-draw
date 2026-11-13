@@ -247,7 +247,7 @@ function add(manager: DatasetManager, options: DatasetOptions): ReturnType<Datas
 
 /** Draws one frame */
 function drawFrame(manager: DatasetManager, probe: RetainedProbe): void {
-  manager.draw('below-store', probe.target, {} as ProjectionData, 10);
+  manager.draw('belowStore', probe.target, {} as ProjectionData, 10);
 }
 
 /** A small square polygon */
@@ -720,13 +720,13 @@ describe('retained batches and the reordering', () => {
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
 
-    manager.move('c1', { order: 'above-store' });
+    manager.move('c1', { order: 'aboveStore' });
     probe.resetDrawn();
     drawFrame(manager, probe);
-    // It disappears from the below-store side
+    // It disappears from the belowStore side
     expect(probe.drawn).toHaveLength(0);
 
-    manager.draw('above-store', probe.target, {} as ProjectionData, 10);
+    manager.draw('aboveStore', probe.target, {} as ProjectionData, 10);
 
     expect(probe.built).toHaveLength(1);
     expect(probe.disposed).toHaveLength(0);
@@ -740,13 +740,13 @@ describe('retained batches and the reordering', () => {
 
     drawFrame(manager, probe);
     dataset.setVisible(false);
-    manager.move('c1', { order: 'above-store' });
+    manager.move('c1', { order: 'aboveStore' });
 
     expect(dataset.visible).toBe(false);
 
     dataset.setVisible(true);
     probe.resetDrawn();
-    manager.draw('above-store', probe.target, {} as ProjectionData, 10);
+    manager.draw('aboveStore', probe.target, {} as ProjectionData, 10);
 
     expect(probe.built).toHaveLength(1);
     expect(probe.disposed).toHaveLength(0);
@@ -883,7 +883,7 @@ describe('the zoom-dependent drawing factors (zoomScale)', () => {
     });
     const target: DisplayBatchTarget = { ...probe.target, getRetainedRenderers: undefined };
 
-    manager.draw('below-store', target, {} as ProjectionData, 10);
+    manager.draw('belowStore', target, {} as ProjectionData, 10);
 
     expect(probe.immediate.map((feature) => feature.id)).toEqual(['pt']);
     expect(vi.mocked(target.beginFrame).mock.calls[0][3]).toEqual({ scale: 2, opacity: 0.5 });
@@ -1275,7 +1275,7 @@ describe('the origin of a chunk seen at high zoom', () => {
 
     probe.built.length = 0;
     setBounds([135.6, 34.8, 135.6002, 34.8002]);
-    manager.draw('below-store', probe.target, {} as ProjectionData, 22);
+    manager.draw('belowStore', probe.target, {} as ProjectionData, 22);
 
     const origin = probe.built[0]?.origin as [number, number];
     expect(origin[0]).toBeCloseTo(135.6001, 6);
@@ -1283,7 +1283,7 @@ describe('the origin of a chunk seen at high zoom', () => {
 
     // The rebuilt batch stays while the view stays there
     probe.built.length = 0;
-    manager.draw('below-store', probe.target, {} as ProjectionData, 22);
+    manager.draw('belowStore', probe.target, {} as ProjectionData, 22);
     expect(probe.built).toEqual([]);
   });
 });

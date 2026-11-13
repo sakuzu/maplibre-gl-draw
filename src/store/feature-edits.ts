@@ -17,7 +17,7 @@
  * roles of each feature (`transform-roles.ts`).
  *
  * Everything is checked before anything is written: an edit that cannot apply throws a
- * DrawError `invalid-input`, and the Store writes none of the edits then.
+ * DrawError `invalidInput`, and the Store writes none of the edits then.
  */
 
 import type { Value } from '@sakuzu/tabane';
@@ -63,9 +63,9 @@ const PATCH_KEYS: readonly string[] = ['geometry', 'properties', 'style', 'visib
 /** The keys an edit of each kind may have */
 const EDIT_KEYS: Readonly<Record<FeatureEdit['kind'], readonly string[]>> = {
   set: ['kind', 'featureId', 'patch'],
-  'vertex-move': ['kind', 'featureId', 'vertices', 'positions'],
-  'vertex-insert': ['kind', 'featureId', 'after', 'before', 'position'],
-  'vertex-delete': ['kind', 'featureId', 'vertices'],
+  vertexMove: ['kind', 'featureId', 'vertices', 'positions'],
+  vertexInsert: ['kind', 'featureId', 'after', 'before', 'position'],
+  vertexDelete: ['kind', 'featureId', 'vertices'],
   translate: ['kind', 'target', 'from', 'to'],
   rotate: ['kind', 'target', 'center', 'angleDegrees'],
   scale: ['kind', 'target', 'center', 'eastFactor', 'northFactor', 'sizeFactor'],
@@ -125,7 +125,7 @@ export function featureIdsOf(edit: FeaturesEdit): readonly string[] {
  * as the computation takes them, before any is applied
  *
  * @returns The edit each of those gives its computation, at its index (undefined for the others)
- * @throws DrawError `invalid-input` when an edit cannot apply
+ * @throws DrawError `invalidInput` when an edit cannot apply
  * @internal
  */
 export function checkEdits(
@@ -151,7 +151,7 @@ export function checkEdits(
  * @param type The type of the feature
  * @param read Reads a key of its `properties` (undefined for a key that is not there)
  * @param fields The fields the custom types of the instance declare
- * @throws DrawError `invalid-input` when the computation gives a geometry the feature cannot have
+ * @throws DrawError `invalidInput` when the computation gives a geometry the feature cannot have
  * @internal
  */
 export function transformedFields(
@@ -209,7 +209,7 @@ export interface FeatureUpdate {
  * An edit of a feature `getFeature` does not find is left out and counted.
  *
  * @param fields The fields the custom types of the instance declare
- * @throws DrawError `invalid-input` when an edit cannot apply
+ * @throws DrawError `invalidInput` when an edit cannot apply
  * @internal
  */
 export function updatesOfEdits(
@@ -254,7 +254,7 @@ export function updatesOfEdits(
 /**
  * The fields an edit of one feature writes over it
  *
- * @throws DrawError `invalid-input` when it cannot apply
+ * @throws DrawError `invalidInput` when it cannot apply
  * @internal
  */
 export function featureUpdatesOfEdit(feature: Feature, edit: OneFeatureEdit): Partial<Feature> {
@@ -270,7 +270,7 @@ export function featureUpdatesOfEdit(feature: Feature, edit: OneFeatureEdit): Pa
  * it changes nothing)
  *
  * @param fields The fields the custom types of the instance declare
- * @throws DrawError `invalid-input` when the computation gives a geometry the feature cannot have
+ * @throws DrawError `invalidInput` when the computation gives a geometry the feature cannot have
  * @internal
  */
 export function transformedFeatureFields(
@@ -304,7 +304,7 @@ export function transformedFeatureFields(
  * Checks a patch and makes the fields written from it over a feature: the keys of `properties`
  * and `style` merged into the ones of the feature, the other fields given whole
  *
- * @throws DrawError `invalid-input` on a wrong patch
+ * @throws DrawError `invalidInput` on a wrong patch
  * @internal
  */
 export function featureUpdatesOfPatch(feature: Feature, patch: FeaturePatch): Partial<Feature> {
@@ -361,7 +361,7 @@ export function mergedKeys(
  * A patch of properties with each value in the one form of a value; undefined stays, to take
  * the key off
  *
- * @throws DrawError `invalid-input` when a value is not a value
+ * @throws DrawError `invalidInput` when a value is not a value
  * @internal
  */
 export function propertiesPatchOf(patch: Record<string, unknown>): Record<string, unknown> {
@@ -400,23 +400,23 @@ function checkEdit(edit: FeatureEdit): void {
     case 'set':
       if (!isRecord(edit.patch)) throw invalidInput('The patch must be an object');
       return;
-    case 'vertex-move':
+    case 'vertexMove':
       checkVertices(edit.vertices);
       if (!Array.isArray(edit.positions) || edit.positions.length !== edit.vertices.length) {
         throw invalidInput('positions must be an array with a position for each vertex');
       }
       for (const position of edit.positions) checkPosition(position);
       return;
-    case 'vertex-insert': {
+    case 'vertexInsert': {
       const { after, before } = edit;
       if ((after === undefined) === (before === undefined)) {
-        throw invalidInput('An edit vertex-insert has exactly one of after and before');
+        throw invalidInput('An edit vertexInsert has exactly one of after and before');
       }
       checkVertex((after ?? before) as VertexTarget);
       checkPosition(edit.position);
       return;
     }
-    case 'vertex-delete':
+    case 'vertexDelete':
       checkVertices(edit.vertices);
       return;
   }
@@ -526,7 +526,7 @@ type VertexEdit = Exclude<OneFeatureEdit, { kind: 'set' }>;
 /**
  * The geometry an edit of the vertices leaves the feature with
  *
- * @throws DrawError `invalid-input` when a vertex is not one of the feature, or the edit leaves
+ * @throws DrawError `invalidInput` when a vertex is not one of the feature, or the edit leaves
  *   a line or a ring with too few positions
  */
 function editedGeometry(feature: Feature, edit: VertexEdit): Geometry {
@@ -541,7 +541,7 @@ function editedGeometry(feature: Feature, edit: VertexEdit): Geometry {
   };
   let edited: FeatureCoordinates;
   switch (edit.kind) {
-    case 'vertex-move':
+    case 'vertexMove':
       edited = movedVertices(
         kind,
         coordinates,
@@ -549,7 +549,7 @@ function editedGeometry(feature: Feature, edit: VertexEdit): Geometry {
         edit.positions as readonly Coordinate[],
       );
       break;
-    case 'vertex-insert': {
+    case 'vertexInsert': {
       if (!LINE_KINDS.has(kind)) {
         throw invalidInput(`A vertex cannot be inserted into a ${kind} geometry`);
       }
@@ -564,7 +564,7 @@ function editedGeometry(feature: Feature, edit: VertexEdit): Geometry {
       );
       break;
     }
-    case 'vertex-delete': {
+    case 'vertexDelete': {
       const result = deletedVertices(kind, coordinates, edit.vertices.map(vertexOf));
       if (!result) {
         throw invalidInput(
@@ -605,7 +605,7 @@ function vertexKey(ref: VertexRef): string {
  * The coordinates with the vertices put at the positions: both ends of a closed ring when one
  * of them is named
  *
- * @throws DrawError `invalid-input` when a vertex is given two different positions
+ * @throws DrawError `invalidInput` when a vertex is given two different positions
  */
 function movedVertices(
   kind: string,
@@ -690,7 +690,7 @@ function deletedVertices(
 
 /** The error for an input of the wrong shape or value */
 function invalidInput(message: string): DrawError {
-  return new DrawError('invalid-input', message);
+  return new DrawError('invalidInput', message);
 }
 
 /** Whether the value is a plain object (not null, not an array) */

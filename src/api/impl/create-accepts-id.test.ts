@@ -5,7 +5,7 @@
  * Creating in a Store that takes ids of its own form only (`Store.acceptsId`)
  *
  * - A feature, a group or a layer created with an id the Store does not take is refused with
- *   `invalid-input` before anything is written: `create` and `createMany` of the features, the
+ *   `invalidInput` before anything is written: `create` and `createMany` of the features, the
  *   groups and the layers, a sketch that creates a feature, and the new layer and group of a load
  * - In `createMany`, one such id refuses every input, and nothing is written
  * - An id the Store takes, and an id left out (made by `generateId`), are created as before
@@ -69,10 +69,10 @@ function errorOf(call: () => unknown): DrawError {
 }
 
 describe('creating with an id the Store does not take', () => {
-  it('refuses a feature with invalid-input, and writes nothing', () => {
+  it('refuses a feature with invalidInput, and writes nothing', () => {
     const write = vi.spyOn(store, 'createFeature');
     const error = errorOf(() => writesOf(draw).features.create(point('road-1')));
-    expect(error.code).toBe('invalid-input');
+    expect(error.code).toBe('invalidInput');
     expect(error.ids).toEqual(['road-1']);
     expect(write).not.toHaveBeenCalled();
     expect(writesOf(draw).features.list()).toEqual([]);
@@ -82,28 +82,28 @@ describe('creating with an id the Store does not take', () => {
     const error = errorOf(() =>
       writesOf(draw).features.createMany([point('w-a'), point('road-1')]),
     );
-    expect(error.code).toBe('invalid-input');
+    expect(error.code).toBe('invalidInput');
     expect(writesOf(draw).features.list()).toEqual([]);
   });
 
-  it('refuses a group and a layer with invalid-input, and writes nothing', () => {
+  it('refuses a group and a layer with invalidInput, and writes nothing', () => {
     const feature = writesOf(draw).features.create(point());
     const group = errorOf(() =>
       writesOf(draw).groups.create({ id: 'group-1', members: [feature?.id as string] }),
     );
-    expect(group.code).toBe('invalid-input');
+    expect(group.code).toBe('invalidInput');
     const groups = errorOf(() =>
       writesOf(draw).groups.createMany([{ id: 'group-1', members: [feature?.id as string] }]),
     );
-    expect(groups.code).toBe('invalid-input');
+    expect(groups.code).toBe('invalidInput');
     expect(draw.groups.list()).toEqual([]);
 
     const layer = errorOf(() => writesOf(draw).layers.create({ id: 'layer-2' }));
-    expect(layer.code).toBe('invalid-input');
+    expect(layer.code).toBe('invalidInput');
     const layers = errorOf(() =>
       writesOf(draw).layers.createMany([{ id: 'w-l' }, { id: 'layer-2' }]),
     );
-    expect(layers.code).toBe('invalid-input');
+    expect(layers.code).toBe('invalidInput');
     expect(draw.layers.list().map((each) => each.id)).toEqual(['w-layer']);
   });
 
@@ -113,7 +113,7 @@ describe('creating with an id the Store does not take', () => {
         edits: [{ kind: 'create', feature: point('road-1'), placedVertexCount: 1, below: null }],
       }),
     );
-    expect(error.code).toBe('invalid-input');
+    expect(error.code).toBe('invalidInput');
     expect(draw.sketches.list()).toEqual([]);
   });
 
@@ -131,12 +131,12 @@ describe('creating with an id the Store does not take', () => {
     await expect(
       writesOf(draw).document.load(geojson, { layer: { id: 'layer-2' } }),
     ).rejects.toMatchObject({
-      code: 'invalid-input',
+      code: 'invalidInput',
     });
     await expect(
       writesOf(draw).document.load(geojson, { group: { id: 'group-1' } }),
     ).rejects.toMatchObject({
-      code: 'invalid-input',
+      code: 'invalidInput',
     });
     expect(writesOf(draw).features.list()).toEqual([]);
     expect(draw.layers.list().map((each) => each.id)).toEqual(['w-layer']);
@@ -157,7 +157,7 @@ describe('creating with an id the Store takes, or with none', () => {
   it('takes an id that is taken as taken, before it asks the Store', () => {
     writesOf(draw).features.create(point('w-own'));
     expect(errorOf(() => writesOf(draw).features.create(point('w-own'))).code).toBe(
-      'already-exists',
+      'alreadyExists',
     );
   });
 });

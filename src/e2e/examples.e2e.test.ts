@@ -337,7 +337,7 @@ describe('the examples', () => {
 
     await page.getByRole('button', { name: 'Polygon', exact: true }).click();
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
-      'draw_polygon',
+      'drawPolygon',
     );
     await clickRing(page, [at(-80, -60), at(80, -60), at(80, 60), at(-80, 60)]);
     expect(await featureCount(page)).toBe(1);
@@ -1229,7 +1229,7 @@ describe('the examples', () => {
         name: draw.features.get(first.id)?.properties.name,
       };
     });
-    expect(after).toEqual({ count: 8, refused: 'not-editable', name: 'North tower' });
+    expect(after).toEqual({ count: 8, refused: 'notEditable', name: 'North tower' });
     await close();
   });
 
@@ -1274,7 +1274,7 @@ describe('the examples', () => {
             .then(
               () => true,
               (error: { code?: string }) => {
-                if (error.code === 'not-editable' || error.code === 'locked') return false;
+                if (error.code === 'notEditable' || error.code === 'locked') return false;
                 throw error;
               },
             ),
@@ -1292,7 +1292,7 @@ describe('the examples', () => {
     // The tools start, and what they draw is not kept
     await page.getByRole('button', { name: 'Polygon', exact: true }).click();
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
-      'draw_polygon',
+      'drawPolygon',
     );
     await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
     expect(await featureCount(page)).toBe(8);
@@ -1318,7 +1318,7 @@ describe('the examples', () => {
     expect(await actionChecked(page, 'Interaction lock')).toBe(true);
     await page.getByRole('button', { name: 'Polygon', exact: true }).click();
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).not.toBe(
-      'draw_polygon',
+      'drawPolygon',
     );
     await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
     expect(await featureCount(page)).toBe(8);
@@ -1418,7 +1418,7 @@ describe('the examples', () => {
 
     expect(await actionChecked(page, 'Stamp plugin')).toBe(true);
     await pressAction(page, 'Stamp plugin');
-    expect(await extension()).toEqual({ plugin: false, mode: false, error: 'not-found' });
+    expect(await extension()).toEqual({ plugin: false, mode: false, error: 'notFound' });
     expect(await actionChecked(page, 'Stamp plugin')).toBe(false);
     expect(await stampTool.count()).toBe(0);
     expect(await section.count()).toBe(0);
@@ -1644,10 +1644,10 @@ describe('the examples', () => {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('custom-ui');
-    const button = page.locator('[data-mode="draw_polygon"]');
+    const button = page.locator('[data-mode="drawPolygon"]');
     await button.click();
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
-      'draw_polygon',
+      'drawPolygon',
     );
     expect(await button.getAttribute('aria-pressed')).toBe('true');
     await close();

@@ -40,9 +40,9 @@ export interface FeaturesCollection {
    * @param filter - Keeps only the features that match every key given
    * @param options - The number of features made at most, and the feature read last
    * @returns The features, from the back (fewer than `limit` once the last page is read)
-   * @throws `DrawError` with the code `invalid-state` when the Store holds its features as rows
-   *   and no limit is given, `not-found` when there is no feature `after` (it was deleted
-   *   meanwhile), or `invalid-input` when the filter or the options have the wrong shape
+   * @throws `DrawError` with the code `invalidState` when the Store holds its features as rows
+   *   and no limit is given, `notFound` when there is no feature `after` (it was deleted
+   *   meanwhile), or `invalidInput` when the filter or the options have the wrong shape
    *
    * @example Reading every feature, a page at a time
    * ```ts
@@ -86,9 +86,9 @@ export interface FeaturesCollection {
   /**
    * Whether the feature can be edited now: the document is not read-only, and neither the
    * feature nor its group nor its layer is locked. A write refused for the same reasons fails
-   * with `not-editable` or `locked`.
+   * with `notEditable` or `locked`.
    *
-   * @throws `DrawError` with the code `not-found` when there is no feature with this ID
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID
    */
   isEditable(id: string): boolean;
   /**

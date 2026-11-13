@@ -169,7 +169,7 @@ describe.each(['objects', 'rows'] as const)('one commit over a Store of %s', (ki
 describe('the stacking order of the layers', () => {
   it('lists the layers alone as placed, and tells another entry put in or out of it as a change of the document', () => {
     const { draw, changes } = open('objects');
-    draw.datasets.add({ id: 'd', rows: [], order: 'layer-order' } as never);
+    draw.datasets.add({ id: 'd', rows: [], order: 'layerOrder' } as never);
     changes.length = 0;
     writesOf(draw).layers.reorder(['a', 'b', 'd']);
     expect(changes).toHaveLength(1);

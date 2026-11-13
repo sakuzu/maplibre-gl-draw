@@ -374,12 +374,12 @@ describe('the declaration of the look of a type', () => {
         render: rendererOf('bad'),
         defaultStyle,
       } as never);
-    expect(() => add('yellow')).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    expect(() => add('yellow')).toThrow(expect.objectContaining({ code: 'invalidInput' }));
     expect(() => add({ fillColor: 'not a color' })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(() => add({ fillOpacity: 2 })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(view.draw.extensions.featureTypes.has('bad')).toBe(false);
   });
@@ -393,7 +393,7 @@ describe('the declaration of the look of a type', () => {
         render: rendererOf('Point'),
         defaultStyle: BOARD_LOOK,
       }),
-    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
     expect(() =>
       view.draw.extensions.featureTypes.override({
         type: 'Point',
@@ -401,7 +401,7 @@ describe('the declaration of the look of a type', () => {
         render: rendererOf('Point'),
         styleRuleChannel: 'fill',
       }),
-    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
   });
 
   it('refuses a channel that is not one', () => {
@@ -413,7 +413,7 @@ describe('the declaration of the look of a type', () => {
         render: rendererOf('bad'),
         styleRuleChannel: 'outline',
       } as never),
-    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
     expect(view.draw.extensions.featureTypes.has('bad')).toBe(false);
   });
 

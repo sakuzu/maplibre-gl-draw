@@ -121,31 +121,31 @@ const definedMessages: Record<string, unknown> = Object.create(null);
  *
  * @param defaults - The keys and their English defaults: a string, or a function that formats
  *   one
- * @throws `DrawError` with the code `invalid-input` when a key is one of the library or a default
- *   is neither a string nor a function, or `already-exists` when a key was defined with another
+ * @throws `DrawError` with the code `invalidInput` when a key is one of the library or a default
+ *   is neither a string nor a function, or `alreadyExists` when a key was defined with another
  *   value; nothing is defined then
  */
 export function defineMessages(defaults: Partial<Messages>): void {
   if (defaults === null || typeof defaults !== 'object' || Array.isArray(defaults)) {
-    throw new DrawError('invalid-input', 'The defaults of the messages must be an object');
+    throw new DrawError('invalidInput', 'The defaults of the messages must be an object');
   }
   const entries = Object.entries(defaults);
   for (const [key, value] of entries) {
     if (hasOwn(MESSAGES_EN, key)) {
       throw new DrawError(
-        'invalid-input',
+        'invalidInput',
         `The message ${JSON.stringify(key)} is one of the library, which an extension does not define`,
       );
     }
     if (typeof value !== 'string' && typeof value !== 'function') {
       throw new DrawError(
-        'invalid-input',
+        'invalidInput',
         `The default of the message ${JSON.stringify(key)} must be a string or a function`,
       );
     }
     if (hasOwn(definedMessages, key) && definedMessages[key] !== value) {
       throw new DrawError(
-        'already-exists',
+        'alreadyExists',
         `The message ${JSON.stringify(key)} is defined with another default`,
       );
     }

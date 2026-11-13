@@ -798,7 +798,7 @@ describe('the built-in guide provider', () => {
   /** Sets up a drawing mode and a Tentative and takes the guide candidates */
   function guideCandidates(
     tentative: TentativeState | null,
-    mode = 'draw_line',
+    mode = 'drawLine',
     options?: { northStepDegrees?: number },
   ): SnapSegmentCandidate[] {
     store.setMode(mode);
@@ -831,9 +831,9 @@ describe('the built-in guide provider', () => {
     );
 
     expect(guideCandidates(tentative, 'select')).toHaveLength(0);
-    expect(guideCandidates(tentative, 'draw_circle')).toHaveLength(0);
-    expect(guideCandidates(tentative, 'draw_line').length).toBeGreaterThan(0);
-    expect(guideCandidates(tentative, 'draw_polygon').length).toBeGreaterThan(0);
+    expect(guideCandidates(tentative, 'drawCircle')).toHaveLength(0);
+    expect(guideCandidates(tentative, 'drawLine').length).toBeGreaterThan(0);
+    expect(guideCandidates(tentative, 'drawPolygon').length).toBeGreaterThan(0);
   });
 
   it('produces no candidates when there is no Tentative', () => {
@@ -866,7 +866,7 @@ describe('the built-in guide provider', () => {
   it('makes the north-based guide work on the first point of a Polygon as well (a Tentative whose type is Point)', () => {
     const candidates = guideCandidates(
       { type: 'Point', coordinates: [0.2, 0.1], layerId: 'l1' },
-      'draw_polygon',
+      'drawPolygon',
     );
 
     expect(candidates).toHaveLength(8);
@@ -874,7 +874,7 @@ describe('the built-in guide provider', () => {
   });
 
   it('takes the descriptions from the messages table given to it', () => {
-    store.setMode('draw_line');
+    store.setMode('drawLine');
     drawingNow(
       lineTentative(
         [
@@ -962,7 +962,7 @@ describe('the built-in guide provider', () => {
     ];
     const candidates = guideCandidates(
       { type: 'Polygon', coordinates: [ring], layerId: 'l1', confirmedCount: 2 },
-      'draw_polygon',
+      'drawPolygon',
     );
 
     expect(candidates).toHaveLength(10);
@@ -980,7 +980,7 @@ describe('the built-in guide provider', () => {
         ],
         1,
       ),
-      'draw_line',
+      'drawLine',
       { northStepDegrees: 90 },
     );
 
@@ -1023,7 +1023,7 @@ describe('the step angle of the built-in guide provider', () => {
 
   /** The rounded bearings of the north-based guides of the built-in set */
   function builtInGuideBearings(getNorthStepDegrees?: () => number): number[] {
-    store.setMode('draw_line');
+    store.setMode('drawLine');
     drawingNow(FIRST_POINT);
     const guide = createBuiltInSnapProviders(
       { store, shapes: shapesOf(store), spatialIndex, snapTargets },
@@ -1050,7 +1050,7 @@ describe('the step angle of the built-in guide provider', () => {
 
   it('reads the step at every query, so a change applies without rebuilding the provider', () => {
     let step = 45;
-    store.setMode('draw_line');
+    store.setMode('drawLine');
     drawingNow(FIRST_POINT);
     const guide = createBuiltInSnapProviders(
       { store, shapes: shapesOf(store), spatialIndex, snapTargets },
@@ -1066,7 +1066,7 @@ describe('the step angle of the built-in guide provider', () => {
     'falls back to the default 45 degrees for an invalid step (%s)',
     (step) => {
       expect(builtInGuideBearings(() => step)).toHaveLength(8);
-      store.setMode('draw_line');
+      store.setMode('drawLine');
       drawingNow(FIRST_POINT);
       expect(
         guideProvider({ store, shapes: shapesOf(store) }, { northStepDegrees: step }).candidates(

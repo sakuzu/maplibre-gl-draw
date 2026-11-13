@@ -75,7 +75,7 @@ await draw.write((tx) =>
 `tx.features.update` は、スタイルをキーごとに併合します。渡したキーだけが
 変わり、ほかのキーはそのまま残ります。`unset.style` に書いたキーは消え、
 その地物には規則の色か既定値がまた使われます。`undefined` を渡したキーは
-受け付けません (`invalid-input`)。
+受け付けません (`invalidInput`)。
 
 ```ts
 // 太くし、色は規則の色に戻す
@@ -89,7 +89,7 @@ await draw.write((tx) =>
 
 - 色は CSS の色 (`#1e88e5`、`rgb(30 136 229)`、`hsl(...)`、`tomato`)
   で、不透明度は 0 から 1 です。型や形の合わない値は、書き込みをコード
-  `invalid-input` の `DrawError` で reject します
+  `invalidInput` の `DrawError` で reject します
 - `parseCssColor(value)` は、ライブラリーと同じ読み方で色を読み、
   0 から 1 の `[red, green, blue, alpha]` を返します。ライブラリーが色と
   して受けない値には `null` を返します。拡張は、自分のスタイルの鍵の色を

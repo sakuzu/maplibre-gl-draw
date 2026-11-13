@@ -635,7 +635,7 @@ describe('delivery to datasets is narrowed by the mode', () => {
 
   it('does not deliver click in a drawing mode, and mousemove discards the hover', () => {
     const rec = makeRecordingInteractions();
-    mode.modeName = 'draw_circle';
+    mode.modeName = 'drawCircle';
     startRouter(rec);
 
     emit(makeMouseEvent('click', TARGET[0], TARGET[1]));
@@ -648,7 +648,7 @@ describe('delivery to datasets is narrowed by the mode', () => {
 
   it('does not deliver for a custom mode either unless it is select', () => {
     const rec = makeRecordingInteractions();
-    mode.modeName = 'draw_text';
+    mode.modeName = 'drawText';
     startRouter(rec);
 
     emit(makeMouseEvent('click', TARGET[0], TARGET[1]));
@@ -679,7 +679,7 @@ describe('notification of a click in select mode (the source of draw.map.click)'
 
   it('does not fire in a drawing mode', () => {
     const notified: MapClickEventPayload[] = [];
-    mode.modeName = 'draw_circle';
+    mode.modeName = 'drawCircle';
     startRouter(undefined, (payload) => notified.push(payload));
 
     emit(makeMouseEvent('click', TARGET[0], TARGET[1]));

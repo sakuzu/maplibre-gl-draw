@@ -673,7 +673,7 @@ export function prepareFeature(
   } else {
     layerId = deps.getActiveLayerId();
     if (!store.getLayer(layerId)) {
-      throw new DrawError('invalid-state', 'There is no layer to put the feature in');
+      throw new DrawError('invalidState', 'There is no layer to put the feature in');
     }
   }
 
@@ -694,7 +694,7 @@ export function prepareFeature(
  * Checks a patch of `selection.update`, which is given to many features: as a patch of
  * `features.update`, without a geometry
  *
- * @throws DrawError `invalid-input` for a patch of another shape, or one with a geometry
+ * @throws DrawError `invalidInput` for a patch of another shape, or one with a geometry
  * @internal
  */
 export function checkSharedPatch(patch: unknown): FeaturePatch {
@@ -745,7 +745,7 @@ function withoutUndefined(value: object): Record<string, unknown> {
  * The properties of an input, each value in the one form of a value, without the keys whose
  * value is undefined
  *
- * @throws DrawError `invalid-input` when a value is not a value
+ * @throws DrawError `invalidInput` when a value is not a value
  */
 function propertiesOfInput(properties: Record<string, unknown>): Record<string, Value> {
   const out: Record<string, Value> = {};

@@ -37,8 +37,8 @@ describe('no local undo', () => {
     await draw.write((tx) => tx.features.update(id as string, { properties: { n: 2 } }));
     const undo = draw.undo();
     await expect(undo).rejects.toBeInstanceOf(DrawError);
-    await expect(undo).rejects.toMatchObject({ code: 'invalid-state' });
-    await expect(draw.redo()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(undo).rejects.toMatchObject({ code: 'invalidState' });
+    await expect(draw.redo()).rejects.toMatchObject({ code: 'invalidState' });
     expect(draw.features.get(id as string)?.properties).toMatchObject({ n: 2 });
   });
 

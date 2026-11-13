@@ -125,7 +125,7 @@ export async function prepareNative(
     retainedLayerIds,
   );
   // A file whose image cannot be imported refuses the whole load, as a malformed field does;
-  // an image the browser cannot encode is refused as unsupported-format, the same as when an
+  // an image the browser cannot encode is refused as unsupportedFormat, the same as when an
   // image file is loaded
   for (const [key, problem] of fileProblems) {
     throw new DrawError(
@@ -233,7 +233,7 @@ function renameRefusedIds(
         return id;
       }
     }
-    throw new DrawError('invalid-input', 'Failed to generate an id the store takes');
+    throw new DrawError('invalidInput', 'Failed to generate an id the store takes');
   };
   for (const list of [layers, groups, features]) {
     for (const item of list) {

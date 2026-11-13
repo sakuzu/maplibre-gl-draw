@@ -4,7 +4,7 @@
 /**
  * Tests for the manager of the datasets
  *
- * They verify the draw order (below-store / above-store and the order of addition) and the
+ * They verify the draw order (belowStore / aboveStore and the order of addition) and the
  * front-to-back relations of the hit testing.
  */
 
@@ -67,26 +67,26 @@ const exactHit = (feature: Feature, coordinate: Coordinate): boolean => {
 describe('the draw order of DatasetManager', () => {
   it('it draws each order separately', () => {
     const manager = createManager();
-    manager.add({ id: 'below', rows: [point('b1')], order: 'below-store' });
-    manager.add({ id: 'above', rows: [point('a1')], order: 'above-store' });
+    manager.add({ id: 'below', rows: [point('b1')], order: 'belowStore' });
+    manager.add({ id: 'above', rows: [point('a1')], order: 'aboveStore' });
 
     const belowTarget = createBatchTarget();
-    manager.draw('below-store', belowTarget.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', belowTarget.target, {} as ProjectionData, 10);
     const aboveTarget = createBatchTarget();
-    manager.draw('above-store', aboveTarget.target, {} as ProjectionData, 10);
+    manager.draw('aboveStore', aboveTarget.target, {} as ProjectionData, 10);
 
     expect(belowTarget.log).toEqual(['b1']);
     expect(aboveTarget.log).toEqual(['a1']);
   });
 
-  it('the default of order is below-store', () => {
+  it('the default of order is belowStore', () => {
     const manager = createManager();
     const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
-    expect(dataset.order).toBe('below-store');
+    expect(dataset.order).toBe('belowStore');
 
     const above = createBatchTarget();
-    manager.draw('above-store', above.target, {} as ProjectionData, 10);
+    manager.draw('aboveStore', above.target, {} as ProjectionData, 10);
     expect(above.log).toEqual([]);
   });
 
@@ -97,7 +97,7 @@ describe('the draw order of DatasetManager', () => {
     manager.add({ id: 'third', rows: [point('t')] });
 
     const { target, log } = createBatchTarget();
-    manager.draw('below-store', target, {} as ProjectionData, 10);
+    manager.draw('belowStore', target, {} as ProjectionData, 10);
 
     expect(log).toEqual(['f', 's', 't']);
   });
@@ -112,18 +112,18 @@ describe('the draw order of DatasetManager', () => {
     });
 
     const { target } = createBatchTarget();
-    manager.draw('below-store', target, {} as ProjectionData, 10);
+    manager.draw('belowStore', target, {} as ProjectionData, 10);
 
     expect(getViewportBounds).not.toHaveBeenCalled();
   });
 });
 
 describe('the hit testing of DatasetManager', () => {
-  /** Looks from the front across the sides (above-store → below-store) */
+  /** Looks from the front across the sides (aboveStore → belowStore) */
   function hitTest(manager: DatasetManager) {
     return (
-      manager.hitTestSide('above-store', [1, 1], 0.1, exactHit) ??
-      manager.hitTestSide('below-store', [1, 1], 0.1, exactHit)
+      manager.hitTestSide('aboveStore', [1, 1], 0.1, exactHit) ??
+      manager.hitTestSide('belowStore', [1, 1], 0.1, exactHit)
     );
   }
 
@@ -146,13 +146,13 @@ describe('the hit testing of DatasetManager', () => {
     expect(hit?.dataset.id).toBe('c1');
   });
 
-  it('above-store takes precedence over below-store', () => {
+  it('aboveStore takes precedence over belowStore', () => {
     const manager = createManager();
     manager.add({
       id: 'above',
       rows: [point('a', [1, 1])],
       interactive: true,
-      order: 'above-store',
+      order: 'aboveStore',
     });
     manager.add({ id: 'below', rows: [point('b', [1, 1])], interactive: true });
 
@@ -193,7 +193,7 @@ describe('the hit testing of DatasetManager', () => {
     const test = vi.fn(() => true);
     manager.add({ id: 'c1', rows: [point('far', [50, 50])], interactive: true });
 
-    expect(manager.hitTestSide('below-store', [1, 1], 0.1, test)).toBeNull();
+    expect(manager.hitTestSide('belowStore', [1, 1], 0.1, test)).toBeNull();
     // It is dropped by the spatial index, so the precise test is not called
     expect(test).not.toHaveBeenCalled();
   });
@@ -220,25 +220,25 @@ describe('the hit testing of DatasetManager', () => {
   });
 });
 
-describe('the stacking order of DatasetManager (layer-order)', () => {
-  it('a layer-order dataset is not drawn by the drawing of a side', () => {
+describe('the stacking order of DatasetManager (layerOrder)', () => {
+  it('a layerOrder dataset is not drawn by the drawing of a side', () => {
     const manager = createManager();
-    manager.add({ id: 'entry', rows: [point('e')], order: 'layer-order' });
+    manager.add({ id: 'entry', rows: [point('e')], order: 'layerOrder' });
     manager.add({ id: 'below', rows: [point('b')] });
-    manager.add({ id: 'above', rows: [point('a')], order: 'above-store' });
+    manager.add({ id: 'above', rows: [point('a')], order: 'aboveStore' });
 
     const below = createBatchTarget();
-    manager.draw('below-store', below.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', below.target, {} as ProjectionData, 10);
     const above = createBatchTarget();
-    manager.draw('above-store', above.target, {} as ProjectionData, 10);
+    manager.draw('aboveStore', above.target, {} as ProjectionData, 10);
 
     expect(below.log).toEqual(['b']);
     expect(above.log).toEqual(['a']);
   });
 
-  it('drawOne draws only the layer-order datasets', () => {
+  it('drawOne draws only the layerOrder datasets', () => {
     const manager = createManager();
-    manager.add({ id: 'entry', rows: [point('e')], order: 'layer-order' });
+    manager.add({ id: 'entry', rows: [point('e')], order: 'layerOrder' });
     manager.add({ id: 'below', rows: [point('b')] });
 
     const { target, log } = createBatchTarget();
@@ -249,13 +249,13 @@ describe('the stacking order of DatasetManager (layer-order)', () => {
     expect(log).toEqual(['e']);
   });
 
-  it('hitTestEntry looks only at the layer-order datasets', () => {
+  it('hitTestEntry looks only at the layerOrder datasets', () => {
     const manager = createManager();
     manager.add({
       id: 'entry',
       rows: [point('e', [1, 1])],
       interactive: true,
-      order: 'layer-order',
+      order: 'layerOrder',
     });
     manager.add({ id: 'below', rows: [point('b', [1, 1])], interactive: true });
 
@@ -264,50 +264,50 @@ describe('the stacking order of DatasetManager (layer-order)', () => {
     expect(manager.hitTestEntry('missing', [1, 1], 0.1, exactHit)).toBeNull();
   });
 
-  it('the scan of a side does not include layer-order', () => {
+  it('the scan of a side does not include layerOrder', () => {
     const manager = createManager();
     manager.add({
       id: 'entry',
       rows: [point('e', [1, 1])],
       interactive: true,
-      order: 'layer-order',
+      order: 'layerOrder',
     });
 
-    expect(manager.hitTestSide('below-store', [1, 1], 0.1, exactHit)).toBeNull();
-    expect(manager.hitTestSide('above-store', [1, 1], 0.1, exactHit)).toBeNull();
+    expect(manager.hitTestSide('belowStore', [1, 1], 0.1, exactHit)).toBeNull();
+    expect(manager.hitTestSide('aboveStore', [1, 1], 0.1, exactHit)).toBeNull();
   });
 
   it('move can put it on the order and take it off again', () => {
     const manager = createManager();
     const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
-    expect(manager.move('c1', { order: 'layer-order' })).toBe(true);
-    expect(dataset.order).toBe('layer-order');
+    expect(manager.move('c1', { order: 'layerOrder' })).toBe(true);
+    expect(dataset.order).toBe('layerOrder');
     const inList = createBatchTarget();
-    manager.draw('below-store', inList.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', inList.target, {} as ProjectionData, 10);
     expect(inList.log).toEqual([]);
     expect(manager.drawOne('c1', createBatchTarget().target, {} as ProjectionData, 10)).toBe(true);
 
-    manager.move('c1', { order: 'below-store' });
-    expect(dataset.order).toBe('below-store');
+    manager.move('c1', { order: 'belowStore' });
+    expect(dataset.order).toBe('belowStore');
     const back = createBatchTarget();
-    manager.draw('below-store', back.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', back.target, {} as ProjectionData, 10);
     expect(back.log).toEqual(['a']);
   });
 
   it('the order of the sides does not break with a dataset of the order mixed in', () => {
     const manager = createManager();
     manager.add({ id: 'b1', rows: [point('b1')] });
-    manager.add({ id: 'e1', rows: [point('e1')], order: 'layer-order' });
+    manager.add({ id: 'e1', rows: [point('e1')], order: 'layerOrder' });
     manager.add({ id: 'b2', rows: [point('b2')] });
-    manager.add({ id: 'a1', rows: [point('a1')], order: 'above-store' });
-    manager.add({ id: 'e2', rows: [point('e2')], order: 'layer-order' });
-    manager.add({ id: 'a2', rows: [point('a2')], order: 'above-store' });
+    manager.add({ id: 'a1', rows: [point('a1')], order: 'aboveStore' });
+    manager.add({ id: 'e2', rows: [point('e2')], order: 'layerOrder' });
+    manager.add({ id: 'a2', rows: [point('a2')], order: 'aboveStore' });
 
     const below = createBatchTarget();
-    manager.draw('below-store', below.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', below.target, {} as ProjectionData, 10);
     const above = createBatchTarget();
-    manager.draw('above-store', above.target, {} as ProjectionData, 10);
+    manager.draw('aboveStore', above.target, {} as ProjectionData, 10);
 
     expect(below.log).toEqual(['b1', 'b2']);
     expect(above.log).toEqual(['a1', 'a2']);
@@ -350,7 +350,7 @@ describe('the lifecycle of DatasetManager', () => {
     expect(manager.list()).toEqual([]);
     expect(manager.hasAny()).toBe(false);
     const { target, log } = createBatchTarget();
-    manager.draw('below-store', target, {} as ProjectionData, 10);
+    manager.draw('belowStore', target, {} as ProjectionData, 10);
     expect(log).toEqual([]);
   });
 
@@ -362,11 +362,11 @@ describe('the lifecycle of DatasetManager', () => {
     expect(manager.list().map((c) => c.id)).toEqual(['a', 'b']);
   });
 
-  it('list returns the below-store group and then the above-store group', () => {
+  it('list returns the belowStore group and then the aboveStore group', () => {
     const manager = createManager();
-    manager.add({ id: 'above1', rows: [], order: 'above-store' });
+    manager.add({ id: 'above1', rows: [], order: 'aboveStore' });
     manager.add({ id: 'below1', rows: [] });
-    manager.add({ id: 'above2', rows: [], order: 'above-store' });
+    manager.add({ id: 'above2', rows: [], order: 'aboveStore' });
     manager.add({ id: 'below2', rows: [] });
 
     // Regardless of the order of addition, they go from the back (the head of below) to the
@@ -387,29 +387,29 @@ describe('the lifecycle of DatasetManager', () => {
 });
 
 describe('the reordering of DatasetManager', () => {
-  /** Takes the draw order of the below-store side and of the above-store side */
+  /** Takes the draw order of the belowStore side and of the aboveStore side */
   function drawnIds(manager: DatasetManager): { below: string[]; above: string[] } {
     const below = createBatchTarget();
-    manager.draw('below-store', below.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', below.target, {} as ProjectionData, 10);
     const above = createBatchTarget();
-    manager.draw('above-store', above.target, {} as ProjectionData, 10);
+    manager.draw('aboveStore', above.target, {} as ProjectionData, 10);
     return { below: below.log, above: above.log };
   }
 
   it('an id that does not exist returns false', () => {
     const manager = createManager();
 
-    expect(manager.move('missing', { order: 'above-store' })).toBe(false);
+    expect(manager.move('missing', { order: 'aboveStore' })).toBe(false);
   });
 
   it('order changes the side and the order property follows it', () => {
     const manager = createManager();
     const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
-    expect(dataset.order).toBe('below-store');
-    expect(manager.move('c1', { order: 'above-store' })).toBe(true);
+    expect(dataset.order).toBe('belowStore');
+    expect(manager.move('c1', { order: 'aboveStore' })).toBe(true);
 
-    expect(dataset.order).toBe('above-store');
+    expect(dataset.order).toBe('aboveStore');
     expect(drawnIds(manager)).toEqual({ below: [], above: ['a'] });
   });
 
@@ -417,20 +417,20 @@ describe('the reordering of DatasetManager', () => {
     const manager = createManager();
     const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
-    manager.move('c1', { order: 'above-store' });
-    manager.move('c1', { order: 'below-store' });
+    manager.move('c1', { order: 'aboveStore' });
+    manager.move('c1', { order: 'belowStore' });
 
-    expect(dataset.order).toBe('below-store');
+    expect(dataset.order).toBe('belowStore');
     expect(drawnIds(manager)).toEqual({ below: ['a'], above: [] });
   });
 
   it('giving only the side puts it at the front of the destination', () => {
     const manager = createManager();
-    manager.add({ id: 'a1', rows: [point('a1')], order: 'above-store' });
-    manager.add({ id: 'a2', rows: [point('a2')], order: 'above-store' });
+    manager.add({ id: 'a1', rows: [point('a1')], order: 'aboveStore' });
+    manager.add({ id: 'a2', rows: [point('a2')], order: 'aboveStore' });
     manager.add({ id: 'b1', rows: [point('b1')] });
 
-    manager.move('b1', { order: 'above-store' });
+    manager.move('b1', { order: 'aboveStore' });
 
     expect(drawnIds(manager).above).toEqual(['a1', 'a2', 'b1']);
   });
@@ -454,7 +454,7 @@ describe('the reordering of DatasetManager', () => {
     manager.add({ id: 'c3', rows: [point('c')] });
 
     manager.move('c2', {});
-    manager.move('c2', { order: 'below-store' });
+    manager.move('c2', { order: 'belowStore' });
 
     expect(drawnIds(manager).below).toEqual(['a', 'b', 'c']);
   });
@@ -474,11 +474,11 @@ describe('the reordering of DatasetManager', () => {
 
   it('the side and index can be given together', () => {
     const manager = createManager();
-    manager.add({ id: 'a1', rows: [point('a1')], order: 'above-store' });
-    manager.add({ id: 'a2', rows: [point('a2')], order: 'above-store' });
+    manager.add({ id: 'a1', rows: [point('a1')], order: 'aboveStore' });
+    manager.add({ id: 'a2', rows: [point('a2')], order: 'aboveStore' });
     manager.add({ id: 'b1', rows: [point('b1')] });
 
-    manager.move('b1', { order: 'above-store', index: 1 });
+    manager.move('b1', { order: 'aboveStore', index: 1 });
 
     expect(drawnIds(manager)).toEqual({ below: [], above: ['a1', 'b1', 'a2'] });
     expect(manager.list().map((x) => x.id)).toEqual(['a1', 'b1', 'a2']);
@@ -489,8 +489,8 @@ describe('the reordering of DatasetManager', () => {
     manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: true });
     manager.add({ id: 'c2', rows: [point('b', [1, 1])], interactive: true });
     const topmost = () =>
-      manager.hitTestSide('above-store', [1, 1], 0.1, exactHit) ??
-      manager.hitTestSide('below-store', [1, 1], 0.1, exactHit);
+      manager.hitTestSide('aboveStore', [1, 1], 0.1, exactHit) ??
+      manager.hitTestSide('belowStore', [1, 1], 0.1, exactHit);
 
     expect(topmost()?.feature?.id).toBe('b');
 
@@ -499,11 +499,11 @@ describe('the reordering of DatasetManager', () => {
     expect(topmost()?.feature?.id).toBe('a');
 
     // Raising the side makes it win regardless of the order within a side
-    manager.move('c2', { order: 'above-store' });
+    manager.move('c2', { order: 'aboveStore' });
     expect(topmost()?.feature?.id).toBe('b');
 
     // Lowering it again brings the precedence back
-    manager.move('c2', { order: 'below-store', index: 0 });
+    manager.move('c2', { order: 'belowStore', index: 0 });
     expect(topmost()?.feature?.id).toBe('a');
   });
 
@@ -516,11 +516,11 @@ describe('the reordering of DatasetManager', () => {
     });
     dataset.setVisible(false);
 
-    manager.move('c1', { order: 'above-store' });
+    manager.move('c1', { order: 'aboveStore' });
 
     expect(dataset.visible).toBe(false);
     expect(drawnIds(manager)).toEqual({ below: [], above: [] });
-    expect(manager.hitTestSide('above-store', [1, 1], 0.1, exactHit)).toBeNull();
+    expect(manager.hitTestSide('aboveStore', [1, 1], 0.1, exactHit)).toBeNull();
 
     dataset.setVisible(true);
     expect(drawnIds(manager).above).toEqual(['a']);
@@ -531,7 +531,7 @@ describe('the reordering of DatasetManager', () => {
     const dataset = manager.add({ id: 'c1', rows: [point('a')], interactive: true });
     const before = dataset.getFeatures();
 
-    manager.move('c1', { order: 'above-store', index: 0 });
+    manager.move('c1', { order: 'aboveStore', index: 0 });
 
     expect(dataset.getFeatures()).toBe(before);
     expect(dataset.interactive).toBe(true);
@@ -549,7 +549,7 @@ describe('the reordering of DatasetManager', () => {
     manager.add({ id: 'c1', rows: [point('a')] });
     requestRepaint.mockClear();
 
-    manager.move('c1', { order: 'above-store' });
+    manager.move('c1', { order: 'aboveStore' });
 
     expect(requestRepaint).toHaveBeenCalled();
   });
@@ -569,7 +569,7 @@ describe('the reordering of DatasetManager', () => {
     });
     manager.add({ id: 'dynamic', provider: async () => [] });
 
-    manager.move('dynamic', { order: 'above-store' });
+    manager.move('dynamic', { order: 'aboveStore' });
 
     expect(subscribed).toBe(1);
   });
@@ -633,7 +633,7 @@ describe('the add and remove notifications of DatasetManager', () => {
     log.length = 0;
 
     expect(() => manager.add({ id: 'a', rows: [] })).toThrow();
-    manager.move('a', { order: 'above-store' });
+    manager.move('a', { order: 'aboveStore' });
     manager.destroy();
 
     expect(log).toEqual([]);
@@ -686,9 +686,9 @@ describe('the reorder notification of DatasetManager', () => {
     const { manager, orders } = createReorderingManager();
 
     // c is already the last, so the list reads the same, but it now draws above the Store
-    manager.move('c', { order: 'above-store' });
+    manager.move('c', { order: 'aboveStore' });
 
-    expect(manager.get('c')?.order).toBe('above-store');
+    expect(manager.get('c')?.order).toBe('aboveStore');
     expect(orders).toEqual([['a', 'b', 'c']]);
   });
 
@@ -698,7 +698,7 @@ describe('the reorder notification of DatasetManager', () => {
     manager.move('b', {});
     manager.move('b', { index: 1 });
     manager.move('c', { index: 5 });
-    manager.move('a', { order: 'below-store', index: 0 });
+    manager.move('a', { order: 'belowStore', index: 0 });
     manager.move('missing', { index: 0 });
 
     expect(orders).toEqual([]);
@@ -763,7 +763,7 @@ describe('the pending work of DatasetManager', () => {
       getRetainedRenderers: () => renderers,
     };
     manager.beginFrame(10);
-    manager.draw('below-store', target, {} as ProjectionData, 10);
+    manager.draw('belowStore', target, {} as ProjectionData, 10);
   }
 
   function managerWith(options: Partial<Parameters<typeof createDatasetManager>[0]> = {}) {
@@ -811,7 +811,7 @@ describe('the pending work of DatasetManager', () => {
 
       // A frame that does not draw it (another side) leaves nothing of it pending either
       dataset.setVisible(true);
-      manager.move('c1', { order: 'above-store' });
+      manager.move('c1', { order: 'aboveStore' });
       manager.beginFrame(10);
       expect(manager.hasPendingWork()).toBe(false);
     } finally {

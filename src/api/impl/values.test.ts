@@ -86,14 +86,14 @@ describe('the properties of a feature', () => {
   it('refuse what is not a value, on create and on update, and change nothing', () => {
     expect(
       codeOf(() => features.create({ ...POINT, properties: { at: new Date() } as never })),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(features.list()).toEqual([]);
     features.create({ ...POINT, id: 'a', properties: { name: 'x' } });
     expect(codeOf(() => features.update('a', { properties: { m: new Map() } as never }))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(codeOf(() => features.update('a', { properties: { s: 'a\ud800' } }))).toBe(
-      'invalid-input',
+      'invalidInput',
     );
     expect(features.get('a')?.properties).toEqual({ name: 'x' });
     const updated = features.update('a', {

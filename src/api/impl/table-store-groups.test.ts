@@ -100,13 +100,13 @@ describe('groups.create in a layer held as rows', () => {
   it('refuses a group without features, as in a layer of objects, and a layer other than its features', () => {
     const { draw } = setup();
     expect(() => writesOf(draw).groups.create({ members: [] })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(() => writesOf(draw).groups.create({ members: [], layerId: 'rows' })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(() => writesOf(draw).groups.create({ members: ['p1'], layerId: 'other' })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(draw.groups.list()).toEqual([]);
   });
@@ -115,7 +115,7 @@ describe('groups.create in a layer held as rows', () => {
     const objects = drawOn();
     const layer = writesOf(objects).layers.create({ name: 'objects' });
     expect(() => writesOf(objects).groups.create({ members: [], layerId: layer?.id })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 });
@@ -182,7 +182,7 @@ describe('groups.restore of the internal writes', () => {
     expect(token).toBeDefined();
     writesOf(draw).features.releaseRestore(token as NonNullable<typeof token>);
     expect(() => writesOf(draw).groups.restore('g')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
   });
 
@@ -208,21 +208,21 @@ describe('groups.restore of the internal writes', () => {
     expect(notified[notified.length - 1].groups?.deleted?.map((group) => group.id)).toEqual(['g']);
     expect(notified[notified.length - 1].restoreToken).toBeUndefined();
     expect(() => writesOf(draw).groups.restore('g')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
   });
 
-  it('throws not-found for a group that is not kept, and already-exists for a group there is', () => {
+  it('throws notFound for a group that is not kept, and alreadyExists for a group there is', () => {
     const { draw } = setup();
     expect(() => writesOf(draw).groups.restore('never')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
     writesOf(draw).groups.create({ id: 'g', members: ['p1'] });
     expect(() => writesOf(draw).groups.restore('g')).toThrow(
-      expect.objectContaining({ code: 'already-exists' }),
+      expect.objectContaining({ code: 'alreadyExists' }),
     );
     expect(() => writesOf(draw).groups.restore(3 as unknown as string)).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 
@@ -235,7 +235,7 @@ describe('groups.restore of the internal writes', () => {
     expect(draw.groups.has('g')).toBe(false);
   });
 
-  it('always throws not-found on a Store of objects, which keeps no group it deleted', () => {
+  it('always throws notFound on a Store of objects, which keeps no group it deleted', () => {
     const objects = drawOn();
     const layer = writesOf(objects).layers.create({ name: 'objects' });
     const feature = writesOf(objects).features.create({
@@ -246,7 +246,7 @@ describe('groups.restore of the internal writes', () => {
     writesOf(objects).groups.create({ id: 'g', members: [feature?.id as string] });
     writesOf(objects).groups.delete('g');
     expect(() => writesOf(objects).groups.restore('g')).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
   });
 });

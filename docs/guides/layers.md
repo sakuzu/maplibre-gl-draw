@@ -16,7 +16,7 @@ const draw = createDraw(map);
 // into it (the write rejects while the instance is read-only)
 const notes = await draw.write((tx) => tx.layers.create({ name: 'Notes' }));
 draw.layers.setActive(notes.id);
-draw.setMode('draw_point');
+draw.setMode('drawPoint');
 
 // Later: lock it, so that its features can be selected but not edited
 await draw.write((tx) => tx.layers.update(notes.id, { locked: true }));
@@ -41,8 +41,8 @@ The writes are made in a `draw.write` ([Getting started](../getting-started.md))
 `create` and `update` give the layer as it was written, and `delete` the
 number of layers deleted, given one ID, several or `{ all: true }`. While
 the instance is read-only the write rejects with a `DrawError` with the
-code `not-editable` ([Read-only](read-only.md)), and an ID that does not
-exist with `not-found`; nothing of the transaction is committed then.
+code `notEditable` ([Read-only](read-only.md)), and an ID that does not
+exist with `notFound`; nothing of the transaction is committed then.
 
 ```ts
 const roads = await draw.write((tx) =>
@@ -337,7 +337,7 @@ draw.on('layerStack.changed', placeMapLayers);
 - Without entries of your own there is one run, `maplibre-gl-draw-layer`
 - `layerStack.changed` fires when runs are added or removed or a range
   changes; place the map layers again then
-- A dataset with `order: 'layer-order'` is drawn at the position of its ID
+- A dataset with `order: 'layerOrder'` is drawn at the position of its ID
   in the same order ([Showing large data](large-data.md))
 
 ## Examples

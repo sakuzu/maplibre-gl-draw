@@ -132,16 +132,16 @@ describe.each(NAMED)('extensions.%s', (_kind, collectionOf, make) => {
     expect(collection.count()).toBe(0);
   });
 
-  it('throws already-exists for a name that is taken', () => {
+  it('throws alreadyExists for a name that is taken', () => {
     add('a');
-    expect(errorOf(() => add('a')).code).toBe('already-exists');
+    expect(errorOf(() => add('a')).code).toBe('alreadyExists');
   });
 
   it('adds all or none with addMany', () => {
     const collection = collectionOf(draw.extensions);
     add('b');
     const error = errorOf(() => collection.addMany([make('a'), make('b')] as never[]));
-    expect(error.code).toBe('already-exists');
+    expect(error.code).toBe('alreadyExists');
     expect(collection.has('a')).toBe(false);
     const remove = collection.addMany([make('c'), make('d')] as never[]);
     expect(collection.count()).toBe(3);
@@ -149,12 +149,12 @@ describe.each(NAMED)('extensions.%s', (_kind, collectionOf, make) => {
     expect(collection.count()).toBe(1);
   });
 
-  it('removes by name, and throws not-found for a missing one', () => {
+  it('removes by name, and throws notFound for a missing one', () => {
     const collection = collectionOf(draw.extensions);
     add('a');
     add('b');
-    expect(errorOf(() => collection.remove('x')).code).toBe('not-found');
-    expect(errorOf(() => collection.removeMany(['a', 'x'])).code).toBe('not-found');
+    expect(errorOf(() => collection.remove('x')).code).toBe('notFound');
+    expect(errorOf(() => collection.removeMany(['a', 'x'])).code).toBe('notFound');
     expect(collection.count()).toBe(2);
     expect(collection.removeMany(['a', 'b'])).toBe(true);
     expect(collection.count()).toBe(0);
@@ -166,7 +166,7 @@ describe('extensions.modes', () => {
 
   it('has the built-in modes written to the contract', () => {
     expect(draw.extensions.modes.list()).toEqual(
-      expect.arrayContaining(['draw_point', 'draw_circle', 'draw_freehand']),
+      expect.arrayContaining(['drawPoint', 'drawCircle', 'drawFreehand']),
     );
   });
 
@@ -180,16 +180,16 @@ describe('extensions.modes', () => {
   });
 
   it('refuses a name a mode of the engine has, and a missing name', () => {
-    expect(errorOf(() => draw.extensions.modes.add('select', probe)).code).toBe('already-exists');
-    expect(errorOf(() => draw.extensions.modes.remove('nothing')).code).toBe('not-found');
-    expect(errorOf(() => draw.extensions.modes.add('', probe)).code).toBe('invalid-input');
+    expect(errorOf(() => draw.extensions.modes.add('select', probe)).code).toBe('alreadyExists');
+    expect(errorOf(() => draw.extensions.modes.remove('nothing')).code).toBe('notFound');
+    expect(errorOf(() => draw.extensions.modes.add('', probe)).code).toBe('invalidInput');
   });
 
   it('adds several modes at once, all or none', () => {
     expect(() =>
       draw.extensions.modes.addMany([
         { name: 'one', factory: probe },
-        { name: 'draw_line', factory: probe },
+        { name: 'drawLine', factory: probe },
       ]),
     ).toThrow(DrawError);
     expect(draw.extensions.modes.has('one')).toBe(false);
@@ -204,7 +204,7 @@ describe('extensions.modes', () => {
 describe('extensions.featureTypes', () => {
   it('refuses the name of a built-in type', () => {
     expect(errorOf(() => draw.extensions.featureTypes.add(featureType('Point'))).code).toBe(
-      'already-exists',
+      'alreadyExists',
     );
   });
 });
@@ -271,7 +271,7 @@ describe('extensions.featureTypes.override', () => {
     expect(selected()).toHaveLength(1);
     // add keeps refusing the name
     expect(errorOf(() => instance.extensions.featureTypes.add(featureType('Polygon'))).code).toBe(
-      'already-exists',
+      'alreadyExists',
     );
     instance.destroy();
   });
@@ -473,16 +473,16 @@ describe('extensions.featureTypes.override', () => {
 
   it('refuses a type that is not built in, another geometry, and a second override', () => {
     const types = draw.extensions.featureTypes;
-    expect(errorOf(() => types.override(featureType('pin'))).code).toBe('invalid-input');
-    expect(errorOf(() => types.override(featureType('MultiPoint'))).code).toBe('invalid-input');
+    expect(errorOf(() => types.override(featureType('pin'))).code).toBe('invalidInput');
+    expect(errorOf(() => types.override(featureType('MultiPoint'))).code).toBe('invalidInput');
     expect(
       errorOf(() => types.override({ type: 'Circle', geometry: 'Polygon', render })).code,
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(
       errorOf(() => types.override({ type: 'Image', geometry: 'Point', render: 1 } as never)).code,
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     types.override(featureType('Image'));
-    expect(errorOf(() => types.override(featureType('Image'))).code).toBe('already-exists');
+    expect(errorOf(() => types.override(featureType('Image'))).code).toBe('alreadyExists');
     expect(types.has('Image')).toBe(true);
   });
 });
@@ -593,7 +593,7 @@ describe('extensions.plugins', () => {
     // A name that is not an event of the library is refused
     expect(() =>
       (ctx as unknown as PluginContext).on('counter.changed' as never, () => {}),
-    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
   });
 
   it('answers for the screen in the frame drawn last', () => {
@@ -668,7 +668,7 @@ describe('the input of the plugins and the modes', () => {
   it('gives a click to the input of a plugin first; true consumes it before the mode', () => {
     const onClick = vi.fn(() => true);
     engine.extensions.collections.plugins.add(plugin('p', { input: { onClick } }));
-    engine.modeManager.setMode('draw_point');
+    engine.modeManager.setMode('drawPoint');
 
     createSyntheticInput(engine).click([1, 1]);
 
@@ -676,12 +676,12 @@ describe('the input of the plugins and the modes', () => {
       expect.objectContaining({ lngLat: [1, 1], point: [500, 200], pointerType: 'mouse' }),
     );
     expect(engine.context.store.listFeatures()).toHaveLength(0);
-    expect(engine.modeManager.getMode()).toBe('draw_point');
+    expect(engine.modeManager.getMode()).toBe('drawPoint');
   });
 
   it('lets the mode receive a click the plugin does not consume', () => {
     engine.extensions.collections.plugins.add(plugin('p', { input: { onClick: () => false } }));
-    engine.modeManager.setMode('draw_point');
+    engine.modeManager.setMode('drawPoint');
     createSyntheticInput(engine).click([1, 1]);
     expect(engine.context.store.listFeatures()).toHaveLength(1);
   });
@@ -1064,7 +1064,7 @@ describe('the built-in modes written to the contract', () => {
   });
 
   it('draws a point, selects it and returns to select', () => {
-    engine.modeManager.setMode('draw_point');
+    engine.modeManager.setMode('drawPoint');
     createSyntheticInput(engine).click([1, 1]);
     const [feature] = engine.context.store.listFeatures();
     expect(feature.geometry).toEqual({ type: 'Point', coordinates: [1, 1] });
@@ -1077,7 +1077,7 @@ describe('the built-in modes written to the contract', () => {
     engine.extensions.collections.plugins.add(
       plugin('commits', { onFeatureCommit: (feature) => committed.push(feature.id) }),
     );
-    engine.modeManager.setMode('draw_point');
+    engine.modeManager.setMode('drawPoint');
     createSyntheticInput(engine).click([1, 1]);
     const [point] = engine.context.store.listFeatures();
     expect(committed).toEqual([point.id]);
@@ -1092,7 +1092,7 @@ describe('the built-in modes written to the contract', () => {
   });
 
   it('draws a circle with two clicks', () => {
-    engine.modeManager.setMode('draw_circle');
+    engine.modeManager.setMode('drawCircle');
     createSyntheticInput(engine).click([1, 1]);
     expect(engine.context.shapes.drawing()?.type).toBe('Circle');
     createSyntheticInput(engine).click([1, 1.5]);
@@ -1103,11 +1103,11 @@ describe('the built-in modes written to the contract', () => {
   });
 
   it('drops the circle being drawn on Escape, and leaves on a second Escape', () => {
-    engine.modeManager.setMode('draw_circle');
+    engine.modeManager.setMode('drawCircle');
     createSyntheticInput(engine).click([1, 1]);
     createSyntheticInput(engine).key('Escape');
     expect(engine.context.shapes.drawing()).toBeNull();
-    expect(engine.modeManager.getMode()).toBe('draw_circle');
+    expect(engine.modeManager.getMode()).toBe('drawCircle');
     createSyntheticInput(engine).key('Escape');
     expect(engine.modeManager.getMode()).toBe('select');
   });
@@ -1223,7 +1223,7 @@ describe('features.list and count by extent', () => {
     ).toEqual(['in', 'across']);
     expect(draw.features.count({ bbox: [0, -1, 2, 2], type: 'Point' })).toBe(1);
     expect(errorOf(() => writesOf(draw).features.list({ bbox: [0, 0] as never })).code).toBe(
-      'invalid-input',
+      'invalidInput',
     );
   });
 });
@@ -1307,7 +1307,7 @@ describe('drawing.cancel', () => {
     const context = ctx as unknown as PluginContext;
     expect(context.draw.drawing.cancel()).toBe(false);
 
-    engine.modeManager.setMode('draw_line');
+    engine.modeManager.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([1, 1]);
@@ -1318,9 +1318,9 @@ describe('drawing.cancel', () => {
     expect(context.draw.drawing.isDrawing()).toBe(false);
     // The sketch that showed the shape is removed
     expect(ended).toEqual(['cancelled']);
-    expect(engine.modeManager.getMode()).toBe('draw_line');
+    expect(engine.modeManager.getMode()).toBe('drawLine');
     expect(context.draw.drawing.cancel()).toBe(false);
-    expect(engine.modeManager.getMode()).toBe('draw_line');
+    expect(engine.modeManager.getMode()).toBe('drawLine');
 
     // The mode dropped its vertices: the next click starts a new shape
     input.click([2, 2]);

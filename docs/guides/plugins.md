@@ -53,8 +53,8 @@ The collections share the same methods: `add` and `addMany` register,
 removes what it added.
 
 A name that is taken throws a `DrawError` with the code
-`already-exists`, and `remove` with a name that is not there throws
-`not-found`. `addMany` and `removeMany` do all of it or none.
+`alreadyExists`, and `remove` with a name that is not there throws
+`notFound`. `addMany` and `removeMany` do all of it or none.
 
 ## The Plugin object
 
@@ -164,7 +164,7 @@ await ctx.draw.write(
 
 The rules are those of the instance. A wrong argument, such as an ID
 that no longer exists, rejects with a `DrawError`. A write refused
-because the drawing is read-only or locked rejects with `not-editable`
+because the drawing is read-only or locked rejects with `notEditable`
 or `locked`. Either way nothing of the transaction is committed. A
 plugin that reacts to a change after it happened checks with `has` first,
 because the target may be gone.
@@ -355,8 +355,8 @@ function createShortcuts(): Plugin {
     input: {
       onKeyDown(event) {
         if (!ctx || event.modifiers.ctrl || event.modifiers.meta) return false;
-        if (event.key === 'p') return ctx.draw.setMode('draw_point');
-        if (event.key === 'l') return ctx.draw.setMode('draw_line');
+        if (event.key === 'p') return ctx.draw.setMode('drawPoint');
+        if (event.key === 'l') return ctx.draw.setMode('drawLine');
         return false;
       },
     },
@@ -476,8 +476,8 @@ const drawRectangle: ModeFactory = (ctx) => {
   };
 };
 
-draw.extensions.modes.add('draw_rectangle', drawRectangle);
-draw.setMode('draw_rectangle');
+draw.extensions.modes.add('drawRectangle', drawRectangle);
+draw.setMode('drawRectangle');
 ```
 
 The first click places a corner, the pointer shows the rectangle, and
@@ -581,7 +581,7 @@ again does nothing. `remove(name)` does the same by name.
   the GPU and ends its subscriptions
 - Removing the active mode enters `select` first
 - The names of the built-in modes and feature types are taken, so
-  `add` throws `already-exists` for them
+  `add` throws `alreadyExists` for them
 - Extensions belong to the instance they are added to. Another draw
   instance on the page never sees them
 - `draw.destroy()` removes the plugins first, then every other

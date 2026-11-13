@@ -33,7 +33,7 @@ export function bindTerrainState(handle: object, terrain: TerrainContext): void 
  * The terrain state behind a render context or its `terrain`
  *
  * @returns The state, or `null` for `null`
- * @throws `DrawError` with the code `invalid-input` for an object the engine did not hand out
+ * @throws `DrawError` with the code `invalidInput` for an object the engine did not hand out
  * @internal
  */
 export function terrainStateOf(
@@ -46,7 +46,7 @@ export function terrainStateOf(
       : undefined;
   if (!state) {
     throw new DrawError(
-      'invalid-input',
+      'invalidInput',
       'The render context (or its terrain) is not one the instance gave a renderer in a draw call',
     );
   }

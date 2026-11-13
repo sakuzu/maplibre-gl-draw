@@ -48,7 +48,7 @@ export function computeVertexMove(
   const base = { ...feature, geometry: { ...feature.geometry } } as Feature;
   (base.geometry as { coordinates: unknown }).coordinates = state.initialCoordinates;
   const { updates } = updatesOfEdits(
-    [{ kind: 'vertex-move', featureId: feature.id, vertices: state.vertices, positions }],
+    [{ kind: 'vertexMove', featureId: feature.id, vertices: state.vertices, positions }],
     () => base,
   );
   return coordinatesOf({ ...base, ...updates[0]?.updates } as Feature);

@@ -129,12 +129,12 @@ for (const [kind, store] of [
           await tx.features.update('nothing', { properties: { n: 1 } }).catch(() => {});
         }),
       );
-      expect(code).toBe('not-found');
+      expect(code).toBe('notFound');
       expect(draw.features.count()).toBe(0);
       expect(changes).toHaveLength(0);
     });
 
-    it('refuses with not-editable and locked rather than null and false', async () => {
+    it('refuses with notEditable and locked rather than null and false', async () => {
       const feature = await draw.write((tx) =>
         tx.features.create({ ...point(1), properties: { 'maplibre-gl-draw:locked': true } }),
       );
@@ -142,7 +142,7 @@ for (const [kind, store] of [
         await codeOf(draw.write((tx) => tx.features.update(feature.id, { properties: { n: 1 } }))),
       ).toBe('locked');
       draw.setReadOnly(true);
-      expect(await codeOf(draw.write((tx) => tx.features.create(point(2))))).toBe('not-editable');
+      expect(await codeOf(draw.write((tx) => tx.features.create(point(2))))).toBe('notEditable');
       draw.setReadOnly(false);
     });
 
@@ -156,13 +156,13 @@ for (const [kind, store] of [
       ]) {
         expect(
           await codeOf(draw.write((tx) => tx.features.update(feature.id, patch as never))),
-        ).toBe('invalid-input');
+        ).toBe('invalidInput');
       }
       await draw.write((tx) => tx.features.update(feature.id, { unset: { properties: ['n'] } }));
       expect(draw.features.get(feature.id)?.properties.n).toBeUndefined();
     });
 
-    it('throws nested-write for a write in the synchronous part of another', async () => {
+    it('throws nestedWrite for a write in the synchronous part of another', async () => {
       let thrown: unknown;
       await draw.write(() => {
         try {
@@ -171,7 +171,7 @@ for (const [kind, store] of [
           thrown = error;
         }
       });
-      expect((thrown as DrawError).code).toBe('nested-write');
+      expect((thrown as DrawError).code).toBe('nestedWrite');
     });
 
     it('closes the transaction once its function ends', async () => {
@@ -180,7 +180,7 @@ for (const [kind, store] of [
         kept = tx;
       });
       expect(await codeOf(kept?.features.create(point(1)) as Promise<unknown>)).toBe(
-        'transaction-closed',
+        'transactionClosed',
       );
     });
 
@@ -230,11 +230,11 @@ for (const [kind, store] of [
       expect(draw.features.get(a.id)?.properties.n).toBeUndefined();
       await draw.undo();
       expect(draw.features.has(a.id)).toBe(false);
-      expect(await codeOf(draw.undo())).toBe('invalid-state');
+      expect(await codeOf(draw.undo())).toBe('invalidState');
       await draw.redo();
       await draw.redo();
       expect(draw.features.get(a.id)?.properties.n).toBe(1);
-      expect(await codeOf(draw.redo())).toBe('invalid-state');
+      expect(await codeOf(draw.redo())).toBe('invalidState');
       expect(changes.slice(2).map((change) => change.source)).toEqual([
         'undo',
         'undo',
@@ -245,7 +245,7 @@ for (const [kind, store] of [
 
     it('makes no step of a commit written with undo: false', async () => {
       await draw.write((tx) => tx.features.create(point(1)), { undo: false });
-      expect(await codeOf(draw.undo())).toBe('invalid-state');
+      expect(await codeOf(draw.undo())).toBe('invalidState');
     });
 
     it('tells the Store a commit written with undo: false as one a recorder of steps leaves out', async () => {
@@ -296,7 +296,7 @@ for (const [kind, store] of [
       expect(opened.features).toBe(1);
       expect(draw.features.count()).toBe(1);
       expect(changes[changes.length - 1]?.source).toBe('open');
-      expect(await codeOf(draw.undo())).toBe('invalid-state');
+      expect(await codeOf(draw.undo())).toBe('invalidState');
     });
   });
 }

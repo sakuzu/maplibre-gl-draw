@@ -83,12 +83,12 @@ export interface SketchPatch {
  * - `deselected`: what it edits was no longer selected
  * - `deleted`: every feature it edits was deleted
  * - `locked`: every feature it edits was locked (itself, its group or its layer)
- * - `read-only`: the document became read-only
- * - `layer-unavailable`: every feature it edits was hidden or put into a layer that cannot be
+ * - `readOnly`: the document became read-only
+ * - `layerUnavailable`: every feature it edits was hidden or put into a layer that cannot be
  *   written, or the layer of the feature it draws cannot be written when it is committed
- * - `vertices-removed`: the vertices it edits are no longer there
+ * - `verticesRemoved`: the vertices it edits are no longer there
  * - `withdrawn`: a sketch with an owner was taken off
- * - `document-replaced`: the whole document was replaced
+ * - `documentReplaced`: the whole document was replaced
  */
 export type SketchEndReason =
   | 'committed'
@@ -96,11 +96,11 @@ export type SketchEndReason =
   | 'deselected'
   | 'deleted'
   | 'locked'
-  | 'read-only'
-  | 'layer-unavailable'
-  | 'vertices-removed'
+  | 'readOnly'
+  | 'layerUnavailable'
+  | 'verticesRemoved'
   | 'withdrawn'
-  | 'document-replaced';
+  | 'documentReplaced';
 
 /**
  * The sketches: edits drawn over the document before they are written, with the standard methods
@@ -136,9 +136,9 @@ export interface SketchesCollection extends Observable<readonly Sketch[]> {
    *
    * @returns The sketch, or `null` when a sketch of this client is refused (read-only, a lock, a
    *   feature hidden or a layer that cannot be written)
-   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape, an
+   * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape, an
    *   edit cannot apply or a feature it creates has an ID the Store does not take
-   *   (`Store.acceptsId`), `already-exists` when its ID is taken, or `not-found` when an edit
+   *   (`Store.acceptsId`), `alreadyExists` when its ID is taken, or `notFound` when an edit
    *   names a feature, a layer or a group that does not exist
    */
   add(input: SketchInput): Sketch | null;
@@ -155,7 +155,7 @@ export interface SketchesCollection extends Observable<readonly Sketch[]> {
    *
    * @returns The changed sketch, or `null` when the change of a sketch of this client is refused
    *   for the reasons `add` refuses
-   * @throws `DrawError` with the code `not-found` when there is no sketch with this ID, or as
+   * @throws `DrawError` with the code `notFound` when there is no sketch with this ID, or as
    *   {@link SketchesCollection.add} does for the edits
    */
   update(id: string, patch: SketchPatch): Sketch | null;
@@ -171,14 +171,14 @@ export interface SketchesCollection extends Observable<readonly Sketch[]> {
    * owner, and is no longer listed).
    *
    * @returns True when it was removed
-   * @throws `DrawError` with the code `not-found` when there is no sketch with this ID
+   * @throws `DrawError` with the code `notFound` when there is no sketch with this ID
    */
   remove(id: string): boolean;
   /**
    * Removes several sketches, all of them or none.
    *
    * @returns True when they were removed
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist; nothing is
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing is
    *   removed then
    */
   removeMany(ids: readonly string[]): boolean;
@@ -188,8 +188,8 @@ export interface SketchesCollection extends Observable<readonly Sketch[]> {
    *
    * @returns True when it was written, false when it is a sketch with an owner or the write
    *   is refused (read-only)
-   * @throws `DrawError` with the code `not-found` when there is no sketch with this ID, or
-   *   `invalid-input` when a shape being drawn it creates is not yet a feature (a line of one
+   * @throws `DrawError` with the code `notFound` when there is no sketch with this ID, or
+   *   `invalidInput` when a shape being drawn it creates is not yet a feature (a line of one
    *   position, a ring of fewer than four)
    */
   commit(id: string): boolean;
@@ -198,7 +198,7 @@ export interface SketchesCollection extends Observable<readonly Sketch[]> {
    *
    * @returns True when they were written, false when one is a sketch with an owner or the
    *   write is refused
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist; nothing is
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing is
    *   written then
    */
   commitMany(ids: readonly string[]): boolean;

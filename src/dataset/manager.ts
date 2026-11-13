@@ -131,11 +131,11 @@ export class DatasetManager {
   /**
    * The datasets in display order (from the back to the front)
    *
-   * They are ordered as the below-store group, the layer-order group and the above-store group.
+   * They are ordered as the belowStore group, the layerOrder group and the aboveStore group.
    * Within each side, the later in the array, the more in front. The rendering, the hit testing
    * and the listing all look only at this single sequence.
    *
-   * Only the layer-order group is an exception: the order of this array does not decide their
+   * Only the layerOrder group is an exception: the order of this array does not decide their
    * stacking order (the truth of the order is the stacking order of the Store,
    * `getLayerOrder()`, alone).
    */
@@ -228,7 +228,7 @@ export class DatasetManager {
   /**
    * Removes a dataset
    *
-   * Even with order 'layer-order', the stacking order of the Store is not touched (the manager
+   * Even with order 'layerOrder', the stacking order of the Store is not touched (the manager
    * does not know the Store). Taking the id off the order is the responsibility of the caller.
    * Even if it stays on the order, an id without a dataset is skipped by both the rendering
    * and the hit testing.
@@ -250,7 +250,7 @@ export class DatasetManager {
    * retained batches held and the state of the provider are not touched at all (no GPU resource
    * is rebuilt).
    *
-   * When it is moved to 'layer-order', the stacking order is decided by the stacking order of
+   * When it is moved to 'layerOrder', the stacking order is decided by the stacking order of
    * the Store alone (index takes no part in it). Putting the id on the order is the
    * responsibility of the caller.
    *
@@ -286,8 +286,8 @@ export class DatasetManager {
   /**
    * The list of datasets in display order (from the back to the front)
    *
-   * They are returned as the below-store group, the layer-order group and the above-store group.
-   * The actual stacking order of a layer-order dataset is decided by the stacking order of the
+   * They are returned as the belowStore group, the layerOrder group and the aboveStore group.
+   * The actual stacking order of a layerOrder dataset is decided by the stacking order of the
    * Store, so it does not match the order of this list.
    */
   list(): Dataset[] {
@@ -360,7 +360,7 @@ export class DatasetManager {
   /**
    * Draws the datasets of the given side in display order (from the back to the front)
    *
-   * The 'layer-order' side is not drawn on this path (it is drawn from `drawOne` at its position
+   * The 'layerOrder' side is not drawn on this path (it is drawn from `drawOne` at its position
    * within the stacking order).
    *
    * @param bounds The bbox of the expanded viewport that the rendering loop computed once.
@@ -385,7 +385,7 @@ export class DatasetManager {
   /**
    * Draws a dataset as one entry of the stacking order
    *
-   * Only a dataset whose order is 'layer-order' is drawn. Nothing happens for an id that does
+   * Only a dataset whose order is 'layerOrder' is drawn. Nothing happens for an id that does
    * not exist or for a dataset on another side (the rendering loop skips that entry).
    *
    * @returns true when it was a drawing target
@@ -398,7 +398,7 @@ export class DatasetManager {
     bounds?: BBox,
   ): boolean {
     const dataset = this.datasets.get(id);
-    if (dataset?.order !== 'layer-order') return false;
+    if (dataset?.order !== 'layerOrder') return false;
 
     dataset.draw(target, projectionData, zoom, bounds ?? this.deps.getViewportBounds());
     return true;
@@ -427,7 +427,7 @@ export class DatasetManager {
   /**
    * Returns the hit as one entry of the stacking order
    *
-   * Only a dataset whose order is 'layer-order' is a target (an id that does not exist and a
+   * Only a dataset whose order is 'layerOrder' is a target (an id that does not exist and a
    * dataset on another side give null).
    */
   hitTestEntry(
@@ -437,7 +437,7 @@ export class DatasetManager {
     test: DisplayHitTestFn,
   ): DisplayHitResult | null {
     const dataset = this.datasets.get(id);
-    if (dataset?.order !== 'layer-order') return null;
+    if (dataset?.order !== 'layerOrder') return null;
     return this.hitTestDataset(dataset, coordinate, toleranceLngLat, test);
   }
 
@@ -463,18 +463,18 @@ export class DatasetManager {
    * The index of the start of a side (the range within the display order)
    */
   private sideStart(order: DatasetOrder): number {
-    if (order === 'below-store') return 0;
+    if (order === 'belowStore') return 0;
     const counts = this.sideCounts();
-    return order === 'layer-order' ? counts.below : counts.below + counts.layerOrder;
+    return order === 'layerOrder' ? counts.below : counts.below + counts.layerOrder;
   }
 
   /**
    * The index just past the end of a side
    */
   private sideEnd(order: DatasetOrder): number {
-    if (order === 'above-store') return this.ordered.length;
+    if (order === 'aboveStore') return this.ordered.length;
     const counts = this.sideCounts();
-    return order === 'below-store' ? counts.below : counts.below + counts.layerOrder;
+    return order === 'belowStore' ? counts.below : counts.below + counts.layerOrder;
   }
 
   /**
@@ -484,8 +484,8 @@ export class DatasetManager {
     let below = 0;
     let layerOrder = 0;
     for (const dataset of this.ordered) {
-      if (dataset.order === 'below-store') below++;
-      else if (dataset.order === 'layer-order') layerOrder++;
+      if (dataset.order === 'belowStore') below++;
+      else if (dataset.order === 'layerOrder') layerOrder++;
     }
     return { below, layerOrder };
   }

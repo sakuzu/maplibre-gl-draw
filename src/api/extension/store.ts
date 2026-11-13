@@ -139,7 +139,7 @@ export interface TransformFields {
 export interface GeometryTransforms {
   /**
    * Whether the Store takes the values of an edit (its points, its angle, its factors). An edit
-   * it does not take makes `applyEdits` throw `invalid-input`, storing nothing.
+   * it does not take makes `applyEdits` throw `invalidInput`, storing nothing.
    */
   accepts(edit: TransformEdit): boolean;
   /**
@@ -161,7 +161,7 @@ export interface GeometryTransforms {
  *   notification carries as read-only, and the Store never changes such an object: a change
  *   stores a new object.
  * - The stacking order (`getLayerOrder()`) is part of the document. It may hold entries that
- *   are not layers (a dataset with `order: 'layer-order'`, a separator of the application),
+ *   are not layers (a dataset with `order: 'layerOrder'`, a separator of the application),
  *   and its entries are distinct non-empty strings.
  * - One notification per outermost transaction: `subscribe` delivers one `DocumentChange`
  *   per outermost `transact` (or per write outside one), with its `source`. The transactions
@@ -315,7 +315,7 @@ export interface Store extends StoreView {
    *
    * @returns What was applied, or `null` when the Store refuses the edits, changing nothing
    *   (read-only, or a reason of its own)
-   * @throws DrawError `invalid-input`, storing nothing, when an edit cannot apply: an edit or a
+   * @throws DrawError `invalidInput`, storing nothing, when an edit cannot apply: an edit or a
    *   patch of the wrong shape, a vertex the feature does not have, positions that do not match
    *   the vertices, an insert with both or neither of `after` and `before`, a deletion that
    *   leaves a line or a ring with too few positions, a target of `{ selection: true }`, or an
@@ -462,7 +462,7 @@ export interface Store extends StoreView {
    * given (`features.create`, `features.createMany`, `groups.create`, `layers.create`, a
    * sketch that creates a feature, and the new layer and group of a load) is checked before
    * anything is written: an id the Store does not take throws a `DrawError` with the code
-   * `invalid-input`, and nothing is written. So a Store that takes the id of something deleted,
+   * `invalidInput`, and nothing is written. So a Store that takes the id of something deleted,
    * to bring it back, answers true for it.
    *
    * It is given the id alone, not whether it is the id of a feature, a group or a layer: a Store

@@ -53,8 +53,8 @@ export interface GroupResource {
    * are counted with `features.count({ groupId })`.
    *
    * @returns The IDs, as a new array (empty past the last feature)
-   * @throws `DrawError` with the code `not-found` when there is no group with this ID, or
-   *   `invalid-input` when the range is not of non-negative integers
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID, or
+   *   `invalidInput` when the range is not of non-negative integers
    */
   listMembers(id: string, options?: ItemListOptions): string[];
   /**
@@ -67,10 +67,10 @@ export interface GroupResource {
    * does.
    *
    * @returns The new group, or `null` when the document is read-only
-   * @throws `DrawError` with the code `not-found` when one of the features does not exist,
-   *   `invalid-input` when there is no feature, the features are not in the same layer (or not
+   * @throws `DrawError` with the code `notFound` when one of the features does not exist,
+   *   `invalidInput` when there is no feature, the features are not in the same layer (or not
    *   in `layerId`) or its ID is not one the Store takes (`Store.acceptsId`), or
-   *   `already-exists` when its ID is taken
+   *   `alreadyExists` when its ID is taken
    */
   create(input: GroupInput): Group | null;
   /**
@@ -94,9 +94,9 @@ export interface GroupResource {
    * transaction that ignores the locks (`draw.transact(fn, { ignoreLocks: true })`).
    *
    * @returns The group, or `null` when it is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when no deletion keeps a group of this ID (or
-   *   its layer is not there), `already-exists` when there is a group of this ID, or
-   *   `invalid-input` when the ID is not a string
+   * @throws `DrawError` with the code `notFound` when no deletion keeps a group of this ID (or
+   *   its layer is not there), `alreadyExists` when there is a group of this ID, or
+   *   `invalidInput` when the ID is not a string
    */
   restore(id: string): Group | null;
   /**
@@ -112,8 +112,8 @@ export interface GroupResource {
    * Changes the keys given in the patch and returns the group after the change.
    *
    * @returns The changed group, or `null` when the change is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no group with this ID, or
-   *   `invalid-input` when the patch has the wrong shape
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID, or
+   *   `invalidInput` when the patch has the wrong shape
    */
   update(id: string, patch: GroupPatch): Group | null;
   /**
@@ -129,7 +129,7 @@ export interface GroupResource {
    * Deletes a group; its features stay in the layer.
    *
    * @returns True when it was deleted, false when the deletion is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no group with this ID
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID
    */
   delete(id: string): boolean;
   /**
@@ -137,7 +137,7 @@ export interface GroupResource {
    * their layers.
    *
    * @returns True when they were deleted, false when the deletion is refused
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist; nothing
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing
    *   is deleted then
    */
   deleteMany(ids: readonly string[]): boolean;
@@ -145,8 +145,8 @@ export interface GroupResource {
    * Moves a group to another layer, or to another position in its layer.
    *
    * @returns True when it moved, false when the move is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when the group or the target does not
-   *   exist, `invalid-input` when the target is a group, or `invalid-state` when it is a position
+   * @throws `DrawError` with the code `notFound` when the group or the target does not
+   *   exist, `invalidInput` when the target is a group, or `invalidState` when it is a position
    *   by `index` in a layer held as rows (which takes the items around the place instead)
    */
   move(id: string, to: MoveTarget): boolean;

@@ -417,7 +417,7 @@ export interface GeoJSONFeatureRead {
  * simplestyle-spec.
  *
  * @returns What is read, or why it cannot be read
- * @throws DrawError (`invalid-input`) when a value of the properties is not a value
+ * @throws DrawError (`invalidInput`) when a value of the properties is not a value
  * @internal
  */
 export function readGeoJSONFeature(

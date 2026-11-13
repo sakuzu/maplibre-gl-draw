@@ -67,24 +67,24 @@ describe('createToolbar', () => {
     const fake = fakeDraw();
     bar = createToolbar(fake.asDraw, { target: fake.container });
     button('Polygon').click();
-    expect(fake.draw.setMode).toHaveBeenCalledWith('draw_polygon');
+    expect(fake.draw.setMode).toHaveBeenCalledWith('drawPolygon');
   });
 
   it('asks for an image at once when the Image tool is pressed, placed at the center of the map', () => {
     const fake = fakeDraw();
     bar = createToolbar(fake.asDraw, { target: fake.container });
     button('Image').click();
-    expect(fake.draw.mode.set).toHaveBeenCalledWith('draw_image');
+    expect(fake.draw.mode.set).toHaveBeenCalledWith('drawImage');
     const center = fake.asDraw.getMap().getCenter();
     expect(fake.draw.mode.drawing.add).toHaveBeenCalledWith([center.lng, center.lat]);
     expect(fake.draw.setMode).not.toHaveBeenCalled();
   });
 
   it('shows the current mode of draw, whoever changed it', () => {
-    const fake = fakeDraw({ mode: 'draw_line' });
+    const fake = fakeDraw({ mode: 'drawLine' });
     bar = createToolbar(fake.asDraw, { target: fake.container });
     expect(pressed('Line')).toBe('true');
-    fake.setModeFromOutside('draw_circle');
+    fake.setModeFromOutside('drawCircle');
     flushSync();
     expect(pressed('Line')).toBe('false');
     expect(pressed('Circle')).toBe('true');
@@ -95,7 +95,7 @@ describe('createToolbar', () => {
   });
 
   it('presses no tool for a mode it does not show', () => {
-    const fake = fakeDraw({ mode: 'draw_line' });
+    const fake = fakeDraw({ mode: 'drawLine' });
     bar = createToolbar(fake.asDraw, { target: fake.container, tools: ['select', 'polygon'] });
     for (const name of ['Select', 'Polygon']) expect(pressed(name)).toBe('false');
   });

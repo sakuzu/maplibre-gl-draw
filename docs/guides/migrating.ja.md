@@ -55,9 +55,9 @@ GeoJSON の書き出しにもそのまま出ます。1.0 の名前はすべて�
   ごとに合わせ、`undefined` を渡した鍵は消えます
 - 複数を扱うメソッド (`createMany`、`deleteMany`、`moveMany`) は
   1 つの取引です。全部が変わるか、何も変わらないかのどちらかです
-- 引数の誤り (無い ID、形の合わない入力) は、`code` (`not-found`、
-  `already-exists`、`invalid-input`、`unsupported-format`、
-  `invalid-state`) を持つ `DrawError` を投げます。状態のために拒む
+- 引数の誤り (無い ID、形の合わない入力) は、`code` (`notFound`、
+  `alreadyExists`、`invalidInput`、`unsupportedFormat`、
+  `invalidState`) を持つ `DrawError` を投げます。状態のために拒む
   書き込み (読み取り専用、ロック) は `null` か `false` を返します。
   どちらのときも何も変わりません
 - イベントの名前は `資源.過去分詞` の形です。`feature.created`、
@@ -107,8 +107,8 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map, { defaultMode: 'select' });
 ```
 
-モードの名前 (`select`、`draw_point`、`draw_line`、`draw_polygon`、
-`draw_circle`、`draw_freehand`、`draw_image`) は変わりません。
+モードの名前 (`select`、`drawPoint`、`drawLine`、`drawPolygon`、
+`drawCircle`、`drawFreehand`、`drawImage`) は変わりません。
 知らないモードを `setMode` に渡すと `DrawError` を投げます。
 
 ### 地物
@@ -183,7 +183,7 @@ import { DrawError } from '@sakuzu/maplibre-gl-draw';
 try {
   draw.features.update(featureId, { visible: false });
 } catch (error) {
-  if (error instanceof DrawError && error.code === 'not-found') {
+  if (error instanceof DrawError && error.code === 'notFound') {
     console.warn('the feature is gone');
   } else {
     throw error;
@@ -568,8 +568,8 @@ const removeLogger = draw.extensions.plugins.add(logger);
 
 ```ts
 // 1.0
-draw.registerMode('draw_marker', () => ({
-  modeName: 'draw_marker',
+draw.registerMode('drawMarker', () => ({
+  modeName: 'drawMarker',
   onStart(context) {},
   onClick(event) {
     context.store.createFeature({ /* ... */ });
@@ -592,7 +592,7 @@ const drawMarker: ModeFactory = (ctx) => ({
     return true;
   },
 });
-draw.extensions.modes.add('draw_marker', drawMarker);
+draw.extensions.modes.add('drawMarker', drawMarker);
 ```
 
 独自の地物の型は `FeatureTypeDefinition` です。`type`、持つ
@@ -763,7 +763,7 @@ draw.getStore().subscribe((change) => {
 `properties` の値は `Value` になりました。日付、時刻、ほかの地物の
 id は、それぞれの種類の値 (`CalendarDate`、`DateTime`、`TimeOfDay`、
 `Reference` など) です。`JSON.stringify` は、これらを JSON の形
-(`{"$date": text}`) で書きます。`Date` は `invalid-input` で
+(`{"$date": text}`) で書きます。`Date` は `invalidInput` で
 断ります。`Date` は瞬間なので、日付を `Date` で渡すと時差で日が
 ずれるためです。日時か日付の値で渡します。値とその種類は、このライブラリーが
 使う `@sakuzu/tabane` から読みます。
@@ -830,6 +830,12 @@ const kept = draw.selection.target;
 draw.selection.clear();
 draw.selection.set(kept);
 ```
+
+API の文字列の値は、すべて camelCase になりました。エラーの符号、
+モードの名前、データセットの順は、新しい名前と比べてください。
+`'invalid-input'` は `'invalidInput'`、`'draw_point'` は `'drawPoint'`、
+`'below-store'` は `'belowStore'` です。スケッチが終わった理由、頂点の
+編集の種類 (`'vertexMove'`)、`debug.checks` の確かめの名前も同じ書き方です。
 
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で
@@ -904,7 +910,7 @@ await draw.write(
   この端末の確定を取り消し、やり直します。`features.restore`、
   `features.releaseRestore`、`groups.restore` は無くなりました
 - 状態のために拒まれた書き込みは、`null` や `false` の代わりに
-  `DrawError` で reject します。読み取り専用のときは `not-editable`、
+  `DrawError` で reject します。読み取り専用のときは `notEditable`、
   ロックされたものには `locked` です。引数の誤りも reject します。その
   とき取引は何も確定しません
 - `draw.metadata` は `draw.document.title`、`description`、`metadata`
@@ -923,7 +929,7 @@ properties }` で、渡す形、読む形、書き出す形が同じです。レ
 `readFeature(feature)` は、それらを既定の値を埋めた短い名前で読みます。
 差分は `{ geometry?, properties?, unset? }` です。鍵は `unset` に書いて
 消し (スタイルの鍵は `unset.style`)、`undefined` を渡した鍵は
-`invalid-input` で断ります。地物がもともと GeoJSON なので、
+`invalidInput` で断ります。地物がもともと GeoJSON なので、
 `featuresToGeoJSON` と `featureToGeoJSON` は無くなりました。
 
 <!-- docs-check: skip -->
@@ -970,7 +976,7 @@ console.log(opened.features, imported.count, imported.skipped);
 独自の形式は `4.0.0` です。地物は GeoJSON の Feature で、題と説明は
 文書の欄になり、`metadata` はアプリケーションの値をそれぞれの前置きで
 持ちます。3.0 が読むのはこの版だけで、`3.0.0` 以前の形式の文書は
-`invalid-input` で断ります。
+`invalidInput` で断ります。
 
 ### 3.0 の拡張
 
@@ -1055,7 +1061,7 @@ console.log(opened.features, imported.count, imported.skipped);
   `gpu.transformFeedback`、`gpu.fence`、`gpu.program`、`gpu.compile` が作り
   ます。`createProgram` は `gpu.program` になり、`/webgl` から無くなりました。
   `QuadShader` は `new QuadShader(gpu, content)` です。断りはコード
-  `too-large` の `DrawError` です
+  `tooLarge` の `DrawError` です
 - 描く文脈は、`ctx.zoom` と `ctx.pixelRatio` の代わりに描いている画面
   `ctx.screen` (プラグインの `screen` と同じもの) を持ちます。
   `ctx.screen.zoom` と `ctx.screen.pixelRatio` を読んでください
@@ -1178,7 +1184,7 @@ API で行った書き込みでも発火します。文書の書き込みは `dr
 | `new MapboxDraw()`, `map.addControl(draw)` | `createDraw(map)` |
 | `changeMode('simple_select')` | `setMode('select')` |
 | `changeMode('direct_select', ...)` | `setMode('select')` |
-| `changeMode('draw_line_string')` | `setMode('draw_line')` |
+| `changeMode('draw_line_string')` | `setMode('drawLine')` |
 | `add(featureCollection)` | `tx.import(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
@@ -1194,7 +1200,7 @@ API で行った書き込みでも発火します。文書の書き込みは `dr
 | terra-draw | このライブラリー |
 | --- | --- |
 | `new TerraDraw({ adapter, modes })` | `createDraw(map)` |
-| `setMode('linestring')` | `setMode('draw_line')` |
+| `setMode('linestring')` | `setMode('drawLine')` |
 | `getSnapshot()` | `document.toGeoJSON()` |
 | `addFeatures(features)` | `tx.import(featureCollection)` |
 | `removeFeatures(ids)` | `tx.features.delete(ids)` |

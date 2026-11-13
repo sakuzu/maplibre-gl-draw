@@ -8,7 +8,7 @@
  * - A group moved to a layer whose rows have fewer dimensions than its members is refused, and the
  *   group, its members and the tables stay as they were
  * - The parent of a row written from elsewhere is a layer of the Store or a group: any other id is
- *   refused (`not-found`), and no table of that id is made
+ *   refused (`notFound`), and no table of that id is made
  * - A layer and a group are named in one space: a layer whose id is a group's, or a group whose id
  *   is a layer's, is refused, in the Store of rows and in the Store of objects
  */
@@ -96,7 +96,7 @@ describe('the parent of a row written from elsewhere', () => {
     const h = tables.getRowRef('f') as number;
     const write = (parent: string) =>
       store.transact(() => writer.writeRows(rowPatch([h], { parent: [parent] })), 'remote');
-    expect(() => write('nogroup')).toThrow(expect.objectContaining({ code: 'not-found' }));
+    expect(() => write('nogroup')).toThrow(expect.objectContaining({ code: 'notFound' }));
     expect(store.getFeature('f')?.layerId).toBe('a');
     expect(tables.get('nogroup')).toBeUndefined();
     write('g');

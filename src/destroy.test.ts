@@ -8,7 +8,7 @@
  * the map, the listeners on the canvas, the timers, the registrations of the extension points,
  * the plugins) and gives back what it changed on the map (boxZoom, the focusability of the
  * canvas). A second destroy is ignored, and any other call after it throws
- * DrawError('invalid-state').
+ * DrawError('invalidState').
  *
  * The map is a stub that records what is added to it, so a leak shows up as a count that does
  * not go back to where it started. The events of the datasets, which need a
@@ -108,7 +108,7 @@ describe('draw.destroy()', () => {
     expect(stub.isBoxZoomEnabled()).toBe(true);
   });
 
-  it('throws invalid-state for the calls made after destroy, and adds nothing to the map', async () => {
+  it('throws invalidState for the calls made after destroy, and adds nothing to the map', async () => {
     const stub = createMapStub();
     const draw = createDraw(stub.map);
     const lateInstall = vi.fn();
@@ -125,7 +125,7 @@ describe('draw.destroy()', () => {
       () => draw.extensions.plugins.add({ name: 'late', onAdd: lateInstall }),
       () => draw.extensions.snapProviders.add({ name: 'late', candidates: () => [] }),
     ];
-    const failed = expect.objectContaining({ name: 'DrawError', code: 'invalid-state' });
+    const failed = expect.objectContaining({ name: 'DrawError', code: 'invalidState' });
     for (const call of calls) {
       expect(call).toThrow(failed);
     }
@@ -169,7 +169,7 @@ describe('the instance after destroy', () => {
     return found;
   }
 
-  it('throws invalid-state from every method of the instance and its collections', async () => {
+  it('throws invalidState from every method of the instance and its collections', async () => {
     const plugin: Plugin = { name: 'p', onAdd: vi.fn(), onRemove: vi.fn() };
     const draw = createDraw(createMapStub().map);
     draw.extensions.plugins.add(plugin);
@@ -210,7 +210,7 @@ describe('the instance after destroy', () => {
       } catch (error) {
         failure = error;
       }
-      expect(failure, path).toMatchObject({ name: 'DrawError', code: 'invalid-state' });
+      expect(failure, path).toMatchObject({ name: 'DrawError', code: 'invalidState' });
     }
     // destroy itself stays callable and does nothing
     expect(() => draw.destroy()).not.toThrow();

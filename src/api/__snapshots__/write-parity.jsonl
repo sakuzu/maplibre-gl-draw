@@ -50,13 +50,13 @@
 {"step":"createMany","outcome":"done","told":[{"source":"local","features":{"created":["p1","p2","p3"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"delete","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":["p1"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"deleteMany","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":["p2","p3"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
-{"step":"missing","outcome":"error:not-found","told":[]}
+{"step":"missing","outcome":"error:notFound","told":[]}
 {"document":{"order":["a","b"],"layers":[{"id":"a","name":"A","visible":true,"locked":false,"items":[]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[],"metadata":{}}}
 {"scene":"features deleted","store":"rows"}
 {"step":"createMany","outcome":"done","told":[{"source":"local","features":{"created":["p1","p2","p3"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"delete","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":["p1"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"deleteMany","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":["p2","p3"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
-{"step":"missing","outcome":"error:not-found","told":[]}
+{"step":"missing","outcome":"error:notFound","told":[]}
 {"document":{"order":["a","b"],"layers":[{"id":"a","name":"A","visible":true,"locked":false,"items":[]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[],"metadata":{}}}
 {"scene":"features put elsewhere","store":"objects"}
 {"step":"createMany","outcome":"done","told":[{"source":"local","features":{"created":["p1","p2","p3"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
@@ -80,7 +80,7 @@
 {"step":"above another","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":["a"]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"point","outcome":"done","told":[{"source":"local","features":{"created":["p1"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"delete with its features","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":["p1"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":["c"],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
-{"step":"missing","outcome":"error:not-found","told":[]}
+{"step":"missing","outcome":"error:notFound","told":[]}
 {"document":{"order":["b","a"],"layers":[{"id":"a","name":"A","visible":true,"locked":false,"items":[]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[],"metadata":{}}}
 {"scene":"layers","store":"rows"}
 {"step":"create","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":[],"placed":[]},"layers":{"created":["c"],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
@@ -88,7 +88,7 @@
 {"step":"above another","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":["a"]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"point","outcome":"done","told":[{"source":"local","features":{"created":["p1"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"delete with its features","outcome":"done","told":[{"source":"local","features":{"created":[],"updated":[],"deleted":["p1"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":["c"],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
-{"step":"missing","outcome":"error:not-found","told":[]}
+{"step":"missing","outcome":"error:notFound","told":[]}
 {"document":{"order":["b","a"],"layers":[{"id":"a","name":"A","visible":true,"locked":false,"items":[]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[],"metadata":{}}}
 {"scene":"groups","store":"objects"}
 {"step":"createMany","outcome":"done","told":[{"source":"local","features":{"created":["p1","p2","p3"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
@@ -126,7 +126,7 @@
 {"step":"createMany","outcome":"done","told":[{"source":"local","features":{"created":["cut","s1","s2","s3"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"union","outcome":"done","told":[{"source":"local","features":{"created":["n1"],"updated":[],"deleted":["s1","s2"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
 {"step":"split","outcome":"done","told":[{"source":"local","features":{"created":["n2","n3"],"updated":[],"deleted":["s3"],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
-{"step":"union of one","outcome":"error:not-found","told":[]}
+{"step":"union of one","outcome":"error:notFound","told":[]}
 {"document":{"order":["a","b"],"layers":[{"id":"a","name":"A","visible":true,"locked":false,"items":["n1","n2","n3","cut"]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[{"id":"n1","type":"Polygon","geometry":{"type":"Polygon","coordinates":[[[0,0],[3,0],[3,2],[0,2],[0,0]]]},"layerId":"a","groupId":null,"properties":{},"style":{},"visible":true,"locked":false},{"id":"n2","type":"Polygon","geometry":{"type":"Polygon","coordinates":[[[10,0],[11,0],[11,2],[10,2],[10,0]]]},"layerId":"a","groupId":null,"properties":{},"style":{},"visible":true,"locked":false},{"id":"n3","type":"Polygon","geometry":{"type":"Polygon","coordinates":[[[11,0],[12,0],[12,2],[11,2],[11,0]]]},"layerId":"a","groupId":null,"properties":{},"style":{},"visible":true,"locked":false},{"id":"cut","type":"LineString","geometry":{"type":"LineString","coordinates":[[11,-1],[11,3]]},"layerId":"a","groupId":null,"properties":{},"style":{},"visible":true,"locked":false}],"metadata":{}}}
 {"scene":"areas subtracted and intersected","store":"objects"}
 {"step":"createMany","outcome":"done","told":[{"source":"local","features":{"created":["s1","s2","s3"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
@@ -184,18 +184,18 @@
 {"step":"place","outcome":"refused","told":[]}
 {"document":{"order":["a","b"],"layers":[{"id":"a","name":"A","visible":true,"locked":true,"items":["p1"]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[{"id":"p1","type":"Point","geometry":{"type":"Point","coordinates":[1,0]},"layerId":"a","groupId":null,"properties":{},"style":{},"visible":true,"locked":false}],"metadata":{}}}
 {"scene":"inputs of the wrong shape","store":"objects"}
-{"step":"no geometry","outcome":"error:invalid-input","told":[]}
-{"step":"missing layer","outcome":"error:not-found","told":[]}
-{"step":"taken ID","outcome":"error:already-exists","told":[]}
+{"step":"no geometry","outcome":"error:invalidInput","told":[]}
+{"step":"missing layer","outcome":"error:notFound","told":[]}
+{"step":"taken ID","outcome":"error:alreadyExists","told":[]}
 {"step":"create","outcome":"done","told":[{"source":"local","features":{"created":["p1"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
-{"step":"taken ID of a feature","outcome":"error:already-exists","told":[]}
-{"step":"missing feature","outcome":"error:not-found","told":[]}
+{"step":"taken ID of a feature","outcome":"error:alreadyExists","told":[]}
+{"step":"missing feature","outcome":"error:notFound","told":[]}
 {"document":{"order":["a","b"],"layers":[{"id":"a","name":"A","visible":true,"locked":false,"items":["p1"]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[{"id":"p1","type":"Point","geometry":{"type":"Point","coordinates":[1,0]},"layerId":"a","groupId":null,"properties":{},"style":{},"visible":true,"locked":false}],"metadata":{}}}
 {"scene":"inputs of the wrong shape","store":"rows"}
-{"step":"no geometry","outcome":"error:invalid-input","told":[]}
-{"step":"missing layer","outcome":"error:not-found","told":[]}
-{"step":"taken ID","outcome":"error:already-exists","told":[]}
+{"step":"no geometry","outcome":"error:invalidInput","told":[]}
+{"step":"missing layer","outcome":"error:notFound","told":[]}
+{"step":"taken ID","outcome":"error:alreadyExists","told":[]}
 {"step":"create","outcome":"done","told":[{"source":"local","features":{"created":["p1"],"updated":[],"deleted":[],"placed":[]},"layers":{"created":[],"updated":[],"deleted":[],"placed":[]},"groups":{"created":[],"updated":[],"deleted":[],"placed":[]},"document":false}]}
-{"step":"taken ID of a feature","outcome":"error:already-exists","told":[]}
-{"step":"missing feature","outcome":"error:not-found","told":[]}
+{"step":"taken ID of a feature","outcome":"error:alreadyExists","told":[]}
+{"step":"missing feature","outcome":"error:notFound","told":[]}
 {"document":{"order":["a","b"],"layers":[{"id":"a","name":"A","visible":true,"locked":false,"items":["p1"]},{"id":"b","name":"B","visible":true,"locked":false,"items":[]}],"groups":[],"features":[{"id":"p1","type":"Point","geometry":{"type":"Point","coordinates":[1,0]},"layerId":"a","groupId":null,"properties":{},"style":{},"visible":true,"locked":false}],"metadata":{}}}

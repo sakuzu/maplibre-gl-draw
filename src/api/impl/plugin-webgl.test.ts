@@ -128,7 +128,7 @@ describe('ctx.webgl.addFeatureRenderer', () => {
   it('refuses a type that was not added', () => {
     const { add, engine } = open();
     expect(() => add((ctx) => ctx.webgl.addFeatureRenderer('Marker', definition().value))).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
     engine.destroy();
   });
@@ -283,7 +283,7 @@ describe('ctx.webgl.addOverlay', () => {
     const half = (): GpuDefinition<() => void> => ({ gpuShare: 0.5, prepare: () => () => {} });
     add((ctx) => ctx.webgl.addOverlay(half()), 'one');
     expect(() => add((ctx) => ctx.webgl.addOverlay(half()), 'two')).toThrow(
-      expect.objectContaining({ code: 'too-large' }),
+      expect.objectContaining({ code: 'tooLarge' }),
     );
     engine.destroy();
   });

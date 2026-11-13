@@ -16,7 +16,7 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map);
 
 // クリックで頂点を足し、Enter か最初の頂点のクリックで終える
-draw.setMode('draw_polygon');
+draw.setMode('drawPolygon');
 
 draw.on('change', ({ features }) => {
   for (const id of features.created) {
@@ -41,19 +41,19 @@ draw.mode.subscribe((mode) => {
 | モード | 作るもの | 操作 |
 | --- | --- | --- |
 | `select` | なし | 選択、移動、拡縮、回転、頂点の編集 |
-| `draw_point` | `Point` | 1 回クリック |
-| `draw_line` | `LineString` | 何度かクリックして終える |
-| `draw_polygon` | `Polygon` | 何度かクリックして終える |
-| `draw_circle` | `Circle` | 中心をクリックし、半径の位置をクリック |
-| `draw_freehand` | `Freehand` | ドラッグで 1 本の線を引く |
-| `draw_image` | `Image` | アプリケーションがファイルを選ぶ (後述) |
+| `drawPoint` | `Point` | 1 回クリック |
+| `drawLine` | `LineString` | 何度かクリックして終える |
+| `drawPolygon` | `Polygon` | 何度かクリックして終える |
+| `drawCircle` | `Circle` | 中心をクリックし、半径の位置をクリック |
+| `drawFreehand` | `Freehand` | ドラッグで 1 本の線を引く |
+| `drawImage` | `Image` | アプリケーションがファイルを選ぶ (後述) |
 
 `draw.setMode(mode)` は、呼んだ後のモードが `mode` なら `true` を返し
 ます。操作ロック中に描画モードを指定したときと、書き込めるレイヤーが
 無いとき (すべてのレイヤーがロックか非表示のとき。
 [レイヤーとグループ](layers.ja.md) を参照) に描画モードを指定したときは、
 `false` を返し、何も変わりません。モードの無い名前を渡すと、コード
-`not-found` の `DrawError` を投げます。
+`notFound` の `DrawError` を投げます。
 
 今のモードは `draw.getMode()` で読めます。モードが変わるたびに
 `draw.mode` が知らせます (`draw.mode.subscribe`)。独自のモードは
@@ -67,11 +67,11 @@ draw.mode.subscribe((mode) => {
 
 | モード | 頂点を足す | 終える | Escape | Backspace |
 | --- | --- | --- | --- | --- |
-| `draw_point` | クリック | そのクリック | select へ | - |
-| `draw_line` | クリック | Enter、最後の頂点 | 破棄 | 最後の頂点 |
-| `draw_polygon` | クリック | Enter、最初の頂点 | 破棄 | 最後の頂点 |
-| `draw_circle` | クリック、移動 | 2 回目のクリック | 破棄 | - |
-| `draw_freehand` | ドラッグ | 離す | 破棄 | - |
+| `drawPoint` | クリック | そのクリック | select へ | - |
+| `drawLine` | クリック | Enter、最後の頂点 | 破棄 | 最後の頂点 |
+| `drawPolygon` | クリック | Enter、最初の頂点 | 破棄 | 最後の頂点 |
+| `drawCircle` | クリック、移動 | 2 回目のクリック | 破棄 | - |
+| `drawFreehand` | ドラッグ | 離す | 破棄 | - |
 
 - 線は頂点が 2 つ、多角形は 3 つ揃ってから、Enter か、ダブルクリックか、
   最後 (線) または最初 (多角形) の頂点のクリックで終わります。その頂点の上ではカーソルが
@@ -129,7 +129,7 @@ draw.sketches.subscribe((sketches) => {
 `draw.selection` が知らせます。
 
 フリーハンドは違います。1 本の線 (押す、ドラッグする、離す) ごとに 1 つの
-地物になり、続けて線を引けるようにモードは `draw_freehand` の
+地物になり、続けて線を引けるようにモードは `drawFreehand` の
 ままで、新しい地物は選ばれません。線を引いている途中で 2 本目の
 指が触れたときや、ブラウザーがタッチを取り消したときは、その線を捨て
 ます。
@@ -146,7 +146,7 @@ draw.sketches.subscribe((sketches) => {
 
 ### 画像
 
-ライブラリーはファイルのダイアログを開きません。`draw_image` では、地図を
+ライブラリーはファイルのダイアログを開きません。`drawImage` では、地図を
 クリックすると (または `draw.mode.drawing.add` を呼ぶと)、オプション
 `requestImage` で、置く位置を添えてアプリケーションに画像を求め、すぐに
 `select` に戻ります。アプリケーションは自前のファイル選択を表示して
@@ -174,7 +174,7 @@ const draw = createDraw(map, {
 });
 
 // 地図の中心に置く画像をいま求める
-draw.mode.set('draw_image');
+draw.mode.set('drawImage');
 const center = map.getCenter();
 draw.mode.drawing.add([center.lng, center.lat]);
 ```
@@ -195,7 +195,7 @@ draw.mode.drawing.add([center.lng, center.lat]);
 ライブラリーは、地図にドロップされたファイルを受け取りません。ドロップ
 されたファイルを読むには、アプリケーションがドロップを受けて取り込みます
 ([保存と読み込み](save-load.ja.md) を参照)。ドロップされた画像も同じ形で
-落とした位置に置けます。`draw_image` に入り、落とした位置で
+落とした位置に置けます。`drawImage` に入り、落とした位置で
 `draw.mode.drawing.add` を呼び、`requestImage` から落とされたファイルを
 返します。
 
@@ -481,7 +481,7 @@ draw.selection.set('feature', [line.id]);
   ないロック中や非表示のレイヤーにも入れられます
 - 描く型は形状の型です。`properties['maplibre-gl-draw:featureType']` で
   別の型を指定できます
-- 読み取り専用のあいだ、書き込みは `DrawError` (`not-editable`) で
+- 読み取り専用のあいだ、書き込みは `DrawError` (`notEditable`) で
   reject します。入力が誤っているときも `DrawError` で reject し、何も
   作りません
 - 円は中心を表す `Point` の形状で型が `Circle` の地物で、半径は
@@ -519,13 +519,13 @@ await draw.write((tx) =>
 `add` と `move` はその位置のクリックと移動、`commit` は Enter、`undo`、
 `redo`、`cancel` はそれぞれのキーと同じです。`active` は描いている途中の
 形があるかを答えます。いまのモードが描画モードでないときは、どれも
-コード `invalid-state` の `DrawError` を投げます。`commit` は作った地物の
+コード `invalidState` の `DrawError` を投げます。`commit` は作った地物の
 書き込みを返し、`draw.write` のオプションの `label` と `undo` を受けます。
-モードが形から何も作らないとき (頂点が足りない) は `invalid-state` で
+モードが形から何も作らないとき (頂点が足りない) は `invalidState` で
 reject します。
 
 ```ts
-draw.mode.set('draw_line');
+draw.mode.set('drawLine');
 draw.mode.drawing.add([139.7, 35.68]);
 draw.mode.drawing.move([139.71, 35.69]);
 draw.mode.drawing.add([139.71, 35.69]);
@@ -539,7 +539,7 @@ console.log(line.id);
 名前、基準のズームが付き、描き終えると選択されます。
 
 ```ts
-draw.setMode('draw_line');
+draw.setMode('drawLine');
 draw.drawing.addVertex([139.7, 35.68]); // その位置のクリックと同じ
 draw.drawing.moveTo([139.71, 35.69]); // プレビューが付いてくる
 draw.drawing.addVertex([139.71, 35.69]);
@@ -557,7 +557,7 @@ draw.drawing.finish(); // Enter と同じ。モードは select に戻る
   ときだけ形を描き終えます
 - `addVertex` は、描画モードが動いていないとき、またはクリックを
   受け取ったものがないときに `false` を返します。何が起きるかはモード
-  しだいです。`draw_point` では点を作り、線や面の閉じる頂点の上では形を
+  しだいです。`drawPoint` では点を作り、線や面の閉じる頂点の上では形を
   描き終えます
 - `finish` は、頂点が足りていれば、最後の頂点がどこにあっても形を
   完成させます。描いている途中の形がないとき、またはモードが形を完成

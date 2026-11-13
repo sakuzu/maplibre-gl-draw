@@ -66,11 +66,11 @@ describe('the messages of an extension', () => {
   it('refuse a key nothing defines and a value of the wrong type, as before', () => {
     expect(() =>
       createDraw(createMapStub().map, { messages: { testUnknown: 'x' } as never }),
-    ).toThrow(refused('invalid-input'));
+    ).toThrow(refused('invalidInput'));
     defineMessages({ testPinLabel: 'Pin' });
     expect(() =>
       createDraw(createMapStub().map, { messages: { testPinLabel: () => 'x' } as never }),
-    ).toThrow(refused('invalid-input'));
+    ).toThrow(refused('invalidInput'));
   });
 
   it('are read by an instance made before they are defined', () => {
@@ -82,10 +82,10 @@ describe('the messages of an extension', () => {
   });
 
   it('cannot take a key of the library, nor a key defined with another value', () => {
-    expect(() => defineMessages({ legendOther: 'Others' })).toThrow(refused('invalid-input'));
-    expect(() => defineMessages({ testTwiceLabel: 1 } as never)).toThrow(refused('invalid-input'));
+    expect(() => defineMessages({ legendOther: 'Others' })).toThrow(refused('invalidInput'));
+    expect(() => defineMessages({ testTwiceLabel: 1 } as never)).toThrow(refused('invalidInput'));
     defineMessages({ testTwiceLabel: 'Twice' });
     expect(() => defineMessages({ testTwiceLabel: 'Twice' })).not.toThrow();
-    expect(() => defineMessages({ testTwiceLabel: 'Again' })).toThrow(refused('already-exists'));
+    expect(() => defineMessages({ testTwiceLabel: 'Again' })).toThrow(refused('alreadyExists'));
   });
 });

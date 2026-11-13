@@ -117,7 +117,7 @@ export function toRowGeometry(geometry: Geometry, dims: CoordinateDimensions = '
       break;
     default:
       throw new DrawError(
-        'invalid-input',
+        'invalidInput',
         `PageBuilder: a ${geometry.type} geometry cannot be a row`,
       );
   }
@@ -134,7 +134,7 @@ export function toRowGeometry(geometry: Geometry, dims: CoordinateDimensions = '
 /** The error of a position of more values than the dimensions of its coordinates */
 function positionTooLong(position: Position, dims: CoordinateDimensions): Error {
   return new DrawError(
-    'invalid-input',
+    'invalidInput',
     `PageBuilder: a position of ${position.length} values does not fit coordinates of ${dims}`,
   );
 }

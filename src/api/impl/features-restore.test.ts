@@ -174,33 +174,33 @@ describe('features.restore', () => {
     const count = notified.length;
     const call = (values: unknown) => () =>
       writesOf(draw).features.restore(values as FeatureValues);
-    expect(call(null)).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    expect(call(null)).toThrow(expect.objectContaining({ code: 'invalidInput' }));
     expect(call({ handles: [handle], fields: new Map() })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(call({ handles: Int32Array.of(handle), fields: new Map([['hidden', []]]) })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(call({ handles: Int32Array.of(handle), fields: new Map([['size', [1]]]) })).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(
       call({ handles: Int32Array.of(handle), fields: new Map(), deleted: Uint8Array.of(1, 1) }),
-    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
     expect(call({ handles: Int32Array.of(9999), fields: new Map() })).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
     expect(notified).toHaveLength(count);
   });
 
-  it('throws invalid-state on a Store of objects', () => {
+  it('throws invalidState on a Store of objects', () => {
     const empty = createRowValues({ handles: new Int32Array(0), fields: new Map() });
     const objects = drawOn(undefined as unknown as Store);
     expect(() => writesOf(objects).features.restore(empty)).toThrow(
-      expect.objectContaining({ code: 'invalid-state' }),
+      expect.objectContaining({ code: 'invalidState' }),
     );
     expect(() => writesOf(objects).features.releaseRestore(1 as RestoreToken)).toThrow(
-      expect.objectContaining({ code: 'invalid-state' }),
+      expect.objectContaining({ code: 'invalidState' }),
     );
   });
 
@@ -223,14 +223,14 @@ describe('features.releaseRestore', () => {
     writesOf(draw).features.releaseRestore(token);
     featureTablesInternals(tables)?.flushVersions();
     expect(() => writesOf(draw).features.restore(change.previousValues as FeatureValues)).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+      expect.objectContaining({ code: 'notFound' }),
     );
   });
 
-  it('throws invalid-input for a value that is not a token', () => {
+  it('throws invalidInput for a value that is not a token', () => {
     const { draw } = setup();
     expect(() => writesOf(draw).features.releaseRestore('t' as unknown as RestoreToken)).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
+      expect.objectContaining({ code: 'invalidInput' }),
     );
   });
 });

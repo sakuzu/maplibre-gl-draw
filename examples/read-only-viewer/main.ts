@@ -70,7 +70,7 @@ function blocksId(): string | undefined {
 }
 
 // 5. The four switches. Read-only refuses every write, by the user or by code: a write of
-// `draw.write` rejects with a DrawError of the code `not-editable`, and the tools draw nothing. The interaction lock only stops
+// `draw.write` rejects with a DrawError of the code `notEditable`, and the tools draw nothing. The interaction lock only stops
 // the user: no tool starts, no handles and no moving, while selecting still works and code can
 // still write. A locked layer is a property of the document: its features refuse to move or
 // change, and since locking it is a write, read-only refuses it too. Hiding is local: the

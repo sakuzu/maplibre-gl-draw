@@ -97,11 +97,11 @@ describe('draw.selection', () => {
     expect(selection.value).toMatchObject({ type: 'group', ids: ['g'] });
   });
 
-  it('throws not-found for an ID of another type and invalid-input for a wrong type', () => {
-    expect(codeOf(() => selection.set('feature', ['g']))).toBe('not-found');
-    expect(codeOf(() => selection.set('thing' as never, ['a']))).toBe('invalid-input');
+  it('throws notFound for an ID of another type and invalidInput for a wrong type', () => {
+    expect(codeOf(() => selection.set('feature', ['g']))).toBe('notFound');
+    expect(codeOf(() => selection.set('thing' as never, ['a']))).toBe('invalidInput');
     selection.set('feature', ['a']);
-    expect(codeOf(() => selection.add(['l1']))).toBe('not-found');
+    expect(codeOf(() => selection.add(['l1']))).toBe('notFound');
     expect(selection.value.ids).toEqual(['a']);
   });
 
@@ -214,7 +214,7 @@ describe('draw.selection', () => {
       { features: createFeatures(deps), groups: createGroups(deps) },
       createEventHub(),
     );
-    expect(codeOf(() => otherSelection.set(target))).toBe('invalid-input');
+    expect(codeOf(() => otherSelection.set(target))).toBe('invalidInput');
     expect(selection.set(target)).toBe(true);
   });
 
@@ -236,7 +236,7 @@ describe('draw.selection', () => {
     selection.set('group', ['g']);
     expect(selection.move({ layerId: 'l2', index: 0 })).toBe(true);
     expect((store.getLayer('l2') as ObjectLayer | undefined)?.items).toEqual(['g', 'a']);
-    expect(codeOf(() => selection.move({ layerId: 'x' }))).toBe('not-found');
+    expect(codeOf(() => selection.move({ layerId: 'x' }))).toBe('notFound');
     selection.clear();
     expect(selection.move({ layerId: 'l1' })).toBe(false);
   });
@@ -251,11 +251,11 @@ describe('draw.vertexSelection', () => {
     expect(vertices.get()).toBeNull();
   });
 
-  it('throws not-found for a missing feature or vertex, and invalid-input for a wrong vertex', () => {
-    expect(codeOf(() => vertices.set('x', [{ ring: 0, index: 0 }]))).toBe('not-found');
-    expect(codeOf(() => vertices.set('line', [{ ring: 0, index: 3 }]))).toBe('not-found');
-    expect(codeOf(() => vertices.set('a', [{ ring: 0, index: 0 }]))).toBe('not-found');
-    expect(codeOf(() => vertices.set('line', [{ ring: -1, index: 0 }]))).toBe('invalid-input');
+  it('throws notFound for a missing feature or vertex, and invalidInput for a wrong vertex', () => {
+    expect(codeOf(() => vertices.set('x', [{ ring: 0, index: 0 }]))).toBe('notFound');
+    expect(codeOf(() => vertices.set('line', [{ ring: 0, index: 3 }]))).toBe('notFound');
+    expect(codeOf(() => vertices.set('a', [{ ring: 0, index: 0 }]))).toBe('notFound');
+    expect(codeOf(() => vertices.set('line', [{ ring: -1, index: 0 }]))).toBe('invalidInput');
     expect(vertices.get()).toBeNull();
   });
 

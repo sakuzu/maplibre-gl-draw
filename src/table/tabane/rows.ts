@@ -109,7 +109,7 @@ function geometryOf(
   if (column === null) return null;
   const from = column.dimensions;
   if (!dimensionsWithin(from, dims))
-    throw new DrawError('invalid-input', `Tabane: coordinates of ${from} in a layer of ${dims}`);
+    throw new DrawError('invalidInput', `Tabane: coordinates of ${from} in a layer of ${dims}`);
   const stride = strideOf(dims);
   const children: TableGeometry[] = column.forms.map((form) => {
     const type = geometryTypeOf(form.name, form.depth);
@@ -135,7 +135,7 @@ function geometryOf(
  * A page as a page of the tables (for `FeatureTablesWriter.addPages`), its columns
  * taken as they are
  *
- * @throws `DrawError` with the code `invalid-input` when the page has a dimension the layer
+ * @throws `DrawError` with the code `invalidInput` when the page has a dimension the layer
  *   does not, or is not one of features: a column that is not one of `TABANE_FEATURE_COLUMNS` or
  *   of another kind, a row without a type, a geometry of another name or depth, a style that is
  *   not an object

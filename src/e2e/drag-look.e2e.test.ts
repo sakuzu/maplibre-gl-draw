@@ -715,7 +715,7 @@ describe('the image of the map', () => {
       },
     });
     await page.evaluate(() =>
-      (window as unknown as { t: { setMode(m: string): void } }).t.setMode('draw_polygon'),
+      (window as unknown as { t: { setMode(m: string): void } }).t.setMode('drawPolygon'),
     );
     for (const p of [at(-0.02, -0.01), at(0.02, -0.01), at(0.02, 0.012)]) {
       const point = await pageOf(page, p);

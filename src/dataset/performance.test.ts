@@ -217,7 +217,7 @@ describe('the cost of a dataset', () => {
     manager.add({ id: 'bulk', rows: createGrid(), styleRule: rule });
 
     // The first frame (the retained batches of the visible chunks are built)
-    manager.draw('below-store', probe.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', probe.target, {} as ProjectionData, 10);
     const builds = probe.builds();
     const builtFeatures = probe.builtFeatures();
     const drawnBatches = probe.drawnBatches();
@@ -236,7 +236,7 @@ describe('the cost of a dataset', () => {
     // The frames after it build nothing and draw the same batches (no per-feature work)
     for (let i = 0; i < 3; i++) {
       probe.reset();
-      manager.draw('below-store', probe.target, {} as ProjectionData, 10);
+      manager.draw('belowStore', probe.target, {} as ProjectionData, 10);
       expect(probe.builds()).toBe(builds);
       expect(probe.builtFeatures()).toBe(builtFeatures);
       expect(probe.drawnBatches()).toBe(drawnBatches);
@@ -256,7 +256,7 @@ describe('the cost of a dataset', () => {
     manager.add({ id: 'bulk', rows: createGrid(), styleRule: rule });
 
     const probe = createRetainedTarget();
-    manager.draw('below-store', probe.target, {} as ProjectionData, 10);
+    manager.draw('belowStore', probe.target, {} as ProjectionData, 10);
 
     expect(probe.builds()).toBe(0);
     expect(probe.builtFeatures()).toBe(0);

@@ -17,9 +17,9 @@
 // of many thousands of features would make the panel slow; such a feature is selected on the map.
 // A group is in a layer, so it never holds more than its layer.
 //
-// The datasets are rows at the root in their place in the stack: those of `above-store` in front
-// of every layer, those of `layer-order` where `layers.getOrder()` places them among the layers,
-// and those of `below-store` behind every layer, each division from the front. A `layer-order`
+// The datasets are rows at the root in their place in the stack: those of `aboveStore` in front
+// of every layer, those of `layerOrder` where `layers.getOrder()` places them among the layers,
+// and those of `belowStore` behind every layer, each division from the front. A `layerOrder`
 // dataset that the stacking order does not list is not drawn, and is left out.
 
 import Circle from '@lucide/svelte/icons/circle';
@@ -262,7 +262,7 @@ function countNode(layerId: string, count: number, m: Messages): LayerTreeNode {
 export function inLayerOrder(node: LayerTreeNode): boolean {
   return (
     node.kind === 'layer' ||
-    (node.kind === 'dataset' && (node.data as TreeDataset).order === 'layer-order')
+    (node.kind === 'dataset' && (node.data as TreeDataset).order === 'layerOrder')
   );
 }
 
@@ -291,12 +291,12 @@ export function buildNodes(
       .filter((dataset) => dataset.order === order)
       .reverse()
       .map(datasetNode);
-  nodes.push(...division('above-store'));
+  nodes.push(...division('aboveStore'));
   for (const layerId of [...source.layers.getOrder()].reverse()) {
     const layer = source.layers.get(layerId);
     if (!layer) {
       const dataset = datasets?.get(layerId);
-      if (dataset?.order === 'layer-order' && !seen.has(dataset.id)) {
+      if (dataset?.order === 'layerOrder' && !seen.has(dataset.id)) {
         seen.add(dataset.id);
         nodes.push(datasetNode(dataset));
       }
@@ -356,7 +356,7 @@ export function buildNodes(
       data: layer,
     });
   }
-  nodes.push(...division('below-store'));
+  nodes.push(...division('belowStore'));
   return nodes;
 }
 

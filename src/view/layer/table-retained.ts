@@ -4446,7 +4446,7 @@ function rowsHidden(group: RowGroup, range: OrderedChunkRange): boolean {
 /** The renderer of a custom type whose rows are held by a source */
 /** Whether a range was refused room on the GPU: its rows are drawn one by one, and it is no error */
 function isRefusal(error: unknown): boolean {
-  return error instanceof DrawError && error.code === 'too-large';
+  return error instanceof DrawError && error.code === 'tooLarge';
 }
 
 function rendererOfGpuRows(

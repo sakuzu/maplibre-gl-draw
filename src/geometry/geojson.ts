@@ -8,7 +8,7 @@
  * field (GeoJSON features, the features of the drawing), and return GeoJSON geometries;
  * the computations underneath work on coordinate arrays. These helpers take the coordinates
  * out of an input, reject an input whose shape a function cannot take with a GeometryError
- * (`invalid-input`), and wrap the computed coordinates back into a geometry.
+ * (`invalidInput`), and wrap the computed coordinates back into a geometry.
  */
 
 import type {
@@ -64,7 +64,7 @@ function isPosition(value: unknown): value is Coordinate {
  * `type` says: a feature of the drawing names its feature type there (`'Polygon'`,
  * `'Circle'`, `'Freehand'` and so on), which is not the type of a geometry it is.
  *
- * @throws GeometryError (`invalid-input`) for a value that is neither, and for a feature
+ * @throws GeometryError (`invalidInput`) for a value that is neither, and for a feature
  *   without a geometry
  */
 export function geometryOf(
@@ -108,7 +108,7 @@ function isGeometryType(type: unknown): boolean {
 /**
  * Returns the coordinates of a point given as a position or a Point
  *
- * @throws GeometryError (`invalid-input`) for anything else
+ * @throws GeometryError (`invalidInput`) for anything else
  */
 export function positionOf(input: PointInput, operation: string): Coordinate {
   if (isPosition(input)) return input;
@@ -121,7 +121,7 @@ export function positionOf(input: PointInput, operation: string): Coordinate {
 /**
  * Returns the geometry of a Polygon or a MultiPolygon, given as it is or in a feature
  *
- * @throws GeometryError (`invalid-input`) for any other geometry
+ * @throws GeometryError (`invalidInput`) for any other geometry
  */
 export function areaGeometryOf(input: AreaInput, operation: string): Polygon | MultiPolygon {
   const geometry = geometryOf(input, operation);
@@ -134,7 +134,7 @@ export function areaGeometryOf(input: AreaInput, operation: string): Polygon | M
 /**
  * Returns the coordinates of a Polygon or a MultiPolygon, given as it is or in a feature
  *
- * @throws GeometryError (`invalid-input`) for any other geometry
+ * @throws GeometryError (`invalidInput`) for any other geometry
  */
 export function areaOf(input: AreaInput, operation: string): AreaCoordinates {
   return areaGeometryOf(input, operation).coordinates as AreaCoordinates;
@@ -143,7 +143,7 @@ export function areaOf(input: AreaInput, operation: string): AreaCoordinates {
 /**
  * Returns the coordinates of each polygon in an array
  *
- * @throws GeometryError (`invalid-input`) for a value that is not an array, and for an
+ * @throws GeometryError (`invalidInput`) for a value that is not an array, and for an
  *   element that is not a Polygon or a MultiPolygon
  */
 export function areasOf(inputs: readonly AreaInput[], operation: string): AreaCoordinates[] {
@@ -156,7 +156,7 @@ export function areasOf(inputs: readonly AreaInput[], operation: string): AreaCo
 /**
  * Returns the coordinates of a LineString, given as it is or in a feature
  *
- * @throws GeometryError (`invalid-input`) for any other geometry
+ * @throws GeometryError (`invalidInput`) for any other geometry
  */
 export function lineOf(
   input: LineString | { readonly geometry: Geometry },
@@ -172,7 +172,7 @@ export function lineOf(
 /**
  * Returns the lines of a LineString or a MultiLineString, given as it is or in a feature
  *
- * @throws GeometryError (`invalid-input`) for any other geometry
+ * @throws GeometryError (`invalidInput`) for any other geometry
  */
 export function linesOf(input: LineInput, operation: string): Coordinate[][] {
   const geometry = geometryOf(input, operation);

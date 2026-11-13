@@ -87,7 +87,7 @@ describe('the parts of an instance', () => {
     } catch (thrown) {
       error = thrown as DrawError;
     }
-    expect(error?.code).toBe('too-large');
+    expect(error?.code).toBe('tooLarge');
     part.release();
     part.release();
     parts.add(definition(0.01).value, 'more');
