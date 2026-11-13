@@ -57,16 +57,20 @@ export const TABANE_FEATURE_COLUMNS: Readonly<Record<string, TabaneColumnKind>> 
 
 /**
  * The columns of the rows of features as the tables hold them (`TableColumns`): those of
- * {@link TABANE_FEATURE_COLUMNS}, with where the values of each `whole` column are kept. The
- * types are few and differ from a page to another, so each page keeps its own; the
- * styles are shared by rows of every table, so the tables keep one dictionary of them
+ * {@link TABANE_FEATURE_COLUMNS}, in the words of the tables (a `whole` column is a `value`
+ * column, a `keyed` one a `struct` one), with where the values of each `value` column are kept.
+ * The types are few and differ from a page to another, so each page keeps its own; the styles
+ * are shared by rows of every table, so the tables keep one dictionary of them
  *
  * @internal
  */
 export const FEATURE_TABLE_COLUMNS: TableColumns = Object.freeze({
-  ...TABANE_FEATURE_COLUMNS,
-  type: Object.freeze({ kind: 'whole', dictionary: 'page' }),
-  style: Object.freeze({ kind: 'whole', dictionary: 'tables' }),
+  type: Object.freeze({ type: 'value', dictionary: 'page' }),
+  geometry: 'shape',
+  hidden: 'flag',
+  locked: 'flag',
+  style: Object.freeze({ type: 'value', dictionary: 'tables' }),
+  properties: 'struct',
 });
 
 /**

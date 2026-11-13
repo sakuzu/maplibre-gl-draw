@@ -310,7 +310,7 @@ export class FeatureCache {
     const context = this.host.readContext;
     // A layer whose coordinates were raised is not made a feature, kept or not
     if (context.dimensionsOf(layerId) !== 'xy') return rowFeature(context, layerId, group, row);
-    const handle = group.data.handles[row];
+    const handle = group.data.rows[row];
     const mark = group.marks[row];
     if (!this.#settled(mark)) {
       this.#forget(handle);
@@ -416,7 +416,7 @@ export class FeatureCache {
 
   #check(kept: Kept, layerId: string, group: RowGroup, row: number): void {
     if (this.#problems.length >= PROBLEM_LIMIT) return;
-    const handle = group.data.handles[row];
+    const handle = group.data.rows[row];
     // The row is read where its handle is read now, with the mark kept
     const place = this.host.placeOf(handle);
     const now = place ? place.group.marks[place.row] : undefined;

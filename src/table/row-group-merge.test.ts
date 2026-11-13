@@ -152,7 +152,7 @@ function readRow(group: PageData, r: number, styles: Map<number, string>) {
   });
   return {
     id: utf8String(group.ids, r),
-    handle: group.handles[r],
+    handle: group.rows[r],
     hash: group.idHashes[r],
     type: typeColumnOf(group).values[typeColumnOf(group).indexes[r]],
     key: utf8String(group.keys, r),
@@ -252,13 +252,13 @@ describe('mergePageData', () => {
       Array.from({ length: 30 }, (_, i) => randomRow(random, i)),
       numbers,
     );
-    for (let r = 0; r < group.length; r++) group.handles[r] = 1000 + r;
+    for (let r = 0; r < group.length; r++) group.rows[r] = 1000 + r;
     const [merged] = mergePageData({
       sources: [group],
       rows: Int32Array.from(everyRow([group])),
       sort: false,
     });
-    expect(Array.from(merged.handles)).toEqual(Array.from(group.handles));
+    expect(Array.from(merged.rows)).toEqual(Array.from(group.rows));
     expect(Array.from(merged.idHashes)).toEqual(Array.from(group.idHashes));
     expect(Array.from(merged.flags)).toEqual(Array.from(group.flags));
     expect(merged.flags.some((f) => (f & ROW_FLAG_HIDDEN) !== 0)).toBe(true);
@@ -267,7 +267,7 @@ describe('mergePageData', () => {
 
   it('puts the members of a group of features at the key of the group', () => {
     const numbers = new Map<string, number>();
-    const groups = [{ handle: 3, id: 'g', key: 'k5' }];
+    const groups = [{ group: 3, id: 'g', key: 'k5' }];
     const builder = createPageDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
       groups,

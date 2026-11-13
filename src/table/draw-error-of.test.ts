@@ -12,14 +12,15 @@ import { DrawError } from '../shared/draw-error.js';
 import { drawErrorOf } from './draw-error-of.js';
 
 describe('drawErrorOf', () => {
-  it('wraps an error of the tables or of Tabane in a DrawError of its code and message', () => {
-    for (const error of [
-      new KasaneError('already-exists', 'taken'),
-      new TabaneError('invalid-input', 'not a value'),
-    ]) {
+  it('wraps an error of the tables or of Tabane in a DrawError of its reason and message', () => {
+    for (const [error, code] of [
+      [new KasaneError('alreadyExists', 'taken'), 'already-exists'],
+      [new KasaneError('invalidState', 'not now'), 'invalid-state'],
+      [new TabaneError('invalid-input', 'not a value'), 'invalid-input'],
+    ] as const) {
       const wrapped = drawErrorOf(error) as DrawError;
       expect(wrapped).toBeInstanceOf(DrawError);
-      expect(wrapped.code).toBe(error.code);
+      expect(wrapped.code).toBe(code);
       expect(wrapped.message).toBe(error.message);
       expect((wrapped as { cause?: unknown }).cause).toBe(error);
     }
@@ -28,10 +29,10 @@ describe('drawErrorOf', () => {
   it('wraps an error Kasane throws itself: the library reads the one class of KasaneError', () => {
     const builder = createPageBuilder({ columns: { shape: 'shape' } });
     const row = { id: 'a', key: 'a0', values: {} };
-    builder.addRow(row);
+    builder.add(row);
     let thrown: unknown;
     try {
-      builder.addRow(row);
+      builder.add(row);
     } catch (error) {
       thrown = error;
     }

@@ -91,14 +91,14 @@ describe('createPageDataBuilder', () => {
     expect(groups).toHaveLength(1);
     expect(idsOf(groups)).toEqual(['a', 'b', 'c']);
     expect(coordinatesOf(groups[0], 0)).toEqual([1, 1]);
-    expect(groups[0].handles.every((handle) => handle === -1)).toBe(true);
+    expect(groups[0].rows.every((handle) => handle === -1)).toBe(true);
     expect(groups[0].idHashes[1]).toBe(hashUtf8(groups[0].ids, 1));
   });
 
   it('puts the members of a group at the key of the group', () => {
     const builder = builderOf({
       columns: FEATURE_TABLE_COLUMNS,
-      groups: [{ handle: 4, id: 'g', key: 'a5' }],
+      groups: [{ group: 4, id: 'g', key: 'a5' }],
     });
     builder.addRow(row('y', 'a9', point(0, 0)));
     builder.addRow(row('m2', 'b', point(0, 0), { group: 4 }));

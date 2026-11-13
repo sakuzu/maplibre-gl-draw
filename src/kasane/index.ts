@@ -109,11 +109,11 @@ export type { CompanionProviderRows } from '../api/extension/provider.js';
 
 // Build and merge pages in a Worker
 // (the builder itself is `createPageBuilder` of `/table`)
-export type { GroupEntry, PageBuilderOptions } from '@sakuzu/kasane';
+export type { GroupEntry, PageBuilderOptions, PageMerge } from '../table/tables-values.js';
 export type { FeatureRowInput as RowInput } from '../table/feature-row-blocks.js';
 export { PAGE_TARGET_ROWS, PAGE_TARGET_VERTICES } from '@sakuzu/kasane';
 export { mergePages } from '../table/pages.js';
-export type { PointRowRings as RowRings, PageMerge } from '@sakuzu/kasane';
+export type { PointRowRings as RowRings } from '@sakuzu/kasane';
 
 // Features as the rows of Tabane blocks (@sakuzu/tabane)
 // (a block is read as pages by `toPage` of `/table`)

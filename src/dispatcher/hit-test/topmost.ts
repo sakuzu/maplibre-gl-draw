@@ -272,7 +272,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     const dragged = shapes.hitRowsLeftOut();
     if (hidden.size === 0 && !dragged) return undefined;
     return (group, row) => {
-      if (dragged?.(group.data.handles[row] as number)) return true;
+      if (dragged?.(group.data.rows[row] as number)) return true;
       if (hidden.size === 0) return false;
       const groupHandle = group.data.groups[row];
       const groupId = groupHandle >= 0 ? tables.groups.idOf(groupHandle) : undefined;
@@ -367,7 +367,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   ): TopHit => {
     const { hit, coordinate } = found;
     const data = hit.group.data;
-    const handle = data.handles[hit.row];
+    const handle = data.rows[hit.row];
     const id = tables.ids.idOf(handle) as string;
     if (asFeature) {
       const feature = tables.featureCache.featureOf(table.tableId, hit.group, hit.row);

@@ -356,7 +356,7 @@ function drawnHandles(record: TableDrawRecord[], table: RowTable): number[] {
     const group = entry.delta ? table.delta.group : table.groupAt(entry.groupIndex);
     if (!group) continue;
     for (let row = entry.from; row < entry.to; row++) {
-      if ((group.gpuState[row] & 1) === 0) out.push(group.data.handles[row]);
+      if ((group.gpuState[row] & 1) === 0) out.push(group.data.rows[row]);
     }
   }
   return out;
@@ -550,14 +550,14 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
       {
         group: group.handle,
         row: 0,
-        handle: group.data.handles[0],
+        handle: group.data.rows[0],
         what: ROW_WRITE_STYLE,
         ...write,
       },
       {
         group: group.handle,
         row: 2,
-        handle: group.data.handles[2],
+        handle: group.data.rows[2],
         what: ROW_WRITE_STYLE,
         ...write,
       },
@@ -699,7 +699,7 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
       {
         group: group.handle,
         row,
-        handle: group.data.handles[row],
+        handle: group.data.rows[row],
         what: ROW_WRITE_GEOMETRY,
         ...longer,
         keys: [],
@@ -732,7 +732,7 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
       {
         group: group.handle,
         row,
-        handle: group.data.handles[row],
+        handle: group.data.rows[row],
         what: ROW_WRITE_STYLE,
         sameShape: true,
         from: 0,
@@ -1042,7 +1042,7 @@ describe('the rows drawn at once out of view', () => {
         {
           group: group.handle,
           row,
-          handle: group.data.handles[row],
+          handle: group.data.rows[row],
           what: ROW_WRITE_GEOMETRY,
           ...written,
           keys: [],
@@ -1182,7 +1182,7 @@ describe('the rows drawn at once by the extent of their footprint', () => {
       {
         group: group.handle,
         row: 1,
-        handle: group.data.handles[1],
+        handle: group.data.rows[1],
         what: ROW_WRITE_GEOMETRY,
         ...written,
         keys: [],

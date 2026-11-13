@@ -149,6 +149,7 @@ describe('the table subpath', () => {
       'table/tabane/rows.ts',
       'table/tabane/triangles.ts',
       'table/table.ts',
+      'table/tables-values.ts',
     ]);
   });
 });

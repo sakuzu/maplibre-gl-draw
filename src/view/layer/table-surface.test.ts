@@ -621,7 +621,7 @@ describe('the drawing of the rows on the terrain and on the globe', () => {
       prepare();
       frame({ globe });
       const group = table.groupAt(0);
-      internals.states.setHidden(Int32Array.of(group.data.handles[0], group.data.handles[1]), true);
+      internals.states.setHidden(Int32Array.of(group.data.rows[0], group.data.rows[1]), true);
       prepare();
       mock.start();
       const record = frame({ globe });
@@ -632,7 +632,7 @@ describe('the drawing of the rows on the terrain and on the globe', () => {
       expect(group.gpuState[0] & 1).toBe(1);
       // Rows of a moving set, moved, turned and resized: the state and the motion of the set
       // reach the program in the frame they are set in, the rows drawn in one draw
-      const moved = Int32Array.of(group.data.handles[2], group.data.handles[3]);
+      const moved = Int32Array.of(group.data.rows[2], group.data.rows[3]);
       internals.states.setMoving(moved, 1);
       for (const edit of [
         { kind: 'translate', from: [CENTER[0], CENTER[1]], to: [CENTER[0] + 0.01, CENTER[1]] },

@@ -26,11 +26,16 @@ import {
 import { describe, expect, it } from 'vitest';
 import { createTables, featureTablesInternals } from '../feature-table/feature-tables.js';
 import { shapesOfGeometries } from '../feature-table/feature-tables-writer.js';
+import type { RowValues } from '../shared/types/model.js';
 import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
 import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import { FILL_TRIANGLES } from './fill-triangles.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
+import { tablesValuesOf } from './tables-values.js';
+
+/** Values of features as the writer of the tables writes them: their geometries as shapes */
+const tablesValuesOfShapes = (values: RowValues) => tablesValuesOf(shapesOfGeometries(values));
 
 /** A cache of the first point and the type of each row, which counts the rows it is made of */
 function countingCache(name = 'test:first-point:1'): RowCache & { readonly made: string[] } {
@@ -41,7 +46,7 @@ function countingCache(name = 'test:first-point:1'): RowCache & { readonly made:
     made,
     build: (row: RowRead) => {
       const shape = row.shape();
-      made.push(String(row.value('id') ?? row.handle));
+      made.push(String(row.value('id') ?? row.row));
       if (!shape) return [];
       const { coords, stride } = shape.column;
       let at = shape.at;
@@ -136,7 +141,7 @@ describe('the caches of the rows of the tables', () => {
     };
     // A point written in place: its numbers are made again, into the column of its page
     writer.writeRows(
-      shapesOfGeometries({
+      tablesValuesOfShapes({
         handles: Int32Array.of(point),
         fields: new Map([['geometry', [{ type: 'Point', coordinates: [7, 8] }]]]),
         deleted: new Uint8Array(1),
@@ -146,7 +151,7 @@ describe('the caches of the rows of the tables', () => {
     expect(read(point)).toEqual([7, 8, 5]);
     // A line of another shape: its numbers are made again (as many: into the column)
     writer.writeRows(
-      shapesOfGeometries({
+      tablesValuesOfShapes({
         handles: Int32Array.of(line),
         fields: new Map([
           [
@@ -216,7 +221,7 @@ describe('the column of a cache', () => {
 describe('the triangles of the fills of the library', () => {
   it('fit a row when they are in pairs within the vertices of its fill', () => {
     const square = {
-      handle: -1,
+      row: -1,
       type: 'Polygon',
       value: () => undefined,
       shape: () => ({

@@ -2117,7 +2117,7 @@ export class TableLayerRenderer {
         for (const [row, write] of rows) {
           if (this.applyWrite(cache, groupCache, row, write)) continue;
           if (ofDelta) cache.deltaStale = true;
-          else away.push(groupCache.group.data.handles[row]);
+          else away.push(groupCache.group.data.rows[row]);
         }
       }
       if (away.length > 0) cache.tables?.toDelta(away);
@@ -2301,7 +2301,7 @@ export class TableLayerRenderer {
   private writeExtensionRow(chunk: ExtensionRowsChunk, group: RowGroup, row: number): boolean {
     const index = row - chunk.range.from;
     if (!chunk.held || index >= chunk.taken) return true;
-    if (!chunk.held.buffer.update(index, group.data.handles[row])) return false;
+    if (!chunk.held.buffer.update(index, group.data.rows[row])) return false;
     this.writeStats.inPlace++;
     return true;
   }
@@ -3833,7 +3833,7 @@ export class TableLayerRenderer {
   ): number {
     const { to } = chunk.range;
     const first = chunk.range.from + chunk.taken;
-    const took = held.add(group.data.handles.subarray(first, to), deadline);
+    const took = held.add(group.data.rows.subarray(first, to), deadline);
     const count = Math.max(0, Math.min(took, to - first));
     if (count > 0) held.setStates(chunk.taken, group.gpuState.subarray(first, first + count));
     chunk.taken += count;

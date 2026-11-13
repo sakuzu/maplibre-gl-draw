@@ -45,12 +45,12 @@ function statesTables(options: Partial<TablesInternalOptions> = {}) {
     valueStates: {
       rowFlags: [{ column: 'hidden', states: SHUT }],
       groupFlags: [{ column: 'hidden', states: SHUT_GROUP }],
-      wholeValues: [{ column: 'type', values: ['Circle', 'Marker'], states: ROUND }],
+      columnValues: [{ column: 'type', values: ['Circle', 'Marker'], states: ROUND }],
     },
     ...options,
   });
   writer.writeGroups({
-    handles: Int32Array.of(50),
+    groups: Int32Array.of(50),
     fields: new Map<'id' | 'parent' | 'key', unknown[]>([
       ['id', ['g']],
       ['parent', ['layer']],
@@ -59,7 +59,7 @@ function statesTables(options: Partial<TablesInternalOptions> = {}) {
   });
   const builder = createPageDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
-    groups: [{ handle: 50, id: 'g', key: orderKey(9) }],
+    groups: [{ group: 50, id: 'g', key: orderKey(9) }],
   });
   const point = { type: 'Point' as const, coordinates: [0, 0] };
   builder.addRow({ id: 'a', type: 'Point', geometry: point, key: orderKey(0) });
@@ -114,11 +114,11 @@ describe('the copy of the state of the rows', () => {
 
   it('gives the members the bits of the flag of their group as it is written', () => {
     const { writer, stateOf } = statesTables();
-    writer.writeGroups({ handles: Int32Array.of(50), fields: new Map([['hidden', [true]]]) });
+    writer.writeGroups({ groups: Int32Array.of(50), fields: new Map([['hidden', [true]]]) });
     expect(stateOf('c')).toBe(SHUT_GROUP);
-    writer.writeGroups({ handles: Int32Array.of(50), fields: new Map([['locked', [true]]]) });
+    writer.writeGroups({ groups: Int32Array.of(50), fields: new Map([['locked', [true]]]) });
     expect(stateOf('c')).toBe(SHUT_GROUP);
-    writer.writeGroups({ handles: Int32Array.of(50), fields: new Map([['hidden', [false]]]) });
+    writer.writeGroups({ groups: Int32Array.of(50), fields: new Map([['hidden', [false]]]) });
     expect(stateOf('c')).toBe(0);
   });
 
@@ -139,7 +139,7 @@ describe('the copy of the state of the rows', () => {
     ).toThrow(KasaneError);
     expect(() =>
       statesTables({
-        valueStates: { wholeValues: [{ column: 'style', values: [{}], states: SHUT }] },
+        valueStates: { columnValues: [{ column: 'style', values: [{}], states: SHUT }] },
       }),
     ).toThrow(KasaneError);
     expect(() =>

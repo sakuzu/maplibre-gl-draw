@@ -9,7 +9,7 @@
  * from the whole lists is kept here as the reference.
  */
 
-import type { GroupHandle, RowRef } from '@sakuzu/kasane';
+import type { GroupRef, RowRef } from '@sakuzu/kasane';
 import type { RowGroup, RowTable, TableItems } from '@sakuzu/kasane/render';
 import { compareRowKeys, ItemWalk, ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 
@@ -36,7 +36,7 @@ function rowCode(handle: RowRef): number {
 }
 
 /** The number of a group of features as an item */
-function groupCode(group: GroupHandle): number {
+function groupCode(group: GroupRef): number {
   return group * 2 + 1;
 }
 
@@ -80,7 +80,7 @@ const PLACE_FIELDS: readonly RowField[] = ['parent', 'key'];
 class FullListWatch {
   private readonly layers = new Map<string, TableItems | null>();
   private readonly groupsBefore = new Map<
-    GroupHandle,
+    GroupRef,
     { layerId: string; members: Int32Array | undefined }
   >();
   private readonly moved = new Set<number>();
@@ -101,7 +101,7 @@ class FullListWatch {
   }
 
   /** A group of features whose members the write changes (its layer too) */
-  watchGroup(group: GroupHandle): void {
+  watchGroup(group: GroupRef): void {
     if (group < 0 || this.groupsBefore.has(group)) return;
     const layerId = this.source.groups.tableOf(group);
     if (layerId === undefined) return;
@@ -168,7 +168,7 @@ class FullListWatch {
       containers.push(trimmedContainer(layerId, undefined, before, now));
     }
     // The groups the rows left or went to (watched from their layer)
-    const groups = new Set<GroupHandle>(this.groupsBefore.keys());
+    const groups = new Set<GroupRef>(this.groupsBefore.keys());
     for (const [layerId] of this.layers) {
       const after = this.source.layer(layerId)?.itemsOf();
       for (const [group, members] of after?.members ?? []) {
@@ -194,7 +194,7 @@ class FullListWatch {
     // A group of features whose last member left is an item deleted
     const deleted = [...this.deleted];
     for (const code of beforeItems) if (!afterItems.has(code)) deleted.push(code);
-    const groupIds = new Map<GroupHandle, string>();
+    const groupIds = new Map<GroupRef, string>();
     const moves = diffItemOrder(containers, {
       moved: this.moved,
       deleted,
@@ -219,7 +219,7 @@ class FullListWatch {
   }
 
   /** The id of an item */
-  private idOf(code: number, groupIds: Map<GroupHandle, string>): string {
+  private idOf(code: number, groupIds: Map<GroupRef, string>): string {
     const handle = code >> 1;
     if ((code & 1) === 0) return this.source.idOf(handle) ?? '';
     let id = groupIds.get(handle) ?? this.source.groups.idOf(handle);
@@ -245,12 +245,12 @@ class FullListWatch {
       list.push(at);
     }
     const out: RowsMove[] = [];
-    const groupIds = new Map<GroupHandle, string>();
+    const groupIds = new Map<GroupRef, string>();
     for (const [layer, rows] of byLayer) {
       rows.sort((a, b) =>
         compareRowKeys(a.group.data, a.row, b.group.data, b.row, this.source.groups),
       );
-      const handles = Int32Array.from(rows, (at) => at.group.data.handles[at.row]);
+      const handles = Int32Array.from(rows, (at) => at.group.data.rows[at.row]);
       const fields = new Map<RowField, unknown[]>(PLACE_FIELDS.map((field) => [field, []]));
       for (const handle of handles) {
         const values = this.before.get(handle) as readonly unknown[];
@@ -266,9 +266,9 @@ class FullListWatch {
       codes.forEach((code, i) => {
         itemIndex.set(code, i);
       });
-      const memberIndex = new Map<GroupHandle, Map<RowRef, number>>();
+      const memberIndex = new Map<GroupRef, Map<RowRef, number>>();
       const belowOf = (at: RowAt): { kind: number; handle: number } => {
-        const handle = at.group.data.handles[at.row];
+        const handle = at.group.data.rows[at.row];
         const group = at.group.data.groups[at.row];
         if (group >= 0) {
           const members = items.members.get(group) ?? new Int32Array(0);
@@ -297,7 +297,7 @@ class FullListWatch {
       if (together) {
         const below = belowOf(first);
         const last = rows[rows.length - 1];
-        const lastHandle = last.group.data.handles[last.row];
+        const lastHandle = last.group.data.rows[last.row];
         let above: number | null = null;
         if (group >= 0) {
           const members = items.members.get(group) ?? new Int32Array(0);
@@ -354,7 +354,7 @@ function isDeleted(at: RowAt): boolean {
 function fullGroupKeyMoves(
   source: ReferenceSource,
   layerId: string,
-  orders: ReadonlyMap<GroupHandle, string>,
+  orders: ReadonlyMap<GroupRef, string>,
 ): ItemMove[] {
   const layer = source.layer(layerId);
   if (!layer) return [];
@@ -444,7 +444,7 @@ function referenceWatch(
   const { handles, fields, deleted } = patch;
   const parents = fields.get('parent');
   const keys = fields.get('key');
-  const groupOf = (value: unknown): GroupHandle =>
+  const groupOf = (value: unknown): GroupRef =>
     typeof value === 'string' && value !== '' ? internals.groups.handleOfId(value) : -1;
   const layerOf = (value: unknown): string | undefined => {
     if (typeof value !== 'string' || value === '') return undefined;

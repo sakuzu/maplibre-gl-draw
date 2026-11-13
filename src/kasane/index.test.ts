@@ -139,7 +139,9 @@ describe('the kasane subpath', () => {
       expect(error).toBeInstanceOf(DrawError);
       const cause = (error as { cause?: unknown }).cause;
       expect(cause).toBeInstanceOf(KasaneError);
-      expect((error as DrawError).code).toBe((cause as KasaneError).code);
+      // The tables write their codes in camelCase, core in kebab-case
+      const kebab = (cause as KasaneError).code.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+      expect((error as DrawError).code).toBe(kebab);
       expect((error as DrawError).message).toBe((cause as KasaneError).message);
       return { error: error as DrawError, cause: cause as KasaneError };
     };

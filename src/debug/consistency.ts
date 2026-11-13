@@ -167,7 +167,7 @@ export function checkIdIndex(store: Store): string[] {
       }
       const place = tables.placeOf(handle);
       if (!place) continue;
-      const handleThere = place.group.data.handles[place.row];
+      const handleThere = place.group.data.rows[place.row];
       const idThere = utf8String(place.group.data.ids, place.row);
       if (handleThere !== handle || idThere !== id) {
         problems.push(
@@ -303,7 +303,7 @@ export function checkWriteMarks(store: Store): string[] {
     for (let r = 0; r < group.data.length && !full(); r++) {
       if (group.marks[r] <= group.mark) continue;
       problems.push(
-        `the row ${group.data.handles[r]} has the write mark ${group.marks[r]}, past the mark ${group.mark} of its group`,
+        `the row ${group.data.rows[r]} has the write mark ${group.marks[r]}, past the mark ${group.mark} of its group`,
       );
     }
   };

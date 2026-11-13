@@ -7,7 +7,7 @@
  * going in. (The cuts of the row groups for groups given new keys are in the tests of Kasane.)
  */
 
-import type { GroupHandle } from '@sakuzu/kasane';
+import type { GroupRef } from '@sakuzu/kasane';
 import type { RowGroup, RowTable } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
@@ -101,7 +101,7 @@ describe('a group shown or hidden', () => {
           internals.flushVersions();
         }
         // New keys for some groups, which go in later
-        const orders = new Map<GroupHandle, string>();
+        const orders = new Map<GroupRef, string>();
         for (const id of GROUPS) {
           if (random() < 0.4) orders.set(internals.groups.handleOfId(id), key());
         }

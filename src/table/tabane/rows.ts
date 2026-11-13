@@ -189,7 +189,7 @@ export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOption
   }));
   let at = 0;
   const read: RowRead = {
-    handle: -1,
+    row: -1,
     get type() {
       return typeNames[types[at]];
     },
@@ -267,7 +267,7 @@ export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOption
   keyed[PROPERTIES_COLUMN] = properties.keys.length > 0 ? properties : null;
   return {
     length: n,
-    handles: new Int32Array(n).fill(-1),
+    rows: new Int32Array(n).fill(-1),
     ids,
     idHashes,
     shapes,

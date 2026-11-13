@@ -23,6 +23,7 @@ import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { geometryColumnOf } from '../table/feature-row-columns.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { tablesBuilderOptionsOf, tablesMergeOf } from '../table/tables-values.js';
 import {
   featureRowDataBuilder as createPageDataBuilder,
   expectTablesMatch,
@@ -86,7 +87,7 @@ function cloningWorker(): FeatureTablesWorker & { calls: number } {
     calls: 0,
     merge: async (merge: Parameters<FeatureTablesWorker['merge']>[0]) => {
       worker.calls++;
-      return mergePages(structuredClone(merge));
+      return mergePages(tablesMergeOf(structuredClone(merge)));
     },
     build: async (
       rows: Parameters<FeatureTablesWorker['build']>[0],
@@ -95,7 +96,7 @@ function cloningWorker(): FeatureTablesWorker & { calls: number } {
       worker.calls++;
       const builder = createPageDataBuilder({
         columns: FEATURE_TABLE_COLUMNS,
-        ...structuredClone(options),
+        ...tablesBuilderOptionsOf(structuredClone(options)),
         rings: circleRowRings,
       });
       for (const row of structuredClone(rows)) builder.addRow(row);

@@ -118,7 +118,7 @@ export function rendererTakesRow(
   featureOf: () => Feature,
 ): boolean {
   if (!renderer.appliesTo) return true;
-  if (renderer.appliesToRow && view) return renderer.appliesToRow(view, group.data.handles[row]);
+  if (renderer.appliesToRow && view) return renderer.appliesToRow(view, group.data.rows[row]);
   return renderer.appliesTo(featureOf());
 }
 
@@ -137,7 +137,7 @@ export function rowHasCompanion(
 ): boolean {
   if (!companions.any()) return false;
   if (!view) return companions.has(featureOf());
-  return companions.hasRow(view, group.data.handles[row], featureOf);
+  return companions.hasRow(view, group.data.rows[row], featureOf);
 }
 
 /**

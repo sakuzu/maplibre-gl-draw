@@ -124,7 +124,7 @@ describe('createFeatureTables', () => {
     const { tables, writer } = createFeatureTablesStore();
     const [group] = groups(3);
     const handles = writer.allocateHandles(group.ids, group.idHashes);
-    group.handles.set(handles);
+    group.rows.set(handles);
     writer.addPages('layer', [group]);
     expect(tables.getRowRef('r1')).toBe(handles[1]);
   });

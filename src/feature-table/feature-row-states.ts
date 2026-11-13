@@ -21,7 +21,7 @@
  * the row.
  */
 
-import type { GroupHandle, RowRef, ValueStates } from '@sakuzu/kasane';
+import type { GroupRef, RowRef, ValueStates } from '@sakuzu/kasane';
 import type { GroupTable } from '@sakuzu/kasane/render';
 import { type RowStates, STATE_DELETED, STATE_DELTA, STATE_WAIT } from '@sakuzu/kasane/render';
 
@@ -73,7 +73,7 @@ export const STATE_UNIFORM = 1 << 9;
 export const FEATURE_VALUE_STATES: ValueStates = Object.freeze({
   rowFlags: Object.freeze([Object.freeze({ column: 'hidden', states: STATE_HIDDEN_INVISIBLE })]),
   groupFlags: Object.freeze([Object.freeze({ column: 'hidden', states: STATE_HIDDEN_GROUP })]),
-  wholeValues: Object.freeze([
+  columnValues: Object.freeze([
     Object.freeze({ column: 'type', values: Object.freeze(['Circle']), states: STATE_UNIFORM }),
   ]),
 });
@@ -308,7 +308,7 @@ export class RowStateSets {
   groupsWritten(groups: Int32Array): void {
     if (this.hiddenGroupIds.size === 0) return;
     const table = this.tables.groups;
-    const hide: GroupHandle[] = [];
+    const hide: GroupRef[] = [];
     for (const group of groups) {
       const id = table.idOf(group);
       if (id === undefined || !this.hiddenGroupIds.has(id)) continue;

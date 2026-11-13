@@ -174,7 +174,7 @@ describe('the rows with companions of a layer held as rows', () => {
     // The undo of the writes of a row
     const p10 = handleOf('p10');
     const write = rowPatch([p10], { 'properties:band': [undefined] }, [1]);
-    const undo = internals.readValues(write);
+    const undo = internals.readRowValues(write);
     writer.writeRows(write);
     asked.rows = 0;
     expect(ids()).toEqual(['p30000', 'p60000', 'p99000']);
@@ -203,7 +203,7 @@ describe('the rows with companions of a layer held as rows', () => {
       /** The writes that can be undone, the last one last */
       const undos: RowValues[] = [];
       const write = (patch: RowValues): void => {
-        undos.push(internals.readValues(patch));
+        undos.push(internals.readRowValues(patch));
         writer.writeRows(patch);
       };
       const someRow = (): number | undefined => {
@@ -329,7 +329,7 @@ describe('the rows with companions of a layer held as rows', () => {
     const x = tables.getRowRef('x') as number;
     const moves: RowValues[] = [];
     const move = (patch: RowValues): void => {
-      moves.push(internals.readValues(patch));
+      moves.push(internals.readRowValues(patch));
       writer.writeRows(patch);
     };
     move(

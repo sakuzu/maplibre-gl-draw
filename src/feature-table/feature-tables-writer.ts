@@ -17,7 +17,7 @@
  * copied row by row.
  */
 
-import type { GroupHandle, TableGroupPatch, TablesWriter } from '@sakuzu/kasane';
+import type { GroupRef, TableGroupPatch as TablesGroupPatch, TablesWriter } from '@sakuzu/kasane';
 import { KasaneError } from '@sakuzu/kasane';
 import {
   ItemWalk,
@@ -35,9 +35,11 @@ import type {
   RestoreToken,
   RowValues,
   StoreChange,
+  TableGroupPatch,
 } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { shapeOfGeometry } from '../table/feature-row-blocks.js';
+import { tablesGroupPatchOf, tablesValuesOf } from '../table/tables-values.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import {
   groupKeyMoves,
@@ -136,7 +138,7 @@ export function createFeatureTablesWriter(
     }
     const watch = new ItemOrderWatch(orderSource);
     const groups = internals.groups;
-    const groupOf = (value: unknown): GroupHandle =>
+    const groupOf = (value: unknown): GroupRef =>
       typeof value === 'string' && value !== '' ? groups.handleOfId(value) : -1;
     // The layer of a parent: the layer of a group, or the parent itself (a layer)
     const layerOf = (value: unknown): string | undefined => {
@@ -230,9 +232,9 @@ export function createFeatureTablesWriter(
     const layerValues = fields.get('parent');
     const groups = internals.groups;
     // The groups the write creates, and the layers of the groups it gives another, as it goes
-    const created = new Set<GroupHandle>();
-    const layersNow = new Map<GroupHandle, string>();
-    const orders = new Map<string, Map<GroupHandle, string>>();
+    const created = new Set<GroupRef>();
+    const layersNow = new Map<GroupRef, string>();
+    const orders = new Map<string, Map<GroupRef, string>>();
     for (let i = 0; i < handles.length; i++) {
       if (deleted?.[i]) continue;
       const group = handles[i];
@@ -303,7 +305,8 @@ export function createFeatureTablesWriter(
   return {
     lookup: (id) => {
       try {
-        return tables.lookup(id);
+        const found = tables.lookup(id);
+        return found && { handle: found.row, deleted: found.deleted };
       } catch (error) {
         throw writerError(error);
       }
@@ -318,14 +321,14 @@ export function createFeatureTablesWriter(
     },
     forget: (handles) => {
       try {
-        tables.forget(handles);
+        tables.forgetIds(handles);
       } catch (error) {
         throw writerError(error);
       }
     },
     allocateHandles: (ids, hashes) => {
       try {
-        return tables.allocateHandles(ids, hashes);
+        return tables.allocateRowRefs(ids, hashes);
       } catch (error) {
         throw writerError(error);
       }
@@ -345,7 +348,7 @@ export function createFeatureTablesWriter(
         checkParents(values);
         // A part of a write made in several parts: its changes of the order are told at its end
         const watch = partsWatch ? null : watchOrder(values);
-        const written = tables.writeRows(shapesOfGeometries(values), options);
+        const written = tables.writeRows(tablesValuesOf(shapesOfGeometries(values)), options);
         const rows = rowsChangeOf(written.rows);
         const kept = written.kept;
         if (notify) {
@@ -416,9 +419,9 @@ export function createFeatureTablesWriter(
  *
  * @throws `DrawError` with the code `invalid-input` when a name is not a string
  */
-function withoutNames(patch: TableGroupPatch): TableGroupPatch {
+function withoutNames(patch: TableGroupPatch): TablesGroupPatch {
   const names = patch.fields.get('name');
-  if (!names) return patch;
+  if (!names) return tablesGroupPatchOf(patch);
   names.forEach((name, i) => {
     if (name !== undefined && typeof name !== 'string' && !patch.deleted?.[i]) {
       throw new DrawError(
@@ -429,5 +432,5 @@ function withoutNames(patch: TableGroupPatch): TableGroupPatch {
   });
   const fields = new Map(patch.fields);
   fields.delete('name');
-  return { ...patch, fields };
+  return tablesGroupPatchOf({ ...patch, fields });
 }

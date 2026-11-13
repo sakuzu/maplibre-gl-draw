@@ -55,16 +55,16 @@ function fakeDrape(internals: FeatureTablesInternals, layerIds: readonly string[
       if (!table) continue;
       const add = (group: RowGroup, row: number, name: string): void => {
         if ((group.state[row] & STATE_HIDDEN_MASK) !== 0) return;
-        out.set(name, group.data.handles[row]);
+        out.set(name, group.data.rows[row]);
       };
       for (let g = 0; g < table.groupCount; g++) {
         const group = table.groupAt(g);
         for (let r = 0; r < group.data.length; r++)
-          add(group, r, `${layerId}:m${group.data.handles[r]}`);
+          add(group, r, `${layerId}:m${group.data.rows[r]}`);
       }
       const delta = table.delta.group;
       for (let k = 0; k < (delta?.data.length ?? 0); k++) {
-        const copy = table.delta.copyOf((delta as RowGroup).data.handles[k]);
+        const copy = table.delta.copyOf((delta as RowGroup).data.rows[k]);
         add(delta as RowGroup, k, `${layerId}:d${copy}`);
       }
     }

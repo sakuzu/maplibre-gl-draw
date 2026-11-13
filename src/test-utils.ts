@@ -632,8 +632,8 @@ export function featureRowDataBuilder(options: PageBuildOptions): {
     get length() {
       return builder.length;
     },
-    addRow: (row) => builder.addRow(rowInputOfFeature(row)),
-    finish: () => builder.finish(),
+    addRow: (row) => builder.add(rowInputOfFeature(row)),
+    finish: () => builder.build(),
   };
 }
 
@@ -648,8 +648,8 @@ export function featureRowBuilder(options: PageBuildOptions): {
     get length() {
       return builder.length;
     },
-    addRow: (row) => builder.addRow(rowInputOfFeature(row)),
-    finish: () => builder.finish(),
+    addRow: (row) => builder.add(rowInputOfFeature(row)),
+    finish: () => builder.build(),
   };
 }
 
@@ -1102,7 +1102,7 @@ export function tablesOfReference(
     });
   }
   const groupKeys = [...reference.groups].map(([id, group]) => ({
-    handle: groupHandles.get(id) as number,
+    group: groupHandles.get(id) as number,
     id,
     key: group.order,
   }));
@@ -1116,7 +1116,7 @@ export function tablesOfReference(
     });
     for (const row of reference.rows.values()) {
       if (row.layerId !== layerId) continue;
-      builder.addRow(
+      builder.add(
         rowInputOfFeature({
           id: row.id,
           type: row.type,
@@ -1131,7 +1131,7 @@ export function tablesOfReference(
         }),
       );
     }
-    if (builder.length > 0) writer.addPages(layerId, builder.finish());
+    if (builder.length > 0) writer.addPages(layerId, builder.build());
   }
   internals.addQueuedPages();
   const groupHandleOf = (id: string): number => groupHandles.get(id) as number;

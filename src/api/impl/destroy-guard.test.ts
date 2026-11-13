@@ -14,7 +14,7 @@ import { guardAfterDestroy } from './destroy-guard.js';
 
 describe('guardAfterDestroy', () => {
   it('throws an error of the tables a method or a getter reaches as a DrawError, held as the cause', () => {
-    const tables = new KasaneError('invalid-state', 'the row is not read');
+    const tables = new KasaneError('invalidState', 'the row is not read');
     const guarded = guardAfterDestroy(
       {
         features: {

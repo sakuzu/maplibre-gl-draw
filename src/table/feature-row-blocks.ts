@@ -19,15 +19,13 @@
  * geometry as a shape of Tabane (`rowInputOfFeature`).
  */
 
-import type { Page, TablesWorker } from '@sakuzu/kasane';
-import {
-  createPageBuilder,
-  KasaneError,
-  mergePages,
-  type PageBuilderOptions,
-  type PageMerge,
-  type RowInput,
+import type {
+  Page,
+  PageBuilderOptions as TablesPageBuilderOptions,
+  PageMerge as TablesPageMerge,
+  TablesWorker,
 } from '@sakuzu/kasane';
+import { createPageBuilder, KasaneError, mergePages, type RowInput } from '@sakuzu/kasane';
 import { rowRingsOfPoint } from '@sakuzu/kasane/render';
 import type { TabaneShape } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
@@ -36,6 +34,13 @@ import { drawErrorOf } from './draw-error-of.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
 import { GEOMETRY_DEPTHS } from './row-geometry.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
+import {
+  groupsOfTables,
+  type PageBuilderOptions,
+  type PageMerge,
+  tablesBuilderOptionsOf,
+  tablesMergeOf,
+} from './tables-values.js';
 
 /**
  * One row given to the builder
@@ -134,9 +139,22 @@ export interface FeatureTablesWorker {
  */
 export function tablesWorkerOf(worker: FeatureTablesWorker): TablesWorker {
   return {
-    merge: (merge) => worker.merge(merge),
-    build: (rows, options) => worker.build(rows.map(featureRowInputOf), options),
+    merge: (merge) => worker.merge(mergeOfTables(merge)),
+    build: (rows, options) =>
+      worker.build(rows.map(featureRowInputOf), builderOptionsOfTables(options)),
   };
+}
+
+/** A merge of the tables as the Worker of the host takes it: the groups named by their handles */
+function mergeOfTables(merge: TablesPageMerge): PageMerge {
+  const { groups, ...rest } = merge;
+  return groups ? { ...rest, groups: groupsOfTables(groups) } : rest;
+}
+
+/** Options of the builder of the tables as the Worker of the host takes them */
+function builderOptionsOfTables(options: TablesPageBuilderOptions): PageBuilderOptions {
+  const { groups, ...rest } = options;
+  return groups ? { ...rest, groups: groupsOfTables(groups) } : rest;
 }
 
 /**
@@ -231,7 +249,7 @@ export function createFeaturePageBuilder(
   options: FeaturePageBuilderOptions = {},
 ): FeaturePageBuilder {
   const builder = createPageBuilder({
-    ...options,
+    ...tablesBuilderOptionsOf(options),
     columns: FEATURE_TABLE_COLUMNS,
     rings: options.rings ? rowRingsOfPoint(options.rings) : circleRowRings,
     caches: FEATURE_CACHES,
@@ -242,14 +260,14 @@ export function createFeaturePageBuilder(
     },
     addRow(row: FeatureRowInput): void {
       try {
-        builder.addRow(rowInputOfFeature(row));
+        builder.add(rowInputOfFeature(row));
       } catch (error) {
         throw rowsError(error);
       }
     },
     finish(): Page[] {
       try {
-        return builder.finish();
+        return builder.build();
       } catch (error) {
         throw rowsError(error);
       }
@@ -267,7 +285,7 @@ export function createFeaturePageBuilder(
  */
 export function mergeFeaturePages(merge: PageMerge): Page[] {
   try {
-    return mergePages(merge);
+    return mergePages(tablesMergeOf(merge));
   } catch (error) {
     throw rowsError(error);
   }

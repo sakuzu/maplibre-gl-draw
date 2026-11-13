@@ -142,7 +142,7 @@ function planDelete(
     fields: new Map(),
     deleted: new Uint8Array(handles.length).fill(1),
   };
-  return { patch, before: internals.readValues(patch) };
+  return { patch, before: internals.readRowValues(patch) };
 }
 
 function planUpdate(
@@ -253,7 +253,7 @@ function planUpdate(
   }
   const fields = new Map<RowField, unknown[]>();
   // The values before (what an undo writes back)
-  const current: RowValues = internals.readValues({
+  const current: RowValues = internals.readRowValues({
     handles,
     fields: new Map([...fieldNames].map((field) => [field, []])),
   });
@@ -373,7 +373,7 @@ function planRows(
     handles: Int32Array.from(handles),
     fields: new Map(op.fields.map((field, f) => [field, columns[f]])),
   };
-  return { patch, before: internals.readValues(patch) };
+  return { patch, before: internals.readRowValues(patch) };
 }
 
 /** The reader of the values of a row */

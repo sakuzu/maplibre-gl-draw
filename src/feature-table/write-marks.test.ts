@@ -227,7 +227,7 @@ describe('the write mark of the tables', () => {
     }
     // The internals are of the tables: their error is wrapped by the entries of core
     expect(thrown).toBeInstanceOf(KasaneError);
-    expect((thrown as KasaneError).code).toBe('invalid-state');
+    expect((thrown as KasaneError).code).toBe('invalidState');
     expect(internals.writeMarks.mark).toBe(keeper.mark);
     expect(() => internals.setWriteMark(0.5 + keeper.mark)).toThrow(KasaneError);
   });
@@ -382,7 +382,7 @@ describe('the next versions with the write marks', () => {
   it('go in with the mark of when they are swapped in, past the rows written while they wait', () => {
     const { tables, writer, internals, sides } = waitingVersion(3);
     const [version] = internals.builtVersions('a');
-    const handle = (version.groups ?? [])[0].data.handles[0];
+    const handle = (version.groups ?? [])[0].data.rows[0];
     // A row of the version written in place under a later mark while it waits
     internals.setWriteMark(4);
     writer.writeRows(rowPatch([handle], { 'properties:name': ['later'] }));

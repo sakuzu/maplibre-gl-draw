@@ -85,7 +85,7 @@ function idsIn(
   if (!table) return [];
   const ids: string[] = [];
   internals.searchRowBoxes(table, box[0], box[1], box[2], box[3], (group, row) => {
-    ids.push(store.tables?.getRowId(group.data.handles[row]) as string);
+    ids.push(store.tables?.getRowId(group.data.rows[row]) as string);
   });
   return ids.sort();
 }

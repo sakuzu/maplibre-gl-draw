@@ -92,11 +92,11 @@ function itemsOfOrder(table: RowTable) {
     const group = data.groups[r];
     if (group < 0) {
       kinds.push(0);
-      handles.push(data.handles[r]);
+      handles.push(data.rows[r]);
       last = -1;
       continue;
     }
-    members.set(group, [...(members.get(group) ?? []), data.handles[r]]);
+    members.set(group, [...(members.get(group) ?? []), data.rows[r]]);
     if (group !== last) {
       kinds.push(1);
       handles.push(group);
@@ -156,10 +156,10 @@ function expectWalkAsLists(internals: FeatureTablesInternals): void {
   const order = table.rowOrder();
   let at = table.firstRow();
   for (let i = 0; i < order.handles.length; i++) {
-    expect(at?.group.data.handles[at.row], `row ${i}`).toBe(order.handles[i]);
+    expect(at?.group.data.rows[at.row], `row ${i}`).toBe(order.handles[i]);
     if (!at) break;
     const back = table.previousRow(at);
-    expect(back?.group.data.handles[back.row] ?? null).toBe(i > 0 ? order.handles[i - 1] : null);
+    expect(back?.group.data.rows[back.row] ?? null).toBe(i > 0 ? order.handles[i - 1] : null);
     at = table.nextRow(at);
   }
   expect(at).toBeNull();

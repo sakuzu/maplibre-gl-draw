@@ -14,12 +14,13 @@
  * edits that move, rotate and scale features as the one copied does (its `transforms`).
  */
 
-import { type GroupEntry, KasaneError, PAGE_TARGET_ROWS } from '@sakuzu/kasane';
+import { KasaneError, PAGE_TARGET_ROWS } from '@sakuzu/kasane';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { rowInputOf } from '../feature-table/row-read.js';
 import { DrawError } from '../shared/draw-error.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { createFeaturePageBuilder } from '../table/feature-row-blocks.js';
+import type { GroupEntry } from '../table/tables-values.js';
 import type { GeometryTransforms, Store, StoreContractView } from './store.js';
 import { createTableStore, type TableStoreOptions } from './table-memory.js';
 import type { Feature, Group, Layer } from './types.js';

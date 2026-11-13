@@ -8,7 +8,7 @@
  * re-exports them).
  */
 
-import type { RowField, RowValues, TableRowsChange } from '@sakuzu/kasane';
+import type { RowField, RowFieldValues, TableRowsChange } from '@sakuzu/kasane';
 import type { Value } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 
@@ -16,7 +16,46 @@ import type { Geometry, Position } from 'geojson';
  * The rows of one layer a change created, updated or deleted, by handle (`LayerRowsChange`): the
  * tables declare it, a layer being a table
  */
-export type { RowField, RowValues, TableRowsChange as LayerRowsChange };
+export type { RowField, TableRowsChange as LayerRowsChange };
+
+/**
+ * Values of rows: the rows by their handles, and the values of fields, one per row. Read from
+ * the rows, they are the values the rows have; written to them, they put the values there.
+ */
+export interface RowValues {
+  /** The rows */
+  readonly handles: Int32Array;
+  /** The values of each field, one per row */
+  readonly fields: ReadonlyMap<RowField, RowFieldValues>;
+  /**
+   * Non-zero for a row deleted, zero for a row not deleted (a row deleted and kept,
+   * `RestoreToken`, written not deleted comes back at its place, as it was); absent when the
+   * deletion is not read or written
+   */
+  readonly deleted?: Uint8Array;
+}
+
+/**
+ * A field of a group a {@link TableGroupPatch} writes: a fixed field of every group (its `id`,
+ * its `parent`, the layer it is in, and the `key` of its order among the items there), its
+ * `name`, or a group column of the features (`hidden`, `locked`). The `name` of a group is kept by
+ * the Store, not by the tables: the writer of the features takes it out of the values it writes to
+ * the tables.
+ */
+export type TableGroupField = 'id' | 'name' | 'parent' | 'key' | 'hidden' | 'locked';
+
+/**
+ * Values written to groups of features held as rows: the groups by their handles (the handles
+ * rows name in their pages, `GroupEntry.handle`).
+ */
+export interface TableGroupPatch {
+  /** The groups written */
+  readonly handles: Int32Array;
+  /** The values of each field written, one per group */
+  readonly fields: ReadonlyMap<TableGroupField, readonly unknown[]>;
+  /** Non-zero for a group deleted */
+  readonly deleted?: Uint8Array;
+}
 
 /**
  * The rows a change wrote, by layer: what the writer of the rows

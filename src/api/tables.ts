@@ -15,12 +15,11 @@
  * implementation of the Store keeps and calls, after it has recorded what it writes.
  */
 
-import type { Page, TableGroupField, TableGroupPatch } from '@sakuzu/kasane';
+import type { Page } from '@sakuzu/kasane';
 import {
   createRowValues as createRowValuesOf,
   type RowField,
   type RowFieldValues,
-  type RowValues,
 } from '@sakuzu/kasane';
 import { checkRowValues as checkShapeOfRowValues, RowFields } from '@sakuzu/kasane/render';
 import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu/tabane';
@@ -33,12 +32,16 @@ import type {
   LayerRowsChange,
   RestoreToken,
   RowsChange,
+  RowValues,
+  TableGroupField,
+  TableGroupPatch,
 } from '../shared/types/model.js';
 import { copyTableStore as copyTableStoreOf } from '../store/table-copy.js';
 import { createTableStore as createTableStoreOf } from '../store/table-memory.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import type { FeatureTablesWorker } from '../table/feature-row-blocks.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { rowValuesOfTables, tablesValuesToCheck } from '../table/tables-values.js';
 import type { GeometryTransforms, Store, StoreView, UpdateSource } from './extension/store.js';
 import type {
   StoredFeature as Feature,
@@ -244,9 +247,8 @@ const FEATURE_FIELDS = new RowFields(FEATURE_TABLE_COLUMNS);
  */
 export function checkRowValues(values: unknown): RowValues {
   try {
-    const checked = checkShapeOfRowValues(values);
-    FEATURE_FIELDS.check(checked);
-    return checked;
+    FEATURE_FIELDS.check(checkShapeOfRowValues(tablesValuesToCheck(values)));
+    return values as RowValues;
   } catch (error) {
     throw drawErrorOf(error);
   }
@@ -268,7 +270,13 @@ export function createRowValues(values: {
   readonly deleted?: Uint8Array;
 }): RowValues {
   try {
-    return createRowValuesOf(values);
+    return rowValuesOfTables(
+      createRowValuesOf({
+        rows: values.handles,
+        fields: values.fields,
+        ...(values.deleted && { deleted: values.deleted }),
+      }),
+    );
   } catch (error) {
     throw drawErrorOf(error);
   }

@@ -8,7 +8,7 @@
  * list of the buffers to transfer takes a table of `/table` as well as pages
  */
 
-import type { Page, PageBuilderOptions, PageMerge } from '@sakuzu/kasane';
+import type { Page } from '@sakuzu/kasane';
 import { transferList as pageTransferList } from '@sakuzu/kasane';
 import {
   createFeaturePageBuilder,
@@ -16,6 +16,7 @@ import {
   mergeFeaturePages,
 } from './feature-row-blocks.js';
 import { transferList as tableTransferList } from './prepare.js';
+import type { PageBuilderOptions, PageMerge } from './tables-values.js';
 import type { PreparedTable, Table } from './types.js';
 
 /**

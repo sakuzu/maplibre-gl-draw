@@ -28,6 +28,7 @@ import { ITEM_GROUP, ITEM_ROW, type RowField, type RowValues } from '../api/tabl
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { tablesValuesOf } from '../table/tables-values.js';
 import {
   featureRowDataBuilder as createPageDataBuilder,
   feature,
@@ -111,7 +112,7 @@ describe('the items of a layer', () => {
     });
     const builder = createPageDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
-      groups: [{ handle: 7, id: 'g', key: 'k000003' }],
+      groups: [{ group: 7, id: 'g', key: 'k000003' }],
       targetRows: 2,
     });
     for (let i = 0; i < 6; i++) {
@@ -277,8 +278,8 @@ describe('writer.writeRows', () => {
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     internals.addQueuedPages();
     const [p0, p1] = ['p0', 'p1'].map((id) => internals.ids.handleOf(id));
-    writer.writeRows(patchOf([p0], created, [11]));
-    writer.writeRows(patchOf([p1], 'type', ['Marker']));
+    writer.writeRows(tablesValuesOf(patchOf([p0], created, [11])));
+    writer.writeRows(tablesValuesOf(patchOf([p1], 'type', ['Marker'])));
     expect(internals.placeOf(p0)?.group.delta).toBe(false);
     expect(tables.get('layer')?.getRowValue(p0, drawPropertyKey('createdZoom'))).toBe(11);
     expect(internals.placeOf(p1)?.group.delta).toBe(true);

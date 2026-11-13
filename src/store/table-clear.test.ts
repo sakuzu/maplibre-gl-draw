@@ -21,6 +21,7 @@ import type { FeatureTablesWorker } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { tablesBuilderOptionsOf } from '../table/tables-values.js';
 import {
   featureRowBuilder as createPageBuilder,
   featureRowDataBuilder as createPageDataBuilder,
@@ -96,7 +97,7 @@ function rowsBack(
   const { tables } = setupOf;
   const group = tables.findGroup('g') as number;
   const groups: GroupEntry[] = [
-    { handle: group, id: 'g', key: tables.getGroupKey(group) as string },
+    { group: group, id: 'g', key: tables.getGroupKey(group) as string },
   ];
   const builder = createPageBuilder({ columns: FEATURE_TABLE_COLUMNS, groups, targetRows: 4 });
   ids.forEach((id) => {
@@ -183,7 +184,7 @@ describe('every row taken out of the tables', () => {
           release = () => {
             const builder = createPageDataBuilder({
               columns: FEATURE_TABLE_COLUMNS,
-              ...options,
+              ...tablesBuilderOptionsOf(options),
               rings: circleRowRings,
             });
             for (const row of rows) builder.addRow(structuredClone(row));

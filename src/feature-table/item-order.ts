@@ -31,7 +31,7 @@
  * layers.
  */
 
-import type { GroupHandle, RowRef } from '@sakuzu/kasane';
+import type { GroupRef, RowRef } from '@sakuzu/kasane';
 import type { GroupTable, RowGroup, RowTable } from '@sakuzu/kasane/render';
 import {
   compareItemKeys,
@@ -87,7 +87,7 @@ export interface ItemOrderSource {
    * The key of the order of a group of features last written (undefined for an unknown group):
    * the one not in the order read yet, or the one of the table of the groups
    */
-  getGroupKey(group: GroupHandle): string | undefined;
+  getGroupKey(group: GroupRef): string | undefined;
   readonly groups: GroupTable;
   /** The id of a row */
   idOf(handle: RowRef): string | undefined;
@@ -108,7 +108,7 @@ type ItemsKept = Map<number, ItemKey>;
 /** A container: a layer (`groupId` undefined), or a group of features of a layer */
 interface ContainerKey {
   readonly layerId: string;
-  readonly group: GroupHandle;
+  readonly group: GroupRef;
 }
 
 /**
@@ -121,7 +121,7 @@ export class ItemOrderWatch {
   /** The layers watched, in the order they were */
   private readonly layers = new Set<string>();
   /** The groups watched and their layer before the write */
-  private readonly groupsBefore = new Map<GroupHandle, string>();
+  private readonly groupsBefore = new Map<GroupRef, string>();
   private readonly moved = new Set<number>();
   private readonly deleted: number[] = [];
   /** The layer, group and keys of each row moved before the write (absent for a new row) */
@@ -130,9 +130,9 @@ export class ItemOrderWatch {
   private readonly beforeIds = new Map<string, RowRef>();
   /** The items of each container before the write (the layers by id, the groups by handle) */
   private readonly layerItems = new Map<string, ItemsKept>();
-  private readonly groupItems = new Map<GroupHandle, ItemsKept>();
+  private readonly groupItems = new Map<GroupRef, ItemsKept>();
   /** The groups watched that were items before the write */
-  private readonly groupsThere = new Set<GroupHandle>();
+  private readonly groupsThere = new Set<GroupRef>();
 
   constructor(private readonly source: ItemOrderSource) {}
 
@@ -152,7 +152,7 @@ export class ItemOrderWatch {
    * @param layerId The layer its members are read in before the write (the layer of the group when
    *   omitted): the members of a group given another layer are there until they are written
    */
-  watchGroup(group: GroupHandle, layerId = this.source.groups.tableOf(group)): void {
+  watchGroup(group: GroupRef, layerId = this.source.groups.tableOf(group)): void {
     if (group < 0 || this.groupsBefore.has(group)) return;
     if (layerId === undefined) return;
     this.watchLayer(layerId);
@@ -212,7 +212,7 @@ export class ItemOrderWatch {
     if (this.moved.size === 0) return [];
     if (this.moved.size > ORDER_ITEM_LIMIT) return this.rowRanges();
     const containers: OrderContainer<number>[] = [];
-    const groupsAfter = new Set<GroupHandle>();
+    const groupsAfter = new Set<GroupRef>();
     for (const layerId of this.layers) {
       const before = this.layerItems.get(layerId) ?? new Map();
       const after = this.itemsNow({ layerId, group: -1 });
@@ -220,8 +220,8 @@ export class ItemOrderWatch {
       for (const code of after.keys()) if ((code & 1) === 1) groupsAfter.add(code >> 1);
     }
     // The groups the rows left or went to: the ones watched, and any a row moved is in now
-    const groups: GroupHandle[] = [...this.groupsBefore.keys()];
-    const joined: Array<{ group: GroupHandle; layer: number; key: ItemKey }> = [];
+    const groups: GroupRef[] = [...this.groupsBefore.keys()];
+    const joined: Array<{ group: GroupRef; layer: number; key: ItemKey }> = [];
     const layerOrder = [...this.layers];
     for (const code of this.moved) {
       const at = this.source.placeOf(code >> 1);
@@ -245,7 +245,7 @@ export class ItemOrderWatch {
     // A group of features whose last member left is an item deleted (in the order the groups
     // stood before the write)
     const deleted = [...this.deleted];
-    const gone: Array<{ group: GroupHandle; layer: number; key: ItemKey }> = [];
+    const gone: Array<{ group: GroupRef; layer: number; key: ItemKey }> = [];
     for (const group of this.groupsThere) {
       if (groupsAfter.has(group)) continue;
       const layerId = this.groupsBefore.get(group) as string;
@@ -254,7 +254,7 @@ export class ItemOrderWatch {
     }
     gone.sort((a, b) => a.layer - b.layer || compareItemKeys(a.key, b.key));
     for (const { group } of gone) deleted.push(groupCode(group));
-    const groupIds = new Map<GroupHandle, string>();
+    const groupIds = new Map<GroupRef, string>();
     const moves = diffItemOrder(containers, {
       moved: this.moved,
       deleted,
@@ -346,7 +346,7 @@ export class ItemOrderWatch {
   }
 
   /** The key a group of features is ordered by in its layer (the key written) */
-  private groupKey(group: GroupHandle): ItemKey {
+  private groupKey(group: GroupRef): ItemKey {
     return [this.source.getGroupKey(group) ?? '', this.source.groups.idOf(group) ?? ''];
   }
 
@@ -356,7 +356,7 @@ export class ItemOrderWatch {
   }
 
   /** The id of an item */
-  private idOf(code: number, groupIds: Map<GroupHandle, string>): string {
+  private idOf(code: number, groupIds: Map<GroupRef, string>): string {
     const handle = code >> 1;
     if ((code & 1) === 0) return this.source.idOf(handle) ?? '';
     let id = groupIds.get(handle) ?? this.source.groups.idOf(handle);
@@ -383,16 +383,16 @@ export class ItemOrderWatch {
       list.push(at);
     }
     const out: RowsMove[] = [];
-    const groupIds = new Map<GroupHandle, string>();
+    const groupIds = new Map<GroupRef, string>();
     for (const [layer, rows] of byLayer) {
       const walk = this.walkOf(layer.tableId) as ItemWalk;
       // In the order written (the keys of the groups written and not read yet)
       rows.sort((a, b) => walk.compareRows(a, b));
-      const handles = Int32Array.from(rows, (at) => at.group.data.handles[at.row]);
+      const handles = Int32Array.from(rows, (at) => at.group.data.rows[at.row]);
       const before = this.placeBefore(handles);
       /** The item just below a row among the items of its layer, or the members of its group */
       const belowOf = (at: RowAt): { kind: number; handle: number } => {
-        const handle = at.group.data.handles[at.row];
+        const handle = at.group.data.rows[at.row];
         const below = walk.below(rowCode(handle), at.group.data.groups[at.row]);
         return below === null ? { kind: 0, handle: -1 } : { kind: below & 1, handle: below >> 1 };
       };
@@ -464,7 +464,7 @@ function inOrder(items: ItemsKept): number[] {
 export function groupKeyMoves(
   source: ItemOrderSource,
   layerId: string,
-  orders: ReadonlyMap<GroupHandle, string>,
+  orders: ReadonlyMap<GroupRef, string>,
 ): ItemMove[] {
   const walk = source.walkItems(layerId);
   if (!walk) return [];

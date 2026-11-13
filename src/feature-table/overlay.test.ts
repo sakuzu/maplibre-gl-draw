@@ -96,7 +96,7 @@ describe('the sketches drawn over rows for this client', () => {
         },
       });
     const at = hit(6.5);
-    expect(at && tables.getRowId(at.group.data.handles[at.row])).toBe('p3');
+    expect(at && tables.getRowId(at.group.data.rows[at.row])).toBe('p3');
     expect(hit(30.5)).toBeNull();
   });
 

@@ -304,7 +304,7 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
       {
         group: group.handle,
         row,
-        handle: group.data.handles[row],
+        handle: group.data.rows[row],
         what,
         sameShape: true,
         from: 0,

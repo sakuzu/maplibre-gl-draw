@@ -1222,7 +1222,7 @@ export class TableDrape {
       for (let d = insert.from; d < insert.to; d++) {
         const kind = deltaKinds[d] as number;
         if (kind !== KIND_POLYGON && kind !== KIND_LINE) continue;
-        const copy = layer.table.delta.copyOf(delta.data.handles[d] as number);
+        const copy = layer.table.delta.copyOf(delta.data.rows[d] as number);
         if (copy < 0) continue;
         const ref = drapeCopyRef(TABLE_DRAPE_DELTA, copy);
         const element = this.elementOf(
@@ -1252,7 +1252,7 @@ export class TableDrape {
       if (kind !== KIND_POLYGON && kind !== KIND_LINE) continue;
       const ref = drapeCopyRef(
         TABLE_DRAPE_MAIN,
-        this.mainCopies.copyOf(g.data.handles[row] as number),
+        this.mainCopies.copyOf(g.data.rows[row] as number),
       );
       const element = this.elementOf(layer, g, row, kind, ref, drapePosition(2 * row + 1));
       if (!element) continue;

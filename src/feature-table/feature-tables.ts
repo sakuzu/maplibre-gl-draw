@@ -13,15 +13,15 @@
  */
 
 import type {
-  GroupHandle,
-  RowValues,
+  GroupRef,
   ScheduleIdleWork,
+  RowValues as TablesRowValues,
   TableScanOptions as TablesScanOptions,
   TablesWrite,
   TablesWriter,
 } from '@sakuzu/kasane';
 import { KasaneError, type TablesOptions } from '@sakuzu/kasane';
-import type { RowGroup } from '@sakuzu/kasane/render';
+import type { RowGroup, RowTable } from '@sakuzu/kasane/render';
 import {
   type DeltaInput,
   type Pages,
@@ -42,7 +42,7 @@ import type {
   TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
-import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
+import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import {
   type FeatureRowInput,
@@ -55,6 +55,7 @@ import {
   ROW_FLAG_LOCKED,
   styleColumnOf,
 } from '../table/feature-row-columns.js';
+import { fieldsToRead, rowValuesOfTables } from '../table/tables-values.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
 import { RowStateSets, STATE_HIDDEN_SKETCH } from './feature-row-states.js';
@@ -198,7 +199,7 @@ export function createTables(options: TablesInternalOptions): {
     readValues: (rows) => {
       try {
         gate();
-        return store.readValues(rows);
+        return store.readRowValues(rows);
       } catch (error) {
         throw tablesError(error);
       }
@@ -392,7 +393,7 @@ export interface FeatureTablesInternals extends Pages<FeatureStyle> {
   /** The reads of the rows of a layer without making features (undefined for a layer of none) */
   view(layerId: string): LayerTableView | undefined;
   /** The values the rows of `rows` have now, for its fields (see `FeatureTables.readValues`) */
-  readValues(rows: RowValues): RowValues;
+  readRowValues(rows: RowValues): RowValues;
   /**
    * Calls `listener` with the rows of a selection of many features once it is decided (a box let
    * go of, every feature selected), and with null once there is none: what moves them on the
@@ -429,7 +430,7 @@ export interface FeatureTablesInternals extends Pages<FeatureStyle> {
    * (its members are read in the order before until its reorder goes in), or the one of the table
    * of the groups (undefined for an unknown group)
    */
-  getGroupKey(group: GroupHandle): string | undefined;
+  getGroupKey(group: GroupRef): string | undefined;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -553,13 +554,21 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     return view;
   }
 
-  override readValues(patch: RowValues): RowValues {
-    const n = patch.handles.length;
+  /** The values the rows of `rows` have now, for its fields, as a feature holds them */
+  readRowValues(rows: RowValues): RowValues {
+    return rowValuesOfTables(this.readValues(rows.handles, fieldsToRead(rows)));
+  }
+
+  override readValues(rows: Int32Array, read: readonly RowField[]): TablesRowValues {
+    const n = rows.length;
     const fields = new Map<RowField, unknown[]>();
-    for (const field of patch.fields.keys()) fields.set(field, new Array(n).fill(undefined));
-    const deleted = patch.deleted ? new Uint8Array(n) : undefined;
+    let deleted: Uint8Array | undefined;
+    for (const field of read) {
+      if (field === 'deleted') deleted ??= new Uint8Array(n);
+      else fields.set(field, new Array(n).fill(undefined));
+    }
     for (let i = 0; i < n; i++) {
-      const place = this.placeOf(patch.handles[i]);
+      const place = this.placeOf(rows[i]);
       if (!place) {
         if (deleted) deleted[i] = 1;
         continue;
@@ -569,7 +578,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
       if (deleted) deleted[i] = (data.flags[row] & ROW_FLAG_DELETED) !== 0 ? 1 : 0;
       for (const [field, values] of fields) values[i] = this.fieldOf(place, field);
     }
-    return { handles: Int32Array.from(patch.handles), fields, ...(deleted && { deleted }) };
+    return { rows: Int32Array.from(rows), fields, ...(deleted && { deleted }) };
   }
 
   /** The value of a field of a row, as a feature holds it */
@@ -919,14 +928,71 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
 }
 
 /**
- * The rows of one layer, read without making features: the view of a table of the tables, and
- * the rows read as a feature reads them
+ * The rows of one layer, read without making features: the view of a table of the tables, in the
+ * words of the layers, and the rows read as a feature reads them
  */
-class LayerTableViewImpl extends RowTableView implements LayerTableView {
-  protected declare readonly store: FeatureTablesStore;
+class LayerTableViewImpl implements LayerTableView {
+  /** The view of the table of the tables */
+  private readonly view: RowTableView;
+
+  constructor(
+    private readonly store: FeatureTablesStore,
+    private readonly table: RowTable,
+  ) {
+    this.view = new RowTableView(store, table);
+  }
 
   get layerId(): string {
     return this.table.tableId;
+  }
+
+  get rowCount(): number {
+    return this.view.rowCount;
+  }
+
+  get rowCountWithDeleted(): number {
+    return this.view.rowCountWithDeleted;
+  }
+
+  get itemCount(): number {
+    return this.view.itemCount;
+  }
+
+  listDrawnRows(bbox: BBox): Int32Array {
+    return this.view.listVisibleRows(bbox);
+  }
+
+  getRowBBox(handle: RowRef): BBox | null {
+    return this.view.getRowBBox(handle);
+  }
+
+  getDrawnRowsRevision(): number {
+    return this.view.getVisibleRowsVersion();
+  }
+
+  listRowHandles(start: number, count: number): Int32Array {
+    return this.view.listRowRefs(start, count);
+  }
+
+  listItems(start: number, count: number): ItemHandles {
+    const items = this.view.listItems(start, count);
+    return { kinds: items.types, handles: items.refs };
+  }
+
+  countGroupMembers(groupHandle: number): number {
+    return this.view.countGroupMembers(groupHandle);
+  }
+
+  listGroupMembers(groupHandle: number, start: number, count: number): Int32Array {
+    return this.view.listGroupMembers(groupHandle, start, count);
+  }
+
+  /**
+   * Whether a row is read from this layer: its group and row are then the ones the tables found
+   * (`foundGroup`, `foundRow`), read at once
+   */
+  private locate(row: RowRef): boolean {
+    return this.store.findPlace(row) && this.store.foundTable === this.table;
   }
 
   getRowType(handle: RowRef): FeatureType | null {

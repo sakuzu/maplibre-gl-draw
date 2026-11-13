@@ -19,7 +19,6 @@
  *   between them: every read of the tables gives the reference
  */
 
-import type { PageMerge } from '@sakuzu/kasane';
 import type {
   GroupVersion,
   GroupVersionReceiver,
@@ -29,6 +28,7 @@ import type {
 import { mergePageData, type PageDataMerge } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
+import type { PageMerge } from '../table/tables-values.js';
 import {
   expectTablesMatch,
   referenceKey as key,

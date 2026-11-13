@@ -22,6 +22,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { tablesBuilderOptionsOf } from '../table/tables-values.js';
 import {
   featureRowDataBuilder as createPageDataBuilder,
   expectTablesMatch,
@@ -212,7 +213,7 @@ describe('many new rows written at once', () => {
         built.push(rows.length);
         const builder = createPageDataBuilder({
           columns: FEATURE_TABLE_COLUMNS,
-          ...options,
+          ...tablesBuilderOptionsOf(options),
           rings: circleRowRings,
         });
         for (const row of rows) builder.addRow(structuredClone(row));
@@ -263,7 +264,7 @@ describe('many new rows written at once', () => {
           release = () => {
             const builder = createPageDataBuilder({
               columns: FEATURE_TABLE_COLUMNS,
-              ...options,
+              ...tablesBuilderOptionsOf(options),
               rings: circleRowRings,
             });
             for (const row of rows) builder.addRow(structuredClone(row));
@@ -299,7 +300,7 @@ describe('many new rows written at once', () => {
           return Math.hypot(px - x, py - y) <= tolerance;
         },
       });
-      const hitHandle = hit ? hit.group.data.handles[hit.row] : -1;
+      const hitHandle = hit ? hit.group.data.rows[hit.row] : -1;
       expect(tables.getRowId(hitHandle)).toBe('r10');
       expect(tables.get('a')?.getRowValue(hitHandle, 'n')).toBe(10);
     };
