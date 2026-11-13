@@ -258,6 +258,13 @@ const SLICE_POLYGON_VERTICES = 2_000;
 /** No rows of a delta to draw */
 const NO_DELTA_INSERTS: ReadonlyMap<number, readonly DeltaInsert[]> = new Map();
 
+/** The budget of a frame while the drawing is held: nothing is built */
+const HELD_BUDGET: ChunkBuildBudget = {
+  now: chunkClock,
+  canStep: () => false,
+  step: (work) => work(chunkClock()),
+};
+
 /** The whole world: the range drawn when the view is not known */
 const WORLD: BBox = [-540, -90, 540, 90];
 /** No region */
@@ -372,6 +379,12 @@ export interface TableLayerRendererOptions {
    * view by (an Image alone has an extent of its own when it is left out)
    */
   readonly extensions?: SelectionExtensionRegistry;
+  /**
+   * Whether the drawing keeps what it drew while a write over several tasks is under way, and takes
+   * its rows in once its last step is written (`HELD_DRAWING`, the second way to show such a write;
+   * the rows are drawn as they are written when it is left out)
+   */
+  readonly holdDrawing?: () => boolean;
   /**
    * The scale of the frame being drawn, which a footprint of the screen is laid on the ground
    * with (Web Mercator at the zoom of the frame when it is left out or gives none)
@@ -762,6 +775,14 @@ export class TableLayerRenderer {
   private readonly written = new Map<string, Map<RowGroupHandle, Map<number, PendingWrite>>>();
   /** The rows of the delta to draw at the places of the groups, by the places they were made of */
   private readonly insertsOf = new WeakMap<DeltaPlaces, Map<number, DeltaInsert[]>>();
+  /**
+   * The places of the rows of the delta of each table last drawn, drawn again while the drawing is
+   * held (`TableLayerRendererOptions.holdDrawing`)
+   */
+  private readonly lastInserts = new WeakMap<
+    RowTable,
+    ReadonlyMap<number, readonly DeltaInsert[]>
+  >();
   /** What the writes in place did */
   readonly writeStats: TableWriteStats = {
     inPlace: 0,
@@ -1290,6 +1311,8 @@ export class TableLayerRenderer {
    * styles, the writes in place). Called before the main pass of the frame
    */
   prerender(): void {
+    // Held: nothing written since is taken in until the write under way ends
+    if (this.held()) return;
     const start = chunkClock();
     this.prepareUploads();
     this.prepared = true;
@@ -1402,15 +1425,18 @@ export class TableLayerRenderer {
    * rendering pixel ratio changed (they keep being drawn until then)
    */
   beginFrame(): void {
+    const held = this.held();
     // A frame that had no pass before its main one writes what was queued now
-    if (!this.prepared) this.prepareUploads();
+    if (!this.prepared && !held) this.prepareUploads();
     this.frameCount++;
     this.prepared = false;
     this.lastDrawMs = this.drawMs;
     this.drawMs = 0;
     this.atOnceStats.visited = 0;
     this.atOnceStats.drawn = 0;
-    this.budget = createChunkBuildBudget(this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS);
+    this.budget = held
+      ? HELD_BUDGET
+      : createChunkBuildBudget(this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS);
     this.pending = false;
     // A new pixel ratio: the batches by kind hold their widths and are built again (drawn until
     // then); the chunks drawn in one draw keep theirs, the values of their styles are written
@@ -1427,7 +1453,7 @@ export class TableLayerRenderer {
   advanceTables(tables: FeatureTablesInternals): void {
     // The next versions of the row groups wait for the chunks of the drawing
     if (!this.attached.has(tables)) this.attached.set(tables, tables.attachReceiver(this.receiver));
-    if (!tables.hasPendingWork) return;
+    if (!tables.hasPendingWork || this.held()) return;
     const budget = this.budget ?? createChunkBuildBudget(TABLE_BUILD_BUDGET_MS);
     this.budget = budget;
     if (tables.hasQueuedBlocks && tables.advanceQueuedBlocks(budget)) this.pending = true;
@@ -4136,6 +4162,22 @@ export class TableLayerRenderer {
    * place in one range (made again when the rows of the delta or their places change)
    */
   private deltaInserts(table: RowTable): ReadonlyMap<number, readonly DeltaInsert[]> {
+    // Held: the rows of the delta as they were last drawn
+    if (this.held()) return this.lastInserts.get(table) ?? NO_DELTA_INSERTS;
+    const inserts = this.currentDeltaInserts(table);
+    this.lastInserts.set(table, inserts);
+    return inserts;
+  }
+
+  /**
+   * Whether the drawing is held: it draws what it drew until the write over several tasks under
+   * way ends (`TableLayerRendererOptions.holdDrawing`)
+   */
+  private held(): boolean {
+    return this.options.holdDrawing?.() === true;
+  }
+
+  private currentDeltaInserts(table: RowTable): ReadonlyMap<number, readonly DeltaInsert[]> {
     if (table.delta.length === 0) return NO_DELTA_INSERTS;
     const places = table.deltaPlaces();
     const held = this.insertsOf.get(places);

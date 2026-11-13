@@ -115,7 +115,13 @@ function features(count: number, seed: number): Feature[] {
  * The tables of features drawn in one draw, the writes reaching the drawing (with `smallDelta` 0,
  * every write into the delta is a group of the delta of its own)
  */
-function setup(list: Feature[], targetRows = 16, versions = false, smallDelta?: number) {
+function setup(
+  list: Feature[],
+  targetRows = 16,
+  versions = false,
+  smallDelta?: number,
+  holdDrawing?: () => boolean,
+) {
   const tables = tablesOfFeatures('layer', list, targetRows);
   if (smallDelta !== undefined) {
     (tables.internals as unknown as { smallDeltaRows: number }).smallDeltaRows = smallDelta;
@@ -173,6 +179,7 @@ function setup(list: Feature[], targetRows = 16, versions = false, smallDelta?: 
     requestRepaint: () => {},
     buildBudgetMs: Number.POSITIVE_INFINITY,
     pixelRatio: 1,
+    ...(holdDrawing && { holdDrawing }),
   });
   tables.internals.onRowsWritten((layerId, writes) => renderer.rowsWritten(layerId, writes));
   /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
@@ -235,6 +242,38 @@ function shownIds(table: RowTable, idOf: (handle: number) => string | undefined)
   }
   return out;
 }
+
+describe('the drawing held while a write over several tasks is under way', () => {
+  it('draws what it drew until it is let go, then the rows as they are written', () => {
+    let held = false;
+    const list = features(120, 1);
+    const live = setup(list, 16, true, undefined, () => held);
+    live.frame();
+    live.frame();
+    const table = live.table;
+    const first = live.frame().record;
+    const before = drawnIds(first, table);
+    const uploads = () =>
+      live.mock.calls.filter(
+        (call) => call.name === 'texSubImage2D' || call.name === 'bufferSubData',
+      ).length;
+    held = true;
+    // Moved to the front: nothing of it is drawn or sent to the GPU while it is held
+    const moved = live.tables.getRowRef(list[50].id) as number;
+    live.writer.writeRows(patchOf([moved], { key: [orderKey(0).slice(0, -1)] }));
+    const deltaGroups = live.renderer.packedDeltaGroups('layer');
+    const sent = uploads();
+    expect(live.frame().record).toEqual(first);
+    expect(live.frame().record).toEqual(first);
+    expect(uploads()).toBe(sent);
+    expect(live.renderer.packedDeltaGroups('layer')).toEqual(deltaGroups);
+    held = false;
+    const { record } = live.frame();
+    expect(drawnIds(record, table)).toEqual(shownIds(table, live.tables.getRowId));
+    expect(drawnIds(record, table)).not.toEqual(before);
+    expect(uploads()).toBeGreaterThan(sent);
+  });
+});
 
 describe('the drawing of the rows of the delta', () => {
   it('draws a row placed elsewhere at its new place from the frame it is written in', () => {
