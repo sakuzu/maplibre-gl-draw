@@ -525,23 +525,26 @@ const NO_ROWS: RowValues = { handles: new Int32Array(0), fields: new Map() };
 /**
  * Puts rows in a place in parts: their parents and the keys of their order are made at once, as
  * one write of all of them makes them, and written a part at a time; the changes of the order and
- * the groups they leave empty are told once at the end. A Store that does not write rows in parts
- * puts them in one write
+ * the groups they leave empty are told once at the end. A step of the commit may end before the
+ * parents and the keys are made, and after (what made the rows to place, a group and the order of
+ * its members say, and the plan are each long for many rows). A Store that does not write rows in
+ * parts puts them in one write
  */
 function placeRowsInParts(
   store: Store,
   rows: TableSelection,
   to: ItemPlacement,
-): boolean | Generator<number, OpResult, undefined> {
-  const values = store.planPlaceRows(rows, to);
-  if (!values) return store.applyBulk({ kind: 'place', to }, rows);
-  const end = store.beginRowParts(values);
-  const parts = inParts(values.handles.length, (from, at) =>
-    store.applyRows({ patch: sliceRowValues(values, from, at), before: NO_ROWS }),
-  );
+): Generator<number, OpResult, undefined> {
   return (function* (): Generator<number, OpResult, undefined> {
+    yield 0;
+    const values = store.planPlaceRows(rows, to);
+    if (!values) return store.applyBulk({ kind: 'place', to }, rows);
+    const end = store.beginRowParts(values);
     try {
-      return yield* parts;
+      yield 0;
+      return yield* inParts(values.handles.length, (from, at) =>
+        store.applyRows({ patch: sliceRowValues(values, from, at), before: NO_ROWS }),
+      );
     } finally {
       end();
     }
@@ -1874,7 +1877,6 @@ class TransactionImpl implements Transaction {
             const placed = members as { rows: Int32Array; to: ItemPlacement } | null;
             if (placed === null) return true;
             const parts = placeRowsInParts(this.#store, TableSelection.of(placed.rows), placed.to);
-            if (typeof parts === 'boolean') return true;
             return (function* (): Generator<number, OpResult, undefined> {
               yield* parts;
               return true;

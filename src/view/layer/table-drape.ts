@@ -11,8 +11,9 @@
  * make the datasets fall out of theirs.
  *
  * - A partition is a row group of a layer (its rows, with the rows of the delta of the layer
- *   placed among them), and a partition after the last group of a layer for the rows of the
- *   delta placed after it. The partitions are in the order of the layers and of the groups
+ *   placed among them, of any of the groups of the delta), and a partition after the last group of
+ *   a layer for the rows of the delta placed after it. The partitions are in the order of the
+ *   layers and of the groups
  * - An element is a copy of a row: the copy of a row of a group is numbered from the handle of
  *   the row (a number given when the row first comes in and given back when no version keeps
  *   it, kept when the row moves to another group or the group to its next version), the copy
@@ -155,11 +156,17 @@ const KIND_NONE = 5;
  */
 const marginZoom = (zoom: number): number => Math.round(zoom) + 0.5;
 
-/** The rows of a delta placed before row `at` of a group: rows `[from, to)` of the delta */
+/**
+ * The rows of a delta placed before row `at` of a group: rows `[from, to)` of the group `group` of
+ * the delta, after `k` rows of the delta placed there before them (the rows of the delta at a place
+ * are in the order of their keys, a run of one group of the delta at a time)
+ */
 export interface TableDrapeInsert {
   readonly at: number;
+  readonly group: RowGroup;
   readonly from: number;
   readonly to: number;
+  readonly k: number;
 }
 
 /** A layer held as rows, as the drape reads it */
@@ -276,8 +283,9 @@ interface PartitionState extends DrapePartitionSource {
   generation: string;
   mark: number;
   stateVersion: number;
-  deltaGroup: RowGroup | null;
-  deltaStateVersion: number;
+  /** The groups of the delta of the rows placed in it, and the versions of their state */
+  deltaGroups: readonly RowGroup[];
+  deltaStateVersions: number[];
   insertsKey: string;
   elements: RowDrapeElement[];
   bounds: DrapeBounds | null;
@@ -286,8 +294,8 @@ interface PartitionState extends DrapePartitionSource {
   vertexCount: number;
   /** The rows of its group written since it was made (made again whatever else changed) */
   readonly written: Set<number>;
-  /** The rows of the delta placed in it written since it was made */
-  readonly deltaWritten: Set<number>;
+  /** The rows of the delta placed in it written since it was made, by group of the delta */
+  readonly deltaWritten: Map<RowGroup, Set<number>>;
   /** The element of the copy of each row of its group (-1 for none) */
   byRow: Int32Array;
   /** Advances whenever its elements are made again */
@@ -501,8 +509,13 @@ export class TableDrape {
     if (group.delta) {
       const list = [...rows];
       for (const part of byGroup.values()) {
-        if (part.deltaGroup !== group) continue;
-        for (const row of list) part.deltaWritten.add(row);
+        if (!part.deltaGroups.includes(group)) continue;
+        let written = part.deltaWritten.get(group);
+        if (!written) {
+          written = new Set();
+          part.deltaWritten.set(group, written);
+        }
+        for (const row of list) written.add(row);
       }
       return;
     }
@@ -1101,7 +1114,6 @@ export class TableDrape {
       this.partitions.set(layerId, byGroup);
     }
     const kept = new Map<number, PartitionState>();
-    const delta = table.delta.group;
     const usedDelta = new Set<number>();
     for (let g = 0; g <= table.groupCount; g++) {
       const group = g < table.groupCount ? table.groupAt(g) : null;
@@ -1117,18 +1129,18 @@ export class TableDrape {
         part.group !== group ||
         part.generation !== layer.generation ||
         part.mark !== (group?.mark ?? -1) ||
-        part.deltaGroup !== (inserts.length > 0 ? delta : null) ||
+        !sameGroups(part.deltaGroups, inserts) ||
         part.insertsKey !== insertsKey ||
         part.written.size > 0 ||
         part.deltaWritten.size > 0;
-      if (stale) this.makePartition(part, layer, group, inserts, delta);
+      if (stale) this.makePartition(part, layer, group, inserts);
       else if (
         part.stateVersion !== (group?.stateVersion ?? -1) ||
-        (part.deltaGroup !== null && part.deltaStateVersion !== part.deltaGroup.stateVersion)
+        part.deltaGroups.some((g, i) => part.deltaStateVersions[i] !== g.stateVersion)
       ) {
         this.writeStates(part);
       }
-      if (part.deltaGroup) {
+      if (part.deltaGroups.length > 0) {
         for (const element of part.elements) {
           if (Math.floor(element.ref / 2 ** 21) === TABLE_DRAPE_DELTA) {
             usedDelta.add(element.ref - TABLE_DRAPE_DELTA * 2 ** 21);
@@ -1169,15 +1181,15 @@ export class TableDrape {
       generation: '',
       mark: -2,
       stateVersion: -2,
-      deltaGroup: null,
-      deltaStateVersion: -2,
+      deltaGroups: NO_GROUPS,
+      deltaStateVersions: [],
       insertsKey: '',
       elements: [],
       bounds: null,
       edgeCount: 0,
       vertexCount: 0,
       written: new Set(),
-      deltaWritten: new Set(),
+      deltaWritten: new Map(),
       byRow: new Int32Array(0),
       version: 0,
       adopted: false,
@@ -1199,7 +1211,6 @@ export class TableDrape {
     layer: TableDrapeLayer,
     group: RowGroup | null,
     inserts: readonly TableDrapeInsert[],
-    delta: RowGroup | null,
   ): void {
     const before = new Map<number, RowDrapeElement>();
     const beforeIndex = new Map<number, number>();
@@ -1214,13 +1225,19 @@ export class TableDrape {
     let edgeCount = 0;
     let vertexCount = 0;
     const kinds = this.kindsOf(layer, group, written);
-    const deltaKinds =
-      inserts.length > 0 && delta ? this.kindsOf(layer, delta, deltaWritten) : null;
+    /** How the rows of each group of the delta placed here are drawn */
+    const deltaKinds = new Map<RowGroup, Uint8Array>();
     const byRow = new Int32Array(group?.data.length ?? 0).fill(-1);
     const pushDelta = (insert: TableDrapeInsert): void => {
-      if (!delta || !deltaKinds) return;
+      const delta = insert.group;
+      let kindsOfDelta = deltaKinds.get(delta);
+      if (!kindsOfDelta) {
+        kindsOfDelta = this.kindsOf(layer, delta, deltaWritten.get(delta) ?? null);
+        deltaKinds.set(delta, kindsOfDelta);
+      }
+      const writtenOfDelta = deltaWritten.get(delta);
       for (let d = insert.from; d < insert.to; d++) {
-        const kind = deltaKinds[d] as number;
+        const kind = kindsOfDelta[d] as number;
         if (kind !== KIND_POLYGON && kind !== KIND_LINE) continue;
         const copy = layer.table.delta.copyOf(delta.data.rows[d] as number);
         if (copy < 0) continue;
@@ -1231,13 +1248,13 @@ export class TableDrape {
           d,
           kind,
           ref,
-          drapePosition(2 * insert.at, d - insert.from),
+          drapePosition(2 * insert.at, insert.k + d - insert.from),
         );
         if (!element) continue;
         elements.push(element.element);
         edgeCount += element.edges;
         vertexCount += element.vertices;
-        if (deltaWritten.has(d)) writtenRefs.add(ref);
+        if (writtenOfDelta?.has(d)) writtenRefs.add(ref);
       }
     };
     let next = 0;
@@ -1300,8 +1317,8 @@ export class TableDrape {
     part.generation = layer.generation;
     part.mark = group?.mark ?? -1;
     part.stateVersion = group?.stateVersion ?? -1;
-    part.deltaGroup = inserts.length > 0 ? delta : null;
-    part.deltaStateVersion = part.deltaGroup?.stateVersion ?? -1;
+    part.deltaGroups = groupsOfInserts(inserts);
+    part.deltaStateVersions = part.deltaGroups.map((g) => g.stateVersion);
     part.insertsKey = insertsKeyOf(inserts);
     part.byRow = byRow;
     part.version++;
@@ -1314,7 +1331,7 @@ export class TableDrape {
   private writeStates(part: PartitionState): void {
     for (const element of part.elements) this.writeState(part, element);
     part.stateVersion = part.group?.stateVersion ?? -1;
-    part.deltaStateVersion = part.deltaGroup?.stateVersion ?? -1;
+    part.deltaStateVersions = part.deltaGroups.map((g) => g.stateVersion);
   }
 
   /** Writes the texels of a copy: its style, its place and its state */
@@ -1485,12 +1502,31 @@ function kindOfRow(layer: TableDrapeLayer, group: RowGroup, row: number): number
   return KIND_CHUNK;
 }
 
+/** No group of a delta */
+const NO_GROUPS: readonly RowGroup[] = [];
+
 /** The key of the rows of a delta placed at a group */
 function insertsKeyOf(inserts: readonly TableDrapeInsert[]): string {
   if (inserts.length === 0) return '';
   let key = '';
-  for (const insert of inserts) key += `${insert.at}:${insert.from}:${insert.to},`;
+  for (const insert of inserts) {
+    key += `${insert.at}:${insert.group.handle}:${insert.from}:${insert.to}:${insert.k},`;
+  }
   return key;
+}
+
+/** The groups of a delta of the rows placed at a group, in the order they first come */
+function groupsOfInserts(inserts: readonly TableDrapeInsert[]): readonly RowGroup[] {
+  if (inserts.length === 0) return NO_GROUPS;
+  const out: RowGroup[] = [];
+  for (const insert of inserts) if (!out.includes(insert.group)) out.push(insert.group);
+  return out;
+}
+
+/** Whether the rows placed at a group are of the groups of a delta a partition was made with */
+function sameGroups(groups: readonly RowGroup[], inserts: readonly TableDrapeInsert[]): boolean {
+  const now = groupsOfInserts(inserts);
+  return now.length === groups.length && now.every((group, i) => groups[i] === group);
 }
 
 /** Whether two elements bin alike (their boxes, kinds and widths) */

@@ -312,7 +312,7 @@ export function checkWriteMarks(store: Store): string[] {
     const table = tables.rowTable(layer.id);
     if (!table) continue;
     for (let g = 0; g < table.groupCount && !full(); g++) checkGroup(layer.id, table.groupAt(g));
-    if (table.delta.group && !full()) checkGroup(layer.id, table.delta.group);
+    for (const group of table.delta.groups) if (!full()) checkGroup(layer.id, group);
   }
   return problems;
 }

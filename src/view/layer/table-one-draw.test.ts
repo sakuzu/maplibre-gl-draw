@@ -353,7 +353,7 @@ function allRows(table: RowTable): string[] {
 function drawnHandles(record: TableDrawRecord[], table: RowTable): number[] {
   const out: number[] = [];
   for (const entry of record) {
-    const group = entry.delta ? table.delta.group : table.groupAt(entry.groupIndex);
+    const group = entry.delta ? table.delta.groupOf(entry.group) : table.groupAt(entry.groupIndex);
     if (!group) continue;
     for (let row = entry.from; row < entry.to; row++) {
       if ((group.gpuState[row] & 1) === 0) out.push(group.data.rows[row]);

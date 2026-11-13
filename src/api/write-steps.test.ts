@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import { writesOf } from '../test-support/writes.js';
-import { createMapStub } from '../test-utils.js';
+import { createMapStub, internalsOf } from '../test-utils.js';
 import type { Draw } from './draw.js';
 import { createDraw } from './draw.js';
 import type { Progress } from './write.js';
@@ -245,18 +245,26 @@ describe('the idle work of the tables during a commit in steps', () => {
       },
     });
     held = () => store.slicedWritePending;
-    // The delta of the layer the rows go to is made again once, at the first read after the last
-    // step: the idle work (which reads every row) does not make it between two steps, and the
-    // changes of the order are made from where the rows go, not read from the rows
-    const rebuiltWhileHeld: boolean[] = [];
-    const rebuild = (TablesStore.prototype as unknown as Record<string, (...args: never[]) => void>)
-      .rebuildDelta;
-    vi.spyOn(
-      TablesStore.prototype as unknown as Record<string, (...args: never[]) => void>,
-      'rebuildDelta',
-    ).mockImplementation(function (this: unknown, ...args: never[]) {
-      rebuiltWhileHeld.push(held());
+    // The delta of the layer the rows go to is made a part at a time: each part is a group of its
+    // own (a few rows join the newest group, up to a thousand rows or so), so no step makes the
+    // rows of the parts before it again
+    const proto = TablesStore.prototype as unknown as Record<string, (...args: never[]) => unknown>;
+    const rebuild = proto.rebuildDelta;
+    const make = proto.makeDeltaGroup;
+    /** The rows each rebuild brought in, and the rows of the groups it made */
+    const rebuilds: Array<{ coming: number; made: number }> = [];
+    vi.spyOn(proto, 'rebuildDelta').mockImplementation(function (this: unknown, ...args: never[]) {
+      rebuilds.push({ coming: (args[2] as unknown[]).length, made: 0 });
       return rebuild.apply(this, args);
+    });
+    vi.spyOn(proto, 'makeDeltaGroup').mockImplementation(function (
+      this: unknown,
+      ...args: never[]
+    ) {
+      const made = make.apply(this, args) as { group: { data: { length: number } } } | null;
+      const last = rebuilds[rebuilds.length - 1];
+      if (last) last.made += made?.group.data.length ?? 0;
+      return made;
     });
     slowClock();
     const target = draw.selection.target;
@@ -265,15 +273,15 @@ describe('the idle work of the tables during a commit in steps', () => {
     await steps.first;
     await write;
     ended = true;
-    expect(rebuiltWhileHeld).toEqual([]);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(draw.features.count({ layerId: 'm' })).toBe(20_000);
     vi.restoreAllMocks();
+    expect(rebuilds.length).toBeGreaterThan(1);
+    for (const { coming, made } of rebuilds) expect(made).toBeLessThanOrEqual(coming + 1_024);
+    expect(internalsOf(store.tables).rowTable('m')?.delta.groups.length).toBeGreaterThan(1);
     // An idle period given while the write was held does no work: the work is asked for again
     expect(given.some((wasHeld) => wasHeld)).toBe(true);
     expect(askedAfter).toBeGreaterThan(0);
-    // Once, after the last step
-    expect(rebuiltWhileHeld).toEqual([false]);
   });
 });
 

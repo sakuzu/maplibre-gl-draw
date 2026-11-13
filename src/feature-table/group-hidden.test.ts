@@ -120,7 +120,7 @@ describe('a group shown or hidden', () => {
           );
           const rowGroups: RowGroup[] = [];
           for (let g = 0; g < layer.groupCount; g++) rowGroups.push(layer.groupAt(g));
-          if (layer.delta.group) rowGroups.push(layer.delta.group);
+          rowGroups.push(...layer.delta.groups);
           for (const rowGroup of rowGroups) {
             for (let r = 0; r < rowGroup.data.length; r++) {
               const named = rowGroup.data.groups[r];

@@ -49,12 +49,13 @@ function sketchesOf(features: readonly Feature[]): { feature: Feature }[] {
 
 /** The ids of the rows of the delta of the layer, in their order, with their places */
 function deltaIds(table: ReturnType<typeof setup>['table']): string[] {
-  const delta = table.delta.group;
-  if (!delta) return [];
-  return Array.from({ length: delta.data.length }, (_, k) => {
+  const places = table.deltaPlaces();
+  return Array.from({ length: places.rows.length }, (_, k) => {
+    const delta = places.sources[places.source[k]];
+    const row = places.rows[k];
     const bytes = delta.data.ids.bytes.subarray(
-      delta.data.ids.offsets[k],
-      delta.data.ids.offsets[k + 1],
+      delta.data.ids.offsets[row],
+      delta.data.ids.offsets[row + 1],
     );
     return new TextDecoder().decode(bytes);
   });
@@ -121,7 +122,7 @@ describe('the sketches drawn over rows for this client', () => {
     const p3 = internals.placeOf(tables.getRowRef('p3') ?? -1);
     expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_SKETCH).toBe(0);
     internalsOf(tables).showSketches([]);
-    expect(table.delta.group).toBeNull();
+    expect(table.delta.groups).toEqual([]);
     const p5 = internals.placeOf(tables.getRowRef('p5') ?? -1);
     expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_SKETCH).toBe(0);
   });
