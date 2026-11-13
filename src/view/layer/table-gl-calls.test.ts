@@ -289,13 +289,13 @@ describe('the GL calls per draw', () => {
     const draws = drawCount(counts);
     const held = ledger.snapshot().byOwner;
     console.log(
-      `[one draw] GPU held: rows ${held.rows} B, row-state ${held['row-state'] ?? 0} B, by kind ${(held.points ?? 0) + (held.lines ?? 0) + (held.polygons ?? 0)} B`,
+      `[one draw] GPU held: rows ${held.rows} B, rowState ${held.rowState ?? 0} B, by kind ${(held.points ?? 0) + (held.lines ?? 0) + (held.polygons ?? 0)} B`,
     );
     console.log(
       `[one draw] draws ${draws}, GL calls ${total(counts)}, per draw ${(total(counts) / draws).toFixed(2)}\n  ${breakdown(counts, draws)}`,
     );
     // The textures of the state of the rows are counted
-    expect(held['row-state'] ?? 0).toBeGreaterThan(0);
+    expect(held.rowState ?? 0).toBeGreaterThan(0);
     // A chunk per 40,000 coordinates or per group: a few draws rather than 7,500
     expect(draws).toBeGreaterThan(0);
     expect(draws).toBeLessThan(20);

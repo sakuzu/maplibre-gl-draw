@@ -36,7 +36,7 @@ export const DEFAULT_GPU_LIMIT_BYTES = 64_000_000;
  */
 const ROW_OWNERS: ReadonlySet<string> = new Set([
   'rows',
-  'row-state',
+  'rowState',
   'polygons',
   'lines',
   'points',

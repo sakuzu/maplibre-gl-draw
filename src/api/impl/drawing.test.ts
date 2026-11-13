@@ -65,7 +65,7 @@ describe('hasPendingWork and debug.terrain', () => {
     expect(terrain.render.active).toBe(false);
     expect(terrain.render.atlasRect).toHaveLength(4);
     expect(terrain.render.atlasSize).toHaveLength(2);
-    expect(terrain.drape).toMatchObject({ used: false, reason: 'not-evaluated', featureCount: 0 });
+    expect(terrain.drape).toMatchObject({ used: false, reason: 'notEvaluated', featureCount: 0 });
     expect(Object.isFrozen(terrain)).toBe(true);
   });
 });

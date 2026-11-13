@@ -29,6 +29,7 @@
  * instance, never "the instance drawn last".
  */
 
+import type { TerrainDiagnostics } from '../../api/state.js';
 import { TerrainFillCache } from '../cache/terrain-fill.js';
 import type { OffsetUniforms, ProjectionMatrices } from '../shaders/helpers.js';
 import type { TerrainLike } from './detect.js';
@@ -132,8 +133,8 @@ export interface GlobeGrids {
 export interface TerrainDrapeDebug {
   /** Whether the analytic drape was used */
   used: boolean;
-  /** The reason it was not used */
-  reason: string;
+  /** Why it was used or not */
+  reason: TerrainDiagnostics['drape']['reason'];
   /** The number of features put on the drape */
   featureCount: number;
   /** The total number of edges */
@@ -163,7 +164,7 @@ export interface TerrainDrapeDebug {
 /** The initial diagnostic values */
 export const INITIAL_DRAPE_DEBUG: TerrainDrapeDebug = {
   used: false,
-  reason: 'not-evaluated',
+  reason: 'notEvaluated',
   featureCount: 0,
   edgeCount: 0,
   tileCount: 0,

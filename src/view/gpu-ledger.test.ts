@@ -61,7 +61,7 @@ describe('GpuLedger', () => {
     const ledger = new GpuLedger();
     const [rows, atlas, kept] = [{}, {}, {}];
     ledger.record(rows, 'rows', 'buffer', 100);
-    ledger.record(atlas, 'dem-atlas', 'texture', 30);
+    ledger.record(atlas, 'demAtlas', 'texture', 30);
     ledger.record(kept, 'a part', 'buffer', 5, true);
     expect(ledger.outsideRowBytes).toBe(30);
     expect(ledger.snapshot().rowBytes).toBe(105);

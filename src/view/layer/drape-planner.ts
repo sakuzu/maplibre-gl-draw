@@ -57,6 +57,7 @@ import {
   getTerrainDrapeDebug,
   setDrapePaintedDatasets,
   setTerrainDrapeDebug,
+  type TerrainDrapeDebug,
 } from '../terrain/state.js';
 import type { DrawnShapes } from './shown-store.js';
 
@@ -235,7 +236,7 @@ export interface DrapeFrameDraws {
 /** The diagnostic values of a frame without terrain */
 const TERRAIN_OFF_DEBUG = {
   used: false,
-  reason: 'terrain-off',
+  reason: 'terrainOff',
   featureCount: 0,
   edgeCount: 0,
   tileCount: 0,
@@ -248,6 +249,18 @@ const TERRAIN_OFF_DEBUG = {
   excluded: 0,
   immediate: 0,
 } as const;
+
+/**
+ * The reason told when what draws the drape could not be made, from the last error of the
+ * renderer (its message stays with the renderer)
+ *
+ * @internal
+ */
+export function ensureFailureOf(lastError: string): TerrainDrapeDebug['reason'] {
+  if (lastError === 'mesh-alloc-failed') return 'meshAllocFailed';
+  if (lastError.startsWith('shader')) return 'shaderFailed';
+  return 'ensureFailed';
+}
 
 /**
  * Plans the analytic drape frame by frame
@@ -404,14 +417,14 @@ export class DrapePlanner {
     } else if (mapTerrain !== null) {
       // A wide band is handled by the vertex displacement path (no index is built either)
       this.plan = null;
-      if (getTerrainDrapeDebug(terrain).reason !== 'wide-zoom') {
+      if (getTerrainDrapeDebug(terrain).reason !== 'wideZoom') {
         setTerrainDrapeDebug(terrain, {
           ...getTerrainDrapeDebug(terrain),
           used: false,
-          reason: 'wide-zoom',
+          reason: 'wideZoom',
         });
       }
-    } else if (getTerrainDrapeDebug(terrain).reason !== 'terrain-off') {
+    } else if (getTerrainDrapeDebug(terrain).reason !== 'terrainOff') {
       setTerrainDrapeDebug(terrain, { ...TERRAIN_OFF_DEBUG });
     }
 
@@ -433,7 +446,7 @@ export class DrapePlanner {
       this.deps.map?.triggerRepaint?.();
     } else {
       const reason = getTerrainDrapeDebug(terrain).reason;
-      if (reason !== 'no-dem-tiles') this.handoff = null;
+      if (reason !== 'noDemTiles') this.handoff = null;
     }
     this.deps.datasets?.setDrapedDatasets(this.handoff);
     // "Whether it is actually painting right now" is reported as well. The hand-over decision
@@ -478,7 +491,7 @@ export class DrapePlanner {
         setTerrainDrapeDebug(terrain, {
           ...getTerrainDrapeDebug(terrain),
           used: false,
-          reason: drapeRenderer.lastError || 'ensure-failed',
+          reason: ensureFailureOf(drapeRenderer.lastError),
         });
         // The images that were to be interleaved between the sections are drawn by the first
         // slot. They are excluded from the later layer rendering, so without a drawer only the
@@ -652,7 +665,7 @@ export class DrapePlanner {
       setTerrainDrapeDebug(context, {
         ...debugBase,
         used: false,
-        reason: collected.elements.length === 0 ? 'no-drapeable-features' : 'vertex-budget',
+        reason: collected.elements.length === 0 ? 'noDrapeableFeatures' : 'vertexBudget',
       });
       this.plan = { tiles: [], excluded: collected.excluded, usable: false, meshSize: 128 };
       return false;
@@ -676,7 +689,7 @@ export class DrapePlanner {
     debugBase.maxEdgesPerCell = prepared.maxEdgesPerCell;
     debugBase.maxRunsPerCell = prepared.maxRunsPerCell;
     if (prepared.overflow) {
-      setTerrainDrapeDebug(context, { ...debugBase, used: false, reason: 'cell-overflow' });
+      setTerrainDrapeDebug(context, { ...debugBase, used: false, reason: 'cellOverflow' });
       this.plan = { tiles: [], excluded: collected.excluded, usable: false, meshSize: 128 };
       return false;
     }
@@ -726,10 +739,10 @@ export class DrapePlanner {
       // draw time, so what is still in view keeps coming out correctly and what disappeared is
       // replaced at the next resolution.
       if (drapePlan?.usable && drapePlan.tiles.length > 0) {
-        setTerrainDrapeDebug(context, { ...debugBase, used: true, reason: 'stale-plan' });
+        setTerrainDrapeDebug(context, { ...debugBase, used: true, reason: 'stalePlan' });
         return true;
       }
-      setTerrainDrapeDebug(context, { ...debugBase, used: false, reason: 'no-dem-tiles' });
+      setTerrainDrapeDebug(context, { ...debugBase, used: false, reason: 'noDemTiles' });
       this.plan = { tiles: [], excluded: collected.excluded, usable: false, meshSize };
       return false;
     }
@@ -754,7 +767,7 @@ export class DrapePlanner {
         setTerrainDrapeDebug(context, {
           ...debugBase,
           used: true,
-          reason: 'stale-plan',
+          reason: 'stalePlan',
           tileCount: drapePlan.tiles.length,
         });
         this.pendingWork = true;
@@ -771,8 +784,8 @@ export class DrapePlanner {
       // frame is drawn without the analytic drape, like an index over its budget, by the vertices
       // moved to the ground
       const reason = this.drapeRenderer?.lastError.startsWith('gpu-limit')
-        ? 'gpu-limit'
-        : 'texture-limit';
+        ? 'gpuLimit'
+        : 'textureLimit';
       setTerrainDrapeDebug(context, { ...debugBase, used: false, reason });
       this.plan = { tiles: [], excluded: collected.excluded, usable: false, meshSize };
       return false;

@@ -82,7 +82,7 @@ export interface TableDiagnostics {
    * compare the two
    */
   setVersionBudgetWhileMoving(ms: number): void;
-  /** The bytes the GPU holds per renderer (`points`, `lines`, `polygons`, `rows`, `row-state`) */
+  /** The bytes the GPU holds per renderer (`points`, `lines`, `polygons`, `rows`, `rowState`) */
   gpuBytesByRenderer(): Readonly<Record<string, number>>;
   /** What the drape of the polygons and the lines of the rows did in the last frame */
   drape(): TableDrapeDiagnostics;

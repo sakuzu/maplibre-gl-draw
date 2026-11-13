@@ -23,6 +23,7 @@ import {
   DRAPE_WIDE_EDGE_BUDGET,
   DrapePlanner,
   type DrapePlannerDatasets,
+  ensureFailureOf,
   type MapTerrain,
   TERRAIN_ANALYTIC_MIN_ZOOM,
 } from './drape-planner.js';
@@ -214,7 +215,7 @@ describe('DrapePlanner reasons', () => {
   it('reports terrain-off without terrain and does not use the drape', () => {
     const { frame, reason } = createPlanner();
     expect(frame({ terrain: false })).toBe(false);
-    expect(reason()).toBe('terrain-off');
+    expect(reason()).toBe('terrainOff');
   });
 
   it('plans with the tiles of the frame when everything is ready (ok)', () => {
@@ -230,7 +231,7 @@ describe('DrapePlanner reasons', () => {
     fake.edgeCount = DRAPE_WIDE_EDGE_BUDGET + 1;
     const { frame, reason } = createPlanner();
     expect(frame({ rawZoom: TERRAIN_ANALYTIC_MIN_ZOOM - 1 })).toBe(false);
-    expect(reason()).toBe('wide-zoom');
+    expect(reason()).toBe('wideZoom');
   });
 
   it('uses the drape outside the band when the elements are light', () => {
@@ -239,30 +240,30 @@ describe('DrapePlanner reasons', () => {
     expect(reason()).toBe('ok');
   });
 
-  it('reports no-drapeable-features and vertex-budget', () => {
+  it('reports noDrapeableFeatures and vertexBudget', () => {
     fake.elements = 0;
     const empty = createPlanner();
     expect(empty.frame()).toBe(false);
-    expect(empty.reason()).toBe('no-drapeable-features');
+    expect(empty.reason()).toBe('noDrapeableFeatures');
 
     fake.elements = 1;
     fake.canDrape = false;
     const heavy = createPlanner();
     expect(heavy.frame()).toBe(false);
-    expect(heavy.reason()).toBe('vertex-budget');
+    expect(heavy.reason()).toBe('vertexBudget');
   });
 
-  it('reports cell-overflow and texture-limit', () => {
+  it('reports cellOverflow and textureLimit', () => {
     fake.overflow = true;
     const overflow = createPlanner();
     expect(overflow.frame()).toBe(false);
-    expect(overflow.reason()).toBe('cell-overflow');
+    expect(overflow.reason()).toBe('cellOverflow');
 
     fake.overflow = false;
     fake.upload = false;
     const limit = createPlanner();
     expect(limit.frame()).toBe(false);
-    expect(limit.reason()).toBe('texture-limit');
+    expect(limit.reason()).toBe('textureLimit');
   });
 
   it('tells a table refused by the limit of the instance, and draws without the drape', () => {
@@ -270,7 +271,7 @@ describe('DrapePlanner reasons', () => {
     fake.lastError = 'gpu-limit: edgeTexSize needs 10 rows';
     const limit = createPlanner();
     expect(limit.frame()).toBe(false);
-    expect(limit.reason()).toBe('gpu-limit');
+    expect(limit.reason()).toBe('gpuLimit');
     fake.lastError = '';
   });
 
@@ -278,14 +279,14 @@ describe('DrapePlanner reasons', () => {
     fake.withDem = new Set();
     const fresh = createPlanner();
     expect(fresh.frame()).toBe(false);
-    expect(fresh.reason()).toBe('no-dem-tiles');
+    expect(fresh.reason()).toBe('noDemTiles');
 
     fake.withDem = new Set(['t1', 't2']);
     const kept = createPlanner();
     expect(kept.frame()).toBe(true);
     fake.withDem = new Set();
     expect(kept.frame()).toBe(true);
-    expect(kept.reason()).toBe('stale-plan');
+    expect(kept.reason()).toBe('stalePlan');
   });
 
   it('keeps the previous plan while the index is incomplete, for a limited number of frames', () => {
@@ -296,7 +297,7 @@ describe('DrapePlanner reasons', () => {
     fake.indexed = new Set([1]);
     for (let i = 0; i < DRAPE_STALE_PLAN_MAX_FRAMES; i++) {
       expect(frame()).toBe(true);
-      expect(reason()).toBe('stale-plan');
+      expect(reason()).toBe('stalePlan');
     }
     // Beyond the limit it is redrawn with what could be built
     expect(frame()).toBe(true);
@@ -320,7 +321,7 @@ describe('DrapePlanner reasons', () => {
     expect(planner.excluded.size).toBe(0);
     fake.withDem = new Set();
     expect(frame()).toBe(false);
-    expect(reason()).toBe('no-dem-tiles');
+    expect(reason()).toBe('noDemTiles');
   });
 });
 
@@ -339,7 +340,7 @@ describe('DrapePlanner hand-over', () => {
     planner.releaseGpu();
     fake.withDem = new Set();
     frame();
-    expect(reason()).toBe('no-dem-tiles');
+    expect(reason()).toBe('noDemTiles');
     expect(setDrapedDatasets).toHaveBeenLastCalledWith(fake.drapedDatasets);
 
     // A settled reason releases it at once
@@ -361,5 +362,13 @@ describe('DrapePlanner layer opacity', () => {
     // The size of the source is not touched
     expect(planner.sourceFactors[3]).toBe(1);
     expect(fake.collects).toBe(collects);
+  });
+});
+
+describe('ensureFailureOf', () => {
+  it('names the failure of what draws the drape by the last error of the renderer', () => {
+    expect(ensureFailureOf('mesh-alloc-failed')).toBe('meshAllocFailed');
+    expect(ensureFailureOf('shader: Error: the program does not link')).toBe('shaderFailed');
+    expect(ensureFailureOf('')).toBe('ensureFailed');
   });
 });

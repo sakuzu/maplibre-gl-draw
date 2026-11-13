@@ -824,7 +824,7 @@ export class TableLayerRenderer {
     this.rowStateGpu = new GpuResources({
       gl: options.gl,
       ledger: options.ledger,
-      owner: 'row-state',
+      owner: 'rowState',
     });
     this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
     this.rowExtents = new RowExtents(options.extensions);

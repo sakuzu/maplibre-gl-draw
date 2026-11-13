@@ -42,7 +42,7 @@ interface ShapeVertex {
 const CIRCLE_SEGMENTS = RENDERING_DEFAULTS.CIRCLE_SEGMENTS;
 
 /** The owner the vertex buffers of the shapes are recorded under in the GPU ledger */
-const POINT_SHAPES_OWNER = 'point-shapes';
+const POINT_SHAPES_OWNER = 'pointShapes';
 
 /**
  * Generates the vertices of a normalized circle (for TRIANGLE_FAN)

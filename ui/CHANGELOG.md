@@ -7,6 +7,14 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+### Changed in Unreleased
+
+- The tools enter the modes of core 3.0 by their names in camelCase
+  (`BUILTIN_TOOLS`: `drawPoint`, `drawLine`, `drawPolygon`, `drawCircle`,
+  `drawFreehand`, `drawImage`), and the layer panel and the legend read the
+  orders of the datasets as core 3.0 names them (`belowStore`, `aboveStore`,
+  `layerOrder`)
+
 ## [1.3.1] - 2026-10-04
 
 kata ^1.9.2: the panes follow kata's measuring of what is seen.

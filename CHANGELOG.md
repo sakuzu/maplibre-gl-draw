@@ -353,8 +353,12 @@ writing it. Its changes are listed after those of 3.0.0.
   (`SketchEndReason`), the kinds of the edits of vertices (`vertexMove`,
   `vertexInsert`, `vertexDelete`), the orders of a dataset (`belowStore`,
   `aboveStore`, `layerOrder`), the checks of `debug.checks`
-  (`ConsistencyCheck`) and the name of the plugin that shows the snapping
-  (`snapIndicator`)
+  (`ConsistencyCheck`), the name of the plugin that shows the snapping
+  (`snapIndicator`), the reasons of `TerrainDiagnostics.drape` (`terrainOff`,
+  `wideZoom`...), now a union of names in place of a string, and the owners of
+  `GpuMemoryDiagnostics.byOwner` (`rowState`, `pointShapes`, `demAtlas`). A
+  drape whose drawing could not be made tells `meshAllocFailed`,
+  `shaderFailed` or `ensureFailed` in place of the message of the error
 - `selection.get()` is `selection.value` (`SelectionValue`): the type, the
   number of the features, their layers and extent, and the IDs, `null` past
   2,000 features in a store that holds its features as rows. Nothing selected

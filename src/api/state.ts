@@ -225,8 +225,30 @@ export interface TerrainDiagnostics {
   readonly drape: {
     /** Whether the analytic drape was used */
     readonly used: boolean;
-    /** Why it was not used */
-    readonly reason: string;
+    /**
+     * Why it was used or not: `ok` (used), `stalePlan` (used with the plan of an earlier frame
+     * while the next one is made), `notEvaluated` (nothing drawn yet), `terrainOff` (no terrain),
+     * `wideZoom` (a zoom too wide for it: the vertices are moved to the ground),
+     * `noDrapeableFeatures`, `vertexBudget` (too many vertices), `cellOverflow` (a cell over its
+     * budget), `noDemTiles` (the elevation data is not there yet), `textureLimit` and `gpuLimit`
+     * (the tables do not fit in the textures of the GPU, or under the limit of the instance),
+     * `meshAllocFailed`, `shaderFailed` and `ensureFailed` (what draws it could not be made)
+     */
+    readonly reason:
+      | 'ok'
+      | 'stalePlan'
+      | 'notEvaluated'
+      | 'terrainOff'
+      | 'wideZoom'
+      | 'noDrapeableFeatures'
+      | 'vertexBudget'
+      | 'cellOverflow'
+      | 'noDemTiles'
+      | 'textureLimit'
+      | 'gpuLimit'
+      | 'meshAllocFailed'
+      | 'shaderFailed'
+      | 'ensureFailed';
     /** The number of features laid on the drape */
     readonly featureCount: number;
     /** The number of edges */

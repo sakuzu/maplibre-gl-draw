@@ -84,7 +84,7 @@ export interface DemAtlasResult {
 const QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
 /** The owner the atlas and its quad are recorded under in the GPU ledger */
-const DEM_ATLAS_OWNER = 'dem-atlas';
+const DEM_ATLAS_OWNER = 'demAtlas';
 
 const VERTEX_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_corner;

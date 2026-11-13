@@ -963,7 +963,7 @@ describe('the GPU ledger holds everything core allocates', () => {
       ledger,
     );
     resolver.resolve(mock.gl);
-    expect(ledger.snapshot().byOwner['dem-atlas'] ?? 0).toBeGreaterThan(0);
+    expect(ledger.snapshot().byOwner.demAtlas ?? 0).toBeGreaterThan(0);
     expectLedgerMatches(mock, ledger);
     resolver.releaseGpu();
     expect(mock.bufferBytes() + mock.textureBytes()).toBe(0);
