@@ -20,7 +20,7 @@ import type {
 } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from '../model.js';
-import type { GroupResource } from './group-resource.js';
+import type { GroupResource, GroupWriteOptions } from './group-resource.js';
 import { groupMemberIds, rangeOf } from './item-reads.js';
 import { moveGroups, resolveMoveTarget } from './placement.js';
 import type { ResourceDeps } from './shared.js';
@@ -68,8 +68,8 @@ export function createGroups(deps: ResourceDeps): GroupResource {
   };
 
   // Its members are in stacking order (`prepareGroup`)
-  const createOne = (prepared: ObjectGroup): void =>
-    insertGroup(store, prepared, { membersInOrder: true });
+  const createOne = (prepared: ObjectGroup, options?: GroupWriteOptions): void =>
+    insertGroup(store, prepared, { membersInOrder: true, ...options });
 
   return {
     get: (id) => store.getGroup(id),
@@ -85,10 +85,10 @@ export function createGroups(deps: ResourceDeps): GroupResource {
       return groupMemberIds(store, group, rangeOf(options));
     },
 
-    create(input) {
+    create(input, options) {
       const prepared = prepareGroup(deps, input, new Set(), new Set());
       if (store.isReadOnly()) return null;
-      store.transact(() => createOne(prepared));
+      store.transact(() => createOne(prepared, options));
       return store.getGroup(prepared.id) ?? null;
     },
 
@@ -97,7 +97,9 @@ export function createGroups(deps: ResourceDeps): GroupResource {
       const prepared = options.membersInOrder
         ? group
         : { ...group, featureIds: idsInStackingOrder(store, group.featureIds) };
-      store.transact(() => createOne(prepared));
+      store.transact(() =>
+        createOne(prepared, options.placeRows ? { placeRows: options.placeRows } : undefined),
+      );
       return store.getGroup(prepared.id) ?? null;
     },
 
