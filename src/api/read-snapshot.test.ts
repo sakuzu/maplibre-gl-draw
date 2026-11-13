@@ -157,6 +157,19 @@ describe('the reads while a commit is written over several tasks', () => {
     await readBetweenSteps(draw, store, (tx) => tx.features.delete(target));
   });
 
+  it('read the rows deleted where they were, the ones written before in the delta too', async () => {
+    const { draw, store } = await rowsDraw(1000);
+    // Some rows read from the delta of the layer (put elsewhere and changed before), some deleted
+    await draw.write((tx) =>
+      tx.features.place(['r10', 'r20', 'r500'], { layerId: 'l', below: 'r900' }),
+    );
+    await draw.write((tx) => tx.features.update(['r30', 'r40'], red));
+    await draw.write((tx) => tx.features.delete(['r50', 'r60']));
+    draw.selection.setAll();
+    const target = draw.selection.target;
+    await readBetweenSteps(draw, store, (tx) => tx.features.delete(target));
+  });
+
   it('read the rows put in another layer where they were', async () => {
     const { draw, store } = await rowsDraw(1000);
     draw.selection.setAll();

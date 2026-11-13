@@ -174,20 +174,24 @@ export class HeldSnapshot implements DocumentSnapshot {
   /** Keeps what a write of rows changes, before it is made */
   beforeRows(patch: RowValues): void {
     if (!this.#valid) return;
-    const places = patch.fields.has('parent') || patch.fields.has('key');
-    const deletes = patch.deleted !== undefined;
-    if (!places && !deletes) return;
+    // A row deleted stays where it is in the order of its table (kept by the transaction): only a
+    // row put elsewhere changes the order the snapshot reads
+    if (!patch.fields.has('parent') && !patch.fields.has('key')) return;
     const { internals } = this.#source;
     const written = this.#source.written();
     const layers = new Set<string>();
     const handles = patch.handles;
     const parentless: number[] = [];
+    // The layers the rows are in: none to look for once the order of every layer with rows is kept
+    const findLayers = !this.#everyOrderKept();
     for (let i = 0; i < handles.length; i++) {
       const handle = handles[i];
       // A row created by the transaction was not there: nothing of it is kept
       if (written.get(handle) === false) continue;
-      const place = internals.placeOf(handle);
-      if (place) layers.add(place.table.tableId);
+      if (findLayers) {
+        const place = internals.placeOf(handle);
+        if (place) layers.add(place.table.tableId);
+      }
       if (patch.fields.has('parent') && !this.#parents.has(handle)) parentless.push(handle);
     }
     // The layers the rows go to
@@ -221,6 +225,10 @@ export class HeldSnapshot implements DocumentSnapshot {
     const groups = this.#source.internals.groups;
     const layers = new Set<string>();
     for (const handle of patch.handles) {
+      // A group made since was not there: making it puts no row elsewhere (its members are put
+      // into it by writes of rows)
+      const id = groups.idOf(handle);
+      if (id === undefined || !this.#groups.has(id)) continue;
       const layerId = groups.tableOf(handle);
       if (layerId !== undefined) layers.add(layerId);
     }
@@ -238,15 +246,38 @@ export class HeldSnapshot implements DocumentSnapshot {
     return (handle >= 0 ? groups.tableOf(handle) : undefined) ?? parent;
   }
 
+  /** Whether the order of every layer that holds rows is kept */
+  #everyOrderKept(): boolean {
+    for (const layerId of this.#layers.keys()) {
+      if (this.#orders.has(layerId)) continue;
+      const rows = this.#source.through(() => this.#source.tables.get(layerId)?.rowCount ?? 0);
+      if (rows > 0) return false;
+    }
+    return true;
+  }
+
   /** Keeps the order of the rows of a layer as it is now, the first time it is about to change */
   #keepOrder(layerId: string): void {
     if (this.#orders.has(layerId)) return;
     this.#orders.set(layerId, this.#scanLayer(layerId));
   }
 
-  /** The rows of a layer as they are now, in their order */
+  /** The rows of a layer as they are now, in their order (the deleted ones left out) */
   #scanLayer(layerId: string): Int32Array {
     return this.#source.through(() => {
+      // The order of the rows the table keeps (made again when read after a change)
+      const table = this.#source.internals.rowTable(layerId);
+      if (table) {
+        const order = table.rowOrder();
+        const out = new Int32Array(order.handles.length);
+        let at = 0;
+        for (let i = 0; i < order.handles.length; i++) {
+          if ((order.groups[i].data.flags[order.rows[i]] & ROW_FLAG_DELETED) === 0) {
+            out[at++] = order.handles[i];
+          }
+        }
+        return out.slice(0, at);
+      }
       const batches: Int32Array[] = [];
       let length = 0;
       const cursor = this.#source.tables.scan({ layerIds: [layerId] });
@@ -345,9 +376,16 @@ export class HeldSnapshot implements DocumentSnapshot {
         for (const handle of kept) if (!one(handle)) return false;
         return true;
       }
-      const cursor = this.#source.tables.scan({ layerIds: [layerId] });
-      for (let batch = cursor.next(); batch; batch = cursor.next()) {
-        for (const handle of batch) if (!one(handle)) return false;
+      // The order of the table as it is, the rows deleted included: a row deleted since is read
+      // where it was, one deleted before is left out
+      const table = this.#source.internals.rowTable(layerId);
+      if (!table) return true;
+      const order = table.rowOrder();
+      for (let i = 0; i < order.handles.length; i++) {
+        const handle = order.handles[i];
+        const deleted = (order.groups[i].data.flags[order.rows[i]] & ROW_FLAG_DELETED) !== 0;
+        if (deleted && !this.#touched.has(handle)) continue;
+        if (!one(handle)) return false;
       }
       return true;
     });
