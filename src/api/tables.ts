@@ -26,6 +26,7 @@ import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu
 import type { Position } from 'geojson';
 import { createFeatureTablesStore } from '../feature-table/feature-row-tables.js';
 import type { BBox } from '../geometry/types.js';
+import { DrawError } from '../shared/draw-error.js';
 import type {
   ItemHandles,
   ItemPlacement,
@@ -246,6 +247,7 @@ const FEATURE_FIELDS = new RowFields(FEATURE_TABLE_COLUMNS);
  * @internal
  */
 export function checkRowValues(values: unknown): RowValues {
+  checkHandles(values);
   try {
     FEATURE_FIELDS.check(checkShapeOfRowValues(tablesValuesToCheck(values)));
     return values as RowValues;
@@ -269,16 +271,26 @@ export function createRowValues(values: {
   readonly fields: ReadonlyMap<RowField, RowFieldValues>;
   readonly deleted?: Uint8Array;
 }): RowValues {
+  checkHandles(values);
   try {
     return rowValuesOfTables(
-      createRowValuesOf({
-        rows: values.handles,
-        fields: values.fields,
-        ...(values.deleted && { deleted: values.deleted }),
-      }),
+      createRowValuesOf(tablesValuesToCheck(values) as Parameters<typeof createRowValuesOf>[0]),
     );
   } catch (error) {
     throw drawErrorOf(error);
+  }
+}
+
+/**
+ * Checks that values of rows given as an object name their rows as core does (`handles`), so that
+ * what is refused is said in the words of core; the tables check the rest
+ *
+ * @throws `DrawError` with the code `invalid-input` when they do not
+ */
+function checkHandles(values: unknown): void {
+  if (typeof values !== 'object' || values === null || Array.isArray(values)) return;
+  if (!((values as { readonly handles?: unknown }).handles instanceof Int32Array)) {
+    throw new DrawError('invalid-input', 'The handles must be an Int32Array');
   }
 }
 
