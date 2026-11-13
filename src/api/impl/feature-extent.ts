@@ -29,8 +29,12 @@ import type { Feature } from '../../store/types.js';
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
 
-/** An extent being widened, from nothing */
-class Extent {
+/**
+ * An extent being widened, from nothing
+ *
+ * @internal
+ */
+export class Extent {
   minX = Number.POSITIVE_INFINITY;
   minY = Number.POSITIVE_INFINITY;
   maxX = Number.NEGATIVE_INFINITY;
@@ -89,29 +93,45 @@ export function rowsExtent(store: Store, filter: RowFilter): BBox | null {
   const internals = featureTablesInternals(tables);
   const extent = new Extent();
   if (!tables || !internals) return null;
-  const b = new Float64Array(4);
+  const add = rowExtentAdder(store);
   forEachMatchingRow(store, filter, (handle) => {
+    add(handle, extent);
+    return true;
+  });
+  return extent.box;
+}
+
+/**
+ * What widens an extent by the box of a row of a Store that holds its features as rows, read
+ * without making its feature (but for an Image)
+ *
+ * @internal
+ */
+export function rowExtentAdder(store: Store): (handle: number, extent: Extent) => void {
+  const tables = store.tables;
+  const internals = featureTablesInternals(tables);
+  const b = new Float64Array(4);
+  return (handle, extent) => {
+    if (!tables || !internals) return;
     const place = internals.placeOf(handle);
-    if (!place) return true;
+    if (!place) return;
     const { group, row } = place;
-    if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return true;
+    if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return;
     const type = rowType(group.data, row);
     if (type === 'Image') {
       const feature = store.getFeature(tables.getRowId(handle) as string);
       if (feature) extent.addBox(featureExtent(feature));
-      return true;
+      return;
     }
     if (type === 'Circle') {
       const center = rowPoint(group, row);
-      if (!center) return true;
+      if (!center) return;
       const radius = rowValue(group, row, RADIUS_KEY);
       const circle =
         typeof radius === 'number' && radius > 0 ? circleBoundingBox(center, radius) : null;
       extent.addBox(circle ?? [center[0], center[1], center[0], center[1]]);
-      return true;
+      return;
     }
     if (pageRowBox(group.data, row, b)) extent.add(b[0], b[1], b[2], b[3]);
-    return true;
-  });
-  return extent.box;
+  };
 }

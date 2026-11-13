@@ -29,6 +29,7 @@
  */
 
 import type { RowField, RowWrite } from '../api/tables.js';
+import type { DocumentSnapshot } from './read-snapshot.js';
 import type { ItemPlacement, RowValues } from './types.js';
 
 /**
@@ -82,8 +83,17 @@ export interface HeldWrites {
   hold(finish: () => void): void;
   /** Writes a later step into the transaction held (outside a transaction of the Store) */
   step<T>(fn: () => T): T;
-  /** Lets go of the notification held: it goes out now */
+  /** Lets go of the notification held: it goes out now (the snapshot ends with it) */
   release(): void;
+  /**
+   * Begins the snapshot of the write (called in its first step, before it writes): what the
+   * instance reads until its last step reads the document as it is now (`read-snapshot.ts`)
+   */
+  openSnapshot(): void;
+  /** Ends the snapshot of a write made in its first step */
+  closeSnapshot(): void;
+  /** The snapshot of the write over several tasks under way (null for none) */
+  snapshot(): DocumentSnapshot | null;
   /**
    * Begins a write of rows made in several parts, told as one write of all of them would be: its
    * changes of the order (see `FeatureTablesStoreWriter.watchOrderOf`) and the groups its parts

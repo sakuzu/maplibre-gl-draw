@@ -56,6 +56,7 @@ import { insertGroup } from './item-lists.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
+import type { DocumentSnapshot } from './read-snapshot.js';
 import { BULK_SLICE_ROWS, heldWritesOf, type RowSteps, rowStepsOf } from './row-steps.js';
 import { settleSelectionValues, valueOfSelection } from './selection-value.js';
 import type {
@@ -198,6 +199,8 @@ export class DrawStore implements Store {
   /** The transactions from elsewhere (`remote`) under way */
   #remoteDepth = 0;
   readonly selectionIdsLimit: number;
+  /** What waits for the writes over several tasks under way (`whenWritten`) */
+  readonly #writtenWaiters: Array<() => void> = [];
 
   constructor(contract: StoreContract, options: DrawStoreOptions = {}) {
     this.#contract = contract;
@@ -394,6 +397,7 @@ export class DrawStore implements Store {
     const going = steps.begin(write, () => {
       ended = true;
       if (this.#queue.remove(restore)) this.#bus.release();
+      this.#settleWritten();
     });
     if (!going || ended) return true;
     this.#queue.add(restore);
@@ -638,6 +642,7 @@ export class DrawStore implements Store {
       } catch (released) {
         error ??= released;
       }
+      this.#settleWritten();
       onEnd(error);
     };
     /** A later step, in the transaction held (its writes finish nothing) */
@@ -667,8 +672,11 @@ export class DrawStore implements Store {
     // The first step, in a transaction of its own: the notification is held when steps are left
     const done = around(() =>
       this.transact(() => {
+        // What the instance reads until the last step reads the document before the write
+        if (options.snapshot) held.openSnapshot();
         const first = step(performance.now() + budgetMs);
-        if (!first) {
+        if (first) held.closeSnapshot();
+        else {
           // Anything else that comes to this Store or to its contract finishes it first
           held.hold(() => write.finish());
           this.#bus.hold(() => write.finish());
@@ -683,6 +691,22 @@ export class DrawStore implements Store {
       return;
     }
     timer = setTimeout(next, 0);
+  }
+
+  whenWritten(): Promise<void> {
+    if (!this.#queue.holding) return Promise.resolve();
+    return new Promise((resolve) => this.#writtenWaiters.push(resolve));
+  }
+
+  /** Settles what waits for the writes over several tasks once none holds its notification */
+  #settleWritten(): void {
+    if (this.#queue.holding || this.#writtenWaiters.length === 0) return;
+    for (const resolve of this.#writtenWaiters.splice(0)) resolve();
+  }
+
+  readSnapshot(): DocumentSnapshot | undefined {
+    if (!this.#queue.holding) return undefined;
+    return heldWritesOf.get(this.#contract)?.snapshot() ?? undefined;
   }
 
   liveRows(rows: TableSelection): TableSelection {

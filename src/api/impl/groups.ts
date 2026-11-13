@@ -6,12 +6,14 @@
  */
 
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { layerIdsInOrder } from '../../store/feature-stream.js';
 import {
   featuresInStackingOrder,
   groupsInStackingOrder,
   groupsInStackingOrderOf,
   insertGroup,
 } from '../../store/item-lists.js';
+import { snapshotOf } from '../../store/read-snapshot.js';
 import type { Store } from '../../store/store.js';
 import type {
   ObjectGroup,
@@ -21,7 +23,7 @@ import type {
 import { DrawError } from '../errors.js';
 import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from '../model.js';
 import type { GroupResource, GroupWriteOptions } from './group-resource.js';
-import { groupMemberIds, rangeOf } from './item-reads.js';
+import { groupMemberIds, itemsAt, rangeOf } from './item-reads.js';
 import { moveGroups, resolveMoveTarget } from './placement.js';
 import type { ResourceDeps } from './shared.js';
 import {
@@ -60,7 +62,23 @@ export function createGroups(deps: ResourceDeps): GroupResource {
   };
 
   /** Every group in stacking order, from the back; a group no layer lists comes last */
-  const inOrder = (): StoredGroup[] => groupsInStackingOrder(store);
+  const inOrder = (): StoredGroup[] => {
+    const snapshot = store.tables ? snapshotOf(store) : undefined;
+    if (!snapshot) return groupsInStackingOrder(store);
+    // While a write over several tasks is under way, the groups as they were before it
+    const out: StoredGroup[] = [];
+    for (const layerId of layerIdsInOrder(store)) {
+      for (const id of itemsAt(store, snapshot, layerId)) {
+        const group = store.getGroup(id);
+        if (group) out.push(group);
+      }
+    }
+    if (out.length < store.listGroups().length) {
+      const listed = new Set(out.map((group) => group.id));
+      out.push(...store.listGroups().filter((group) => !listed.has(group.id)));
+    }
+    return out;
+  };
 
   const list = (filter?: GroupFilter): Group[] => {
     const entries = filterEntries(filter, FILTER_KEYS);

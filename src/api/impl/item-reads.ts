@@ -7,6 +7,7 @@
  * and from the tables of a layer held as rows, without making features
  */
 
+import { type DocumentSnapshot, snapshotOf } from '../../store/read-snapshot.js';
 import type { Store } from '../../store/store.js';
 import type { Group, Layer } from '../../store/types.js';
 import type { ItemListOptions } from '../model.js';
@@ -57,6 +58,8 @@ function slice(list: readonly string[], range: Range): string[] {
  */
 export function layerItemIds(store: Store, layer: Layer, range: Range): string[] {
   if (layer.kind !== 'table') return slice(layer.items, range);
+  const snapshot = snapshotOf(store);
+  if (snapshot) return slice(itemsAt(store, snapshot, layer.id), range);
   const tables = store.tables;
   const view = tables?.get(layer.id);
   if (!tables || !view) return [];
@@ -78,6 +81,8 @@ export function layerItemIds(store: Store, layer: Layer, range: Range): string[]
  */
 export function layerItemCount(store: Store, layer: Layer): number {
   if (layer.kind !== 'table') return layer.items.length;
+  const snapshot = snapshotOf(store);
+  if (snapshot) return itemsAt(store, snapshot, layer.id).length;
   return store.tables?.get(layer.id)?.itemCount ?? 0;
 }
 
@@ -88,6 +93,8 @@ export function layerItemCount(store: Store, layer: Layer): number {
  */
 export function groupMemberIds(store: Store, group: Group, range: Range): string[] {
   if (group.kind !== 'table') return slice(group.featureIds, range);
+  const snapshot = snapshotOf(store);
+  if (snapshot) return slice(membersAt(store, snapshot, group), range);
   const tables = store.tables;
   const view = tables?.get(group.layerId);
   const handle = tables?.findGroup(group.id);
@@ -95,4 +102,47 @@ export function groupMemberIds(store: Store, group: Group, range: Range): string
   const count = range.limit ?? Math.max(0, view.countGroupMembers(handle) - range.offset);
   const members = view.listGroupMembers(handle, range.offset, count);
   return Array.from(members, (row) => tables.getRowId(row) as string);
+}
+
+/**
+ * The IDs of the items of a layer held as rows as they were when the write over several tasks
+ * under way began (`Store.readSnapshot`), from the back: a row on its own, or the group of the rows
+ * of a group, at the place of its first member
+ *
+ * @internal
+ */
+export function itemsAt(store: Store, snapshot: DocumentSnapshot, layerId: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  snapshot.read(() => {
+    const tables = store.tables;
+    if (!tables) return;
+    snapshot.forEachRow(layerId, (handle, changed) => {
+      const groupId = changed ? changed.groupId : snapshot.groupOfRow(handle);
+      if (groupId === undefined) {
+        out.push(changed ? changed.id : (tables.getRowId(handle) as string));
+      } else if (!seen.has(groupId)) {
+        seen.add(groupId);
+        out.push(groupId);
+      }
+      return true;
+    });
+  });
+  return out;
+}
+
+/** The IDs of the members of a group held as rows as they were then, from the back */
+function membersAt(store: Store, snapshot: DocumentSnapshot, group: Group): string[] {
+  const out: string[] = [];
+  snapshot.read(() => {
+    const tables = store.tables;
+    if (!tables) return;
+    snapshot.forEachRow(group.layerId, (handle, changed) => {
+      const groupId = changed ? changed.groupId : snapshot.groupOfRow(handle);
+      if (groupId === group.id)
+        out.push(changed ? changed.id : (tables.getRowId(handle) as string));
+      return true;
+    });
+  });
+  return out;
 }

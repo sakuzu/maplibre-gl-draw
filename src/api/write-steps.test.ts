@@ -123,7 +123,7 @@ describe('a commit too long for one task', () => {
     expect(styleOf(draw, 'r999')).toBeUndefined();
   });
 
-  it('is finished by a read of the rows before its last step: nothing reads them half written', async () => {
+  it('is read as the document before it until its last step, without finishing it', async () => {
     const { draw, store } = rowsDraw(1000);
     const commits: string[] = [];
     draw.on('change', (change) => commits.push(change.commit));
@@ -133,9 +133,32 @@ describe('a commit too long for one task', () => {
     const write = draw.write((tx) => tx.features.update(target, red), steps.options);
     await steps.first;
     expect(store.slicedWritePending).toBe(true);
+    // The rows of the first part are written, but read as they were
+    expect(styleOf(draw, 'r0')).toBeUndefined();
+    expect(styleOf(draw, 'r999')).toBeUndefined();
+    expect(draw.features.list({}, { limit: 3 }).map((f) => f.properties[STYLE])).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(store.slicedWritePending).toBe(true);
+    expect(commits).toEqual([]);
+    expect((await write.result).skipped).toBe(0);
+    expect(styleOf(draw, 'r0')).toEqual({ pointColor: '#ff0000' });
     expect(styleOf(draw, 'r999')).toEqual({ pointColor: '#ff0000' });
+  });
+
+  it('is finished by a read of the rows of this client before its last step', async () => {
+    const { draw, store } = rowsDraw(1000);
+    slowClock();
+    const target = draw.selection.target;
+    const steps = stepped();
+    const write = draw.write((tx) => tx.features.update(target, red), steps.options);
+    await steps.first;
+    expect(store.slicedWritePending).toBe(true);
+    // What this client does reads the Store itself: nothing reads the rows half written
+    expect(store.getFeature('r999')?.style).toEqual({ pointColor: '#ff0000' });
     expect(store.slicedWritePending).toBe(false);
-    expect(commits).toEqual([write.id]);
     expect((await write.result).skipped).toBe(0);
   });
 
