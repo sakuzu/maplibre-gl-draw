@@ -11,7 +11,7 @@
  */
 
 import type { SelectionValue as PublicSelectionValue } from '../api/state.js';
-import { summarizeRows } from '../feature-table/bulk-rows.js';
+import { livePlaceOf, summarizeRows } from '../feature-table/bulk-rows.js';
 import type { FeatureTablesInternals } from '../feature-table/feature-tables.js';
 import type { TableSelection } from '../feature-table/selection.js';
 import type { SelectionBulk, SelectionValue } from './types.js';
@@ -34,6 +34,35 @@ export function summaryOf(internals: FeatureTablesInternals, rows: TableSelectio
   });
   ROWS.set(bulk, rows);
   if (summary.hasArea) WITH_AREA.add(bulk);
+  return bulk;
+}
+
+/**
+ * The summary of rows whose geometries are as they were for a summary of them made before, some
+ * of them put in other layers: the layers made again (the ones the rows put elsewhere went to,
+ * and the ones the others are read in), the number and the extent kept
+ *
+ * @param layerOf - The layer a row was put in (undefined for a row not put elsewhere)
+ * @internal
+ */
+export function summaryWithLayers(
+  internals: FeatureTablesInternals,
+  previous: SelectionBulk,
+  rows: TableSelection,
+  layerOf: (handle: number) => string | undefined,
+): SelectionBulk {
+  const layers = new Set<string>();
+  for (const handle of rows.handles) {
+    const layerId = layerOf(handle) ?? livePlaceOf(internals, handle)?.table.tableId;
+    if (layerId !== undefined) layers.add(layerId);
+  }
+  const bulk: SelectionBulk = Object.freeze({
+    count: previous.count,
+    layerIds: Object.freeze([...layers]) as readonly string[],
+    bbox: previous.bbox,
+  });
+  ROWS.set(bulk, rows);
+  if (WITH_AREA.has(previous)) WITH_AREA.add(bulk);
   return bulk;
 }
 

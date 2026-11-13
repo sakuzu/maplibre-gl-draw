@@ -407,6 +407,15 @@ function onlyPlaced(fields: ReadonlySet<RowField>): boolean {
   return true;
 }
 
+/** The handles of lists of rows, as a mark by handle (1: in a list) */
+function handleSet(lists: readonly Int32Array[]): Uint8Array {
+  let size = 0;
+  for (const handles of lists) for (const handle of handles) if (handle >= size) size = handle + 1;
+  const out = new Uint8Array(size);
+  for (const handles of lists) for (const handle of handles) out[handle] = 1;
+  return out;
+}
+
 /** The same IDs, or the empty list shared by every change */
 function idsOf(list: string[]): readonly string[] {
   return list.length === 0 ? NO_IDS : list;
@@ -497,17 +506,22 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
   };
   // A row whose only fields written are those of its place was put in another place, and nothing
   // else of it changed: it is told as placed, as a feature of a Store of objects is
+  const placedRows: Int32Array[] = [];
   for (const rows of changes.rows?.layers.values() ?? []) {
     ofRows(rows.created, created);
-    ofRows(rows.updated, onlyPlaced(rows.fields) ? placedFeatures : updated);
+    const placed = onlyPlaced(rows.fields);
+    ofRows(rows.updated, placed ? placedFeatures : updated);
+    if (placed) placedRows.push(rows.updated);
     ofRows(rows.deleted, deleted);
   }
 
   // The features and the groups put in another place of the order, each once
   const placedGroups: string[] = [];
   if (changes.order) {
-    const seen = new Set<string>(placedFeatures);
+    // Made at the first item told (the rows told as placed are many when many rows were put)
+    let seen: Set<string> | null = null;
     const add = (id: string, out: string[]): void => {
+      seen ??= new Set<string>(placedFeatures);
       if (seen.has(id)) return;
       seen.add(id);
       out.push(id);
@@ -516,9 +530,12 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
       if (store.getGroup(itemId)) add(itemId, placedGroups);
       else add(itemId, placedFeatures);
     }
+    // A row of a move of many rows already told as placed is not read again
+    const told = handleSet(placedRows);
     for (const move of changes.order) {
       if (move.kind !== 'rows' || !tables) continue;
       for (const handle of move.handles) {
+        if (handle < told.length && told[handle] === 1) continue;
         const id = tables.getRowId(handle);
         if (id !== undefined) add(id, placedFeatures);
       }

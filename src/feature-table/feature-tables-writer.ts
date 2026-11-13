@@ -46,6 +46,8 @@ import {
   type ItemOrderSource,
   ItemOrderWatch,
   ORDER_ITEM_LIMIT,
+  PlacementOrder,
+  type RowsPlacement,
 } from './item-order.js';
 import { rowsChangeOf } from './rows-change.js';
 
@@ -62,6 +64,14 @@ export interface FeatureTablesStoreWriter extends FeatureTablesWriter {
    * changes the whole write made
    */
   watchOrderOf(patch: RowValues): () => void;
+  /**
+   * As `watchOrderOf`, for values that put rows in a place together (`placeRows` of the Store):
+   * the changes of the order are made as the parts are written, from where the rows go
+   * (`placement`) and from where each part read its rows before it was written, not from the
+   * places of the rows once written (see `PlacementOrder`). Values of few rows are watched as
+   * `watchOrderOf` watches them
+   */
+  watchPlacementOf(patch: RowValues, placement: RowsPlacement): () => void;
 }
 
 /**
@@ -103,8 +113,14 @@ export function createFeatureTablesWriter(
   notify?: (change: StoreChange) => void,
   isLayer?: (id: string) => boolean,
 ): FeatureTablesStoreWriter {
-  /** The changes of the order of a write made in several parts, under way (`watchOrderOf`) */
-  let partsWatch: { readonly watch: ItemOrderWatch | null } | null = null;
+  /**
+   * The changes of the order of a write made in several parts, under way (`watchOrderOf`, or
+   * `watchPlacementOf` with the order made as its parts are written)
+   */
+  let partsWatch: {
+    readonly watch: ItemOrderWatch | null;
+    readonly placed?: PlacementOrder;
+  } | null = null;
   const orderSource: ItemOrderSource = {
     walkItems: (layerId) => internals.walkItems(layerId),
     getGroupKey: (group) => internals.getGroupKey(group),
@@ -302,6 +318,17 @@ export function createFeatureTablesWriter(
     });
   };
 
+  const watchOrderOf = (patch: RowValues): (() => void) => {
+    const parts = { watch: watchOrder(patch) };
+    partsWatch = parts;
+    return () => {
+      if (partsWatch !== parts) return;
+      partsWatch = null;
+      const order = parts.watch?.finish() ?? [];
+      if (order.length > 0) notify?.({ order });
+    };
+  };
+
   return {
     lookup: (id) => {
       try {
@@ -348,6 +375,7 @@ export function createFeatureTablesWriter(
         checkParents(values);
         // A part of a write made in several parts: its changes of the order are told at its end
         const watch = partsWatch ? null : watchOrder(values);
+        partsWatch?.placed?.part(values);
         const written = tables.writeRows(tablesValuesOf(shapesOfGeometries(values)), options);
         const rows = rowsChangeOf(written.rows);
         const kept = written.kept;
@@ -400,14 +428,16 @@ export function createFeatureTablesWriter(
         throw writerError(error);
       }
     },
-    watchOrderOf: (patch) => {
-      const parts = { watch: watchOrder(patch) };
+    watchOrderOf,
+    watchPlacementOf: (patch, placement) => {
+      if (!notify || patch.handles.length <= ORDER_ITEM_LIMIT) return watchOrderOf(patch);
+      const parts = { watch: null, placed: new PlacementOrder(orderSource, patch, placement) };
       partsWatch = parts;
       return () => {
         if (partsWatch !== parts) return;
         partsWatch = null;
-        const order = parts.watch?.finish() ?? [];
-        if (order.length > 0) notify?.({ order });
+        const order = parts.placed.finish();
+        if (order.length > 0) notify({ order });
       };
     },
   };

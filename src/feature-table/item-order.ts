@@ -49,6 +49,7 @@ import type {
   ItemPosition,
   RowField,
   RowsMove,
+  RowValues,
 } from '../shared/types/model.js';
 import {
   diffItemOrder,
@@ -438,6 +439,150 @@ export class ItemOrderWatch {
       });
     }
     return out;
+  }
+}
+
+/**
+ * Where rows put in a place together are once written (`placeRows` of the Store of rows): the
+ * layer and the group (none: the layer) they are in, and the items just below and above them then
+ * (null for none)
+ *
+ * @internal
+ */
+export interface RowsPlacement {
+  readonly layerId: string;
+  readonly groupId: string | undefined;
+  readonly below: number | null;
+  readonly above: number | null;
+}
+
+/**
+ * The changes of the order of rows put in a place together in parts (more than are told one at a
+ * time), made as their parts are written, from where they go and from where they were: not from
+ * the places of the rows once written, which the last part would read for every row
+ *
+ * They are what `ItemOrderWatch` makes of the write of all of them in one: one move of many rows
+ * with the rows in their new order (the order of the values, whose keys go up), the place they
+ * were put at together and their parents and keys before; or, when a row of them was already
+ * where it goes, the item just below each row moved
+ *
+ * @internal
+ */
+export class PlacementOrder {
+  /** Whether each row of the values was there, and was put in another place */
+  private readonly there: Uint8Array;
+  private readonly moved: Uint8Array;
+  /** The parent and the key of each row of the values before (for the rows moved) */
+  private readonly parents: unknown[];
+  private readonly keys: unknown[];
+  /** The next row of the values a part is expected to start at */
+  private next = 0;
+  /** The index of each row of the values, made when a part does not start where expected */
+  private indexOf: Map<RowRef, number> | null = null;
+
+  constructor(
+    private readonly source: ItemOrderSource,
+    private readonly values: RowValues,
+    private readonly placement: RowsPlacement,
+  ) {
+    const n = values.handles.length;
+    this.there = new Uint8Array(n);
+    this.moved = new Uint8Array(n);
+    this.parents = new Array<unknown>(n);
+    this.keys = new Array<unknown>(n);
+  }
+
+  /** A part, before it is written: where its rows were, and whether they move */
+  part(part: RowValues): void {
+    const { handles } = this.values;
+    const parents = this.values.fields.get('parent');
+    const keys = this.values.fields.get('key');
+    for (const handle of part.handles) {
+      let i = this.next;
+      if (handles[i] !== handle) {
+        if (!this.indexOf) this.indexOf = new Map(Array.from(handles, (h, k) => [h, k]));
+        const at = this.indexOf.get(handle);
+        if (at === undefined) continue;
+        i = at;
+      }
+      this.next = i + 1;
+      const at = this.source.placeOf(handle);
+      if (!at || isDeleted(at)) continue;
+      const data = at.group.data;
+      const group = data.groups[at.row];
+      const parent = group >= 0 ? this.source.groups.idOf(group) : at.table.tableId;
+      const key = utf8String(data.keys, at.row);
+      this.there[i] = 1;
+      if (parent === parents?.[i] && key === keys?.[i]) continue;
+      this.moved[i] = 1;
+      this.parents[i] = parent;
+      this.keys[i] = key;
+    }
+  }
+
+  /** The changes of the order, once the last part is written */
+  finish(): ItemOrderChange[] {
+    const n = this.values.handles.length;
+    let count = 0;
+    let all = true;
+    for (let i = 0; i < n; i++) {
+      if (this.moved[i]) count++;
+      else if (this.there[i]) all = false;
+    }
+    if (count === 0) return [];
+    const handles = new Int32Array(count);
+    const parents: unknown[] = new Array(count);
+    const keys: unknown[] = new Array(count);
+    const kinds = all ? null : new Uint8Array(count);
+    const belows = all ? null : new Int32Array(count);
+    const { below, above, layerId, groupId } = this.placement;
+    // The item just below a row: the row of the values before it that is there, or the item
+    // below the place for the first of them
+    let last = -1;
+    let k = 0;
+    for (let i = 0; i < n; i++) {
+      if (!this.there[i]) continue;
+      if (this.moved[i]) {
+        handles[k] = this.values.handles[i];
+        parents[k] = this.parents[i];
+        keys[k] = this.keys[i];
+        if (kinds && belows) {
+          if (last >= 0) {
+            kinds[k] = 0;
+            belows[k] = this.values.handles[last];
+          } else {
+            kinds[k] = below === null ? 0 : below & 1;
+            belows[k] = below === null ? -1 : below >> 1;
+          }
+        }
+        k++;
+      }
+      last = i;
+    }
+    const before = {
+      handles,
+      fields: new Map<RowField, unknown[]>([
+        ['parent', parents],
+        ['key', keys],
+      ]),
+    };
+    if (kinds && belows) {
+      return [{ kind: 'rows', layerId, handles, belows: { kinds, handles: belows }, before }];
+    }
+    const to: ItemPosition = {
+      layerId,
+      groupId,
+      below: below === null ? null : this.idOf(below),
+      above: above === null ? null : this.idOf(above),
+    };
+    return [{ kind: 'rows', layerId, handles, to, before }];
+  }
+
+  /** The id of an item */
+  private idOf(code: number): string {
+    const handle = code >> 1;
+    if ((code & 1) === 0) return this.source.idOf(handle) ?? '';
+    return this.source.groups.idOf(handle) ?? '';
   }
 }
 
