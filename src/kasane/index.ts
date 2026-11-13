@@ -42,16 +42,16 @@
  * take as they are (`toPage` of `/table`), the triangles copied from the caches.
  *
  * ```ts
- * import { packTabaneBlock, readTabaneBlockFile, tabaneNameOf } from '@sakuzu/tabane';
+ * import { packBlock, readBlockFile, digestOf } from '@sakuzu/tabane';
  * import { toPage } from '@sakuzu/maplibre-gl-draw/table';
  *
  * const [{ block, caches }] = writeTabaneFeatureBlocks({ parent: 'buildings', head: 'V', rows });
- * const name = await tabaneNameOf(block.content); // the name to keep the file under
- * const file = packTabaneBlock(block, compressor, caches); // its parts compressed with zstd
+ * const name = await digestOf(block.content); // the name to keep the file under
+ * const file = packBlock(block, compressor, caches); // its parts compressed with zstd
  *
  * // where it is read
- * const read = readTabaneBlockFile(file, compressor);
- * const pages = read.rowBlocks.map((b, k) =>
+ * const read = readBlockFile(file, compressor);
+ * const pages = read.pages.map((b, k) =>
  *   toPage(b, { caches: read.caches.filter((c) => c.part === k + 1) }),
  * );
  * ```

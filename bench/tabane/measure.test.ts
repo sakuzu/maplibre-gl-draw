@@ -28,15 +28,15 @@ import {
 } from '@sakuzu/maplibre-gl-draw/kasane';
 import { createPageBuilder, toPage } from '@sakuzu/maplibre-gl-draw/table';
 import {
-  formatTabaneId,
-  listTabaneFileParts,
-  packTabaneBlock,
-  readTabaneFileCache,
-  readTabaneFilePart,
-  readTabaneRowBlock,
+  formatId,
+  listFileParts,
+  packBlock,
+  readFileCache,
+  readFilePart,
+  readPage,
+  readRows,
+  rowSuffixOf,
   type TabaneCache,
-  tabaneRowSuffixOf,
-  tabaneRowsOf,
 } from '@sakuzu/tabane';
 import { decompress } from 'fzstd';
 import type { Feature } from 'geojson';
@@ -77,7 +77,7 @@ function rowsOf(file: string): TabaneFeatureRow[] {
     if (!line) continue;
     const f = JSON.parse(line) as Feature;
     out.push({
-      id: formatTabaneId({ origin: ORIGIN, number: out.length + 1 }),
+      id: formatId({ origin: ORIGIN, number: out.length + 1 }),
       type: f.geometry?.type ?? 'Point',
       geometry: f.geometry,
       properties: f.properties ?? {},
@@ -96,9 +96,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         const blocks = writeTabaneFeatureBlocks({ parent: 'layer', head: 'V', rows });
         const writeMs = performance.now() - t0;
         const t1 = performance.now();
-        const files = blocks.map((b) =>
-          packTabaneBlock(b.block, zstd, fills ? b.caches : undefined),
-        );
+        const files = blocks.map((b) => packBlock(b.block, zstd, fills ? b.caches : undefined));
         const zstdMs = performance.now() - t1;
         let content = 0;
         let stored = 0;
@@ -119,9 +117,9 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         let at = 0;
         let differ = 0;
         for (const f of files) {
-          for (const part of listTabaneFileParts(f).slice(1)) {
-            const rowBlock = readTabaneRowBlock(readTabaneFilePart(part, zstd));
-            for (const back of tabaneRowsOf(rowBlock).map(featureRowOfTabane)) {
+          for (const part of listFileParts(f).slice(1)) {
+            const rowBlock = readPage(readFilePart(part, zstd));
+            for (const back of readRows(rowBlock).map(featureRowOfTabane)) {
               const row = rows[at++];
               if (
                 back.id !== row.id ||
@@ -136,20 +134,20 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         (result[label] as Record<string, unknown>).readBack = { rows: at, differ };
 
         // The time to read the pages into pages of the tables, a part at a time (warmed up)
-        const parts = files.flatMap((f) => listTabaneFileParts(f).slice(1));
+        const parts = files.flatMap((f) => listFileParts(f).slice(1));
         const pass = () => {
           const t = { unzip: 0, read: 0, block: 0, rowBlocks: 0 };
           const each: number[] = [];
           for (const part of parts) {
             const a = performance.now();
-            const bytes = readTabaneFilePart(part, zstd);
+            const bytes = readFilePart(part, zstd);
             const caches: TabaneCache[] = part.caches.map((c) => ({
               part: 0,
               name: c.name,
-              content: readTabaneFileCache(c, zstd),
+              content: readFileCache(c, zstd),
             }));
             const b = performance.now();
-            const rowBlock = readTabaneRowBlock(bytes);
+            const rowBlock = readPage(bytes);
             const c = performance.now();
             toPage(rowBlock, { caches });
             const d = performance.now();
@@ -190,7 +188,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
               id: row.id,
               type: row.type,
               geometry: row.geometry,
-              key: `V${tabaneRowSuffixOf(s + i)}`,
+              key: `V${rowSuffixOf(s + i)}`,
               properties: row.properties,
             });
           });

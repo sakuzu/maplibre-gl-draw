@@ -181,7 +181,7 @@ describe('the rows of layers of every dimensions', () => {
       // Many new rows at once: built in the Worker
       const ids = Array.from({ length: 200 }, (_, i) => `w${i}`);
       const handles = writer.allocateHandles(
-        (await import('@sakuzu/tabane')).utf8ColumnFromStrings(ids),
+        (await import('@sakuzu/tabane')).byteColumnFromStrings(ids),
       );
       const rows: ReferenceRow[] = ids.map((id, i) => ({
         id,

@@ -12,7 +12,7 @@
  */
 
 import type { TableWorkBudget } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import {
   expectTablesMatch,
@@ -114,7 +114,7 @@ describe('the deltas and the versions at their edges', () => {
     const reference = pointsReference(10);
     const setup = tablesOfReference(reference, ['a'], 4);
     const { tables, writer, internals, groupHandleOf } = setup;
-    const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['alone']));
+    const [fresh] = writer.allocateHandles(byteColumnFromStrings(['alone']));
     writer.writeRows(
       rowPatch([fresh], {
         type: ['Point'],

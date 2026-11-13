@@ -36,17 +36,17 @@ import {
   type CoordinateDimensions,
   type CoordinateSystem,
   copyCoordinates,
-  dimsWithin,
+  dimensionsWithin,
   hashUtf8,
   idColumn,
   keyColumn,
   planarCoordinates,
+  readFlag,
   readValue,
   strideOf,
   type TabaneCache,
-  type TabaneRowBlock,
+  type TabanePage,
   type TabaneShapeColumn,
-  tabaneFlagOf,
 } from '@sakuzu/tabane';
 import { DrawError } from '../../shared/draw-error.js';
 import { circleRowRings } from '../circle-rings.js';
@@ -108,7 +108,7 @@ function geometryOf(
 ): ShapeColumn | null {
   if (column === null) return null;
   const from = column.dimensions;
-  if (!dimsWithin(from, dims))
+  if (!dimensionsWithin(from, dims))
     throw new DrawError('invalid-input', `Tabane: coordinates of ${from} in a layer of ${dims}`);
   const stride = strideOf(dims);
   const children: TableGeometry[] = column.forms.map((form) => {
@@ -141,7 +141,7 @@ function geometryOf(
  *   not an object
  * @experimental
  */
-export function toPage(rowBlock: TabaneRowBlock, options: ToPageOptions = {}): Page {
+export function toPage(rowBlock: TabanePage, options: ToPageOptions = {}): Page {
   return pageDataOfTabane(rowBlock, options);
 }
 
@@ -150,7 +150,7 @@ export function toPage(rowBlock: TabaneRowBlock, options: ToPageOptions = {}): P
  *
  * @internal
  */
-export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOptions = {}): PageData {
+export function pageDataOfTabane(rowBlock: TabanePage, options: ToPageOptions = {}): PageData {
   const n = rowBlock.length;
   const columns = featureColumnsOf(rowBlock);
   const dims = options.dimensions ?? columns.geometry?.dimensions ?? 'xy';
@@ -170,9 +170,9 @@ export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOption
   const flags = new Uint8Array(n);
   for (let r = 0; r < n; r++) {
     flags[r] =
-      (tabaneFlagOf(columns.hidden, r) ? ROW_FLAG_HIDDEN : 0) |
-      (tabaneFlagOf(columns.locked, r) ? ROW_FLAG_LOCKED : 0) |
-      (tabaneFlagOf(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
+      (readFlag(columns.hidden, r) ? ROW_FLAG_HIDDEN : 0) |
+      (readFlag(columns.locked, r) ? ROW_FLAG_LOCKED : 0) |
+      (readFlag(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
   }
 
   // What the rings and the caches read of a row: its type, its attributes and its shape

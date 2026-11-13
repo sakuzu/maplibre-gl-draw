@@ -21,7 +21,7 @@ import {
   ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
 } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings, type Value } from '@sakuzu/tabane';
+import { byteColumnFromStrings, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { ITEM_GROUP, ITEM_ROW, type RowField, type RowValues } from '../api/tables.js';
@@ -213,7 +213,7 @@ describe('writer.writeRows', () => {
     expect(() => writer.writeRows(patch)).toThrow(/no row/);
     expect(tables.get('layer')?.getRowValue(handle, 'name')).toBeUndefined();
     // A new row without what it needs
-    const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
+    const [fresh] = writer.allocateHandles(byteColumnFromStrings(['new']));
     expect(() => writer.writeRows(patchOf([fresh], 'properties:name', ['x']))).toThrow(
       /a new row needs type, parent, geometry, key/,
     );

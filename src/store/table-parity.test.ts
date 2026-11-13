@@ -20,7 +20,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { readTabaneBlock, utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings, readBlock } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
@@ -748,7 +748,7 @@ const CASES: readonly Case[] = [
       settle(tables);
       step('added');
       const ids = ['f0', 'n0', 'zz'];
-      const given = Array.from(writer.allocateHandles(utf8ColumnFromStrings(ids)));
+      const given = Array.from(writer.allocateHandles(byteColumnFromStrings(ids)));
       step(`handles ${JSON.stringify(given.map((x, i) => x === tables.getRowRef(ids[i])))}`);
       store.transact(() => writer.clear(), 'remote');
       step('cleared');
@@ -837,7 +837,7 @@ describe('the Store of rows, as it was before its tables were reworked', () => {
     const { store, writer } = createTableStore();
     store.createLayer(layer('a'));
     for (const w of written) {
-      const rowBlocks = readTabaneBlock(w.block.content).map((b) => toPage(b));
+      const rowBlocks = readBlock(w.block.content).map((b) => toPage(b));
       store.transact(() => writer.addPages('a', rowBlocks), 'load');
     }
     const tables = store.tables as FeatureTables;

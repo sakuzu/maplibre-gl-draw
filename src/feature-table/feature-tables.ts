@@ -30,7 +30,7 @@ import {
   RowTableView,
   TablesStore,
 } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
+import { byteColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import type {
   FeatureTables,
@@ -700,7 +700,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
       for (const { feature, place: given } of this.sketchInputs) {
         const over = given ? undefined : this.handleOf(feature.id);
         const id = `\u0000overlay\u0000${SKETCH_OWNER}\u0000${feature.id}`;
-        const [handle] = this.ids.allocate(utf8ColumnFromStrings([id]));
+        const [handle] = this.ids.allocate(byteColumnFromStrings([id]));
         const place = over === undefined ? undefined : this.placeOf(over);
         const layer = feature.layerId;
         let base: FeatureRowInput;

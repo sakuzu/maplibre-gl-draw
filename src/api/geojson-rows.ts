@@ -5,7 +5,7 @@
  * Features of GeoJSON read as the values of rows of a layer, by the rules of a load
  */
 
-import { type CoordinateDimensions, unionDims, type Value } from '@sakuzu/tabane';
+import { type CoordinateDimensions, unionDimensions, type Value } from '@sakuzu/tabane';
 import type { Feature as GeoJSONFeature, Geometry } from 'geojson';
 import { readGeoJSONFeature } from '../feature-table/geojson-read.js';
 import type { FeatureStyle } from './model.js';
@@ -58,7 +58,7 @@ export interface GeoJSONRows {
   readonly skipped: { readonly index: number; readonly reason: string }[];
   /**
    * The dimensions that hold the positions of every row (`xy` for none): the rows are written to a
-   * layer of these dimensions or more (`FeatureTablesOptions.dimensionsOf`; `unionDims` of
+   * layer of these dimensions or more (`FeatureTablesOptions.dimensionsOf`; `unionDimensions` of
    * `@sakuzu/tabane` gives the dimensions that hold both)
    */
   readonly dimensions: CoordinateDimensions;
@@ -103,7 +103,7 @@ export function rowsOfGeoJSON(features: readonly GeoJSONFeature[]): GeoJSONRows 
       skipped.push({ index, reason: 'the feature embeds an image, which a row does not hold' });
       return;
     }
-    dimensions = unionDims(dimensions, read.dimensions);
+    dimensions = unionDimensions(dimensions, read.dimensions);
     read.parts.forEach(({ type, geometry }, i) => {
       rows.push({
         index,

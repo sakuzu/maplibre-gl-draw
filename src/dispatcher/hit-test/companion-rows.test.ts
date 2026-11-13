@@ -9,7 +9,7 @@
  */
 
 import type { RowTable } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { LayerTableView, RowField, RowValues, TableGroupField } from '../../api/tables.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
@@ -282,7 +282,7 @@ describe('the rows with companions of a layer held as rows', () => {
           const layerId = layerIds[Math.floor(random() * layerIds.length)];
           const n = 70;
           const ids = Array.from({ length: n }, (_, k) => `many${step}-${k}`);
-          const handles = Array.from(writer.allocateHandles(utf8ColumnFromStrings(ids)));
+          const handles = Array.from(writer.allocateHandles(byteColumnFromStrings(ids)));
           const base = 3_000_000 + step * 1000;
           write(
             rowPatch(handles, {

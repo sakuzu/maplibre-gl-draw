@@ -11,7 +11,7 @@
  * of their bytes), or one more digit when it cannot be raised.
  */
 
-import { tabaneKeyAfter, tabaneKeyBefore } from '@sakuzu/tabane';
+import { keyAfter as tabaneKeyAfter, keyBefore as tabaneKeyBefore } from '@sakuzu/tabane';
 
 /** The digits of the keys, in the order of their bytes */
 const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';

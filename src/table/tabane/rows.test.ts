@@ -10,21 +10,21 @@
 
 import type { PageData, PageDictionary } from '@sakuzu/kasane/render';
 import {
+  type ByteColumn,
   ByteSink,
   ByteSource,
-  formatTabaneId,
-  packTabaneBlock,
-  readTabaneBlock,
-  readTabaneBlockFile,
+  formatId,
+  packBlock,
+  readBlock,
+  readBlockFile,
+  readKeys,
+  readRows,
   readValue,
+  rowSuffixOf,
+  type TabanePage,
   type TabaneRow,
-  type TabaneRowBlock,
-  tabaneKeysOf,
-  tabaneRowSuffixOf,
-  tabaneRowsOf,
-  type Utf8Column,
   utf8String,
-  writeTabaneBlocks,
+  writeBlocks,
 } from '@sakuzu/tabane';
 import type { Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -100,7 +100,7 @@ function buildings(count: number, seed = 1, from = 1): TabaneFeatureRow[] {
   const random = seededRandom(seed);
   const kinds = ['普通建物', '堅ろう建物', '普通無壁舎'];
   return Array.from({ length: count }, (_, i) => ({
-    id: formatTabaneId({ origin: ORIGIN, number: from + i }),
+    id: formatId({ origin: ORIGIN, number: from + i }),
     type: 'Polygon',
     geometry: building(random, 139.7 + random() * 0.1, 35.6 + random() * 0.1),
     properties: {
@@ -113,7 +113,7 @@ function buildings(count: number, seed = 1, from = 1): TabaneFeatureRow[] {
 
 /** Rows of every geometry type, value and flag */
 function variety(): TabaneFeatureRow[] {
-  const id = (n: number) => formatTabaneId({ origin: ORIGIN, number: n });
+  const id = (n: number) => formatId({ origin: ORIGIN, number: n });
   return [
     {
       id: id(1),
@@ -217,9 +217,9 @@ function variety(): TabaneFeatureRow[] {
       },
       style: { color: '#00ff00' },
     },
-    { id: formatTabaneId({ origin: OTHER, number: 7 }), type: 'Marker', geometry: null },
+    { id: formatId({ origin: OTHER, number: 7 }), type: 'Marker', geometry: null },
     {
-      id: formatTabaneId({ origin: OTHER, number: 8 }),
+      id: formatId({ origin: OTHER, number: 8 }),
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [139.7, 35.6] },
       properties: { radius: 100 },
@@ -228,29 +228,29 @@ function variety(): TabaneFeatureRow[] {
 }
 
 /** The key of row `i` of the first block of a run that follows the key `V` */
-const numberedKey = (i: number) => `V${tabaneRowSuffixOf(0)}${tabaneRowSuffixOf(i)}`;
+const numberedKey = (i: number) => `V${rowSuffixOf(0)}${rowSuffixOf(i)}`;
 
 /** The texts of a column of `n` entries */
-function textsOf(column: Utf8Column, n: number): string[] {
+function textsOf(column: ByteColumn, n: number): string[] {
   return Array.from({ length: n }, (_, r) => utf8String(column, r));
 }
 
 /** A page of rows, the first block of a run that follows the key `V` */
-function rowBlockOf(rows: readonly TabaneRow[]): TabaneRowBlock {
-  const [block] = writeTabaneBlocks({
+function rowBlockOf(rows: readonly TabaneRow[]): TabanePage {
+  const [block] = writeBlocks({
     parent: 'l',
     head: 'V',
     columns: TABANE_FEATURE_COLUMNS,
     rows,
   });
-  return readTabaneBlock(block.content)[0];
+  return readBlock(block.content)[0];
 }
 
 /** Points numbered from `from`, one for each key (without one, a row has the key of its place) */
 function pointsOf(keys: readonly (string | undefined)[], from = 1): TabaneRow[] {
   return keys.map((key, i) => ({
     ...tabaneRowOf({
-      id: formatTabaneId({ origin: ORIGIN, number: from + i }),
+      id: formatId({ origin: ORIGIN, number: from + i }),
       type: 'Point',
       geometry: { type: 'Point', coordinates: [from + i, 0] },
     }),
@@ -316,7 +316,7 @@ describe('a page as a page of the tables', () => {
           type: row.type,
           geometry: row.geometry,
           // Block 0 follows the key `V` and the suffix of 0
-          key: `V${tabaneRowSuffixOf(0)}${tabaneRowSuffixOf(i)}`,
+          key: `V${rowSuffixOf(0)}${rowSuffixOf(i)}`,
           style: row.style,
           properties: row.properties,
           deleted: row.deleted,
@@ -326,17 +326,17 @@ describe('a page as a page of the tables', () => {
       });
       const [built] = builder.finish();
       // The triangles copied from the cache of the file, and made without it
-      const file = readTabaneBlockFile(packTabaneBlock(written.block, undefined, written.caches));
-      expect(file.rowBlocks).toHaveLength(1);
-      expectSameBlock(pageDataOfTabane(file.rowBlocks[0], { caches: file.caches }), built);
-      expectSameBlock(pageDataOfTabane(readTabaneBlock(written.block.content)[0]), built);
+      const file = readBlockFile(packBlock(written.block, undefined, written.caches));
+      expect(file.pages).toHaveLength(1);
+      expectSameBlock(pageDataOfTabane(file.pages[0], { caches: file.caches }), built);
+      expectSameBlock(pageDataOfTabane(readBlock(written.block.content)[0]), built);
     }
   });
 
   it('holds the columns the builder makes of rows of keys of their own', () => {
     const rows = buildings(30, 7);
     // Keys no head gives, then keys of the head and numbers that do not follow each other
-    const keys = rows.map((_, i) => (i < 20 ? `A${tabaneRowSuffixOf(i * 7)}` : numberedKey(i * 2)));
+    const keys = rows.map((_, i) => (i < 20 ? `A${rowSuffixOf(i * 7)}` : numberedKey(i * 2)));
     const rowBlock = rowBlockOf(rows.map((row, i) => ({ ...tabaneRowOf(row), key: keys[i] })));
     expect(rowBlock.keys).toEqual(keys);
     const builder = createPageDataBuilder({
@@ -355,7 +355,7 @@ describe('a page as a page of the tables', () => {
     const [written] = writeTabaneFeatureBlocks({ parent: 'p', head: 'V', rows });
     expect(written.caches.map((c) => [c.part, c.name])).toEqual([[1, FILL_TRIANGLES_CACHE]]);
     // The content is the one written without the triangles
-    const [plain] = writeTabaneBlocks({
+    const [plain] = writeBlocks({
       parent: 'p',
       head: 'V',
       columns: TABANE_FEATURE_COLUMNS,
@@ -371,7 +371,7 @@ describe('a page as a page of the tables', () => {
   it('makes the triangles again when the cache does not fit the rows', () => {
     const rows = buildings(40, 4);
     const [written] = writeTabaneFeatureBlocks({ parent: 'p', head: 'V', rows });
-    const rowBlock = readTabaneBlock(written.block.content)[0];
+    const rowBlock = readBlock(written.block.content)[0];
     const made = pageDataOfTabane(rowBlock);
     const cache = written.caches[0];
     // The cache of other rows, bytes cut short, an index past the vertices, a cache of another name
@@ -415,10 +415,10 @@ describe('a page as a page of the tables', () => {
       styleRule: undefined,
     });
     const [written] = writeTabaneFeatureBlocks({ parent: 'l', head: 'V', rows });
-    const file = readTabaneBlockFile(packTabaneBlock(written.block, undefined, written.caches));
+    const file = readBlockFile(packBlock(written.block, undefined, written.caches));
     writer.addPages(
       'l',
-      file.rowBlocks.map((g, k) =>
+      file.pages.map((g, k) =>
         pageDataOfTabane(g, { caches: file.caches.filter((c) => c.part === k + 1) }),
       ),
     );
@@ -434,7 +434,7 @@ describe('a page as a page of the tables', () => {
 });
 
 describe('a page that writes the key of each row', () => {
-  const id = (number: number) => formatTabaneId({ origin: ORIGIN, number });
+  const id = (number: number) => formatId({ origin: ORIGIN, number });
 
   /** A Store of rows with one layer `l` */
   function setup() {
@@ -452,7 +452,7 @@ describe('a page that writes the key of each row', () => {
     const tables = store.tables as FeatureTables;
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     /** Takes in pages as the tables read them */
-    const add = (...rowBlocks: readonly TabaneRowBlock[]) => {
+    const add = (...rowBlocks: readonly TabanePage[]) => {
       const blocks = rowBlocks.map((rowBlock) => pageDataOfTabane(rowBlock));
       writer.addPages('l', blocks);
       internals.addQueuedPages();
@@ -507,7 +507,7 @@ describe('a page that writes the key of each row', () => {
     expect(rowBlock.place.firstIndex).toBe(5);
     const data = pageDataOfTabane(rowBlock);
     expect(textsOf(data.keys, 3)).toEqual([numberedKey(5), numberedKey(6), numberedKey(7)]);
-    expect(textsOf(data.keys, 3)).toEqual(tabaneKeysOf(rowBlock));
+    expect(textsOf(data.keys, 3)).toEqual(readKeys(rowBlock));
   });
 
   it('is taken as it is when its rows are in the order of their keys', () => {
@@ -637,13 +637,13 @@ describe('a page that writes the key of each row', () => {
 
   it('keeps the keys of its rows written again as rows of another head', () => {
     const keys = ['A5', numberedKey(3), numberedKey(9), 'q7'];
-    const [block] = writeTabaneBlocks({
+    const [block] = writeBlocks({
       parent: 'l',
       head: 'W',
       columns: TABANE_FEATURE_COLUMNS,
-      rows: tabaneRowsOf(rowBlockOf(pointsOf(keys))),
+      rows: readRows(rowBlockOf(pointsOf(keys))),
     });
-    const data = pageDataOfTabane(readTabaneBlock(block.content)[0]);
+    const data = pageDataOfTabane(readBlock(block.content)[0]);
     expect(textsOf(data.keys, 4)).toEqual(keys);
   });
 });
@@ -653,7 +653,7 @@ describe('a feature as a row of Tabane', () => {
     const rows = [
       ...variety(),
       {
-        id: formatTabaneId({ origin: ORIGIN, number: 20 }),
+        id: formatId({ origin: ORIGIN, number: 20 }),
         type: 'Point',
         geometry: { type: 'Point' as const, coordinates: [1, 2] },
         visible: false,
@@ -661,8 +661,8 @@ describe('a feature as a row of Tabane', () => {
       },
     ];
     const [written] = writeTabaneFeatureBlocks({ parent: 'p', head: 'V', rows });
-    const back = readTabaneBlock(written.block.content).flatMap((g) =>
-      tabaneRowsOf(g).map(featureRowOfTabane),
+    const back = readBlock(written.block.content).flatMap((g) =>
+      readRows(g).map(featureRowOfTabane),
     );
     rows.forEach((row, i) => {
       expect(back[i].id).toBe(row.id);
@@ -678,41 +678,41 @@ describe('a feature as a row of Tabane', () => {
 
   it('writes a row not shown as a flag of the rows hidden', () => {
     const row = {
-      id: formatTabaneId({ origin: ORIGIN, number: 1 }),
+      id: formatId({ origin: ORIGIN, number: 1 }),
       type: 'Point',
       geometry: null,
     };
     expect(tabaneRowOf({ ...row, visible: false }).values?.hidden).toBe(true);
     expect(tabaneRowOf(row).values?.hidden).toBe(false);
     const [written] = writeTabaneFeatureBlocks({ parent: 'p', head: 'V', rows: [row] });
-    const rowBlock = readTabaneBlock(written.block.content)[0];
+    const rowBlock = readBlock(written.block.content)[0];
     // A flag no row has is not written
     expect(rowBlock.columns.map((c) => c.name)).toEqual(['style', 'type']);
   });
 
   it('is refused with a column that is not one of a feature, or of another kind', () => {
     const write = (
-      columns: Record<string, 'shape' | 'flag' | 'whole' | 'keyed'>,
+      columns: Record<string, 'shape' | 'flag' | 'value' | 'struct'>,
       values: Record<string, unknown>,
     ) =>
-      readTabaneBlock(
-        writeTabaneBlocks({
+      readBlock(
+        writeBlocks({
           parent: 'p',
           head: 'V',
           columns,
-          rows: [{ id: formatTabaneId({ origin: ORIGIN, number: 1 }), values }],
+          rows: [{ id: formatId({ origin: ORIGIN, number: 1 }), values }],
         })[0].content,
-      )[0] as TabaneRowBlock;
-    const other = write({ type: 'whole', name: 'whole' }, { type: 'Point', name: 'x' });
+      )[0] as TabanePage;
+    const other = write({ type: 'value', name: 'value' }, { type: 'Point', name: 'x' });
     expect(() => pageDataOfTabane(other)).toThrow(/not one of a feature/);
-    const kind = write({ type: 'whole', locked: 'whole' }, { type: 'Point', locked: true });
-    expect(() => pageDataOfTabane(kind)).toThrow(/of the kind whole/);
+    const kind = write({ type: 'value', locked: 'value' }, { type: 'Point', locked: true });
+    expect(() => pageDataOfTabane(kind)).toThrow(/of the kind value/);
     const shape = write(
-      { type: 'whole', geometry: 'shape' },
+      { type: 'value', geometry: 'shape' },
       { type: 'Point', geometry: { name: 'Polygon', depth: 1, points: [[0, 0]] } },
     );
     expect(() => pageDataOfTabane(shape)).toThrow(/a shape Polygon of the depth 1/);
-    expect(() => featureRowOfTabane(tabaneRowsOf(other)[0])).toThrow(/not one of a feature/);
+    expect(() => featureRowOfTabane(readRows(other)[0])).toThrow(/not one of a feature/);
   });
 });
 
@@ -749,7 +749,7 @@ describe('features of GeoJSON written as blocks', () => {
     ]);
     expect(read.dimensions).toBe('xyzm');
     const rows = read.rows.map((row, i) => ({
-      id: formatTabaneId({ origin: ORIGIN, number: i + 1 }),
+      id: formatId({ origin: ORIGIN, number: i + 1 }),
       type: row.type,
       geometry: row.geometry,
       style: row.style,
@@ -774,10 +774,10 @@ describe('features of GeoJSON written as blocks', () => {
       rows,
       dimensions: read.dimensions,
     });
-    const file = readTabaneBlockFile(packTabaneBlock(written.block, undefined, written.caches));
+    const file = readBlockFile(packBlock(written.block, undefined, written.caches));
     writer.addPages(
       'l',
-      file.rowBlocks.map((g, k) =>
+      file.pages.map((g, k) =>
         pageDataOfTabane(g, {
           dimensions: read.dimensions,
           caches: file.caches.filter((c) => c.part === k + 1),

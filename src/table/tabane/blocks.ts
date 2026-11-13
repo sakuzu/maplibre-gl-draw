@@ -4,7 +4,7 @@
 /**
  * Features written as blocks of the Tabane format, each with the caches of its file
  *
- * The rows are written as `writeTabaneBlocks` of `@sakuzu/tabane` writes them, in the columns of
+ * The rows are written as `writeBlocks` of `@sakuzu/tabane` writes them, in the columns of
  * a feature (`columns.ts`). The triangles of the fills of the polygon rows of every page are
  * made here, once, and kept as a cache that follows the page in the file of its block
  * (`triangles.ts`), so that a reader copies them (`toPage`). The name of a block does
@@ -16,10 +16,10 @@
 
 import {
   type CoordinateDimensions,
-  readTabaneBlockHead,
+  readBlockHeader,
   type TabaneBlock,
   type TabaneCache,
-  writeTabaneBlocks,
+  writeBlocks as writeTabaneBlocks,
 } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import { drawErrorOf } from '../draw-error-of.js';
@@ -37,7 +37,7 @@ export interface TabaneFeatureBlocksInput {
   readonly parent: string;
   /**
    * The key the rows follow: block `j` holds the rows that follow the key `head` followed by
-   * `tabaneRowSuffixOf(j)`
+   * `rowSuffixOf(j)`
    */
   readonly head: string;
   /**
@@ -62,11 +62,11 @@ export interface TabaneFeatureBlocksInput {
  * @experimental
  */
 export interface TabaneFeatureBlock {
-  /** The block (its name is the SHA-256 of its content, `tabaneNameOf`) */
+  /** The block (its name is the SHA-256 of its content, `digestOf`) */
   readonly block: TabaneBlock;
   /**
    * The caches of its file, each after the part of its page (none for a page without a
-   * polygon): give them to `packTabaneBlock` with the block
+   * polygon): give them to `packBlock` with the block
    */
   readonly caches: TabaneCache[];
 }
@@ -90,7 +90,7 @@ function dimensionsOf(rows: readonly TabaneFeatureRow[]): CoordinateDimensions {
   return longest >= 4 ? 'xyzm' : longest === 3 ? 'xyz' : 'xy';
 }
 
-/** `writeTabaneBlocks`, its errors those of the library */
+/** `writeBlocks` of `@sakuzu/tabane`, its errors those of the library */
 function writeBlocks(input: Parameters<typeof writeTabaneBlocks>[0]): TabaneBlock[] {
   try {
     return writeTabaneBlocks(input);
@@ -100,7 +100,7 @@ function writeBlocks(input: Parameters<typeof writeTabaneBlocks>[0]): TabaneBloc
 }
 
 /**
- * Writes features as the blocks of a long run of rows (as `writeTabaneBlocks` of
+ * Writes features as the blocks of a long run of rows (as `writeBlocks` of
  * `@sakuzu/tabane`), with the triangles of the fills of the polygons of every page as a cache
  * of the file of its block
  *
@@ -108,8 +108,8 @@ function writeBlocks(input: Parameters<typeof writeTabaneBlocks>[0]): TabaneBloc
  * ```ts
  * const blocks = writeTabaneFeatureBlocks({ parent: 'buildings', head: 'V', rows });
  * for (const { block, caches } of blocks) {
- *   const name = await tabaneNameOf(block.content);
- *   const file = packTabaneBlock(block, compressor, caches);
+ *   const name = await digestOf(block.content);
+ *   const file = packBlock(block, compressor, caches);
  * }
  * ```
  *
@@ -134,7 +134,7 @@ export function writeTabaneFeatureBlocks(input: TabaneFeatureBlocksInput): Taban
   let at = 0;
   return blocks.map((block) => {
     const caches: TabaneCache[] = [];
-    readTabaneBlockHead(block.content).rowBlocks.forEach((rowBlock, k) => {
+    readBlockHeader(block.content).pages.forEach((rowBlock, k) => {
       const geometries: (RowGeometry | null)[] = [];
       for (let r = 0; r < rowBlock.rows; r++) {
         const g = rows[at++].geometry;

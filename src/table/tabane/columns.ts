@@ -8,14 +8,14 @@
  * A row of Tabane holds its id, its place, what created it, the revisions of its cells and
  * whether it is deleted. Everything else of a feature is a column of a name:
  *
- * - `type` (`whole`): the type of the feature (`'Polygon'`, `'Circle'`, the type of an
+ * - `type` (`value`): the type of the feature (`'Polygon'`, `'Circle'`, the type of an
  *   extension), a string
  * - `geometry` (`shape`): the geometry, the name of the shape its GeoJSON type and its points the
  *   coordinates, nested as deep as the type (its rings closed, as a row holds them)
  * - `hidden` (`flag`): the rows that are not shown, the opposite of `visible`
  * - `locked` (`flag`): the rows that are locked
- * - `style` (`whole`): the style, an object (`{}` for a row without one)
- * - `properties` (`keyed`): the attributes, a column per key
+ * - `style` (`value`): the style, an object (`{}` for a row without one)
+ * - `properties` (`struct`): the attributes, a column per key
  *
  * The rows are read as columns (`toPage`), without an object per row; the functions here
  * that read and write a row as an object are for the rows written and for a row read alone.
@@ -30,12 +30,12 @@ import {
   decodeCanonicalValue,
   type PropertyColumns,
   type TabaneColumnKind,
+  type TabanePage,
   type TabaneRevision,
   type TabaneRow,
-  type TabaneRowBlock,
   type TabaneShape,
   type TabaneShapeColumn,
-  type TabaneWholeColumn,
+  type TabaneValueColumn,
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { DrawError } from '../../shared/draw-error.js';
@@ -47,18 +47,18 @@ import type { GeometryType } from '../types.js';
  * @experimental
  */
 export const TABANE_FEATURE_COLUMNS: Readonly<Record<string, TabaneColumnKind>> = Object.freeze({
-  type: 'whole',
+  type: 'value',
   geometry: 'shape',
   hidden: 'flag',
   locked: 'flag',
-  style: 'whole',
-  properties: 'keyed',
+  style: 'value',
+  properties: 'struct',
 });
 
 /**
  * The columns of the rows of features as the tables hold them (`TableColumns`): those of
- * {@link TABANE_FEATURE_COLUMNS}, in the words of the tables (a `whole` column is a `value`
- * column, a `keyed` one a `struct` one), with where the values of each `value` column are kept.
+ * {@link TABANE_FEATURE_COLUMNS}, of the same kinds, with where the values of each `value` column
+ * are kept.
  * The types are few and differ from a page to another, so each page keeps its own; the styles
  * are shared by rows of every table, so the tables keep one dictionary of them
  *
@@ -179,7 +179,7 @@ export function tabaneRowOf(row: TabaneFeatureRow): TabaneRow {
 }
 
 /**
- * A row of Tabane read back as a feature (`tabaneRowsOf` of `@sakuzu/tabane` reads the rows of a
+ * A row of Tabane read back as a feature (`readRows` of `@sakuzu/tabane` reads the rows of a
  * page as objects)
  *
  * @throws `DrawError` with the code `invalid-input` when the row is not one of a feature: a column
@@ -245,13 +245,13 @@ export function geometryTypeOf(name: string, depth: number): GeometryType {
  * @internal
  */
 export interface FeatureColumns {
-  readonly type: TabaneWholeColumn | null;
+  readonly type: TabaneValueColumn | null;
   readonly geometry: TabaneShapeColumn | null;
   /** The bits of the rows not shown */
   readonly hidden: Uint8Array | null;
   /** The bits of the locked rows */
   readonly locked: Uint8Array | null;
-  readonly style: TabaneWholeColumn | null;
+  readonly style: TabaneValueColumn | null;
   readonly properties: PropertyColumns;
 }
 
@@ -262,12 +262,12 @@ export interface FeatureColumns {
  *   one of {@link TABANE_FEATURE_COLUMNS}, or one of another kind
  * @internal
  */
-export function featureColumnsOf(rowBlock: TabaneRowBlock): FeatureColumns {
-  let type: TabaneWholeColumn | null = null;
+export function featureColumnsOf(rowBlock: TabanePage): FeatureColumns {
+  let type: TabaneValueColumn | null = null;
   let geometry: TabaneShapeColumn | null = null;
   let hidden: Uint8Array | null = null;
   let locked: Uint8Array | null = null;
-  let style: TabaneWholeColumn | null = null;
+  let style: TabaneValueColumn | null = null;
   let properties: PropertyColumns = { keys: [], columns: [] };
   for (const column of rowBlock.columns) {
     const kind = KIND_OF.get(column.name);
@@ -286,11 +286,11 @@ export function featureColumnsOf(rowBlock: TabaneRowBlock): FeatureColumns {
         if (column.name === 'hidden') hidden = column.bits;
         else locked = column.bits;
         break;
-      case 'whole':
+      case 'value':
         if (column.name === 'type') type = column;
         else style = column;
         break;
-      case 'keyed':
+      case 'struct':
         properties = { keys: column.keys, columns: column.columns };
         break;
     }
@@ -306,7 +306,7 @@ export function featureColumnsOf(rowBlock: TabaneRowBlock): FeatureColumns {
  * @internal
  */
 export function typesOf(
-  column: TabaneWholeColumn | null,
+  column: TabaneValueColumn | null,
   rows: number,
 ): { typeNames: string[]; types: Uint8Array } {
   if (column === null) throw new DrawError('invalid-input', 'Tabane: rows without a type');
@@ -339,7 +339,7 @@ const EMPTY_STYLE = Uint8Array.of(CANONICAL_OBJECT, 0);
  * @internal
  */
 export function stylesOf(
-  column: TabaneWholeColumn | null,
+  column: TabaneValueColumn | null,
   rows: number,
 ): { styleDictionary: { offsets: Int32Array; bytes: Uint8Array }; styles: Uint32Array } {
   const styles = new Uint32Array(rows);

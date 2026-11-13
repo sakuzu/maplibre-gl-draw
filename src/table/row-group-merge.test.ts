@@ -14,7 +14,7 @@
 
 import type { PageData } from '@sakuzu/kasane/render';
 import { cacheNumbersOf, mergePageData, ShapeFormReader, shapeRowOf } from '@sakuzu/kasane/render';
-import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
+import { byteColumnLength, readValue, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { featureRowDataBuilder as createPageDataBuilder, seededRandom } from '../test-utils.js';
@@ -35,7 +35,7 @@ function numbered(groups: PageData[], numbers: Map<string, number>): PageData[] 
   for (const group of groups) {
     const dictionary = styleColumnOf(group).dictionary;
     if (!dictionary) continue;
-    const local = Array.from({ length: utf8ColumnLength(dictionary) }, (_, i) => {
+    const local = Array.from({ length: byteColumnLength(dictionary) }, (_, i) => {
       const bytes = utf8String(dictionary, i);
       let n = numbers.get(bytes);
       if (n === undefined) {

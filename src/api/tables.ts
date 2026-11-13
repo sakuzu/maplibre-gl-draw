@@ -22,7 +22,7 @@ import {
   type RowFieldValues,
 } from '@sakuzu/kasane';
 import { checkRowValues as checkShapeOfRowValues, RowFields } from '@sakuzu/kasane/render';
-import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu/tabane';
+import type { ByteColumn, CoordinateDimensions, CoordinateSystem } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import { createFeatureTablesStore } from '../feature-table/feature-row-tables.js';
 import type { BBox } from '../geometry/types.js';
@@ -181,7 +181,7 @@ export interface RowCursor {
  */
 export interface CreatedRows {
   /** The ids of the new rows */
-  readonly ids: Utf8Column;
+  readonly ids: ByteColumn;
   /** The values of each field, one per new row */
   readonly fields: ReadonlyMap<RowField, RowFieldValues>;
 }
@@ -385,7 +385,7 @@ export interface FeatureTablesWriter {
    *
    * @param hashes - The hashes of the ids (`Page.idHashes`; computed when omitted)
    */
-  allocateHandles(ids: Utf8Column, hashes?: Uint32Array): Int32Array;
+  allocateHandles(ids: ByteColumn, hashes?: Uint32Array): Int32Array;
   /**
    * Adds pages to a layer at once, without copying their columns, after the implementation of
    * the Store recorded them.

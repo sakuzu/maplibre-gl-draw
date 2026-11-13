@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { tabaneRowSuffixOf } from '@sakuzu/tabane';
+import { rowSuffixOf } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../test-utils.js';
 import {
@@ -118,7 +118,7 @@ describe('the keys of the items put at an end again and again', () => {
 
   it('come after every row of a block, the last row read for the end', () => {
     for (const head of ['V', 'W5', 'X0z', 'Uz', 'T1', 'zV']) {
-      const rows = [0, 1, 60, 61, 3721, 3722, 299_999].map((i) => head + tabaneRowSuffixOf(i));
+      const rows = [0, 1, 60, 61, 3721, 3722, 299_999].map((i) => head + rowSuffixOf(i));
       const [key] = keysBetween(rows[rows.length - 1], null, 1);
       for (const row of rows) expect(compareKeys(row, key)).toBeLessThan(0);
     }

@@ -7,7 +7,7 @@
  */
 
 import type { PageData, RowTable } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { LayerTableView } from '../api/tables.js';
@@ -207,7 +207,7 @@ describe('createFeatureTables', () => {
     writer.addPages('layer', groups(3));
     // u100 and u101 with their keys swapped: u101 comes first
     const [built] = groups(2, { keyOffset: 100, prefix: 'u' });
-    const swapped = { ...built, keys: utf8ColumnFromStrings(['k101', 'k100']) };
+    const swapped = { ...built, keys: byteColumnFromStrings(['k101', 'k100']) };
     expect(() => writer.addPages('layer', [swapped])).not.toThrow();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     const u100 = tables.getRowRef('u100') as number;
@@ -316,7 +316,7 @@ describe('createFeatureTables', () => {
 
   it('allocates handles for the ids of a column', () => {
     const { tables, writer } = createFeatureTablesStore();
-    const handles = writer.allocateHandles(utf8ColumnFromStrings(['x', 'y']));
+    const handles = writer.allocateHandles(byteColumnFromStrings(['x', 'y']));
     expect(tables.getRowId(handles[1])).toBe('y');
     // A handle with no row yet is not a row
     expect(tables.getRowRef('x')).toBeUndefined();
@@ -331,8 +331,8 @@ describe('RowTable', () => {
     const [first, second] = layer.groupHandles;
 
     const key = (order: string, id: string) => ({
-      ids: utf8ColumnFromStrings([id]),
-      keys: utf8ColumnFromStrings([order]),
+      ids: byteColumnFromStrings([id]),
+      keys: byteColumnFromStrings([order]),
       groups: Int32Array.of(-1),
     });
     // The key of an existing row is that row

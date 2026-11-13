@@ -16,7 +16,7 @@ import {
   writeRowGeometry,
 } from '@sakuzu/kasane/render';
 import type { CoordinateSystem, TabaneShape } from '@sakuzu/tabane';
-import { utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { expect, vi } from 'vitest';
@@ -1276,7 +1276,7 @@ export function randomRowWrites(
       Object.assign(row, { groupId, member });
     } else if (pick < 0.78) {
       const fresh = `n${created++}`;
-      const [freshHandle] = writer.allocateHandles(utf8ColumnFromStrings([fresh]));
+      const [freshHandle] = writer.allocateHandles(byteColumnFromStrings([fresh]));
       const next = randomReferenceRow(
         random,
         fresh,

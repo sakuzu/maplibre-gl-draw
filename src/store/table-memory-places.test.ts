@@ -13,7 +13,7 @@
  *   is a layer's, is refused, in the Store of rows and in the Store of objects
  */
 
-import { utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { createFeatureTables } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
@@ -58,7 +58,7 @@ describe('a group moved to a layer of fewer dimensions', () => {
     store.createLayer(layer('z'));
     store.createLayer(layer('a'));
     store.createGroup(group('g', 'z'));
-    const [h] = writer.allocateHandles(utf8ColumnFromStrings(['f']));
+    const [h] = writer.allocateHandles(byteColumnFromStrings(['f']));
     store.transact(
       () =>
         writer.writeRows(
@@ -108,7 +108,7 @@ describe('the parent of a row written from elsewhere', () => {
 
   it('may name a new table when the tables have no Store', () => {
     const { tables, writer } = createFeatureTables();
-    const [h] = writer.allocateHandles(utf8ColumnFromStrings(['r']));
+    const [h] = writer.allocateHandles(byteColumnFromStrings(['r']));
     writer.writeRows(
       rowPatch([h as number], {
         type: ['Point'],

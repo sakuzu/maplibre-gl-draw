@@ -24,7 +24,7 @@
  */
 
 import type { RowTable } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -255,7 +255,7 @@ describe('the drawing of the rows of the delta', () => {
     const list = features(40, 2);
     const live = setup(list);
     live.frame();
-    const [fresh, other] = live.writer.allocateHandles(utf8ColumnFromStrings(['new', 'elsewhere']));
+    const [fresh, other] = live.writer.allocateHandles(byteColumnFromStrings(['new', 'elsewhere']));
     const geometry: Geometry = { type: 'Point', coordinates: [1, 1] };
     live.writer.writeRows(
       patchOf([fresh], {
@@ -423,7 +423,7 @@ describe('the drawing of the rows of the delta', () => {
           );
         } else if (pick < 0.5) {
           const id = `n${created++}`;
-          const [fresh] = live.writer.allocateHandles(utf8ColumnFromStrings([id]));
+          const [fresh] = live.writer.allocateHandles(byteColumnFromStrings([id]));
           live.writer.writeRows(
             patchOf([fresh], {
               type: ['Polygon'],
@@ -584,7 +584,7 @@ describe('the drawing of the rows of the delta', () => {
     let drawnBefore = new Set<string>();
     for (let write = 0; write < 6; write++) {
       const ids = Array.from({ length: 1000 }, (_, i) => `import${write * 1000 + i}`);
-      const handles = live.writer.allocateHandles(utf8ColumnFromStrings(ids));
+      const handles = live.writer.allocateHandles(byteColumnFromStrings(ids));
       live.writer.writeRows(
         patchOf(Array.from(handles), {
           type: ids.map(() => 'Point'),

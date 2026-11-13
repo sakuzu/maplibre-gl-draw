@@ -19,7 +19,7 @@
  */
 
 import type { TableWorkBudget } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings } from '@sakuzu/tabane';
+import { byteColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import {
   createFeatureTables,
@@ -467,7 +467,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     n = 80,
   ) {
     const ids = Array.from({ length: n }, (_, i) => `c${String(i).padStart(2, '0')}`);
-    const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
+    const handles = writer.allocateHandles(byteColumnFromStrings(ids));
     writer.writeRows({
       handles,
       fields: new Map<RowField, unknown[]>([
@@ -533,7 +533,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     const keys = ids.map((_, i) =>
       i < n / 2 ? `${low}${String(i).padStart(2, '0')}` : `${high}${String(i).padStart(2, '0')}`,
     );
-    const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
+    const handles = writer.allocateHandles(byteColumnFromStrings(ids));
     writer.writeRows({
       handles,
       fields: new Map<RowField, unknown[]>([
@@ -733,7 +733,7 @@ describe('taking in the row groups without a drawing', () => {
     // A run of new rows after the last row: built into row groups of their own over the frames
     const n = 100;
     const ids = Array.from({ length: n }, (_, i) => `r${i + 4}`);
-    const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
+    const handles = writer.allocateHandles(byteColumnFromStrings(ids));
     writer.writeRows({
       handles,
       fields: new Map<RowField, unknown[]>([

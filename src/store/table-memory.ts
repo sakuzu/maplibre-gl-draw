@@ -35,7 +35,7 @@
 
 import type { ItemWalk } from '@sakuzu/kasane/render';
 import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
-import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
+import { byteColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type {
   FeatureTables,
   FeatureTablesWriter,
@@ -390,7 +390,7 @@ export class TableContractStore implements StoreContract {
       }
       if (features.length === 0) return;
       const handles = this.writer.allocateHandles(
-        utf8ColumnFromStrings(features.map((feature) => feature.id)),
+        byteColumnFromStrings(features.map((feature) => feature.id)),
       );
       // The keys of the ends of the layers and the groups, from their last keys read once: the
       // new rows put at an end one after the other get keys made at once, short
