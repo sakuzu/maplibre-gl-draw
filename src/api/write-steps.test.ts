@@ -7,6 +7,7 @@
  * creations next to each other in a transaction, made as one write of their rows
  */
 
+import { TablesStore } from '@sakuzu/kasane/render';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
@@ -40,8 +41,11 @@ function layer(id: string) {
 }
 
 /** `count` rows in the layer `l` (and an empty layer `m`), every one selected in bulk */
-function rowsDraw(count: number): { draw: Draw; store: DrawStore } {
-  const store = new DrawStore(new TableContractStore(), { selectionIdsLimit: 2 });
+function rowsDraw(
+  count: number,
+  options: ConstructorParameters<typeof TableContractStore>[0] = {},
+): { draw: Draw; store: DrawStore } {
+  const store = new DrawStore(new TableContractStore(options), { selectionIdsLimit: 2 });
   store.createLayer(layer('l'));
   store.createLayer(layer('m'));
   const draw = createDraw(createMapStub().map, { store: store as never, initDefaultLayer: false });
@@ -219,6 +223,55 @@ describe('a commit too long for one task', () => {
     controller.abort();
     expect(await write).toBe(1000);
     expect(styleOf(draw, 'r999')).toEqual({ pointColor: '#ff0000' });
+  });
+});
+
+describe('the idle work of the tables during a commit in steps', () => {
+  it('waits for the last step, and is asked for again after it', async () => {
+    let held: () => boolean = () => false;
+    // Each idle period given, and whether a write over several tasks was held then
+    const given: boolean[] = [];
+    let askedAfter = 0;
+    let ended = false;
+    // Past the rows from which the index of the boxes is built while the page is idle
+    const { draw, store } = rowsDraw(20_000, {
+      scheduleIdleWork: (task) => {
+        if (ended) askedAfter++;
+        const timer = setTimeout(() => {
+          given.push(held());
+          task(performance.now() + 1000);
+        }, 0);
+        return () => clearTimeout(timer);
+      },
+    });
+    held = () => store.slicedWritePending;
+    // The delta of the layer the rows go to is made again once, in the last step: the idle work
+    // (which reads every row) does not make it between two steps
+    const rebuiltWhileHeld: boolean[] = [];
+    const rebuild = (TablesStore.prototype as unknown as Record<string, (...args: never[]) => void>)
+      .rebuildDelta;
+    vi.spyOn(
+      TablesStore.prototype as unknown as Record<string, (...args: never[]) => void>,
+      'rebuildDelta',
+    ).mockImplementation(function (this: unknown, ...args: never[]) {
+      rebuiltWhileHeld.push(held());
+      return rebuild.apply(this, args);
+    });
+    slowClock();
+    const target = draw.selection.target;
+    const steps = stepped();
+    const write = draw.write((tx) => tx.features.place(target, { layerId: 'm' }), steps.options);
+    await steps.first;
+    await write;
+    ended = true;
+    vi.restoreAllMocks();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // An idle period given while the write was held does no work: the work is asked for again
+    expect(given.some((wasHeld) => wasHeld)).toBe(true);
+    expect(askedAfter).toBeGreaterThan(0);
+    // Once, in the last step (its changes of the order read where the rows are)
+    expect(rebuiltWhileHeld.filter((whileHeld) => whileHeld)).toHaveLength(1);
+    expect(draw.features.count({ layerId: 'm' })).toBe(20_000);
   });
 });
 
