@@ -33,6 +33,7 @@
  *   stamp it on the rows they write (`write-marks.ts`)
  */
 
+import type { ScheduleIdleWork } from '@sakuzu/kasane';
 import type { ItemWalk } from '@sakuzu/kasane/render';
 import { ROW_FLAG_DELETED, rowProperties } from '@sakuzu/kasane/render';
 import { byteColumnFromStrings, utf8String } from '@sakuzu/tabane';
@@ -58,6 +59,7 @@ import {
   type FeatureTablesStoreWriter,
 } from '../feature-table/feature-tables-writer.js';
 import { asFeatureValues } from '../shared/feature-values.js';
+import { whenIdle } from '../shared/utils/idle.js';
 import { isGroupHidden, isGroupLocked } from '../table/feature-row-columns.js';
 import { DrawStore } from './draw-store.js';
 import {
@@ -246,6 +248,10 @@ export class TableContractStore implements StoreContract {
    * leave empty are deleted at their end
    */
   #groupsHeld = 0;
+  /** What runs the idle work of the tables */
+  #idleScheduler: ScheduleIdleWork = whenIdle;
+  /** The idle work of the tables that came while a write over several tasks was held */
+  readonly #idleWaiting = new Set<{ cancel: () => void; run: (deadline: number) => void }>();
   /** The restore of rows written in steps under way (`row-steps.ts`) */
   #steps: RestoreSteps | null = null;
   /** Whether a step of it is being written (its own writes and reads do not finish it) */
@@ -264,8 +270,27 @@ export class TableContractStore implements StoreContract {
     takeTransformFields(this, (fields) => {
       this.#transformFields = fields;
     });
+    const idle = options.scheduleIdleWork ?? whenIdle;
+    this.#idleScheduler = idle;
     const { tables, writer: tablesWriter } = createFeatureRowTables({
       ...options,
+      // The work of the tables while the page is idle waits for the end of a write over several
+      // tasks: it runs once after its last step, not once between each two of them
+      scheduleIdleWork: (task) => {
+        const entry = { cancel: (): void => {}, run: (_deadline: number): void => {} };
+        entry.run = (deadline) => {
+          if (this.#bus.held) {
+            this.#idleWaiting.add(entry);
+            return;
+          }
+          task(deadline);
+        };
+        entry.cancel = idle(entry.run);
+        return () => {
+          entry.cancel();
+          this.#idleWaiting.delete(entry);
+        };
+      },
       // Nothing else needs the ids of the rows deleted that nothing keeps any more
       onRelease: (handles) => this.#writer.forget(handles),
       // A read of the rows comes after the restore under way, finished first
@@ -310,7 +335,10 @@ export class TableContractStore implements StoreContract {
       hold: (finish) => this.#bus.hold(finish),
       // Each step is a frame of the write marks, as a step of a restore is
       step: (fn) => this.#marks.frame(() => this.#bus.continueHeld(fn)),
-      release: () => this.#bus.release(),
+      release: () => {
+        this.#bus.release();
+        this.#runIdleWaiting();
+      },
       placeRows: (rows, to) => {
         const { parent, keys } = this.#placing(Array.from(rows), to);
         return {
@@ -1542,6 +1570,7 @@ export class TableContractStore implements StoreContract {
       }),
     );
     this.#bus.release();
+    this.#runIdleWaiting();
     steps.onEnd();
   }
 
@@ -1829,6 +1858,16 @@ export class TableContractStore implements StoreContract {
   #isThere(handle: RowRef): boolean {
     const place = this.#internals.placeOf(handle);
     return !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
+  }
+
+  /** Schedules again the idle work that waited for the end of a write over several tasks */
+  #runIdleWaiting(): void {
+    if (this.#bus.held || this.#idleWaiting.size === 0) return;
+    const idle = this.#idleScheduler;
+    for (const entry of [...this.#idleWaiting]) {
+      this.#idleWaiting.delete(entry);
+      entry.cancel = idle(entry.run);
+    }
   }
 
   /**
