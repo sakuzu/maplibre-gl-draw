@@ -430,6 +430,28 @@ export interface StoreView {
  */
 export type SlicedWrite = QueuedWrite;
 
+/**
+ * How a write of this client made over several tasks as one transaction goes
+ * (`Store.writeInSteps`)
+ *
+ * @internal
+ */
+export interface StepsOptions {
+  /** The time of a step (ms) */
+  readonly budgetMs: number;
+  /**
+   * Called once the notification went out, after the last step, with what a step made in a later
+   * task threw (undefined when none did)
+   */
+  readonly onEnd: (error: unknown) => void;
+  /** Runs each step and the end around what they run (the commit they are told as) */
+  readonly around?: <T>(fn: () => T) => T;
+  /** Runs the next step in a later task (`setTimeout` by default); what it gives cancels it */
+  readonly schedule?: (next: () => void) => unknown;
+  /** The clock of the steps (`performance.now` by default) */
+  readonly now?: () => number;
+}
+
 export interface Store extends StoreView, UiState {
   /**
    * A number that changes whenever the Store may have changed: each of its transactions and each
@@ -589,6 +611,32 @@ export interface Store extends StoreView, UiState {
   runSlicedStep<T>(fn: () => T): T;
   /** Whether a write over several tasks is queued */
   readonly slicedWritePending: boolean;
+  /**
+   * Writes over several tasks as one transaction of this client (the commit of a transaction of
+   * `draw.write` too long for one task): `step` writes until a time (of `options.now`) and says
+   * whether it is done. The first step is made now, in a transaction of `source`; the next ones
+   * in later tasks, in the transaction held; the notification goes out once, after the last.
+   * Anything that comes first finishes the rest at once (`step` given no time): a write of this
+   * client or from elsewhere, a write or a read of the state of this client, a read of the
+   * document through the Store or the reading side of its tables (the drawing reads the rows as
+   * they are written). A Store whose contract does not hold a transaction over several tasks
+   * makes every step at once.
+   *
+   * What the first step throws is thrown (nothing is held then); what a later step throws ends
+   * it, and is given to `options.onEnd`.
+   */
+  writeInSteps(
+    source: UpdateSource,
+    step: (deadline: number) => boolean,
+    options: StepsOptions,
+  ): void;
+  /**
+   * Begins a write of rows made in parts (the rows of `patch`), told as one write of all of them
+   * would be: the writes of rows tell no change of the order, and the groups they leave without a
+   * member stay, until the function returned is called once the last part is written (inside the
+   * transaction). A Store whose contract does not write rows in parts tells each part
+   */
+  beginRowParts(patch: RowValues): () => void;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;

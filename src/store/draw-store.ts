@@ -54,13 +54,14 @@ import { insertGroup } from './item-lists.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
-import { BULK_SLICE_ROWS, type RowSteps, rowStepsOf } from './row-steps.js';
+import { BULK_SLICE_ROWS, heldWritesOf, type RowSteps, rowStepsOf } from './row-steps.js';
 import { settleSelectionValues, valueOfSelection } from './selection-value.js';
 import type {
   EditResult,
   FeatureEdit,
   GeometryTransforms,
   SlicedWrite,
+  StepsOptions,
   Store,
   StoreContract,
 } from './store.js';
@@ -568,6 +569,90 @@ export class DrawStore implements Store {
   }
   get slicedWritePending(): boolean {
     return this.#queue.pending;
+  }
+
+  beginRowParts(patch: RowValues): () => void {
+    const held = this.#contract.tables ? heldWritesOf.get(this.#contract) : undefined;
+    return held ? held.beginRowParts(patch) : () => {};
+  }
+
+  writeInSteps(
+    source: UpdateSource,
+    step: (deadline: number) => boolean,
+    options: StepsOptions,
+  ): void {
+    const { budgetMs, onEnd } = options;
+    const around = options.around ?? (<T>(fn: () => T): T => fn());
+    const schedule = options.schedule ?? ((next: () => void) => setTimeout(next, 0));
+    const now = options.now ?? (() => performance.now());
+    const held = this.#contract.tables ? heldWritesOf.get(this.#contract) : undefined;
+    if (!held) {
+      // A Store that does not hold a transaction over several tasks makes every step at once
+      around(() =>
+        this.transact(() => {
+          while (!step(Number.POSITIVE_INFINITY));
+        }, source),
+      );
+      onEnd(undefined);
+      return;
+    }
+    let ended = false;
+    let cancel: unknown = null;
+    const write: QueuedWrite = { finish: () => finish(), holdsNotification: true };
+    /** Lets go of the notification: the contract tells into the one of this Store, which goes out */
+    const end = (error: unknown): void => {
+      if (ended) return;
+      ended = true;
+      if (cancel !== null) clearTimeout(cancel as ReturnType<typeof setTimeout>);
+      around(() => {
+        try {
+          held.release();
+        } finally {
+          if (this.#queue.remove(write)) this.#bus.release();
+        }
+      });
+      onEnd(error);
+    };
+    /** A later step, in the transaction held (its writes finish nothing) */
+    const run = (deadline: number): void => {
+      let done: boolean;
+      try {
+        done = around(() =>
+          this.#queue.runStep(() => this.#bus.continueHeld(() => held.step(() => step(deadline)))),
+        );
+      } catch (error) {
+        end(error);
+        return;
+      }
+      if (done) end(undefined);
+      else cancel = schedule(next);
+    };
+    const next = (): void => {
+      cancel = null;
+      if (!ended) run(now() + budgetMs);
+    };
+    const finish = (): void => {
+      if (!ended) run(Number.POSITIVE_INFINITY);
+    };
+    // The first step, in a transaction of its own: the notification is held when steps are left
+    const done = around(() =>
+      this.transact(() => {
+        const first = step(now() + budgetMs);
+        if (!first) {
+          // Anything else that comes to this Store or to its contract finishes it first
+          held.hold(() => write.finish());
+          this.#bus.hold(() => write.finish());
+          this.#queue.add(write);
+        }
+        return first;
+      }, source),
+    );
+    if (done) {
+      ended = true;
+      onEnd(undefined);
+      return;
+    }
+    cancel = schedule(next);
   }
 
   liveRows(rows: TableSelection): TableSelection {

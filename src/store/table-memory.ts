@@ -78,7 +78,13 @@ import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
 import { setRowPlaceKeys } from './row-places.js';
-import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS, rowStepsOf, sliceRowValues } from './row-steps.js';
+import {
+  BULK_SLICE_BUDGET_MS,
+  BULK_SLICE_ROWS,
+  heldWritesOf,
+  rowStepsOf,
+  sliceRowValues,
+} from './row-steps.js';
 import { combineValuesBefore } from './row-values-before.js';
 import type {
   EditResult,
@@ -235,6 +241,11 @@ export class TableContractStore implements StoreContract {
   #remoteDeleted: RowRef[] = [];
   /** The groups features left in the write being made (deleted at its end when empty) */
   readonly #leftGroups = new Set<string>();
+  /**
+   * The writes of rows in parts under way (`HeldWrites.beginRowParts`): the groups their parts
+   * leave empty are deleted at their end
+   */
+  #groupsHeld = 0;
   /** The restore of rows written in steps under way (`row-steps.ts`) */
   #steps: RestoreSteps | null = null;
   /** Whether a step of it is being written (its own writes and reads do not finish it) */
@@ -294,6 +305,21 @@ export class TableContractStore implements StoreContract {
     rowStepsOf.set(this, {
       begin: (write, onEnd) => this.#beginSteps(write, onEnd),
       finish: () => this.#finishSteps(),
+    });
+    heldWritesOf.set(this, {
+      hold: (finish) => this.#bus.hold(finish),
+      // Each step is a frame of the write marks, as a step of a restore is
+      step: (fn) => this.#marks.frame(() => this.#bus.continueHeld(fn)),
+      release: () => this.#bus.release(),
+      beginRowParts: (patch) => {
+        const tellOrder = this.#tablesWriter.watchOrderOf(patch);
+        this.#groupsHeld++;
+        return () => {
+          this.#groupsHeld--;
+          tellOrder();
+          if (this.#groupsHeld === 0) this.transact(() => this.#deleteEmptyGroups());
+        };
+      },
     });
     setRowPlaceKeys(tables, (to) => this.#placeKeys(to));
   }
@@ -1512,7 +1538,7 @@ export class TableContractStore implements StoreContract {
         write();
       } finally {
         this.#depth--;
-        if (this.#depth === 0) this.#deleteEmptyGroups();
+        if (this.#depth === 0 && this.#groupsHeld === 0) this.#deleteEmptyGroups();
       }
     });
     return true;
@@ -1787,9 +1813,19 @@ export class TableContractStore implements StoreContract {
     return !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
   }
 
-  /** Finishes the restore under way before a read of the rows */
+  /**
+   * Finishes the restore under way, or the write over several tasks held, before a read of the
+   * rows: no read sees them half written. The layers, the groups and the metadata are read
+   * without it (the drawing reads them every frame): a write over several tasks leaves them as
+   * they are until its last step (see `Store.writeInSteps`)
+   */
   #readGate(): void {
-    if (this.#steps && !this.#inStep) this.#finishSteps();
+    if (this.#steps) {
+      if (!this.#inStep) this.#finishSteps();
+      return;
+    }
+    // Inside a transaction, the writes held are the ones being made
+    this.#bus.finishHeld();
   }
 
   /** The feature of a row, kept or made (undefined for a deleted row) */
