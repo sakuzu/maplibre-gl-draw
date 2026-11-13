@@ -57,9 +57,10 @@ function slice(list: readonly string[], range: Range): string[] {
  * @internal
  */
 export function layerItemIds(store: Store, layer: Layer, range: Range): string[] {
-  if (layer.kind !== 'table') return slice(layer.items, range);
-  const snapshot = snapshotOf(store);
+  // The document before a write over several tasks, or a transaction over it
+  const snapshot = store.tables ? snapshotOf(store) : undefined;
   if (snapshot) return slice(itemsAt(store, snapshot, layer.id), range);
+  if (layer.kind !== 'table') return slice(layer.items, range);
   const tables = store.tables;
   const view = tables?.get(layer.id);
   if (!tables || !view) return [];
@@ -80,9 +81,9 @@ export function layerItemIds(store: Store, layer: Layer, range: Range): string[]
  * @internal
  */
 export function layerItemCount(store: Store, layer: Layer): number {
-  if (layer.kind !== 'table') return layer.items.length;
-  const snapshot = snapshotOf(store);
+  const snapshot = store.tables ? snapshotOf(store) : undefined;
   if (snapshot) return itemsAt(store, snapshot, layer.id).length;
+  if (layer.kind !== 'table') return layer.items.length;
   return store.tables?.get(layer.id)?.itemCount ?? 0;
 }
 
@@ -92,9 +93,9 @@ export function layerItemCount(store: Store, layer: Layer): number {
  * @internal
  */
 export function groupMemberIds(store: Store, group: Group, range: Range): string[] {
-  if (group.kind !== 'table') return slice(group.featureIds, range);
-  const snapshot = snapshotOf(store);
+  const snapshot = store.tables ? snapshotOf(store) : undefined;
   if (snapshot) return slice(membersAt(store, snapshot, group), range);
+  if (group.kind !== 'table') return slice(group.featureIds, range);
   const tables = store.tables;
   const view = tables?.get(group.layerId);
   const handle = tables?.findGroup(group.id);

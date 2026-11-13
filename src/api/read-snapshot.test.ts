@@ -123,6 +123,12 @@ async function readBetweenSteps(
   await stepped;
   expect(store.slicedWritePending).toBe(true);
   expect(readAll(draw)).toEqual(before);
+  // A transaction reads the document committed as well
+  let read: unknown;
+  await draw.write((tx) => {
+    read = readAll(tx as never);
+  });
+  expect(read).toEqual(before);
   expect(store.slicedWritePending).toBe(true);
   await write;
   vi.restoreAllMocks();
