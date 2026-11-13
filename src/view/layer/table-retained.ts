@@ -59,7 +59,12 @@
  * (`checkRebuild`).
  */
 
-import type { GroupVersion, GroupVersionReceiver, PageDictionary } from '@sakuzu/kasane/render';
+import type {
+  DeltaPlaces,
+  GroupVersion,
+  GroupVersionReceiver,
+  PageDictionary,
+} from '@sakuzu/kasane/render';
 import {
   buildPackedRTree,
   geometryAt,
@@ -250,6 +255,9 @@ const IMMEDIATE_INDEX_FROM = 64;
 /** The vertices of polygons packed and written between two looks at the clock */
 const SLICE_POLYGON_VERTICES = 2_000;
 
+/** No rows of a delta to draw */
+const NO_DELTA_INSERTS: ReadonlyMap<number, readonly DeltaInsert[]> = new Map();
+
 /** The whole world: the range drawn when the view is not known */
 const WORLD: BBox = [-540, -90, 540, 90];
 /** No region */
@@ -273,20 +281,24 @@ export interface TableDrawRecord {
   /** The end of the rows drawn (exclusive) */
   readonly to: number;
   /**
-   * Whether the rows are rows of the delta of the layer (`group` is the handle of the delta and
-   * `groupIndex` -1; `from` and `to` are rows of the delta)
+   * Whether the rows are rows of the delta of the layer (`group` is the handle of the group of the
+   * delta they are in and `groupIndex` -1; `from` and `to` are rows of that group)
    */
   readonly delta?: boolean;
 }
 
 /**
  * The rows of the delta drawn at a place of a group: before row `at` of the group, the rows
- * `[from, to)` of the delta
+ * `[from, to)` of the group `group` of the delta. The rows of the delta at a place are drawn in the
+ * order of their keys: a run of rows of one group of the delta, then of another when the groups
+ * mix there; `k` is the number of rows of the delta at the place before the run
  */
 interface DeltaInsert {
   readonly at: number;
+  readonly group: RowGroup;
   readonly from: number;
   readonly to: number;
+  readonly k: number;
 }
 
 /**
@@ -515,6 +527,11 @@ interface GroupCache {
   bulkMarkVersion: number;
   /** The generation of the surface the rows of a delta were packed for (-1 for a group) */
   surfaceGeneration: number;
+  /**
+   * Whether the rows of a group of the delta are to be packed again (a write did not fit its
+   * place; false for a group of the order)
+   */
+  repack: boolean;
 }
 
 /** What is kept for a layer */
@@ -541,10 +558,8 @@ interface LayerCache {
   layer: Layer | null;
   deps: StoreRetainedDrawDeps | null;
   tables: FeatureTablesInternals | null;
-  /** The rows of the delta of the layer as they are packed (null when there is none) */
-  delta: GroupCache | null;
-  /** Whether the rows of the delta are to be packed again (a write did not fit its place) */
-  deltaStale: boolean;
+  /** The groups of the delta of the layer as they are packed, by group */
+  readonly deltas: Map<RowGroup, GroupCache>;
   /** The view the layer was drawn in last (what a pending version waits for) */
   bounds: BBox;
   /** The drawing the layer was drawn with last, and the frame */
@@ -611,10 +626,10 @@ interface DrawPass {
   inserts: readonly DeltaInsert[] | null;
   /** The next of them to draw */
   insertAt: number;
-  /** The rows of the delta of the layer being drawn, as they are packed (null: not packed) */
+  /** The groups of the delta of the layer being drawn, as they are packed */
+  deltas: ReadonlyMap<RowGroup, GroupCache> | null;
+  /** The group of the delta being drawn, as it is packed (null: not packed) */
   delta: GroupCache | null;
-  /** The rows of the delta of the layer being drawn */
-  deltaGroup: RowGroup | null;
   /** What the rows drawn at once of the layer being drawn are drawn with */
   layer: Layer | null;
   deps: StoreRetainedDrawDeps | null;
@@ -745,6 +760,8 @@ export class TableLayerRenderer {
   private lastDrawMs = 0;
   /** The rows written in place since the last pass before the main one, by layer and group */
   private readonly written = new Map<string, Map<RowGroupHandle, Map<number, PendingWrite>>>();
+  /** The rows of the delta to draw at the places of the groups, by the places they were made of */
+  private readonly insertsOf = new WeakMap<DeltaPlaces, Map<number, DeltaInsert[]>>();
   /** What the writes in place did */
   readonly writeStats: TableWriteStats = {
     inPlace: 0,
@@ -784,8 +801,8 @@ export class TableLayerRenderer {
     drawing: true,
     inserts: null,
     insertAt: 0,
+    deltas: null,
     delta: null,
-    deltaGroup: null,
     layer: null,
     deps: null,
     tables: null,
@@ -907,9 +924,7 @@ export class TableLayerRenderer {
   checkCopies(): string[] {
     const problems: string[] = [];
     for (const [layerId, cache] of this.layers) {
-      const groups = cache.delta
-        ? [...cache.groups.values(), cache.delta]
-        : [...cache.groups.values()];
+      const groups = [...cache.groups.values(), ...cache.deltas.values()];
       for (const groupCache of groups) {
         const group = groupCache.group;
         if (groupCache.texture && groupCache.uploadedVersion !== group.stateVersion) {
@@ -1018,7 +1033,7 @@ export class TableLayerRenderer {
       for (const groupCache of this.checkedGroups(layerId, cache)) {
         if (problems.length >= CHECK_PROBLEMS) return problems;
         this.checkGroupState(layerId, groupCache, tables, stateCopies, problems);
-        const delta = groupCache === cache.delta;
+        const delta = groupCache.group.delta;
         for (const oneDraw of delta ? [true] : [true, false]) {
           const held = oneDraw ? groupCache.oneDraw : groupCache.byKind;
           if (this.isSettled(cache, groupCache, held)) {
@@ -1083,9 +1098,10 @@ export class TableLayerRenderer {
   /** The groups of a layer the checks read: its row groups, and its delta when it is packed */
   private checkedGroups(layerId: string, cache: LayerCache): GroupCache[] {
     const groups = [...cache.groups.values()];
-    const delta = cache.delta;
-    const table = cache.tables?.rowTable(layerId);
-    if (delta && !cache.deltaStale && delta.group === table?.delta.group) groups.push(delta);
+    const delta = cache.tables?.rowTable(layerId)?.delta;
+    for (const [group, groupCache] of cache.deltas) {
+      if (!groupCache.repack && delta?.groupOf(group.handle) === group) groups.push(groupCache);
+    }
     return groups;
   }
 
@@ -1330,8 +1346,7 @@ export class TableLayerRenderer {
     const table = this.layers.get(layerId)?.tables?.rowTable(layerId);
     if (table) {
       for (const write of writes) {
-        const group =
-          write.group === table.delta.handle ? table.delta.group : table.group(write.group);
+        const group = table.delta.groupOf(write.group) ?? table.group(write.group);
         if (group) this.drape.rowsWritten(layerId, group, [write.row]);
         // Its extent is read again (its footprint may follow any of what was written)
         if (group && (write.what & ~ROW_WRITE_STATE) !== 0)
@@ -1434,7 +1449,7 @@ export class TableLayerRenderer {
     for (const cache of this.layers.values()) {
       if (!cache.holdsGpuRows || cache.drawnFrame === this.frameCount) continue;
       cache.holdsGpuRows = false;
-      const caches = cache.delta ? [...cache.groups.values(), cache.delta] : cache.groups.values();
+      const caches = [...cache.groups.values(), ...cache.deltas.values()];
       for (const groupCache of caches) {
         for (const chunk of allChunks(groupCache)) {
           if (chunk.type === 'extension') this.releaseGpuRows(chunk);
@@ -1720,8 +1735,8 @@ export class TableLayerRenderer {
     cache.drawnFrame = this.frameCount;
     const inserts = this.deltaInserts(table);
     const pass = this.pass;
-    pass.delta = cache.delta?.group === table.delta.group && !cache.deltaStale ? cache.delta : null;
-    pass.deltaGroup = table.delta.group;
+    pass.deltas = cache.deltas;
+    pass.delta = null;
     pass.oneDraw = drawing === 'one-draw';
     pass.layer = layer;
     pass.deps = deps;
@@ -1862,8 +1877,8 @@ export class TableLayerRenderer {
       pass.cutsOf = null;
       pass.drawing = true;
       pass.inserts = null;
+      pass.deltas = null;
       pass.delta = null;
-      pass.deltaGroup = null;
       pass.layer = null;
       pass.deps = null;
       pass.tables = null;
@@ -1985,7 +2000,7 @@ export class TableLayerRenderer {
         for (const chunk of allChunks(groupCache)) this.invalidateChunk(chunk, keepDrawing);
       }
       // The rows of the delta are packed again before the next frame
-      cache.deltaStale = true;
+      for (const groupCache of cache.deltas.values()) groupCache.repack = true;
       if (!keepDrawing) cache.slots = null;
     }
   }
@@ -2080,8 +2095,8 @@ export class TableLayerRenderer {
     this.pendingCaches.clear();
     for (const cache of this.layers.values()) {
       for (const groupCache of cache.groups.values()) this.disposeGroup(groupCache);
-      if (cache.delta) this.disposeGroup(cache.delta);
-      cache.delta = null;
+      for (const groupCache of cache.deltas.values()) this.disposeGroup(groupCache);
+      cache.deltas.clear();
       if (cache.rowsStyles) this.renderers?.rows?.retirePalette(cache.rowsStyles.palette);
     }
     this.layers.clear();
@@ -2107,16 +2122,12 @@ export class TableLayerRenderer {
       const delta = cache.tables?.rowTable(layerId)?.delta;
       const away: number[] = [];
       for (const [handle, rows] of groups) {
-        const ofDelta = delta?.handle === handle;
-        const groupCache = ofDelta
-          ? cache.delta?.group === delta.group
-            ? cache.delta
-            : null
-          : cache.groups.get(handle);
+        const deltaGroup = delta?.groupOf(handle);
+        const groupCache = deltaGroup ? cache.deltas.get(deltaGroup) : cache.groups.get(handle);
         if (!groupCache) continue;
         for (const [row, write] of rows) {
           if (this.applyWrite(cache, groupCache, row, write)) continue;
-          if (ofDelta) cache.deltaStale = true;
+          if (deltaGroup) groupCache.repack = true;
           else away.push(groupCache.group.data.rows[row]);
         }
       }
@@ -2411,12 +2422,23 @@ export class TableLayerRenderer {
     this.versionBudgetWhileMovingMs = Math.max(0, ms);
   }
 
-  /** The chunks the rows of the delta of a layer are packed in (for the tests) */
+  /**
+   * The chunks the rows of the delta of a layer are packed in, in the order of its groups (for the
+   * tests)
+   */
   deltaChunks(layerId: string): RowsGpuChunk[] {
-    const chunks = this.layers.get(layerId)?.delta?.oneDraw?.chunks ?? [];
-    return chunks.flatMap((chunk) =>
-      chunk.type === 'rows' && chunk.batches ? [chunk.batches] : [],
+    const cache = this.layers.get(layerId);
+    const groups = cache?.tables?.rowTable(layerId)?.delta.groups ?? [];
+    return groups.flatMap((group) =>
+      (cache?.deltas.get(group)?.oneDraw?.chunks ?? []).flatMap((chunk) =>
+        chunk.type === 'rows' && chunk.batches ? [chunk.batches] : [],
+      ),
     );
+  }
+
+  /** The groups of the delta of a layer packed for the drawing (for the tests) */
+  packedDeltaGroups(layerId: string): RowGroup[] {
+    return [...(this.layers.get(layerId)?.deltas.keys() ?? [])];
   }
 
   /**
@@ -2452,8 +2474,7 @@ export class TableLayerRenderer {
         layer: null,
         deps: null,
         tables: null,
-        delta: null,
-        deltaStale: false,
+        deltas: new Map(),
         bounds: WORLD,
         drawing: 'one-draw',
         drawnFrame: -1,
@@ -2800,7 +2821,7 @@ export class TableLayerRenderer {
   ): void {
     const drawn = new Set<number>();
     for (const cache of this.layers.values()) {
-      const caches = cache.delta ? [...cache.groups.values(), cache.delta] : cache.groups.values();
+      const caches = [...cache.groups.values(), ...cache.deltas.values()];
       for (const groupCache of caches) {
         const binding = groupCache.binding;
         if (!binding || !holdsBulkMark(groupCache)) continue;
@@ -2826,7 +2847,7 @@ export class TableLayerRenderer {
    */
   private uploadStates(): void {
     for (const cache of this.layers.values()) {
-      const caches = cache.delta ? [...cache.groups.values(), cache.delta] : cache.groups.values();
+      const caches = [...cache.groups.values(), ...cache.deltas.values()];
       for (const groupCache of caches) {
         const group = groupCache.group;
         if (!groupCache.texture) {
@@ -3225,7 +3246,7 @@ export class TableLayerRenderer {
     if (!inserts || !pass.drawing) return;
     while (pass.insertAt < inserts.length && inserts[pass.insertAt].at <= row) {
       const insert = inserts[pass.insertAt++];
-      this.drawDeltaRange(insert.from, insert.to, insert);
+      this.drawDeltaRange(insert);
     }
   }
 
@@ -4111,49 +4132,72 @@ export class TableLayerRenderer {
   /**
    * The places of the rows of the delta of a layer among its groups: by the place of a group in
    * the order (-1 for the rows after every group), the rows of the delta to draw before each row
-   * of the group, consecutive rows at the same place in one range
+   * of the group in the order of their keys, consecutive rows of one group of the delta at the same
+   * place in one range (made again when the rows of the delta or their places change)
    */
-  private deltaInserts(table: RowTable): Map<number, DeltaInsert[]> {
-    const out = new Map<number, DeltaInsert[]>();
-    const delta = table.delta.group;
-    if (!delta) return out;
+  private deltaInserts(table: RowTable): ReadonlyMap<number, readonly DeltaInsert[]> {
+    if (table.delta.length === 0) return NO_DELTA_INSERTS;
     const places = table.deltaPlaces();
+    const held = this.insertsOf.get(places);
+    if (held) return held;
+    const out = new Map<number, DeltaInsert[]>();
+    const n = places.rows.length;
     let k = 0;
-    while (k < delta.data.length) {
+    let first = 0;
+    while (k < n) {
       const g = places.groups[k];
       const at = places.cuts[k];
+      const source = places.source[k];
+      // The first row of the delta at this place
+      if (k === 0 || places.groups[k - 1] !== g || places.cuts[k - 1] !== at) first = k;
       let end = k + 1;
-      while (end < delta.data.length && places.groups[end] === g && places.cuts[end] === at) end++;
+      while (
+        end < n &&
+        places.groups[end] === g &&
+        places.cuts[end] === at &&
+        places.source[end] === source &&
+        places.rows[end] === places.rows[end - 1] + 1
+      ) {
+        end++;
+      }
       let list = out.get(g);
       if (!list) {
         list = [];
         out.set(g, list);
       }
-      list.push({ at, from: k, to: end });
+      list.push({
+        at,
+        group: places.sources[source] as RowGroup,
+        from: places.rows[k],
+        to: places.rows[end - 1] + 1,
+        k: k - first,
+      });
       k = end;
     }
+    this.insertsOf.set(places, out);
     return out;
   }
 
   /**
-   * Draws the rows `[from, to)` of the delta of the layer being drawn: in one draw from the
-   * chunks they are packed in, when the layer is drawn in one draw and they are on the GPU; at
+   * Draws the rows `[from, to)` of a group of the delta of the layer being drawn: in one draw from
+   * the chunks they are packed in, when the layer is drawn in one draw and they are on the GPU; at
    * once from their features otherwise
    */
-  private drawDeltaRange(from: number, to: number, insert?: DeltaInsert): void {
+  private drawDeltaRange(insert: DeltaInsert): void {
     const pass = this.pass;
-    const group = pass.deltaGroup;
-    if (!group || to <= from) return;
+    const { group, from, to } = insert;
+    if (to <= from) return;
     // On the drape, the rank of a row of the delta is its place before a row of the group
     const groupHandle = pass.group?.handle ?? -1;
     const layerId = pass.layerId;
     const rankOf = (row: number): TableDrapeRank | null =>
-      insert ? this.drape.rankOfInsert(layerId, groupHandle, insert.at, row - insert.from) : null;
-    const cache = pass.delta;
+      this.drape.rankOfInsert(layerId, groupHandle, insert.at, insert.k + row - from);
+    const held = pass.deltas?.get(group) ?? null;
+    const cache = held && !held.repack ? held : null;
     const record = (kind: TableRunKind, a: number, b: number): void => {
       this.record?.push({
         layerId: pass.layerId,
-        group: cache?.group.handle ?? -1,
+        group: group.handle,
         groupIndex: -1,
         kind,
         from: a,
@@ -4199,6 +4243,7 @@ export class TableLayerRenderer {
       if (gpu?.uploaded && rows && this.painter.active) {
         const binding = pass.binding;
         pass.binding = (cache as GroupCache).binding;
+        pass.delta = cache;
         this.drawPointsOnDrape(
           gpu,
           group,
@@ -4207,6 +4252,7 @@ export class TableLayerRenderer {
           b - chunk.range.from,
           rankOf,
         );
+        pass.delta = null;
         pass.binding = binding;
         record('rows', a, b);
       } else if (gpu?.uploaded && rows) {
@@ -4235,13 +4281,14 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Packs the rows of the delta of every layer whose rows came in, left or were made again, or
-   * whose packing is stale (a write that did not fit, new styles): before the main pass, so they
-   * are on the GPU in the frame the copies in their groups are hidden. The rows the drawing in
-   * one draw cannot draw are drawn at once
+   * Packs the groups of the delta of every layer that came in or were made again, or whose
+   * packing is stale (a write that did not fit, new styles): before the main pass, so they are on
+   * the GPU in the frame the copies in their groups are hidden. A group of the delta that is the
+   * same as when it was packed is not packed again, so a write that brings rows into the delta
+   * packs its own rows. What is held for a group that left the delta is released. The rows the
+   * drawing in one draw cannot draw are drawn at once
    */
   private packDeltas(): void {
-    const rows = this.renderers?.rows ?? null;
     for (const [layerId, cache] of this.layers) {
       const table = cache.tables?.rowTable(layerId);
       if (!table) {
@@ -4249,86 +4296,96 @@ export class TableLayerRenderer {
         if (cache.tables) this.releaseLayer(layerId, cache);
         continue;
       }
-      const group = table.delta.group;
-      const held = cache.delta;
-      const palette = cache.rowsStyles?.palette;
-      const current =
-        held !== null &&
-        held.group === group &&
-        !cache.deltaStale &&
-        held.styleGeneration === cache.styleGeneration &&
-        held.surfaceGeneration === this.surfaces.generation &&
-        held.oneDraw?.generation === cache.generation &&
-        held.oneDraw.chunks.every((c) => c.type !== 'rows' || c.batches?.data.palette === palette);
-      if (current) {
-        // The elevations of its points follow the tiles of the terrain (a delta is small: read
-        // whole)
-        for (const chunk of held.oneDraw?.chunks ?? []) {
-          const gpu = chunk.type === 'rows' ? chunk.batches : null;
-          const generation = this.options.terrain.elevationGeneration;
-          if (gpu && this.heightGenerations.get(gpu) !== generation) {
-            this.writeHeights(held.group, gpu, null);
-          }
+      const groups = table.delta.groups;
+      if (cache.deltas.size > 0) {
+        const present = new Set(groups);
+        for (const [group, held] of cache.deltas) {
+          if (present.has(group)) continue;
+          this.disposeGroup(held);
+          cache.deltas.delete(group);
         }
-        continue;
       }
-      if (held) this.disposeGroup(held);
-      cache.delta = null;
-      cache.deltaStale = false;
-      if (!group) continue;
-      const deltaCache = newGroupCache(group, cache.styleGeneration);
-      deltaCache.surfaceGeneration = this.surfaces.generation;
-      cache.delta = deltaCache;
-      const { tables, slots, layer, deps } = cache;
-      if (!rows || !tables || !slots || !layer || !deps || !cache.context || !cache.rowsStyles) {
-        continue;
-      }
-      const sprites = new Map<number, RowSpriteSource>();
-      const gpuRows = new Map<number, GpuRowsSource>();
-      const view = tables.view(layerId);
-      const transformFields = this.options.transformFields?.() ?? null;
-      const ranges = partitionRowGroup(
-        group,
-        (row) =>
-          classifyRow(group, row, {
-            slots,
-            customTypes: deps.customRenderers,
-            companions: deps.companions as FeatureCompanionRegistry,
-            featureOf: (r, k) => rowFeatureToRead(tables.readContext, layerId, r, k),
-            view,
-            layer,
-            oneDraw: true,
-            transformFields,
-            onSprite: (r, source) => sprites.set(r, source),
-            onGpuRows: (r, source) => gpuRows.set(r, source),
-          }),
-        DELTA_CHUNK_VERTICES,
-        (row) => sprites.get(row) ?? gpuRows.get(row),
-      );
-      deltaCache.sprites = sprites;
-      const chunks = ranges.flatMap((range) => this.makeChunk(range)) as OneDrawChunk[];
-      deltaCache.oneDraw = { chunks, generation: cache.generation, retiring: null };
-      const context = this.packContext(deltaCache, cache);
-      for (const chunk of chunks) {
-        if (chunk.type === 'extension' && view) {
-          // A delta is small: given its rows at once
-          cache.holdsGpuRows = true;
-          chunk.held = chunk.source.create(view);
-          this.addRows(chunk, chunk.held.buffer, group, Number.POSITIVE_INFINITY);
+      for (const group of groups) this.packDeltaGroup(layerId, cache, group);
+    }
+  }
+
+  /** Packs a group of the delta of a layer when what is packed of it is not current */
+  private packDeltaGroup(layerId: string, cache: LayerCache, group: RowGroup): void {
+    const rows = this.renderers?.rows ?? null;
+    const held = cache.deltas.get(group) ?? null;
+    const palette = cache.rowsStyles?.palette;
+    const current =
+      held !== null &&
+      !held.repack &&
+      held.styleGeneration === cache.styleGeneration &&
+      held.surfaceGeneration === this.surfaces.generation &&
+      held.oneDraw?.generation === cache.generation &&
+      held.oneDraw.chunks.every((c) => c.type !== 'rows' || c.batches?.data.palette === palette);
+    if (current) {
+      // The elevations of its points follow the tiles of the terrain (read whole)
+      for (const chunk of held.oneDraw?.chunks ?? []) {
+        const gpu = chunk.type === 'rows' ? chunk.batches : null;
+        const generation = this.options.terrain.elevationGeneration;
+        if (gpu && this.heightGenerations.get(gpu) !== generation) {
+          this.writeHeights(held.group, gpu, null);
         }
-        if (chunk.type !== 'rows') continue;
-        const origin = normalizeOrigin(chunkOrigin(chunk));
-        chunk.batches = packRowsChunk(group, chunk.range, origin, context, rows);
-        chunk.origin = origin;
-        this.writeHeights(group, chunk.batches, null);
       }
+      return;
+    }
+    if (held) this.disposeGroup(held);
+    const deltaCache = newGroupCache(group, cache.styleGeneration);
+    deltaCache.surfaceGeneration = this.surfaces.generation;
+    cache.deltas.set(group, deltaCache);
+    const { tables, slots, layer, deps } = cache;
+    if (!rows || !tables || !slots || !layer || !deps || !cache.context || !cache.rowsStyles) {
+      return;
+    }
+    const sprites = new Map<number, RowSpriteSource>();
+    const gpuRows = new Map<number, GpuRowsSource>();
+    const view = tables.view(layerId);
+    const transformFields = this.options.transformFields?.() ?? null;
+    const ranges = partitionRowGroup(
+      group,
+      (row) =>
+        classifyRow(group, row, {
+          slots,
+          customTypes: deps.customRenderers,
+          companions: deps.companions as FeatureCompanionRegistry,
+          featureOf: (r, k) => rowFeatureToRead(tables.readContext, layerId, r, k),
+          view,
+          layer,
+          oneDraw: true,
+          transformFields,
+          onSprite: (r, source) => sprites.set(r, source),
+          onGpuRows: (r, source) => gpuRows.set(r, source),
+        }),
+      DELTA_CHUNK_VERTICES,
+      (row) => sprites.get(row) ?? gpuRows.get(row),
+    );
+    deltaCache.sprites = sprites;
+    const chunks = ranges.flatMap((range) => this.makeChunk(range)) as OneDrawChunk[];
+    deltaCache.oneDraw = { chunks, generation: cache.generation, retiring: null };
+    const context = this.packContext(deltaCache, cache);
+    for (const chunk of chunks) {
+      if (chunk.type === 'extension' && view) {
+        // A group of a delta is given its rows at once
+        cache.holdsGpuRows = true;
+        chunk.held = chunk.source.create(view);
+        this.addRows(chunk, chunk.held.buffer, group, Number.POSITIVE_INFINITY);
+      }
+      if (chunk.type !== 'rows') continue;
+      const origin = normalizeOrigin(chunkOrigin(chunk));
+      chunk.batches = packRowsChunk(group, chunk.range, origin, context, rows);
+      chunk.origin = origin;
+      this.writeHeights(group, chunk.batches, null);
     }
   }
 
   /** Releases what is held for a layer that left its tables */
   private releaseLayer(layerId: string, cache: LayerCache): void {
     for (const groupCache of cache.groups.values()) this.disposeGroup(groupCache);
-    if (cache.delta) this.disposeGroup(cache.delta);
+    for (const groupCache of cache.deltas.values()) this.disposeGroup(groupCache);
+    cache.deltas.clear();
     if (cache.rowsStyles) this.renderers?.rows?.retirePalette(cache.rowsStyles.palette);
     this.layers.delete(layerId);
   }
@@ -4545,6 +4602,7 @@ function newGroupCache(group: RowGroup, styleGeneration: number): GroupCache {
     bulkMarked: false,
     bulkMarkVersion: -1,
     surfaceGeneration: -1,
+    repack: false,
   };
 }
 

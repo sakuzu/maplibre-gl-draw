@@ -111,11 +111,18 @@ function features(count: number, seed: number): Feature[] {
   });
 }
 
-/** The tables of features drawn in one draw, the writes reaching the drawing */
-function setup(list: Feature[], targetRows = 16, versions = false) {
+/**
+ * The tables of features drawn in one draw, the writes reaching the drawing (with `smallDelta` 0,
+ * every write into the delta is a group of the delta of its own)
+ */
+function setup(list: Feature[], targetRows = 16, versions = false, smallDelta?: number) {
   const tables = tablesOfFeatures('layer', list, targetRows);
+  if (smallDelta !== undefined) {
+    (tables.internals as unknown as { smallDeltaRows: number }).smallDeltaRows = smallDelta;
+  }
   const mock = memoryGL();
-  const rows = new RowsRenderer(null, mock.gl, new GpuLedger(), 1, terrain);
+  const ledger = new GpuLedger();
+  const rows = new RowsRenderer(null, mock.gl, ledger, 1, terrain);
   rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
   const made: RowsChunk[] = [];
   const createChunk = rows.createChunk.bind(rows);
@@ -160,7 +167,7 @@ function setup(list: Feature[], targetRows = 16, versions = false) {
     companions: createFeatureCompanionRegistry(),
   };
   const renderer = new TableLayerRenderer({
-    ledger: new GpuLedger(),
+    ledger,
     gl: mock.gl,
     terrain,
     requestRepaint: () => {},
@@ -190,7 +197,7 @@ function setup(list: Feature[], targetRows = 16, versions = false) {
     renderer.endFrame();
     return { record, atOnce: [...atOnce] };
   };
-  return { ...tables, renderer, rows, made, frame, mock };
+  return { ...tables, renderer, rows, made, frame, mock, ledger };
 }
 
 /**
@@ -200,7 +207,7 @@ function setup(list: Feature[], targetRows = 16, versions = false) {
 function drawnIds(record: TableDrawRecord[], table: RowTable): string[] {
   const out: string[] = [];
   for (const entry of record) {
-    const group = entry.delta ? table.delta.group : table.groupAt(entry.groupIndex);
+    const group = entry.delta ? table.delta.groupOf(entry.group) : table.groupAt(entry.groupIndex);
     if (!group) continue;
     for (let row = entry.from; row < entry.to; row++) {
       if ((group.gpuState[row] & 1) !== 0) continue;
@@ -406,10 +413,19 @@ describe('the drawing of the rows of the delta', () => {
   });
 
   it('draws the rows of the layer in their order every frame, whatever is written at random', () => {
-    for (const seed of [21, 22, 23]) {
+    // A few rows written at a time join one group of the delta (the default), or are each a group
+    // of the delta of their own
+    for (const [seed, smallDelta] of [
+      [21, undefined],
+      [22, undefined],
+      [23, undefined],
+      [24, 0],
+      [25, 0],
+      [26, 0],
+    ] as const) {
       const random = seededRandom(seed);
       const list = features(150, seed);
-      const live = setup(list, 16);
+      const live = setup(list, 16, false, smallDelta);
       live.frame();
       let created = 0;
       for (let step = 0; step < 60; step++) {
@@ -468,6 +484,81 @@ describe('the drawing of the rows of the delta', () => {
         expect(drawnIds(full.record, live.table)).toEqual(shown);
       }
     }
+  });
+
+  it('draws the rows of groups of the delta that mix at one place in the order of their keys', () => {
+    const list = features(64, 3).map((f) =>
+      f.type === 'Image' ? feature(f.id, 'Point', [0, 0]) : f,
+    );
+    const live = setup(list, 64, false, 0);
+    live.frame();
+    live.frame();
+    const handleOf = (i: number): number => live.tables.getRowRef(list[i].id) as number;
+    // Two writes whose rows go to the same place, before the row 11 of the group, their keys mixed
+    live.writer.writeRows(
+      patchOf([handleOf(20), handleOf(21), handleOf(22)], {
+        key: [`${orderKey(10)}a`, `${orderKey(10)}c`, `${orderKey(10)}e`],
+      }),
+    );
+    live.frame();
+    const [first] = live.table.delta.groups;
+    const packed = live.renderer.deltaChunks('layer');
+    live.writer.writeRows(
+      patchOf([handleOf(30), handleOf(31)], { key: [`${orderKey(10)}b`, `${orderKey(10)}d`] }),
+    );
+    const { record } = live.frame();
+    expect(live.table.delta.groups).toHaveLength(2);
+    expect(live.table.delta.groups[0]).toBe(first);
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
+    // A run of one group at a time, at the place, in the order of the keys
+    const second = live.table.delta.groups[1];
+    expect(
+      record
+        .filter((entry) => entry.delta)
+        .map((entry) => [entry.group === first.handle ? 'first' : 'second', entry.from, entry.to]),
+    ).toEqual([
+      ['first', 0, 1],
+      ['second', 0, 1],
+      ['first', 1, 2],
+      ['second', 1, 2],
+      ['first', 2, 3],
+    ]);
+    expect(second.handle).not.toBe(first.handle);
+    // The second write packed its own rows: the chunk of the first group is the one before
+    expect(live.renderer.deltaChunks('layer')[0]).toBe(packed[0]);
+    expect(live.renderer.packedDeltaGroups('layer')).toEqual([first, second]);
+  });
+
+  it('gives back what the groups of the delta held when they leave it, and holds a few of them', () => {
+    const list = features(120, 7);
+    const live = setup(list, 16, false, 0);
+    live.frame();
+    const before = live.ledger.snapshot().bytes;
+    // Many writes of a row each: one group of the delta each, up to the most a delta holds
+    for (let i = 0; i < 100; i++) {
+      const handle = live.tables.getRowRef(list[i].id) as number;
+      live.writer.writeRows(
+        patchOf([handle], { key: [`${orderKey(119)}${String(i).padStart(3, '0')}`] }),
+      );
+      const { record } = live.frame();
+      expect(live.renderer.packedDeltaGroups('layer')).toEqual([...live.table.delta.groups]);
+      expect(live.table.delta.groups.length).toBeLessThanOrEqual(64);
+      if (i % 25 === 24) {
+        expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
+      }
+    }
+    expect(live.ledger.snapshot().bytes).toBeGreaterThan(before);
+    // The rows go to the next versions of their groups: what their groups of the delta held is
+    // given back
+    live.internals.flushVersions();
+    for (let i = 0; i < 3; i++) live.frame();
+    const { record } = live.frame();
+    expect(live.table.delta.groups).toEqual([]);
+    expect(live.renderer.packedDeltaGroups('layer')).toEqual([]);
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
+    live.renderer.dispose();
+    live.rows.dispose();
+    expect(live.ledger.snapshot().bytes).toBe(0);
   });
 
   it('draws a sketch drawn over a row in its place, from the frame it is given, and not the row', () => {

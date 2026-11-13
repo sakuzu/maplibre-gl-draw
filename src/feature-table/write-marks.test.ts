@@ -256,8 +256,6 @@ describe('the write mark of the tables', () => {
     // The row of the delta that stays keeps its mark when the delta is made again
     internals.setWriteMark(7);
     writer.writeRows(rowPatch([at('p12')], { key: [key(10_500)] }));
-    // The delta is made again at its first read (a row that stays is read where it is until then)
-    expect(internals.rowTable('a')?.delta.group?.mark).toBe(7);
     const kept = internals.placeOf(at('p3'));
     expect(kept?.group.marks[kept.row]).toBe(5);
     expect(kept?.group.mark).toBe(7);

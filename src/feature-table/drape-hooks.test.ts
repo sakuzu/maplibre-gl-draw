@@ -62,10 +62,11 @@ function fakeDrape(internals: FeatureTablesInternals, layerIds: readonly string[
         for (let r = 0; r < group.data.length; r++)
           add(group, r, `${layerId}:m${group.data.rows[r]}`);
       }
-      const delta = table.delta.group;
-      for (let k = 0; k < (delta?.data.length ?? 0); k++) {
-        const copy = table.delta.copyOf((delta as RowGroup).data.rows[k]);
-        add(delta as RowGroup, k, `${layerId}:d${copy}`);
+      for (const delta of table.delta.groups) {
+        for (let k = 0; k < delta.data.length; k++) {
+          const copy = table.delta.copyOf(delta.data.rows[k]);
+          add(delta, k, `${layerId}:d${copy}`);
+        }
       }
     }
     return out;
