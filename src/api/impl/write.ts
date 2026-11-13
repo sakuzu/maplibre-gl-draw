@@ -29,6 +29,7 @@ import { createId } from '../../shared/utils/id.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
+import { readThroughSnapshot } from '../../store/read-snapshot.js';
 import { BULK_SLICE_ROWS, sliceRowValues } from '../../store/row-steps.js';
 import { selectedRowsOfTarget, selectionOfTarget } from '../../store/selection-value.js';
 import type { FeatureEdit, SlicedWrite, Store } from '../../store/store.js';
@@ -90,7 +91,7 @@ import type {
 import type { DocumentLoader, PreparedItem } from './document.js';
 import type { FeatureResource } from './feature-resource.js';
 import { storedInputOf, storedPatchOf, toFeature } from './feature-shape.js';
-import { prepareFeature, preparePatch } from './features.js';
+import { createFeatures, prepareFeature, preparePatch } from './features.js';
 import { resultFeature } from './geometry/apply.js';
 import { planBuffer } from './geometry/buffer.js';
 import { planSplit } from './geometry/split.js';
@@ -102,9 +103,9 @@ import {
   toResultGeometry,
 } from './geometry/targets.js';
 import type { GroupResource } from './group-resource.js';
-import { idsInStackingOrder, prepareGroup, prepareGroupPatch } from './groups.js';
+import { createGroups, idsInStackingOrder, prepareGroup, prepareGroupPatch } from './groups.js';
 import type { LayerResource } from './layer-resource.js';
-import { prepareLayer, prepareLayerPatch } from './layers.js';
+import { createLayers, prepareLayer, prepareLayerPatch } from './layers.js';
 import { placementOf, resolveMoveTarget } from './placement.js';
 import type { SelectionWrites } from './selection-resource.js';
 import type { ResourceDeps } from './shared.js';
@@ -118,6 +119,7 @@ import {
   onlyLockOrVisibility,
   requireId,
 } from './shared.js';
+import { type OrderWrite, type OverlayState, transactionReads } from './transaction-reads.js';
 
 // ============================================================================
 // What the commit tells
@@ -226,6 +228,11 @@ export interface Writers {
  */
 export interface WriterDeps {
   readonly deps: ResourceDeps;
+  /**
+   * The Store as the reads of the instance read it (`publishedStore`): the document committed, which
+   * the reads of a transaction read with its writes over it
+   */
+  readonly published: Store;
   readonly writers: Writers;
   readonly reads: {
     readonly features: FeaturesCollection;
@@ -595,10 +602,16 @@ class Overlay {
     readonly rows: TableSelection;
     readonly apply: (feature: StoredFeature) => StoredFeature | null;
   }> = [];
+  /** The writes that change the order of the items, in their order (`transaction-reads.ts`) */
+  readonly order: OrderWrite[] = [];
+  /** The stacking order of the layers once the transaction placed or created a layer by index */
+  layerOrder: string[] | null = null;
+  /** Changes with every write of the transaction (what its reads made of the order is kept by it) */
+  version = 0;
   /** The Store as the checks read it, with what the transaction wrote over it */
   readonly view: Store;
 
-  constructor(store: Store) {
+  constructor(store: Store, published: Store) {
     const read = <T>(
       written: Map<string, T | null>,
       id: string,
@@ -609,7 +622,7 @@ class Overlay {
     };
     const overrides: Record<string, unknown> = {
       getFeature: (id: string) => {
-        let feature = read(this.features, id, () => store.getFeature(id));
+        let feature = read(this.features, id, () => published.getFeature(id));
         // The writes of many rows, over a feature the transaction did not write otherwise
         if (feature && this.bulk.length > 0 && !this.features.has(id)) {
           const handle = store.tables?.getRowRef(id);
@@ -620,27 +633,41 @@ class Overlay {
         }
         // A member of a group the transaction made, written into the group as it is read
         const groupId = this.members.get(id);
-        return feature && groupId !== undefined && !this.features.has(id)
-          ? { ...feature, groupId }
-          : feature;
+        if (feature && groupId !== undefined && !this.features.has(id)) {
+          feature = { ...feature, groupId };
+        }
+        if (feature?.groupId !== undefined) {
+          const group = this.groups.get(feature.groupId);
+          // A member of a group the transaction deleted, keeping it, is in its layer
+          if (group === null) return { ...feature, groupId: undefined };
+          // A member of a group the transaction put in another layer is in that layer
+          if (group && group.layerId !== feature.layerId) {
+            return { ...feature, layerId: group.layerId };
+          }
+        }
+        return feature;
       },
       getFeatureLayerId: (id: string) => {
         const own = this.features.get(id);
         if (own !== undefined) return own === null ? undefined : own.layerId;
         if (this.bulk.length > 0) return this.view.getFeature(id)?.layerId;
-        return store.getFeatureLayerId(id);
+        return published.getFeatureLayerId(id);
       },
-      getLayer: (id: string) => read(this.layers, id, () => store.getLayer(id)),
-      getGroup: (id: string) => read(this.groups, id, () => store.getGroup(id)),
+      getLayer: (id: string) => read(this.layers, id, () => published.getLayer(id)),
+      getGroup: (id: string) => read(this.groups, id, () => published.getGroup(id)),
       getLayerOrder: () => {
-        const order = store.getLayerOrder().filter((id) => this.layers.get(id) !== null);
+        if (this.layerOrder) return this.layerOrder.filter((id) => this.layers.get(id) !== null);
+        const order = published.getLayerOrder().filter((id) => this.layers.get(id) !== null);
         for (const [id, layer] of this.layers) {
           if (layer !== null && !order.includes(id)) order.push(id);
         }
         return order;
       },
       listLayers: () => {
-        const out = store.listLayers().filter((layer) => this.layers.get(layer.id) !== null);
+        const out = published
+          .listLayers()
+          .filter((layer) => this.layers.get(layer.id) !== null)
+          .map((layer) => this.layers.get(layer.id) ?? layer);
         for (const [id, layer] of this.layers) {
           if (layer !== null && !out.some((other) => other.id === id)) out.push(layer);
         }
@@ -671,7 +698,12 @@ class TransactionImpl implements Transaction {
   readonly #deps: ResourceDeps;
   readonly #writers: Writers;
   readonly #reads: WriterDeps['reads'];
+  readonly #published: Store;
   #overlayMade: Overlay | undefined;
+  /** The reads of the transaction over the whole document, made when first read */
+  #wholeReads:
+    | { features: FeatureResource; layers: LayerResource; groups: GroupResource }
+    | undefined;
   /** The writes in the order they were called; an asynchronous one fills its place once read */
   readonly #ops: (Op | null)[] = [];
   /** The writes called that have not settled yet */
@@ -692,6 +724,7 @@ class TransactionImpl implements Transaction {
     this.#store = writerDeps.deps.store;
     this.#writers = writerDeps.writers;
     this.#reads = writerDeps.reads;
+    this.#published = writerDeps.published;
     this.#revision = this.#store.revision;
   }
 
@@ -722,8 +755,57 @@ class TransactionImpl implements Transaction {
 
   /** What the transaction wrote over the document, made with its first write */
   get #overlay(): Overlay {
-    this.#overlayMade ??= new Overlay(this.#store);
+    this.#overlayMade ??= new Overlay(this.#store, this.#published);
     return this.#overlayMade;
+  }
+
+  /**
+   * The reads of the transaction over the whole document (a list, a count, the items of a layer):
+   * the document committed with its writes over it, their order played over it
+   * (`transaction-reads.ts`)
+   */
+  get #whole(): { features: FeatureResource; layers: LayerResource; groups: GroupResource } {
+    if (this.#wholeReads) return this.#wholeReads;
+    const overlay = this.#overlay;
+    const state: OverlayState = {
+      features: overlay.features,
+      groups: overlay.groups,
+      layers: overlay.layers,
+      members: overlay.members,
+      bulk: overlay.bulk,
+      order: overlay.order,
+      view: overlay.view,
+      get version() {
+        return overlay.version;
+      },
+    };
+    const published = this.#published;
+    const reads = transactionReads(published, state);
+    const own: Record<string, unknown> = {
+      getFeature: reads.getFeature,
+      getFeatureLayerId: (id: string) => reads.getFeature(id)?.layerId,
+      getLayer: reads.getLayer,
+      listLayers: reads.listLayers,
+      getLayerOrder: reads.getLayerOrder,
+      getGroup: reads.getGroup,
+      listGroups: reads.listGroups,
+    };
+    const store = new Proxy(published, {
+      get(target, key) {
+        if (typeof key === 'string' && key in own) return own[key];
+        const value = Reflect.get(target, key, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    readThroughSnapshot(store, () => reads);
+    const deps: ResourceDeps = { ...this.#deps, store };
+    const writers = this.#writers;
+    this.#wholeReads = {
+      features: createFeatures(deps),
+      layers: createLayers(deps, (id) => writers.layers.isStackEntry(id)),
+      groups: createGroups(deps),
+    };
+    return this.#wholeReads;
   }
 
   /** Whether it wrote nothing */
@@ -920,7 +1002,12 @@ class TransactionImpl implements Transaction {
     if (refused) return this.#fail(refused);
     this.#noteRevision();
     try {
-      return Promise.resolve(check((op) => this.#ops.push(op)));
+      return Promise.resolve(
+        check((op) => {
+          this.#ops.push(op);
+          if (this.#overlayMade) this.#overlayMade.version++;
+        }),
+      );
     } catch (error) {
       return this.#fail(error);
     }
@@ -938,6 +1025,7 @@ class TransactionImpl implements Transaction {
         return await check((op) => {
           this.#noteRevision();
           this.#ops[at] = op;
+          if (this.#overlayMade) this.#overlayMade.version++;
         });
       } catch (error) {
         this.#failure ??= { error };
@@ -1141,7 +1229,6 @@ class TransactionImpl implements Transaction {
   // ==========================================================================
 
   #featureWrites(): TransactionFeatures {
-    const reads = this.#reads.features;
     const writers = this.#writers.features;
     const overlay = this.#overlay;
     const deps = (): ResourceDeps => ({ ...this.#deps, store: overlay.view });
@@ -1167,6 +1254,25 @@ class TransactionImpl implements Transaction {
         });
         self.#requireEditable();
         for (const feature of prepared) overlay.features.set(feature.id, feature);
+        // At the front of its layer, or of its group, one after the other
+        for (const feature of prepared) {
+          const last = overlay.order[overlay.order.length - 1];
+          if (
+            last?.kind === 'put' &&
+            last.created === true &&
+            last.to.layerId === feature.layerId &&
+            last.to.groupId === feature.groupId
+          ) {
+            (last.ids as string[]).push(feature.id);
+          } else {
+            overlay.order.push({
+              kind: 'put',
+              created: true,
+              ids: [feature.id],
+              to: { layerId: feature.layerId, groupId: feature.groupId, above: null },
+            });
+          }
+        }
         keep(createOp(prepared, () => writers.createMany(prepared) !== null));
         return many ? prepared.map((feature) => feature.id) : toFeature(prepared[0]);
       });
@@ -1374,6 +1480,7 @@ class TransactionImpl implements Transaction {
         if (bulk) {
           // Features selected in bulk: their rows not locked deleted in one write of the rows
           overlay.bulk.push({ rows: bulk, apply: () => null });
+          overlay.order.push({ kind: 'removeRows', rows: bulk });
           const first = self.#ops.length === 0;
           keep(
             featureWrite(bulk.count, () => {
@@ -1408,6 +1515,7 @@ class TransactionImpl implements Transaction {
         }
         const ids = self.#writableIds(resolved);
         for (const id of ids) overlay.features.set(id, null);
+        overlay.order.push({ kind: 'remove', ids });
         keep(
           featureWrite(ids.length, () => {
             const now = self.#idsAtCommit(resolved, ids).filter((id) => {
@@ -1485,6 +1593,7 @@ class TransactionImpl implements Transaction {
             new Set(),
           );
           overlay.bulk.push({ rows: bulk, apply: (feature) => ({ ...feature, layerId, groupId }) });
+          overlay.order.push({ kind: 'putRows', rows: bulk, to: placement });
           const first = self.#ops.length === 0;
           keep(
             featureWrite(bulk.count, () => {
@@ -1505,6 +1614,30 @@ class TransactionImpl implements Transaction {
                 : feature.layerId;
           const groupId = resolvedTarget.kind === 'group' ? resolvedTarget.group.id : undefined;
           overlay.features.set(id, { ...feature, layerId, groupId });
+        }
+        if (resolvedTarget.kind === 'ungroup') {
+          overlay.order.push({ kind: 'ungroup', ids });
+        } else {
+          const placeLayer =
+            resolvedTarget.kind === 'layer'
+              ? resolvedTarget.layer.id
+              : resolvedTarget.group.layerId;
+          const placeGroup = resolvedTarget.kind === 'group' ? resolvedTarget.group.id : undefined;
+          try {
+            overlay.order.push({
+              kind: 'put',
+              ids,
+              to: placementOf(
+                overlay.view,
+                placeLayer,
+                placeGroup,
+                resolvedTarget.place,
+                new Set(ids),
+              ),
+            });
+          } catch {
+            // A place the commit refuses (by an index in a layer of rows): read where they are
+          }
         }
         keep(() => {
           const now = self.#idsAtCommit(resolved, ids).filter((id) => {
@@ -1565,6 +1698,25 @@ class TransactionImpl implements Transaction {
         overlay.features.set(ids[i], made[i]);
         return { ...entry, id: ids[i] };
       });
+      // Each in the place of its input (the ones after the first of a chain just in front of the
+      // one before it)
+      if (chained) {
+        overlay.order.push({
+          kind: 'result',
+          anchor: results[0].anchor.id,
+          ids,
+          removed: results.flatMap((result) => result.removedIds),
+        });
+      } else {
+        results.forEach((result, i) => {
+          overlay.order.push({
+            kind: 'result',
+            anchor: result.anchor.id,
+            ids: [ids[i]],
+            removed: result.removedIds,
+          });
+        });
+      }
       keep(() => self.#writers.features.writeResults(written));
       return made.map(toFeature);
     };
@@ -1595,11 +1747,13 @@ class TransactionImpl implements Transaction {
           });
         }),
       has: (id) => read(() => typeof id === 'string' && overlay.view.getFeature(id) !== undefined),
-      list: (filter, options) => read(() => reads.list(filter, options)),
-      count: (filter) => read(() => reads.count(filter)),
-      bbox: (filter) => read(() => reads.bbox(filter)),
-      isEditable: (id) => read(() => reads.isEditable(id)),
-      getAppliedStyle: (id) => read(() => reads.getAppliedStyle(id)),
+      // Over the whole document: the document committed with the writes over it
+      list: (filter, options) =>
+        read(() => self.#whole.features.list(filter, options).map(toFeature)),
+      count: (filter) => read(() => self.#whole.features.count(filter)),
+      bbox: (filter) => read(() => self.#whole.features.bbox(filter)),
+      isEditable: (id) => read(() => self.#whole.features.isEditable(id)),
+      getAppliedStyle: (id) => read(() => self.#whole.features.getAppliedStyle(id)),
       create,
       update,
       delete: remove,
@@ -1707,11 +1861,11 @@ class TransactionImpl implements Transaction {
       getMany: (ids) =>
         read(() => reads.getMany(ids).map((layer, i) => overlay.view.getLayer(ids[i]) ?? layer)),
       has: (id) => read(() => typeof id === 'string' && overlay.view.getLayer(id) !== undefined),
-      list: (filter) => read(() => reads.list(filter)),
-      count: (filter) => read(() => reads.count(filter)),
-      listItems: (id, options) => read(() => reads.listItems(id, options)),
-      countItems: (id) => read(() => reads.countItems(id)),
-      getOrder: () => read(() => reads.getOrder()),
+      list: (filter) => read(() => this.#whole.layers.list(filter)),
+      count: (filter) => read(() => this.#whole.layers.count(filter)),
+      listItems: (id, options) => read(() => this.#whole.layers.listItems(id, options)),
+      countItems: (id) => read(() => this.#whole.layers.countItems(id)),
+      getOrder: () => read(() => this.#whole.layers.getOrder()),
       getActive: () => read(() => reads.getActive()),
       setActive: (id) => read(() => reads.setActive(id)),
       create: (input?: LayerInput) =>
@@ -1727,6 +1881,11 @@ class TransactionImpl implements Transaction {
           this.#requireEditable();
           overlay.layers.set(prepared.layer.id, prepared.layer);
           const { layer, index } = prepared;
+          if (index !== undefined || overlay.layerOrder) {
+            const order = overlay.view.getLayerOrder().filter((id) => id !== layer.id);
+            order.splice(index ?? order.length, 0, layer.id);
+            overlay.layerOrder = order;
+          }
           keep(
             () =>
               writers.create({
@@ -1793,6 +1952,12 @@ class TransactionImpl implements Transaction {
           inOrder(neighbor);
           if (neighbor === placed) throw invalidInput('An entry is not placed next to itself');
           this.#requireEditable();
+          const order = overlay.view.getLayerOrder().filter((other) => other !== placed);
+          const at = order.indexOf(neighbor);
+          if (at >= 0) {
+            order.splice(after ? at + 1 : at, 0, placed);
+            overlay.layerOrder = order;
+          }
           keep(() => {
             const order = writers.getOrder().filter((other) => other !== placed);
             const at = order.indexOf(neighbor);
@@ -1825,9 +1990,9 @@ class TransactionImpl implements Transaction {
       getMany: (ids) =>
         read(() => reads.getMany(ids).map((group, i) => overlay.view.getGroup(ids[i]) ?? group)),
       has: (id) => read(() => typeof id === 'string' && overlay.view.getGroup(id) !== undefined),
-      list: (filter) => read(() => reads.list(filter)),
-      count: (filter) => read(() => reads.count(filter)),
-      listMembers: (id, options) => read(() => reads.listMembers(id, options)),
+      list: (filter) => read(() => this.#whole.groups.list(filter)),
+      count: (filter) => read(() => this.#whole.groups.count(filter)),
+      listMembers: (id, options) => read(() => this.#whole.groups.listMembers(id, options)),
       create: (input: GroupInput) =>
         this.#run((keep) => {
           const checked = prepareGroup(
@@ -1850,6 +2015,7 @@ class TransactionImpl implements Transaction {
           const { featureIds: _members, ...fields } = prepared;
           const made: StoredGroup = asRows ? { ...fields, kind: 'table' } : prepared;
           overlay.groups.set(prepared.id, made);
+          overlay.order.push({ kind: 'group', groupId: prepared.id, members: prepared.featureIds });
           for (const featureId of prepared.featureIds) {
             // The features it wrote are written again in the group; the others are read in it
             const own = overlay.features.get(featureId);
@@ -1920,10 +2086,13 @@ class TransactionImpl implements Transaction {
           if (locked.length > 0) throw lockedError(locked);
           const withMembers = options.members === 'delete';
           const members = withMembers
-            ? ids.flatMap((id) => reads.listMembers(id).filter((m) => overlay.view.getFeature(m)))
+            ? ids.flatMap((id) =>
+                this.#whole.groups.listMembers(id).filter((m) => overlay.view.getFeature(m)),
+              )
             : [];
           for (const id of ids) overlay.groups.set(id, null);
           for (const id of members) overlay.features.set(id, null);
+          if (members.length > 0) overlay.order.push({ kind: 'remove', ids: members });
           keep(() => {
             const now = ids.filter((id) => this.#store.getGroup(id) !== undefined);
             if (withMembers) {
@@ -1948,6 +2117,21 @@ class TransactionImpl implements Transaction {
             ...group,
             layerId: resolvedTarget.layer.id,
           } as StoredGroup);
+          try {
+            overlay.order.push({
+              kind: 'putGroup',
+              groupId: group.id,
+              to: placementOf(
+                overlay.view,
+                resolvedTarget.layer.id,
+                undefined,
+                resolvedTarget.place,
+                new Set([group.id]),
+              ),
+            });
+          } catch {
+            // A place the commit refuses (by an index in a layer of rows): read where it is
+          }
           keep(
             () =>
               this.#store.getGroup(group.id) === undefined ||

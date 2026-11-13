@@ -199,6 +199,7 @@ export function createDrawOnEngine(
   );
   const writer = createWriter({
     deps,
+    published: readDeps.store,
     writers: {
       features: featureResource,
       layers: layerResource,
