@@ -19,7 +19,7 @@ import {
   readBlockHeader,
   type TabaneBlock,
   type TabaneCache,
-  writeBlocks as writeTabaneBlocks,
+  writeBlocks,
 } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import { drawErrorOf } from '../draw-error-of.js';
@@ -91,9 +91,9 @@ function dimensionsOf(rows: readonly TabaneFeatureRow[]): CoordinateDimensions {
 }
 
 /** `writeBlocks` of `@sakuzu/tabane`, its errors those of the library */
-function writeBlocks(input: Parameters<typeof writeTabaneBlocks>[0]): TabaneBlock[] {
+function writeBlocksWithDrawErrors(input: Parameters<typeof writeBlocks>[0]): TabaneBlock[] {
   try {
-    return writeTabaneBlocks(input);
+    return writeBlocks(input);
   } catch (error) {
     throw drawErrorOf(error);
   }
@@ -121,7 +121,7 @@ function writeBlocks(input: Parameters<typeof writeTabaneBlocks>[0]): TabaneBloc
 export function writeTabaneFeatureBlocks(input: TabaneFeatureBlocksInput): TabaneFeatureBlock[] {
   const rows = input.rows;
   const dimensions = input.dimensions ?? dimensionsOf(rows);
-  const blocks = writeBlocks({
+  const blocks = writeBlocksWithDrawErrors({
     parent: input.parent,
     head: input.head,
     dimensions,
