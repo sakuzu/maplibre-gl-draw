@@ -20,8 +20,8 @@
  * the document before it.
  */
 
-import type { RowUpdate } from '../../feature-table/bulk-plan.js';
-import type { TableSelection } from '../../feature-table/selection.js';
+import type { BulkOperation, RowUpdate } from '../../feature-table/bulk-plan.js';
+import { TableSelection } from '../../feature-table/selection.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import type { ObjectGroup } from '../../shared/types/model.js';
@@ -29,11 +29,13 @@ import { createId } from '../../shared/utils/id.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
+import { BULK_SLICE_ROWS } from '../../store/row-steps.js';
 import { selectedRowsOfTarget, selectionOfTarget } from '../../store/selection-value.js';
-import type { SlicedWrite, Store } from '../../store/store.js';
+import type { FeatureEdit, SlicedWrite, Store } from '../../store/store.js';
 import type {
   FeatureCoordinates,
   FeatureType,
+  RowValues,
   Selection,
   Feature as StoredFeature,
   Group as StoredGroup,
@@ -70,6 +72,7 @@ import type {
   OpenResult,
   OpenSource,
   Placement,
+  Progress,
   Rotate,
   Scale,
   Target,
@@ -160,13 +163,25 @@ export function runCommit<T>(store: Store, info: CommitInfo, source: string, fn:
   }
 }
 
+/** Runs fn with the commit told as the one being made in the Store */
+function withCommit<T>(store: Store, info: CommitInfo, fn: () => T): T {
+  const outer = COMMITS.get(store);
+  COMMITS.set(store, info);
+  try {
+    return fn();
+  } finally {
+    if (outer) COMMITS.set(store, outer);
+    else COMMITS.delete(store);
+  }
+}
+
 /**
  * Puts a commit in the queue of the writes of this client, after the ones before it, and makes it
  * in a later microtask (or sooner, when another write of this client comes first)
  *
  * @internal
  */
-export function queueCommit<T>(store: Store, make: () => T): Promise<T> {
+export function queueCommit<T>(store: Store, make: () => T | Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let made = false;
     const queued: SlicedWrite = {
@@ -281,7 +296,7 @@ export function createWriter(writerDeps: WriterDeps): Writer {
       if (checked.signal.aborted) throw abortedError(checked.signal);
       if (tx.empty) return { value, skipped: 0 };
       return queueCommit(store, () =>
-        tx.commit({ id, label: checked.label, undo: checked.undo }),
+        tx.commit({ id, label: checked.label, undo: checked.undo }, checked.onProgress),
       ).then((skipped) => ({ value, skipped }));
     };
     const result: Promise<WriteResult<T>> = Promise.resolve(returned).then(
@@ -364,17 +379,26 @@ export function checkWriteOptions(options: WriteOptions | undefined): {
   signal: AbortSignal;
   label: string | undefined;
   undo: boolean;
+  onProgress: ((progress: Progress) => void) | undefined;
 } {
   if (options !== undefined && !isRecord(options))
     throw invalidInput('The options must be an object');
-  const { signal, label, undo } = options ?? {};
+  const { signal, label, undo, onProgress } = options ?? {};
+  if (onProgress !== undefined && typeof onProgress !== 'function') {
+    throw invalidInput('onProgress must be a function');
+  }
   if (label !== undefined && typeof label !== 'string')
     throw invalidInput('label must be a string');
   if (undo !== undefined && typeof undo !== 'boolean') throw invalidInput('undo must be a boolean');
   if (signal !== undefined && !(signal instanceof AbortSignal)) {
     throw invalidInput('signal must be an AbortSignal');
   }
-  return { signal: signal ?? NEVER_ABORTED, label, undo: undo ?? true };
+  return {
+    signal: signal ?? NEVER_ABORTED,
+    label,
+    undo: undo ?? true,
+    onProgress: onProgress as ((progress: Progress) => void) | undefined,
+  };
 }
 
 /** @internal */
@@ -399,8 +423,119 @@ function isSkip(error: unknown): boolean {
 // The transaction
 // ============================================================================
 
-/** A write of a transaction, made at its commit: false when it was refused (left out) */
-type Op = () => boolean | undefined;
+/**
+ * What a write of a transaction made at its commit gives: false when it was refused (left out),
+ * or how many writes it left out (writes made as one)
+ */
+type OpResult = boolean | number | undefined;
+
+/**
+ * The parts a write of many rows or features is made in at its commit: each part writes some of
+ * them and tells how many, and the end gives what the write gives
+ */
+type OpParts = Iterator<number, OpResult, undefined>;
+
+/** A write of a transaction, made at its commit: at once, or in parts */
+interface Op {
+  (): OpResult | OpParts;
+  /**
+   * The features it creates: a creation, made in one write with the creations next to it (one
+   * write of the rows of a layer for many features created one by one)
+   */
+  readonly creates?: readonly StoredFeature[];
+  /** How much it writes (rows, features), told by the progress of the commit (1 when not told) */
+  readonly size?: number;
+  /**
+   * Whether it writes features only (it creates, changes or deletes features, and writes nothing
+   * of the layers, of the groups or of the metadata): a step of the commit ends after it, or
+   * between its parts, only while every write made before it does as well, as the layers, the
+   * groups and the metadata are read without finishing the commit (the drawing reads them every
+   * frame)
+   */
+  readonly featuresOnly?: boolean;
+}
+
+/** A write of features made at the commit, with how much it writes */
+function featureWrite(size: number, op: () => OpResult | OpParts): Op {
+  return Object.assign(op, { size: Math.max(1, size), featuresOnly: true });
+}
+
+/** A creation made at the commit, with the features it creates */
+function createOp(creates: readonly StoredFeature[], op: () => OpResult): Op {
+  return Object.assign(op, { creates, size: Math.max(1, creates.length), featuresOnly: true });
+}
+
+/**
+ * The time of a step of a commit written over several tasks (ms): writes are made until it is
+ * spent, the next ones in a later task. A part of many rows then ends a step a few ms past it, and
+ * the notification of the last step comes on top: a step stays well within the 100 ms of a task
+ */
+const COMMIT_STEP_MS = 40;
+
+/** The rows or features a part of a write of many is made of, at first */
+const FIRST_PART = BULK_SLICE_ROWS;
+
+/** The time a part of a write of many is grown to (ms): it doubles while it is quicker */
+const PART_MS = 8;
+
+/**
+ * Writes `count` items in parts, each of which a step of the commit can end after: a part doubles
+ * while it is quick and halves while it is slow, so that many items cost few parts. `write` writes
+ * the items `from` to `to` and says whether it wrote anything
+ *
+ * @returns Whether a part wrote anything
+ */
+function* inParts(
+  count: number,
+  write: (from: number, to: number) => boolean | undefined,
+): Generator<number, boolean, undefined> {
+  let written = false;
+  let size = FIRST_PART;
+  let at = 0;
+  while (at < count) {
+    const to = Math.min(count, at + size);
+    const start = performance.now();
+    if (write(at, to) === true) written = true;
+    const took = performance.now() - start;
+    if (took * 2 < PART_MS) size *= 2;
+    else if (took > PART_MS * 2 && size > FIRST_PART) size = Math.max(FIRST_PART, size >> 1);
+    yield to - at;
+    at = to;
+  }
+  return written;
+}
+
+/** Writes rows in parts: `write` writes the rows of a part */
+function rowsInParts(
+  rows: TableSelection,
+  write: (part: TableSelection) => boolean | undefined,
+): Generator<number, boolean, undefined> {
+  return inParts(rows.count, (from, to) =>
+    write(TableSelection.of(rows.handles.subarray(from, to))),
+  );
+}
+
+/** The deletion of rows, as the values of a write of them */
+function deletionOf(handles: ArrayLike<number>): RowValues {
+  return {
+    handles: Int32Array.from(handles),
+    fields: new Map(),
+    deleted: new Uint8Array(handles.length).fill(1),
+  };
+}
+
+/** Writes items of a list in parts: `write` writes the items of a part */
+function listInParts<T>(
+  list: readonly T[],
+  write: (part: T[]) => boolean | undefined,
+): Generator<number, boolean, undefined> {
+  return inParts(list.length, (from, to) => write(list.slice(from, to)));
+}
+
+/** Whether what a write gave at its commit is the parts it is made in */
+function isParts(value: OpResult | OpParts): value is OpParts {
+  return typeof value === 'object' && value !== null && typeof value.next === 'function';
+}
 
 /**
  * The features, layers and groups a transaction wrote by their IDs, over the document as
@@ -580,38 +715,153 @@ class TransactionImpl implements Transaction {
   }
 
   /**
-   * Makes the writes, in one transaction of the Store
+   * Makes the writes, in one transaction of the Store: in the task it is called in when they are
+   * quick, over several tasks otherwise (`Store.writeInSteps`), a step of `COMMIT_STEP_MS` at a
+   * time, a write of many rows or features made in parts. It is one notification, one `change`
+   * and one step of undo either way; what reads the document before the last step finishes it
+   * first, so nothing reads it half made. Writes next to each other that create features are made
+   * in one write.
    *
-   * @returns How many were left out
+   * @returns How many writes were left out, once the last step is made
    */
-  commit(info: CommitInfo): number {
+  commit(info: CommitInfo, onProgress?: (progress: Progress) => void): Promise<number> {
     const store = this.#store;
     if (store.isReadOnly()) throw notEditable();
-    let skipped = 0;
     // Nothing changed the document since the writes were checked: a write may skip the checks
     // it made then (the writes before it in the commit are the ones it was checked after)
     this.#noteRevision();
     this.#unchangedAtCommit = !this.#changed;
-    try {
-      runCommit(store, info, info.undo ? WRITE_SOURCE : WRITE_SOURCE_NO_UNDO, () => {
-        for (const op of this.#ops) {
-          if (op === null) continue;
-          try {
-            if (op() === false) skipped++;
-          } catch (error) {
-            if (!isSkip(error)) throw error;
-            skipped++;
-          }
-        }
-      });
-    } catch (error) {
-      // What the Store refuses at the commit fails the write as an error of the library
-      if (error instanceof DrawError) throw error;
-      throw new DrawError('invalidState', `The commit was refused: ${String(error)}`, {
-        cause: error,
-      });
+    // The creations next to each other are one write
+    const ops: Op[] = [];
+    const written = this.#ops.filter((op): op is Op => op !== null);
+    for (let i = 0; i < written.length; ) {
+      let j = i;
+      while (j < written.length && written[j].creates) j++;
+      if (j > i) {
+        ops.push(this.#creations(written.slice(i, j)));
+        i = j;
+      } else {
+        ops.push(written[i]);
+        i++;
+      }
     }
-    return skipped;
+    const total = ops.reduce((sum, op) => sum + (op.size ?? 1), 0);
+    let at = 0;
+    let parts: OpParts | null = null;
+    // What the writes made so far wrote (those ended, and the parts of the one under way)
+    let done = 0;
+    let doneOfEnded = 0;
+    let skipped = 0;
+    // Whether a step may end now: every write made so far wrote features only
+    let stoppable = true;
+    const ended = (result: OpResult, size: number): void => {
+      if (result === false) skipped++;
+      else if (typeof result === 'number') skipped += result;
+      if (ops[at].featuresOnly !== true) stoppable = false;
+      doneOfEnded += size;
+      done = doneOfEnded;
+      at++;
+      parts = null;
+    };
+    /** Makes writes until a time; true once every one is made */
+    const step = (deadline: number): boolean => {
+      while (at < ops.length) {
+        const op = ops[at];
+        const size = op.size ?? 1;
+        try {
+          if (parts === null) {
+            const made = op();
+            if (isParts(made)) parts = made;
+            else ended(made, size);
+          }
+          if (parts !== null) {
+            let next = parts.next();
+            while (!next.done) {
+              done = Math.min(doneOfEnded + size, done + next.value);
+              if (stoppable && performance.now() >= deadline) return false;
+              next = parts.next();
+            }
+            ended(next.value, size);
+          }
+        } catch (error) {
+          // A write whose target is gone (or locked meanwhile) is left out
+          if (!isSkip(error)) throw error;
+          ended(false, size);
+        }
+        if (stoppable && performance.now() >= deadline) return at >= ops.length;
+      }
+      return true;
+    };
+    const refused = (error: unknown): DrawError =>
+      // What the Store refuses at the commit fails the write as an error of the library
+      error instanceof DrawError
+        ? error
+        : new DrawError('invalidState', `The commit was refused: ${String(error)}`, {
+            cause: error,
+          });
+    return new Promise<number>((resolve, reject) => {
+      let steps = 0;
+      try {
+        store.writeInSteps(
+          info.undo ? WRITE_SOURCE : WRITE_SOURCE_NO_UNDO,
+          (deadline) => {
+            const all = step(deadline);
+            steps++;
+            if (!all || steps > 1) onProgress?.({ phase: 'apply', done, total });
+            return all;
+          },
+          {
+            budgetMs: COMMIT_STEP_MS,
+            around: (fn) => withCommit(store, info, fn),
+            onEnd: (error) => {
+              if (error !== undefined) reject(refused(error));
+              else resolve(skipped);
+            },
+          },
+        );
+      } catch (error) {
+        reject(refused(error));
+      }
+    });
+  }
+
+  /**
+   * Creations next to each other made as one write of their features, in parts. A creation whose
+   * layer or group is gone is left out, as a creation alone is
+   *
+   * @returns The write, which gives how many creations it left out
+   */
+  #creations(ops: readonly Op[]): Op {
+    const store = this.#store;
+    const writers = this.#writers.features;
+    const size = ops.reduce((sum, op) => sum + (op.size ?? 1), 0);
+    return Object.assign(
+      (): OpParts => {
+        const features: StoredFeature[] = [];
+        let skipped = 0;
+        for (const op of ops) {
+          const creates = op.creates as readonly StoredFeature[];
+          const there = creates.every(
+            (feature) =>
+              store.getLayer(feature.layerId) !== undefined &&
+              (feature.groupId === undefined || store.getGroup(feature.groupId) !== undefined),
+          );
+          if (there) features.push(...creates);
+          else skipped++;
+        }
+        return (function* (): Generator<number, OpResult, undefined> {
+          let refused = false;
+          yield* inParts(features.length, (from, to) => {
+            const made = writers.createMany(features.slice(from, to));
+            if (made === null) refused = true;
+            return made !== null;
+          });
+          // Refused (read-only): every creation is left out
+          return refused ? ops.length : skipped;
+        })();
+      },
+      { size },
+    );
   }
 
   // ==========================================================================
@@ -874,7 +1124,7 @@ class TransactionImpl implements Transaction {
         });
         self.#requireEditable();
         for (const feature of prepared) overlay.features.set(feature.id, feature);
-        keep(() => writers.createMany(prepared) !== null);
+        keep(createOp(prepared, () => writers.createMany(prepared) !== null));
         return many ? prepared.map((feature) => feature.id) : toFeature(prepared[0]);
       });
     }
@@ -947,12 +1197,25 @@ class TransactionImpl implements Transaction {
         .map(({ id }) => id);
       if (locked.length > 0) throw lockedError(locked);
       for (const { id, next } of prepared) overlay.features.set(id, next);
-      keep(() => {
-        const result = self.#store.applyEdits(
-          prepared.map(({ id, op }) => ({ kind: 'set', featureId: id, patch: op })),
-        );
-        return result !== null && result.dropped === 0;
-      });
+      keep(
+        featureWrite(prepared.length, () => {
+          const edits: FeatureEdit[] = prepared.map(({ id, op }) => ({
+            kind: 'set',
+            featureId: id,
+            patch: op,
+          }));
+          let refused = false;
+          const parts = listInParts(edits, (part) => {
+            const result = self.#store.applyEdits(part);
+            if (result === null || result.dropped > 0) refused = true;
+            return true;
+          });
+          return (function* (): Generator<number, OpResult, undefined> {
+            yield* parts;
+            return !refused;
+          })();
+        }),
+      );
       return prepared.length;
     };
 
@@ -986,22 +1249,24 @@ class TransactionImpl implements Transaction {
         written++;
       }
       if (lockedNamed.length > 0) throw lockedError(lockedNamed);
-      keep(() => {
-        const entries: { id: string; patch: StoredFeaturePatch }[] = [];
-        for (const id of self.#idsAtCommit(resolved)) {
-          const feature = self.#store.getFeature(id);
-          if (!feature) continue;
-          const made = make(sampleOf(feature), feature);
-          if (made === null) continue;
-          if (featureLocked(self.#store, feature) && !onlyLockOrVisibility(made)) continue;
-          entries.push({ id, patch: made });
-        }
-        if (entries.length === 0) return true;
-        self.#store.applyEdits(
-          entries.map(({ id, patch: made }) => ({ kind: 'set', featureId: id, patch: made })),
-        );
-        return true;
-      });
+      keep(
+        featureWrite(written, () => {
+          const entries: FeatureEdit[] = [];
+          for (const id of self.#idsAtCommit(resolved)) {
+            const feature = self.#store.getFeature(id);
+            if (!feature) continue;
+            const made = make(sampleOf(feature), feature);
+            if (made === null) continue;
+            if (featureLocked(self.#store, feature) && !onlyLockOrVisibility(made)) continue;
+            entries.push({ kind: 'set', featureId: id, patch: made });
+          }
+          if (entries.length === 0) return true;
+          return listInParts(entries, (part) => {
+            self.#store.applyEdits(part);
+            return true;
+          });
+        }),
+      );
       return written;
     };
 
@@ -1036,25 +1301,25 @@ class TransactionImpl implements Transaction {
           return made === null ? feature : { ...feature, ...preparePatch(feature, made) };
         },
       });
-      keep(() => {
-        const reuse = first && self.#unchangedAtCommit;
-        const now = reuse
-          ? rows
-          : lockOnly
-            ? self.#store.liveRows(all)
-            : self.#store.unlockedRows(bulk);
-        if (now.count === 0) return true;
-        return self.#store.applyBulk(
-          {
+      keep(
+        featureWrite(rows.count, () => {
+          const reuse = first && self.#unchangedAtCommit;
+          const now = reuse
+            ? rows
+            : lockOnly
+              ? self.#store.liveRows(all)
+              : self.#store.unlockedRows(bulk);
+          if (now.count === 0) return true;
+          const op: BulkOperation = {
             kind: 'update',
             make: (sample) => {
               const made = make(sample, undefined);
               return made === null ? null : rowUpdateOf(made);
             },
-          },
-          now,
-        );
-      });
+          };
+          return rowsInParts(now, (part) => self.#store.applyBulk(op, part));
+        }),
+      );
       return rows.count;
     };
 
@@ -1067,33 +1332,65 @@ class TransactionImpl implements Transaction {
           // Features selected in bulk: their rows not locked deleted in one write of the rows
           overlay.bulk.push({ rows: bulk, apply: () => null });
           const first = self.#ops.length === 0;
-          keep(() => {
-            const now = first && self.#unchangedAtCommit ? bulk : self.#store.unlockedRows(bulk);
-            if (now.count === 0) return true;
-            const store = self.#store;
-            if (!store.applyBulk({ kind: 'delete' }, now)) return false;
-            // A selection in bulk the deletion left without a feature is cleared with it (the
-            // selection the target was read from, every row of it deleted, is known to be)
-            const selected = store.getSelectedRows();
-            const named = (resolved as { rows?: TableSelection }).rows;
-            const emptied =
-              selected !== null &&
-              ((selected === named && now.count === named.count) ||
-                store.liveRows(selected).count === 0);
-            if (emptied) store.setSelection(null, []);
-            return true;
-          });
+          keep(
+            featureWrite(bulk.count, () => {
+              const now = first && self.#unchangedAtCommit ? bulk : self.#store.unlockedRows(bulk);
+              if (now.count === 0) return true;
+              const store = self.#store;
+              // Told as one write of every row: its changes of the order, the groups it empties
+              const end = store.beginRowParts(deletionOf(now.handles));
+              const parts = rowsInParts(now, (part) => store.applyBulk({ kind: 'delete' }, part));
+              return (function* (): Generator<number, OpResult, undefined> {
+                let deleted: boolean;
+                try {
+                  deleted = yield* parts;
+                } finally {
+                  end();
+                }
+                if (!deleted) return false;
+                // A selection in bulk the deletion left without a feature is cleared with it (the
+                // selection the target was read from, every row of it deleted, is known to be)
+                const selected = store.getSelectedRows();
+                const named = (resolved as { rows?: TableSelection }).rows;
+                const emptied =
+                  selected !== null &&
+                  ((selected === named && now.count === named.count) ||
+                    store.liveRows(selected).count === 0);
+                if (emptied) store.setSelection(null, []);
+                return true;
+              })();
+            }),
+          );
           return bulk.count;
         }
         const ids = self.#writableIds(resolved);
         for (const id of ids) overlay.features.set(id, null);
-        keep(() => {
-          const now = self.#idsAtCommit(resolved, ids).filter((id) => {
-            const feature = self.#store.getFeature(id);
-            return feature !== undefined && !featureLocked(self.#store, feature);
-          });
-          return now.length === 0 || writers.deleteMany(now);
-        });
+        keep(
+          featureWrite(ids.length, () => {
+            const now = self.#idsAtCommit(resolved, ids).filter((id) => {
+              const feature = self.#store.getFeature(id);
+              return feature !== undefined && !featureLocked(self.#store, feature);
+            });
+            if (now.length === 0) return true;
+            // Told as one write of every row: its changes of the order, the groups it empties
+            const store = self.#store;
+            const tables = store.tables;
+            const handles: number[] = [];
+            for (const id of now) {
+              const handle = tables?.getRowRef(id);
+              if (handle !== undefined) handles.push(handle);
+            }
+            const end = handles.length > 0 ? store.beginRowParts(deletionOf(handles)) : () => {};
+            const parts = listInParts(now, (part) => writers.deleteMany(part));
+            return (function* (): Generator<number, OpResult, undefined> {
+              try {
+                return yield* parts;
+              } finally {
+                end();
+              }
+            })();
+          }),
+        );
         return ids.length;
       });
 
@@ -1106,15 +1403,19 @@ class TransactionImpl implements Transaction {
           self.#requireEditable();
           const values = transformValues(kind, input);
           const ids = self.#writableIds(resolved);
-          keep(() => {
-            const now = self.#idsAtCommit(resolved, ids).filter((id) => {
-              const feature = self.#store.getFeature(id);
-              return feature !== undefined && !featureLocked(self.#store, feature);
-            });
-            if (now.length === 0) return true;
-            self.#store.applyEdits([{ ...values, target: { featureIds: now } }]);
-            return true;
-          });
+          keep(
+            featureWrite(ids.length, () => {
+              const now = self.#idsAtCommit(resolved, ids).filter((id) => {
+                const feature = self.#store.getFeature(id);
+                return feature !== undefined && !featureLocked(self.#store, feature);
+              });
+              if (now.length === 0) return true;
+              return listInParts(now, (part) => {
+                self.#store.applyEdits([{ ...values, target: { featureIds: part } }]);
+                return true;
+              });
+            }),
+          );
           return ids.length;
         });
 
@@ -1143,6 +1444,9 @@ class TransactionImpl implements Transaction {
           overlay.bulk.push({ rows: bulk, apply: (feature) => ({ ...feature, layerId, groupId }) });
           const first = self.#ops.length === 0;
           keep(() => {
+            // One write of the rows: the tables build the rows put in another place again with
+            // the rows they joined, once per write, so a write of them in parts would cost the
+            // rows already placed once per part
             const now = first && self.#unchangedAtCommit ? bulk : self.#store.unlockedRows(bulk);
             return now.count === 0 || self.#store.applyBulk({ kind: 'place', to: placement }, now);
           });

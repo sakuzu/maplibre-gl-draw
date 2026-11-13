@@ -541,6 +541,19 @@ export class ChangeBus {
     return this.#hold !== null;
   }
 
+  /** Whether a transaction is being run (a step of the held one included) */
+  get inTransaction(): boolean {
+    return this.#transactionDepth > 0;
+  }
+
+  /**
+   * Finishes the held writes now, outside a transaction (a read that comes before them): nothing
+   * inside one, where the held writes are the ones being made
+   */
+  finishHeld(): void {
+    if (this.#transactionDepth === 0) this.#finishHeld();
+  }
+
   /**
    * Runs a write of the held transaction in a later task: added to its notification, with its
    * source, nothing finished (flushed when it lets go of the notification)

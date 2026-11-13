@@ -67,6 +67,41 @@ export interface RowSteps {
 export const rowStepsOf = new WeakMap<object, RowSteps>();
 
 /**
+ * What lets a write of this client made over several tasks be one transaction of a Store of core
+ * (the commit of a transaction of `draw.write` too long for one task): its notification held from
+ * its first step to its last, and its later steps written into it
+ *
+ * @internal
+ */
+export interface HeldWrites {
+  /**
+   * Holds the notification of the transaction under way (called inside it): `finish` writes the
+   * rest and lets go of it, and is called when anything else comes first (a write, a read of the
+   * document)
+   */
+  hold(finish: () => void): void;
+  /** Writes a later step into the transaction held (outside a transaction of the Store) */
+  step<T>(fn: () => T): T;
+  /** Lets go of the notification held: it goes out now */
+  release(): void;
+  /**
+   * Begins a write of rows made in several parts, told as one write of all of them would be: its
+   * changes of the order (see `FeatureTablesStoreWriter.watchOrderOf`) and the groups its parts
+   * leave without a member are told and deleted by the function returned, called (in a
+   * transaction) once the last part is written
+   */
+  beginRowParts(patch: RowValues): () => void;
+}
+
+/**
+ * The transactions over several tasks of the Stores of core that have them, by the contract (a
+ * Store given by the host writes such a write at once)
+ *
+ * @internal
+ */
+export const heldWritesOf = new WeakMap<object, HeldWrites>();
+
+/**
  * The rows `from` to `to` of values of rows (the same fields)
  *
  * @internal
