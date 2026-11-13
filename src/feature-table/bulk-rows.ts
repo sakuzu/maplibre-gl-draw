@@ -124,6 +124,25 @@ export function isRowShown(
 }
 
 /**
+ * Whether a row that could be seen can be seen once put in a place (a layer, and a group of it
+ * or none), nothing else of it written: its layer is visible and neither the layer nor the group
+ * is hidden (the rule of `isRowShown`, read from the place instead of the row)
+ *
+ * @internal
+ */
+export function isPlaceShown(
+  internals: FeatureTablesInternals,
+  containers: RowContainers,
+  place: { readonly layerId: string; readonly groupId: string | undefined },
+): boolean {
+  if (!containers.layerVisible(place.layerId) || containers.hidden(place.layerId)) return false;
+  if (place.groupId === undefined) return true;
+  const group = internals.groups.handleOfId(place.groupId);
+  if (group < 0 || isGroupHidden(internals.groups, group)) return false;
+  return !containers.hidden(place.groupId);
+}
+
+/**
  * Whether a row is locked: itself, its group or its layer
  *
  * @internal

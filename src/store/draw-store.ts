@@ -31,6 +31,7 @@ import type { VertexId } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import { type BulkOperation, planBulk } from '../feature-table/bulk-plan.js';
 import {
+  isPlaceShown,
   isRowLocked,
   isRowShown,
   livePlaceOf,
@@ -48,8 +49,9 @@ import {
   tableLayerFeatureIds,
 } from '../feature-table/item-ids.js';
 import { TableSelection } from '../feature-table/selection.js';
+import type { ItemPosition } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
-import { rowsOfSummary, summaryOf } from './bulk-selection.js';
+import { rowsOfSummary, summaryOf, summaryWithLayers } from './bulk-selection.js';
 import { insertGroup } from './item-lists.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
@@ -177,6 +179,11 @@ export class DrawStore implements Store {
   #selecting = false;
   /** Whether a feature selected in bulk is locked, as read last (null: to be read again) */
   #bulkUnlocked: TableSelection | null = null;
+  /**
+   * Whether the notification of a write over several tasks is going out now: it tells the whole
+   * write, so the summary of the features selected in bulk is made again from it
+   */
+  #releasingHeld = false;
   /** The selection as this Store told it last (what a change of it tells as the one before) */
   #toldSelection: Selection;
   /** The value of the selection this Store told last (made when first asked) */
@@ -621,8 +628,10 @@ export class DrawStore implements Store {
       try {
         around(() => {
           try {
+            this.#releasingHeld = true;
             held.release();
           } finally {
+            this.#releasingHeld = false;
             if (this.#queue.remove(write)) this.#bus.release();
           }
         });
@@ -1131,13 +1140,26 @@ export class DrawStore implements Store {
     }
     const containers = this.#containers();
     const checked = changes ? rowsToCheck(internals, changes) : null;
-    const keep = (handle: number): boolean => isRowShown(internals, containers, handle);
+    // A row put in a place together with others, nothing else of it written, is read from that
+    // place: the places of the rows are not read for every row of a write of many
+    const placed = changes ? placedRowsOf(changes) : null;
+    const shownPlaces = new Map<ItemPosition, boolean>();
+    const keep = (handle: number): boolean => {
+      const place = placed?.get(handle);
+      if (!place) return isRowShown(internals, containers, handle);
+      let shown = shownPlaces.get(place);
+      if (shown === undefined) {
+        shown = isPlaceShown(internals, containers, place);
+        shownPlaces.set(place, shown);
+      }
+      return shown;
+    };
     const rows =
       checked === null
         ? bulk.rows.filter(keep)
         : bulk.rows.without(checked.filter((handle) => bulk.rows.has(handle) && !keep(handle)));
     if (rows === bulk.rows) {
-      this.#refreshSummary(changes);
+      this.#refreshSummary(changes, placed);
       return;
     }
     if (rows.count > this.selectionIdsLimit) {
@@ -1164,17 +1186,34 @@ export class DrawStore implements Store {
    * Makes the summary of the features selected in bulk again when a change wrote the geometry or
    * the layer of one of them (their extent and their layers)
    */
-  #refreshSummary(changes: StoreChange | null): void {
+  #refreshSummary(changes: StoreChange | null, placed: PlacedRows | null = null): void {
     const bulk = this.#bulk;
     const internals = featureTablesInternals(this.#contract.tables);
-    if (!bulk || !internals || (changes !== null && this.#queue.pending)) return;
-    let touched = changes === null;
-    for (const change of changes?.rows?.layers.values() ?? []) {
-      if (touched) break;
-      if (!change.fields.has('geometry') && !change.fields.has('parent')) continue;
-      touched = change.updated.some((handle) => bulk.rows.has(handle));
+    // A write over several tasks makes it again with its notification (a drag let go, once its
+    // last step is written: `endSlicedWrite`)
+    if (!bulk || !internals || (changes !== null && this.#queue.pending && !this.#releasingHeld)) {
+      return;
     }
-    if (touched) bulk.summary = summaryOf(internals, bulk.rows);
+    let touched = changes === null;
+    let geometry = changes === null;
+    for (const change of changes?.rows?.layers.values() ?? []) {
+      if (!change.fields.has('geometry') && !change.fields.has('parent')) continue;
+      if (!change.updated.some((handle) => bulk.rows.has(handle))) continue;
+      touched = true;
+      if (change.fields.has('geometry')) geometry = true;
+    }
+    if (!touched) return;
+    // Rows put in other layers, their geometries as they were: their layers are read from where
+    // they were put (the places of the rows are not read for every row of a write of many)
+    bulk.summary =
+      !geometry && placed
+        ? summaryWithLayers(
+            internals,
+            bulk.summary,
+            bulk.rows,
+            (handle) => placed.get(handle)?.layerId,
+          )
+        : summaryOf(internals, bulk.rows);
   }
 
   /**
@@ -1759,6 +1798,46 @@ function membersMayChange(changes: StoreChange): boolean {
     }
   }
   return false;
+}
+
+/**
+ * The rows a notification tells put in a place together with others, nothing else of them that
+ * hides them written, and that place (null when it tells none, or when another change of it may
+ * hide rows: a row written hidden, what this client hides, the whole document replaced, or a move
+ * of the order told otherwise)
+ */
+function placedRowsOf(changes: StoreChange): PlacedRows | null {
+  const order = changes.order;
+  if (!order || changes.reset || changes.uiStateChanged) return null;
+  const layers = changes.rows?.layers;
+  for (const rows of layers?.values() ?? []) if (rows.fields.has('hidden')) return null;
+  const places: ItemPosition[] = [];
+  let size = 0;
+  for (const move of order) {
+    if (move.kind !== 'rows' || !move.to) return null;
+    places.push(move.to);
+    for (const handle of move.handles) if (handle >= size) size = handle + 1;
+  }
+  // The place of each row by its handle (its number among the places plus one; 0: none)
+  const placeOf = new Int32Array(size);
+  order.forEach((move, k) => {
+    for (const handle of (move as { handles: Int32Array }).handles) {
+      if (placeOf[handle] !== 0) size = -1;
+      placeOf[handle] = k + 1;
+    }
+  });
+  if (size < 0) return null;
+  for (const rows of layers?.values() ?? []) {
+    for (const handle of rows.deleted) if (handle < placeOf.length) placeOf[handle] = 0;
+  }
+  return {
+    get: (handle) => (handle < placeOf.length ? places[placeOf[handle] - 1] : undefined),
+  };
+}
+
+/** The places of rows a notification tells put in places together (`placedRowsOf`) */
+interface PlacedRows {
+  get(handle: number): ItemPosition | undefined;
 }
 
 /**

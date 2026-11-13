@@ -58,6 +58,7 @@ import {
   createFeatureTablesWriter,
   type FeatureTablesStoreWriter,
 } from '../feature-table/feature-tables-writer.js';
+import type { RowsPlacement } from '../feature-table/item-order.js';
 import { asFeatureValues } from '../shared/feature-values.js';
 import { whenIdle } from '../shared/utils/idle.js';
 import { isGroupHidden, isGroupLocked } from '../table/feature-row-columns.js';
@@ -248,6 +249,11 @@ export class TableContractStore implements StoreContract {
    * leave empty are deleted at their end
    */
   #groupsHeld = 0;
+  /**
+   * Where the rows of the values that put rows in a place in parts (`HeldWrites.placeRows`) are
+   * once written, for the changes of the order of their parts
+   */
+  readonly #placements = new WeakMap<RowValues, RowsPlacement>();
   /** What runs the idle work of the tables */
   #idleScheduler: ScheduleIdleWork = whenIdle;
   /** The idle work of the tables that came while a write over several tasks was held */
@@ -340,17 +346,26 @@ export class TableContractStore implements StoreContract {
         this.#runIdleWaiting();
       },
       placeRows: (rows, to) => {
-        const { parent, keys } = this.#placing(Array.from(rows), to);
-        return {
+        const placed = Array.from(rows);
+        const moving = new Set(placed.map((handle) => handle * 2));
+        const { parent, keys } = this.#placing(placed, to, moving);
+        const values: RowValues = {
           handles: Int32Array.from(rows),
           fields: new Map<RowField, unknown[]>([
             ['parent', new Array<unknown>(rows.length).fill(parent)],
             ['key', keys],
           ]),
         };
+        // Where they are once written, for the changes of the order of their parts
+        const group = to.groupId === undefined ? undefined : this.#groups.get(to.groupId);
+        this.#placements.set(values, this.#rowsPlacement(to, group, moving));
+        return values;
       },
       beginRowParts: (patch) => {
-        const tellOrder = this.#tablesWriter.watchOrderOf(patch);
+        const placement = this.#placements.get(patch);
+        const tellOrder = placement
+          ? this.#tablesWriter.watchPlacementOf(patch, placement)
+          : this.#tablesWriter.watchOrderOf(patch);
         this.#groupsHeld++;
         return () => {
           this.#groupsHeld--;
@@ -967,8 +982,14 @@ export class TableContractStore implements StoreContract {
   /**
    * The parent (the group, or the layer) and the keys of the order rows put in a place get,
    * among the items there now, in the order of the rows
+   *
+   * @param moving - The numbers of the rows as items (made from them when left out)
    */
-  #placing(placed: readonly number[], to: ItemPlacement): { parent: string; keys: string[] } {
+  #placing(
+    placed: readonly number[],
+    to: ItemPlacement,
+    moving: ReadonlySet<number> = new Set(placed.map((handle) => handle * 2)),
+  ): { parent: string; keys: string[] } {
     if (!this.#layers.has(to.layerId)) {
       throw new Error(`Layer with id "${to.layerId}" not found`);
     }
@@ -976,12 +997,7 @@ export class TableContractStore implements StoreContract {
     if (to.groupId !== undefined && !group) {
       throw new Error(`Group with id "${to.groupId}" not found`);
     }
-    const keys = this.#keysAt(
-      to,
-      group,
-      new Set(placed.map((handle) => handle * 2)),
-      placed.length,
-    );
+    const keys = this.#keysAt(to, group, moving, placed.length);
     return { parent: group?.id ?? to.layerId, keys };
   }
 
@@ -1749,27 +1765,73 @@ export class TableContractStore implements StoreContract {
     moving: ReadonlySet<number>,
     n: number,
   ): string[] {
+    const { below, above } = this.#placeBetween(to, group, moving);
+    const keyOf = (code: number | null): string | null =>
+      code === null ? null : this.#keyOfCode(code);
+    return keysBetween(keyOf(below), keyOf(above), n);
+  }
+
+  /**
+   * The items that stay just below and above a place (null for none), the items put there left
+   * out: the keys of the items put there go between theirs
+   */
+  #placeBetween(
+    to: ItemPlacement,
+    group: TableGroup | undefined,
+    moving: ReadonlySet<number>,
+  ): { below: number | null; above: number | null } {
     const container = group ? this.#internals.groups.handleOfId(group.id) : -1;
     const walk = this.#walk(to.layerId);
-    const keyOf = (code: number | null | undefined): string | null =>
-      code === null || code === undefined ? null : this.#keyOfCode(code);
     /** The item of an id that stays in the container (-1 for none) */
     const itemOf = (id: string | null | undefined): number => {
       if (id === null || id === undefined || !walk) return -1;
       const code = this.#codeOfId(id);
       return code >= 0 && !moving.has(code) && walk.span(code, container) ? code : -1;
     };
-    if (group && container < 0) return keysBetween(null, null, n);
-    if (to.below === null) return keysBetween(null, keyOf(walk?.bottom(container, moving)), n);
+    if ((group && container < 0) || !walk) return { below: null, above: null };
+    if (to.below === null) return { below: null, above: walk.bottom(container, moving) };
     const below = itemOf(to.below);
-    if (below >= 0) {
-      return keysBetween(keyOf(below), keyOf(walk?.above(below, container, moving)), n);
-    }
+    if (below >= 0) return { below, above: walk.above(below, container, moving) };
     const above = to.above === null ? -1 : itemOf(to.above);
-    if (above >= 0) {
-      return keysBetween(keyOf(walk?.below(above, container, moving)), keyOf(above), n);
+    if (above >= 0) return { below: walk.below(above, container, moving), above };
+    return { below: walk.top(container, moving), above: null };
+  }
+
+  /**
+   * Where rows put in a place together are once they are written, as the changes of the order
+   * tell it (`RowsPlacement`): the items just below and above them then are the ones around the
+   * place, a group of features whose every member is put there passed (it is no item once they
+   * have left it)
+   */
+  #rowsPlacement(
+    to: ItemPlacement,
+    group: TableGroup | undefined,
+    moving: ReadonlySet<number>,
+  ): RowsPlacement {
+    const container = group ? this.#internals.groups.handleOfId(group.id) : -1;
+    const walk = this.#walk(to.layerId);
+    let { below, above } = this.#placeBetween(to, group, moving);
+    if (walk && container < 0) {
+      const passed = new Set(moving);
+      /** Whether every member of a group of features is put in the place */
+      const emptied = (code: number): boolean =>
+        (code & 1) === 1 &&
+        this.#internals.membersIn(to.layerId, code >> 1).every((member) => moving.has(member * 2));
+      while (below !== null && emptied(below)) {
+        passed.add(below);
+        below = walk.below(below, container, passed);
+      }
+      while (above !== null && emptied(above)) {
+        passed.add(above);
+        above = walk.above(above, container, passed);
+      }
     }
-    return keysBetween(keyOf(walk?.top(container, moving)), null, n);
+    return {
+      layerId: group?.layerId ?? to.layerId,
+      groupId: group?.id,
+      below,
+      above,
+    };
   }
 
   /** Writes fields of one row */

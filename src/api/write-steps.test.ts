@@ -245,8 +245,9 @@ describe('the idle work of the tables during a commit in steps', () => {
       },
     });
     held = () => store.slicedWritePending;
-    // The delta of the layer the rows go to is made again once, in the last step: the idle work
-    // (which reads every row) does not make it between two steps
+    // The delta of the layer the rows go to is made again once, at the first read after the last
+    // step: the idle work (which reads every row) does not make it between two steps, and the
+    // changes of the order are made from where the rows go, not read from the rows
     const rebuiltWhileHeld: boolean[] = [];
     const rebuild = (TablesStore.prototype as unknown as Record<string, (...args: never[]) => void>)
       .rebuildDelta;
@@ -264,14 +265,15 @@ describe('the idle work of the tables during a commit in steps', () => {
     await steps.first;
     await write;
     ended = true;
-    vi.restoreAllMocks();
+    expect(rebuiltWhileHeld).toEqual([]);
     await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(draw.features.count({ layerId: 'm' })).toBe(20_000);
+    vi.restoreAllMocks();
     // An idle period given while the write was held does no work: the work is asked for again
     expect(given.some((wasHeld) => wasHeld)).toBe(true);
     expect(askedAfter).toBeGreaterThan(0);
-    // Once, in the last step (its changes of the order read where the rows are)
-    expect(rebuiltWhileHeld.filter((whileHeld) => whileHeld)).toHaveLength(1);
-    expect(draw.features.count({ layerId: 'm' })).toBe(20_000);
+    // Once, after the last step
+    expect(rebuiltWhileHeld).toEqual([false]);
   });
 });
 
