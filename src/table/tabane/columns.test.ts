@@ -12,8 +12,8 @@ import { FEATURE_TABLE_COLUMNS, TABANE_FEATURE_COLUMNS } from './columns.js';
 const TYPE_OF_KIND: Readonly<Record<string, string>> = {
   shape: 'shape',
   flag: 'flag',
-  whole: 'value',
-  keyed: 'struct',
+  value: 'value',
+  struct: 'struct',
 };
 
 describe('the columns of a feature', () => {
