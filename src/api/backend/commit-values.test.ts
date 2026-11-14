@@ -16,7 +16,12 @@ import { createMapStub } from '../../test-utils.js';
 import { createDraw, type Draw } from '../draw.js';
 import { CommitValues, fileRecordOf } from './commit-values.js';
 import { batchesOf, createPartCollector } from './parts.js';
-import { applyOperations, createStoredDocument, type ValueBatch } from './values.js';
+import {
+  applyOperations,
+  createStoredDocument,
+  type StoredDocument,
+  type ValueBatch,
+} from './values.js';
 
 let draw: Draw | undefined;
 
@@ -74,8 +79,80 @@ function receiver(store: Store, next: () => number) {
   return { document, stop, counts: () => ({ commits, parts }) };
 }
 
+/** A document of records as one value to compare, the keys of the order included */
+function recordsOf(document: StoredDocument) {
+  const sorted = <T>(map: Map<string, T>) =>
+    [...map].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return {
+    features: sorted(document.features),
+    layers: sorted(document.layers),
+    groups: sorted(document.groups),
+    files: sorted(document.files),
+    title: document.title,
+    description: document.description,
+  };
+}
+
+/** The paths where two values differ, and the two values there */
+function differences(a: unknown, b: unknown, path = ''): unknown[] {
+  if (a === b) return [];
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
+    return [{ path, a, b }];
+  }
+  if (Array.isArray(a) && Array.isArray(b) && a.length !== b.length) return [{ path, a, b }];
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].flatMap((key) =>
+    differences(
+      (a as Record<string, unknown>)[key],
+      (b as Record<string, unknown>)[key],
+      `${path}/${key}`,
+    ),
+  );
+}
+
 describe('CommitValues', () => {
   for (const [kind, makeStore] of KINDS) {
+    it(`takes each commit back with its inverse, the keys of the order included (${kind})`, async () => {
+      let checked = 0;
+      for (const seed of [21, 22, 23, 24, 25, 26]) {
+        const next = random(seed);
+        const store = makeStore();
+        draw = createDraw(createMapStub().map, { store, initDefaultLayer: false });
+        await draw.write(async (tx) => {
+          await tx.layers.create({ id: 'a', name: 'A' });
+          await tx.layers.create({ id: 'b', name: 'B' });
+        });
+        const values = new CommitValues(store);
+        const document = createStoredDocument();
+        applyOperations(document, values.documentOperations());
+        const failures: unknown[] = [];
+        const stop = store.subscribe((changes) => {
+          const reading = values.readChange(changes, Number.POSITIVE_INFINITY);
+          if (!reading) throw new Error('The document was replaced');
+          reading.step(Number.POSITIVE_INFINITY);
+          const operations = reading.operations();
+          const inverse = reading.inverse();
+          reading.release();
+          if (operations.length === 0) return;
+          const before = structuredClone(recordsOf(document));
+          applyOperations(document, operations);
+          const back = structuredClone(document);
+          applyOperations(back, inverse);
+          const after = structuredClone(recordsOf(back));
+          const differ = differences(before, after);
+          if (differ.length > 0) failures.push({ seed, operations, inverse, differ });
+          checked++;
+        });
+        const ids = { feature: 0, layer: 0, group: 0 };
+        for (let i = 0; i < 80; i++) await step(draw, next, ids);
+        stop();
+        expect(failures.slice(0, 1)).toEqual([]);
+        draw.destroy();
+        draw = undefined;
+      }
+      expect(checked).toBeGreaterThan(300);
+    });
+
     it(`gives, applied part by part, the document written out (${kind})`, async () => {
       let total = { commits: 0, parts: 0 };
       for (const seed of [1, 2, 3, 4, 5, 6]) {
