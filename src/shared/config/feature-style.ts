@@ -106,6 +106,12 @@ export interface TentativeStyle {
    * @defaultValue a 10 px white circle with a 1 px `#FF2D55` outline
    */
   circleRadiusHandle: PointStyle;
+  /**
+   * The fill of a polygon (from its third vertex) and of a circle
+   *
+   * @defaultValue `#FF2D55` at an alpha of 0.2
+   */
+  fill: FillStyle;
 }
 
 /**
@@ -152,7 +158,8 @@ export interface FeatureStyleConfig {
   /**
    * The geometry being drawn
    *
-   * @defaultValue `#FF0077` 2 px lines (dashed to the cursor) and 10 px white vertices
+   * @defaultValue `#FF0077` 2 px lines (dashed to the cursor), 10 px white vertices and a
+   *   `#FF2D55` fill at an alpha of 0.2
    */
   tentative: TentativeStyle;
 }
@@ -244,6 +251,9 @@ export const DEFAULT_FEATURE_STYLE_CONFIG: FeatureStyleConfig = {
       strokeWidth: 1,
       strokeOpacity: 1.0,
     },
+    fill: {
+      color: [1.0, 0.176, 0.333, 0.2], // #FF2D55, 20% opacity
+    },
   },
 };
 
@@ -309,6 +319,10 @@ export function mergeFeatureStyleConfig(
       circleRadiusHandle: {
         ...base.tentative.circleRadiusHandle,
         ...override.tentative?.circleRadiusHandle,
+      },
+      fill: {
+        ...base.tentative.fill,
+        ...override.tentative?.fill,
       },
     },
     ...mergeOptionalPart('circle', base, override),

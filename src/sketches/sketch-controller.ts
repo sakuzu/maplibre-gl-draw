@@ -52,6 +52,8 @@ import {
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { TableSelection } from '../feature-table/selection.js';
 import { DrawError } from '../shared/draw-error.js';
+import { describeStyleProblem } from '../shared/style-validation.js';
+import type { FeatureStyle } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { isVertexOf } from '../shared/utils/vertex-edits.js';
 import { DEFAULT_TRANSFORMS, type FeatureUpdate, updatesOfEdits } from '../store/feature-edits.js';
@@ -93,10 +95,10 @@ import {
 } from './sketch-view.js';
 
 /** The keys of the input of a sketch */
-const INPUT_KEYS: readonly string[] = ['id', 'edits', 'owner'];
+const INPUT_KEYS: readonly string[] = ['id', 'edits', 'owner', 'previewStyle'];
 
 /** The keys of a patch of a sketch */
-const PATCH_KEYS: readonly string[] = ['edits'];
+const PATCH_KEYS: readonly string[] = ['edits', 'previewStyle'];
 
 /** The order the reasons a feature is left out are told in, when several leave a sketch empty */
 const DROP_REASONS: readonly SketchEndReason[] = ['deleted', 'locked', 'layerUnavailable'];
@@ -515,7 +517,7 @@ export class SketchController {
     }
     if (edits.every(isVertexEdit)) {
       this.#operate(() => {
-        entry.sketch = sketchOf(id, positionsGiven(entry, edits), entry.sketch.owner);
+        entry.sketch = sketchOf(id, positionsGiven(entry, edits), entry.sketch);
         this.#queue('sketch.updated', { sketch: entry.sketch, dropped: 0 });
         this.#dirty = true;
       });
@@ -530,7 +532,7 @@ export class SketchController {
     const { id } = entry.sketch;
     this.#operate(() => {
       const next = { ...edit, target: before.target } as SketchEdit;
-      entry.sketch = sketchOf(id, [next], entry.sketch.owner);
+      entry.sketch = sketchOf(id, [next], entry.sketch);
       this.#queue('sketch.updated', { sketch: entry.sketch, dropped: 0 });
       const motion = this.#motions.get(id);
       if (!motion || motion.slow.length > 0) {
@@ -609,7 +611,8 @@ export class SketchController {
       taken.add(id);
       const owner = input.owner === undefined || input.owner === null ? null : input.owner;
       if (owner !== null) requireId(owner, 'The owner');
-      return { id, owner, prepared: this.#prepare(id, input.edits, owner) };
+      const previewStyle = previewStyleOf(input.previewStyle, 'The input');
+      return { id, owner, previewStyle, prepared: this.#prepare(id, input.edits, owner) };
     });
     // Two sketches of this client of a feature, given at once
     const touchedBy = new Map<string, string>();
@@ -641,9 +644,9 @@ export class SketchController {
       }
     }
     const sketches: Sketch[] = [];
-    for (const { id, owner, prepared } of checked) {
+    for (const { id, owner, previewStyle, prepared } of checked) {
       const entry: Entry = {
-        sketch: sketchOf(id, prepared.edits, owner),
+        sketch: sketchOf(id, prepared.edits, { owner, previewStyle }),
         seq: this.#seq++,
         dropped: 0,
         shapes: prepared.shapes,
@@ -671,7 +674,15 @@ export class SketchController {
       if (!isRecord(patch)) throw invalidInput('The patch must be an object');
       onlyKeys(patch, PATCH_KEYS, 'The patch');
       const edits = patch.edits === undefined ? found.sketch.edits : patch.edits;
-      return { entry: found, prepared: this.#prepare(id, edits, found.sketch.owner) };
+      const previewStyle =
+        patch.previewStyle === undefined
+          ? found.sketch.previewStyle
+          : previewStyleOf(patch.previewStyle, 'The patch');
+      return {
+        entry: found,
+        previewStyle,
+        prepared: this.#prepare(id, edits, found.sketch.owner),
+      };
     });
     const own = checked.filter(({ entry }) => entry.sketch.owner === null);
     if (own.some(({ prepared }) => !this.#allowed(prepared))) return null;
@@ -686,8 +697,11 @@ export class SketchController {
       if (own.some(({ prepared }) => !this.#allowed(prepared))) return null;
     }
     const sketches: Sketch[] = [];
-    for (const { entry, prepared } of checked) {
-      entry.sketch = sketchOf(entry.sketch.id, prepared.edits, entry.sketch.owner);
+    for (const { entry, previewStyle, prepared } of checked) {
+      entry.sketch = sketchOf(entry.sketch.id, prepared.edits, {
+        owner: entry.sketch.owner,
+        previewStyle,
+      });
       entry.shapes = prepared.shapes;
       entry.createLayers = prepared.createLayers;
       sketches.push(entry.sketch);
@@ -1008,7 +1022,7 @@ export class SketchController {
       this.#end(entry.sketch.id, 'deselected');
       return;
     }
-    entry.sketch = sketchOf(entry.sketch.id, kept.edits, entry.sketch.owner);
+    entry.sketch = sketchOf(entry.sketch.id, kept.edits, entry.sketch);
     this.#dirty = true;
     this.#queue('sketch.updated', { sketch: entry.sketch, dropped: kept.dropped });
   }
@@ -1125,7 +1139,7 @@ export class SketchController {
     }
     if (dropped === 0) return;
     entry.dropped += dropped;
-    entry.sketch = sketchOf(entry.sketch.id, edits, entry.sketch.owner);
+    entry.sketch = sketchOf(entry.sketch.id, edits, entry.sketch);
     this.#dirty = true;
     this.#queue('sketch.updated', { sketch: entry.sketch, dropped });
   }
@@ -1355,7 +1369,7 @@ export class SketchController {
         } catch {
           return;
         }
-        out.push(shapeBeingDrawnOf(feature, edit, entry.sketch.owner));
+        out.push(shapeBeingDrawnOf(feature, edit, entry.sketch.owner, entry.sketch.previewStyle));
       });
     }
     return out;
@@ -1649,9 +1663,33 @@ function letGoRows(motion: SketchMotion, states: RowStateSets): void {
   if (motion.byValues.length > 0) states.setByValues(motion.byValues, false);
 }
 
-/** A sketch, frozen */
-function sketchOf(id: string, edits: readonly SketchEdit[], owner: string | null): Sketch {
-  return Object.freeze({ id, edits: Object.freeze([...edits]), owner });
+/** A sketch, frozen: its edits, with its owner and its look kept from before or given */
+function sketchOf(
+  id: string,
+  edits: readonly SketchEdit[],
+  {
+    owner,
+    previewStyle,
+  }: { owner: string | null; previewStyle?: Sketch['previewStyle'] | undefined },
+): Sketch {
+  return Object.freeze({
+    id,
+    edits: Object.freeze([...edits]),
+    owner,
+    ...(previewStyle !== undefined && { previewStyle }),
+  });
+}
+
+/**
+ * The look a sketch is given (`previewStyle`), checked and copied, frozen
+ *
+ * @throws DrawError `invalidInput` when it is not a style
+ */
+function previewStyleOf(given: unknown, what: string): Readonly<Partial<FeatureStyle>> | undefined {
+  if (given === undefined) return undefined;
+  const problem = describeStyleProblem(given);
+  if (problem) throw invalidInput(`The previewStyle of ${what.toLowerCase()} is ${problem}`);
+  return Object.freeze({ ...(given as Partial<FeatureStyle>) });
 }
 
 /** The ID a feature a sketch creates is drawn with: an ID of no feature of the document */

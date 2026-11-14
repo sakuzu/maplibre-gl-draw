@@ -197,9 +197,12 @@ describe('options.update', () => {
         pointRadius: 3,
         pointStrokeColor: '#f00',
         pointStrokeWidth: 1,
+        fillColor: '#00f',
+        fillOpacity: 0.5,
       },
     });
     const { tentative } = engine.context.featureStyle;
+    expect(tentative.fill.color).toEqual([0, 0, 1, 0.5]);
     expect(tentative.stroke.color).toEqual([0, 0, 0, 1]);
     expect(tentative.stroke.width).toBe(5);
     expect(tentative.tentativeStroke.lineStyle).toBe('dashed');

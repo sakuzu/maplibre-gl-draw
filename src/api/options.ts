@@ -435,7 +435,8 @@ export interface RuntimeOptions {
   /**
    * The look of the geometry being drawn, with the keys of the style of a feature: the stroke
    * keys give its lines, the point keys its vertices (`pointStrokeColor` and
-   * `pointStrokeWidth` their outlines)
+   * `pointStrokeWidth` their outlines), the fill keys its fill. A sketch can put a look of its
+   * own over it (`SketchInput.previewStyle`)
    */
   previewStyle?: Partial<FeatureStyle>;
   /** The look of the box and the handles of the selection */

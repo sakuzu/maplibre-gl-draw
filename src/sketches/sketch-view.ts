@@ -22,7 +22,7 @@
 import type { SketchOverlay } from '../feature-table/feature-tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
-import type { TentativeState } from '../shared/types/model.js';
+import type { FeatureStyle, TentativeState } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { rowPlaceKeysOf } from '../store/row-places.js';
 import type { Store } from '../store/store.js';
@@ -39,10 +39,13 @@ import type { CreateEdit } from './sketch-edits.js';
 export interface ShapeBeingDrawn extends TentativeState {
   /** Who draws it: `null` for this client */
   readonly owner: string | null;
+  /** The look of the sketch, put over the look of the shapes being drawn, when it has one */
+  readonly previewStyle?: Readonly<Partial<FeatureStyle>>;
 }
 
 /**
- * The shape being drawn of an edit `create` of a sketch, over the feature it creates
+ * The shape being drawn of an edit `create` of a sketch, over the feature it creates, with the look
+ * of the sketch
  *
  * @internal
  */
@@ -50,6 +53,7 @@ export function shapeBeingDrawnOf(
   feature: Feature,
   edit: CreateEdit,
   owner: string | null,
+  previewStyle?: Readonly<Partial<FeatureStyle>>,
 ): ShapeBeingDrawn {
   const shape: ShapeBeingDrawn = {
     owner,
@@ -57,6 +61,7 @@ export function shapeBeingDrawnOf(
     coordinates: coordinatesOf(feature) as TentativeState['coordinates'],
     layerId: feature.layerId,
     pendingFeatureId: feature.id,
+    ...(previewStyle !== undefined && { previewStyle }),
   };
   if (edit.placedVertexCount !== undefined) shape.confirmedCount = edit.placedVertexCount;
   if (edit.highlightedVertexIndex !== undefined) {

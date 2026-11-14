@@ -17,12 +17,12 @@ import type {
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { isLayerDrawnFromRows } from '../../feature-table/rows-drawn.js';
 import type { BBox } from '../../geometry/types.js';
-import type { TentativeState } from '../../shared/types/model.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { drawFeatureCompanionsInFrame } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
+import type { DrawnTentative } from '../ui/tentative.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
 import { customRendererOf } from './store-retained-classify.js';
@@ -78,7 +78,8 @@ import type { TableLayerRenderer } from './table-retained.js';
  *   drawn when omitted)
  * @param beforeEntry Called before each entry of the order is drawn (the drape of the elements
  *   of the other entries is painted up to it where the layers held as rows are draped)
- * @param drawings The shapes being drawn, each drawn with its layer (none when omitted)
+ * @param drawings The shapes being drawn, each drawn with its layer and its look (none when
+ *   omitted)
  */
 export function renderLayers(
   r: Renderers,
@@ -98,7 +99,7 @@ export function renderLayers(
   view?: RenderLayersView,
   tableRetained?: TableLayerRenderer,
   beforeEntry?: (layerId: string) => void,
-  drawings: readonly TentativeState[] = [],
+  drawings: readonly DrawnTentative[] = [],
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets

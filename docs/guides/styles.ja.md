@@ -149,8 +149,9 @@ const draw = createDraw(map, {
 ```
 
 - `previewStyle` は描いている途中の形の見た目です。線のキーはその線に、
-  点のキーはその頂点に使われます。頂点の輪郭は `pointStrokeColor` と
-  `pointStrokeWidth` です
+  点のキーはその頂点に、塗りのキーはその塗りに使われます。頂点の輪郭は
+  `pointStrokeColor` と `pointStrokeWidth` です。形を描く下書きは、
+  その上に自分の見た目を重ねられます (下を参照してください)
 - `selectionStyle` は、選択を囲む枠とそのハンドル (拡縮、回転、頂点、
   中点、半径のハンドル、円の中心、矩形選択の矩形) の見た目です。渡した
   部分は、その部分の既定値を置き換えるので、部分ごとにすべての項目を
@@ -180,6 +181,39 @@ draw.options.update({ scaleWithZoom: false });
 (`draw.options.subscribe`)。設定を表示する UI は、これで追随できます
 ([イベントのリファレンス](../reference/events.md#drawoptions) (英語)
 を参照してください)。
+
+形を描く `draw.sketches` の下書き (`placedVertexCount` のある編集
+`create`) は、自分の `previewStyle` を持てます。その下書きの形にだけ、
+設定の上に重ねて使われます。置いた頂点を結ぶ線にはすべての線のキーが
+使われます。ポインターへの線と最初の頂点へ戻る線には色、幅、不透明度が
+使われ、破線のままです。これで、同時に描く 2 つの形を見分けられます。
+たとえば、提案の形を灰色の破線で見せたり、面の 2 つの候補を色で
+分けたりできます。
+
+```ts
+const proposal = draw.sketches.add({
+  edits: [
+    {
+      kind: 'create',
+      feature: {
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [139.76, 35.68],
+            [139.77, 35.69],
+          ],
+        },
+      },
+      placedVertexCount: 1,
+    },
+  ],
+  previewStyle: { strokeColor: '#888888', lineStyle: 'dashed' },
+});
+if (proposal) {
+  draw.sketches.update(proposal.id, { previewStyle: { strokeColor: '#1e88e5' } });
+}
+```
 
 ## スタイル規則
 

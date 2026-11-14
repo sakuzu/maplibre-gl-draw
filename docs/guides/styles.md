@@ -149,7 +149,8 @@ const draw = createDraw(map, {
 
 - `previewStyle` is the look of the shape being drawn: its stroke keys
   give its lines, its point keys its vertices (`pointStrokeColor` and
-  `pointStrokeWidth` their outlines)
+  `pointStrokeWidth` their outlines), its fill keys its fill. A sketch
+  that draws a shape can put a look of its own over it (see below)
 - `selectionStyle` is the look of the box around the selection and of its
   handles (resize, rotate, vertex, midpoint and radius handles, the center
   of a circle and the box of a box selection). Each part you give
@@ -184,6 +185,39 @@ draw.options.update({ scaleWithZoom: false });
 value (`draw.options.subscribe`), so a control that shows an option can
 follow it (see
 [the event reference](../reference/events.md#drawoptions)).
+
+A sketch of `draw.sketches` that draws a shape (an edit `create` with
+`placedVertexCount`) takes a `previewStyle` of its own, put over the
+option for its shapes alone. The line through the vertices placed takes
+every stroke key; the lines to the pointer and back to the first vertex
+take the color, the width and the opacity, and stay dashed. Two shapes
+drawn at once can so be told apart, a proposed shape in gray dashes, say,
+or two candidates of an area in two colors:
+
+```ts
+const proposal = draw.sketches.add({
+  edits: [
+    {
+      kind: 'create',
+      feature: {
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [139.76, 35.68],
+            [139.77, 35.69],
+          ],
+        },
+      },
+      placedVertexCount: 1,
+    },
+  ],
+  previewStyle: { strokeColor: '#888888', lineStyle: 'dashed' },
+});
+if (proposal) {
+  draw.sketches.update(proposal.id, { previewStyle: { strokeColor: '#1e88e5' } });
+}
+```
 
 ## Style rules
 

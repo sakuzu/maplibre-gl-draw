@@ -576,6 +576,80 @@ for (const kind of KINDS) {
       expect(failures).toEqual([]);
     });
 
+    it('draws each shape being drawn with the look of its sketch, and changes it with a patch', () => {
+      const { draw, engine, events, failures } = open(kind);
+      const shape = (id: string, x: number): SketchEdit => ({
+        kind: 'create',
+        feature: {
+          type: 'LineString',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [x, 0],
+              [x + 1, 1],
+            ],
+          },
+          id,
+        },
+        placedVertexCount: 1,
+      });
+      // A proposed shape in gray dashes, next to the one drawn by the pointer
+      const proposed = { strokeColor: '#888888', lineStyle: 'dashed' as const };
+      const given = { ...proposed };
+      const proposal = draw.sketches.add({
+        owner: 'proposal',
+        edits: [shape('p', 0)],
+        previewStyle: given,
+      }) as Sketch;
+      const drawn = draw.sketches.add({ edits: [shape('d', 5)] }) as Sketch;
+      // Copied and frozen: a change of what was given does not change it
+      given.strokeColor = '#000000';
+      expect(proposal.previewStyle).toEqual(proposed);
+      expect(Object.isFrozen(proposal.previewStyle)).toBe(true);
+      expect('previewStyle' in drawn).toBe(false);
+      const view = engine.sketches.view;
+      const looks = (): unknown[] =>
+        view.drawings().map((d) => [d.pendingFeatureId, d.previewStyle]);
+      expect(looks()).toEqual([
+        ['p', proposed],
+        ['d', undefined],
+      ]);
+
+      // A patch of the look alone keeps the edits; a patch of the edits alone keeps the look
+      const candidate = { strokeColor: '#1e88e5', fillColor: '#1e88e5' };
+      events.length = 0;
+      const changed = draw.sketches.update(proposal.id, { previewStyle: candidate }) as Sketch;
+      expect(changed.previewStyle).toEqual(candidate);
+      expect(changed.edits).toEqual(proposal.edits);
+      expect(names(events)).toEqual(['sketch.updated']);
+      const moved = draw.sketches.update(proposal.id, { edits: [shape('p', 1)] }) as Sketch;
+      expect(moved.previewStyle).toEqual(candidate);
+      draw.sketches.update(drawn.id, { previewStyle: proposed });
+      expect(looks()).toEqual([
+        ['p', candidate],
+        ['d', proposed],
+      ]);
+      // `{}` draws it with the option alone again
+      draw.sketches.update(drawn.id, { previewStyle: {} });
+      expect(looks()).toEqual([
+        ['p', candidate],
+        ['d', {}],
+      ]);
+
+      // A look that is not a style is refused, and nothing changes
+      for (const bad of [{ strokeColor: 'nope' }, { strokeWidth: -1 }, 'gray']) {
+        expect(() =>
+          draw.sketches.add({ edits: [shape('x', 9)], previewStyle: bad as never }),
+        ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
+        expect(() => draw.sketches.update(drawn.id, { previewStyle: bad as never })).toThrow(
+          expect.objectContaining({ code: 'invalidInput' }),
+        );
+      }
+      expect(draw.sketches.count()).toBe(2);
+      expect(draw.sketches.get(drawn.id)?.previewStyle).toEqual({});
+      expect(failures).toEqual([]);
+    });
+
     it('ends the sketches of this client when the document becomes read-only, and all when it is replaced', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);

@@ -6,7 +6,7 @@
  */
 
 import type { Observable } from './events.js';
-import type { FeatureEdit, StoredFeatureInput } from './model.js';
+import type { FeatureEdit, FeatureStyle, StoredFeatureInput } from './model.js';
 
 /**
  * An edit a sketch holds: an edit of features ({@link FeatureEdit}), or the shape of a feature
@@ -16,7 +16,8 @@ import type { FeatureEdit, StoredFeatureInput } from './model.js';
  * (just above that item of its layer or group; at the back for `null`, at the front where
  * `features.create` puts a new feature when it is left out) and written by `features.create` when
  * the sketch is committed. With `placedVertexCount` it is a shape being drawn: drawn with the look
- * of the option `previewStyle` in its layer, in place of the feature (the vertices up to
+ * of the option `previewStyle` (and the `previewStyle` of its sketch over it) in its layer, in
+ * place of the feature (the vertices up to
  * `placedVertexCount` placed and the line to them solid, the ones after it following the pointer
  * and dashed, `highlightedVertexIndex` the vertex shown as the one to close the shape on), with no
  * ID `draw.rendered` reads it by, and its geometry may have fewer positions than a feature (a line
@@ -57,6 +58,11 @@ export interface Sketch {
    * (they are drawn under the ones of this client and cannot be committed here)
    */
   readonly owner: string | null;
+  /**
+   * The look of the shapes being drawn of this sketch (its edits `create` with
+   * `placedVertexCount`), put over the option `previewStyle`; left out when it has none
+   */
+  readonly previewStyle?: Readonly<Partial<FeatureStyle>>;
 }
 
 /** What `sketches.add` takes. */
@@ -67,12 +73,32 @@ export interface SketchInput {
   edits: readonly SketchEdit[];
   /** Who makes it (`null` for this client when left out) */
   owner?: string | null;
+  /**
+   * The look of the shapes being drawn of this sketch (its edits `create` with
+   * `placedVertexCount`), with the keys of the style of a feature put over the option
+   * `previewStyle` as it puts them over the default: the stroke keys give the line through the
+   * vertices placed, and the color, the width and the opacity of the lines to the pointer and back
+   * to the first vertex, which stay dashed; the point keys give the vertices; the fill keys the
+   * fill of an area. The other edits are drawn as they leave the features. Left out, the shapes
+   * are drawn with the option alone.
+   *
+   * Two sketches can so be told apart: a shape proposed drawn in gray dashes
+   * (`{ strokeColor: '#888888', lineStyle: 'dashed' }`) next to the one drawn by the pointer, or two
+   * candidates of an area in two colors (`{ strokeColor: '#1e88e5', fillColor: '#1e88e5' }` and
+   * `{ strokeColor: '#43a047', fillColor: '#43a047' }`).
+   */
+  previewStyle?: Partial<FeatureStyle>;
 }
 
 /** What `sketches.update` takes: only the keys given change. */
 export interface SketchPatch {
   /** The edits, in place of the ones the sketch holds */
   edits?: readonly SketchEdit[];
+  /**
+   * The look of the shapes being drawn of the sketch, in place of the one it has
+   * ({@link SketchInput.previewStyle}; `{}` draws them with the option alone again)
+   */
+  previewStyle?: Partial<FeatureStyle>;
 }
 
 /**
@@ -136,10 +162,11 @@ export interface SketchesCollection extends Observable<readonly Sketch[]> {
    *
    * @returns The sketch, or `null` when a sketch of this client is refused (read-only, a lock, a
    *   feature hidden or a layer that cannot be written)
-   * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape, an
-   *   edit cannot apply or a feature it creates has an ID the Store does not take
-   *   (`Store.acceptsId`), `alreadyExists` when its ID is taken, or `notFound` when an edit
-   *   names a feature, a layer or a group that does not exist
+   * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape (a
+   *   `previewStyle` that is not a style among them), an edit cannot apply or a feature it
+   *   creates has an ID the Store does not take (`Store.acceptsId`), `alreadyExists` when its
+   *   ID is taken, or `notFound` when an edit names a feature, a layer or a group that does not
+   *   exist
    */
   add(input: SketchInput): Sketch | null;
   /**

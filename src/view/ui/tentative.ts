@@ -9,8 +9,11 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { destinationPoint } from '../../geometry/distance.js';
+import { applyPreviewStyle } from '../../shared/config/apply-style.js';
 import type { TentativeStyle } from '../../shared/config/feature-style.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
+import type { FeatureStyle } from '../../shared/types/model.js';
+import type { Color } from '../../shared/types/style.js';
 import type { Coordinate, TentativeState } from '../../store/types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import type { SDFLineRenderer, SDFStrokeStyle } from '../renderers/line/sdf-line.js';
@@ -42,6 +45,47 @@ export interface TentativeRendererDeps {
 const TENTATIVE_DASH_ARRAY: [number, number] = [8, 6];
 
 /**
+ * A shape being drawn, with the look of its own put over the look of the shapes being drawn
+ * (`Sketch.previewStyle`), when it has one
+ *
+ * @internal
+ */
+export type DrawnTentative = TentativeState & {
+  readonly previewStyle?: Readonly<Partial<FeatureStyle>>;
+};
+
+/** The look a shape being drawn is drawn with */
+interface Look {
+  /** The style of confirmed lines (solid) */
+  readonly stroke: SDFStrokeStyle;
+  /** The style of unconfirmed lines (dotted) */
+  readonly tentativeStroke: SDFStrokeStyle;
+  readonly vertex: PointStyle;
+  /** The style of a highlighted vertex */
+  readonly highlightedVertex: PointStyle;
+  /** For Circle: the style of the center marker */
+  readonly circleCenterMarker: PointStyle;
+  /** For Circle: the style of the radius change handle */
+  readonly circleRadiusHandle: PointStyle;
+  /** The fill of a polygon and of a circle */
+  readonly fill: Color;
+}
+
+/** The look of a configuration of the shapes being drawn */
+function lookOf(style: TentativeStyle): Look {
+  return {
+    stroke: style.stroke,
+    // The style of unconfirmed lines (the dotted pattern is set to match the specification)
+    tentativeStroke: { ...style.tentativeStroke, dashArray: TENTATIVE_DASH_ARRAY },
+    vertex: style.vertex,
+    highlightedVertex: style.highlightedVertex,
+    circleCenterMarker: style.circleCenterMarker,
+    circleRadiusHandle: style.circleRadiusHandle,
+    fill: style.fill.color,
+  };
+}
+
+/**
  * The Tentative rendering class
  *
  * Draws the tentative state while drawing (points, lines, polygons)
@@ -51,36 +95,40 @@ const TENTATIVE_DASH_ARRAY: [number, number] = [8, 6];
 export class TentativeRenderer {
   private sdfLineRenderer: SDFLineRenderer;
   private pointShapeRenderer: PointShapeRenderer;
-  /** The style of confirmed lines (solid) */
-  private strokeStyle: SDFStrokeStyle;
-  /** The style of unconfirmed lines (dotted) */
-  private tentativeStrokeStyle: SDFStrokeStyle;
-  private vertexStyle: PointStyle;
-  /** The style of a highlighted vertex */
-  private highlightedVertexStyle: PointStyle;
-  /** For Circle: the style of the center marker */
-  private circleCenterMarkerStyle: PointStyle;
-  /** For Circle: the style of the radius change handle */
-  private circleRadiusHandleStyle: PointStyle;
-  private fillColor: [number, number, number, number];
+  /** The look of the shapes being drawn, from the configuration */
+  private tentativeStyle: TentativeStyle;
+  /** The look of a shape being drawn without a look of its own */
+  private look: Look;
+  /**
+   * The looks of the shapes being drawn with a look of their own, by that look (the renderers are
+   * built again when the configuration changes, and this with them)
+   */
+  private looks = new WeakMap<Readonly<Partial<FeatureStyle>>, Look>();
   private fillShaderManager: FillShaderManager;
 
   constructor(deps: TentativeRendererDeps) {
     this.sdfLineRenderer = deps.sdfLineRenderer;
     this.pointShapeRenderer = deps.pointShapeRenderer;
-    this.strokeStyle = deps.tentativeStyle.stroke;
-    // The style of unconfirmed lines (the dotted pattern is set to match the specification)
-    this.tentativeStrokeStyle = {
-      ...deps.tentativeStyle.tentativeStroke,
-      dashArray: TENTATIVE_DASH_ARRAY,
-    };
-    this.vertexStyle = deps.tentativeStyle.vertex;
-    this.highlightedVertexStyle = deps.tentativeStyle.highlightedVertex;
-    this.circleCenterMarkerStyle = deps.tentativeStyle.circleCenterMarker;
-    this.circleRadiusHandleStyle = deps.tentativeStyle.circleRadiusHandle;
-    // The fill color for Tentative (translucent pink)
-    this.fillColor = [1.0, 0.176, 0.333, 0.2];
+    this.tentativeStyle = deps.tentativeStyle;
+    this.look = lookOf(deps.tentativeStyle);
     this.fillShaderManager = new FillShaderManager(deps.gl, deps.ledger, deps.terrain);
+  }
+
+  /**
+   * The look of a shape being drawn: the look of the configuration, with the look of its own put
+   * over it
+   */
+  private lookOf(tentative: DrawnTentative): Look {
+    const own = tentative.previewStyle;
+    if (own === undefined) return this.look;
+    let look = this.looks.get(own);
+    if (!look) {
+      const style = structuredClone(this.tentativeStyle);
+      applyPreviewStyle(style, own);
+      look = lookOf(style);
+      this.looks.set(own, look);
+    }
+    return look;
   }
 
   /**
@@ -103,18 +151,20 @@ export class TentativeRenderer {
    * Used by the rendering that follows the layer order. The vertices are drawn separately
    * in the foreground by drawVertices().
    */
-  drawGeometry(tentative: TentativeState, projectionData: ProjectionData, zoom: number): void {
+  drawGeometry(tentative: DrawnTentative, projectionData: ProjectionData, zoom: number): void {
     if (tentative.type === 'Point') {
       // A Point is only vertices, so nothing is drawn for the geometry
       return;
-    } else if (tentative.type === 'LineString') {
-      this.drawLineStringGeometry(tentative, projectionData, zoom);
+    }
+    const look = this.lookOf(tentative);
+    if (tentative.type === 'LineString') {
+      this.drawLineStringGeometry(tentative, look, projectionData, zoom);
     } else if (tentative.type === 'Polygon') {
-      this.drawPolygonGeometry(tentative, projectionData, zoom);
+      this.drawPolygonGeometry(tentative, look, projectionData, zoom);
     } else if (tentative.type === 'Circle') {
-      this.drawCircleGeometry(tentative, projectionData, zoom);
+      this.drawCircleGeometry(tentative, look, projectionData, zoom);
     } else if (tentative.type === 'Freehand') {
-      this.drawFreehandGeometry(tentative, projectionData, zoom);
+      this.drawFreehandGeometry(tentative, look, projectionData, zoom);
     }
   }
 
@@ -123,16 +173,17 @@ export class TentativeRenderer {
    *
    * Called after the selection UI so that they are shown in the foreground.
    */
-  drawVertices(tentative: TentativeState): void {
+  drawVertices(tentative: DrawnTentative): void {
+    const look = this.lookOf(tentative);
     if (tentative.type === 'Point') {
       const coord = tentative.coordinates as Coordinate;
-      this.drawPointShape(coord, this.vertexStyle);
+      this.drawPointShape(coord, look.vertex);
     } else if (tentative.type === 'LineString') {
-      this.drawLineStringVertices(tentative);
+      this.drawLineStringVertices(tentative, look);
     } else if (tentative.type === 'Polygon') {
-      this.drawPolygonVertices(tentative);
+      this.drawPolygonVertices(tentative, look);
     } else if (tentative.type === 'Circle') {
-      this.drawCircleVertices(tentative);
+      this.drawCircleVertices(tentative, look);
     } else if (tentative.type === 'Freehand') {
       // Freehand is lines only and does not draw vertices (the existing behavior is kept)
     }
@@ -150,6 +201,7 @@ export class TentativeRenderer {
    */
   private drawLineStringGeometry(
     tentative: TentativeState,
+    look: Look,
     projectionData: ProjectionData,
     zoom: number,
   ): void {
@@ -161,7 +213,7 @@ export class TentativeRenderer {
       const confirmedCoords = coords.slice(0, confirmedCount) as [number, number][];
       this.sdfLineRenderer.draw(
         confirmedCoords,
-        this.strokeStyle,
+        look.stroke,
         { widthUnit: 'pixels', closed: false },
         zoom,
         projectionData,
@@ -176,7 +228,7 @@ export class TentativeRenderer {
       ];
       this.sdfLineRenderer.draw(
         tentativeCoords,
-        this.tentativeStrokeStyle,
+        look.tentativeStroke,
         { widthUnit: 'pixels', closed: false },
         zoom,
         projectionData,
@@ -187,13 +239,13 @@ export class TentativeRenderer {
   /**
    * Tentative rendering of the vertices of a LineString
    */
-  private drawLineStringVertices(tentative: TentativeState): void {
+  private drawLineStringVertices(tentative: TentativeState, look: Look): void {
     const coords = tentative.coordinates as Coordinate[];
     const highlightedIndex = tentative.highlightedVertexIndex;
 
     // Draw the vertices (the highlighted one has a different style)
     for (let i = 0; i < coords.length; i++) {
-      const style = i === highlightedIndex ? this.highlightedVertexStyle : this.vertexStyle;
+      const style = i === highlightedIndex ? look.highlightedVertex : look.vertex;
       this.drawPointShape(coords[i], style);
     }
   }
@@ -203,6 +255,7 @@ export class TentativeRenderer {
    */
   private drawPolygonGeometry(
     tentative: TentativeState,
+    look: Look,
     projectionData: ProjectionData,
     zoom: number,
   ): void {
@@ -219,7 +272,7 @@ export class TentativeRenderer {
 
     // Fill from 3 points or more (4 points or more when closed)
     if (outerRing.length >= 4) {
-      this.fillShaderManager.drawPolygon(outerRing, this.fillColor, projectionData);
+      this.fillShaderManager.drawPolygon(outerRing, look.fill, projectionData);
     }
 
     // Draw solid lines between the confirmed vertices (when there are 2 or more of them)
@@ -227,7 +280,7 @@ export class TentativeRenderer {
       const confirmedCoords = outerRing.slice(0, confirmedCount) as [number, number][];
       this.sdfLineRenderer.draw(
         confirmedCoords,
-        this.strokeStyle,
+        look.stroke,
         { widthUnit: 'pixels', closed: false },
         zoom,
         projectionData,
@@ -245,7 +298,7 @@ export class TentativeRenderer {
       ];
       this.sdfLineRenderer.draw(
         lastConfirmedToMouse,
-        this.tentativeStrokeStyle,
+        look.tentativeStroke,
         { widthUnit: 'pixels', closed: false },
         zoom,
         projectionData,
@@ -258,7 +311,7 @@ export class TentativeRenderer {
       ];
       this.sdfLineRenderer.draw(
         mouseToFirst,
-        this.tentativeStrokeStyle,
+        look.tentativeStroke,
         { widthUnit: 'pixels', closed: false },
         zoom,
         projectionData,
@@ -269,7 +322,7 @@ export class TentativeRenderer {
   /**
    * Tentative rendering of the vertices of a Polygon
    */
-  private drawPolygonVertices(tentative: TentativeState): void {
+  private drawPolygonVertices(tentative: TentativeState, look: Look): void {
     const rings = tentative.coordinates as Coordinate[][];
     const outerRing = rings[0];
 
@@ -282,7 +335,7 @@ export class TentativeRenderer {
     const uniqueVertexCount = outerRing.length > 1 ? outerRing.length - 1 : outerRing.length;
     const highlightedIndex = tentative.highlightedVertexIndex;
     for (let i = 0; i < uniqueVertexCount; i++) {
-      const style = i === highlightedIndex ? this.highlightedVertexStyle : this.vertexStyle;
+      const style = i === highlightedIndex ? look.highlightedVertex : look.vertex;
       this.drawPointShape(outerRing[i], style);
     }
   }
@@ -292,6 +345,7 @@ export class TentativeRenderer {
    */
   private drawCircleGeometry(
     tentative: TentativeState,
+    look: Look,
     projectionData: ProjectionData,
     zoom: number,
   ): void {
@@ -304,13 +358,13 @@ export class TentativeRenderer {
       // The preview of the circle (the fill)
       const circleCoords = generateCirclePolygon(center, radiusMeters);
       if (circleCoords.length >= 4) {
-        this.fillShaderManager.drawPolygon(circleCoords, this.fillColor, projectionData);
+        this.fillShaderManager.drawPolygon(circleCoords, look.fill, projectionData);
       }
 
       // The stroke of the circle
       this.sdfLineRenderer.draw(
         circleCoords as [number, number][],
-        this.strokeStyle,
+        look.stroke,
         { widthUnit: 'pixels', closed: true },
         zoom,
         projectionData,
@@ -326,7 +380,7 @@ export class TentativeRenderer {
       ];
       this.sdfLineRenderer.draw(
         radiusLine,
-        this.tentativeStrokeStyle,
+        look.tentativeStroke,
         { widthUnit: 'pixels', closed: false },
         zoom,
         projectionData,
@@ -337,7 +391,7 @@ export class TentativeRenderer {
   /**
    * Tentative rendering of the vertices of a Circle
    */
-  private drawCircleVertices(tentative: TentativeState): void {
+  private drawCircleVertices(tentative: TentativeState, look: Look): void {
     const center = tentative.coordinates as Coordinate;
     const radiusMeters = tentative.radiusMeters ?? 0;
     const radiusHandleAngle = tentative.radiusHandleAngle ?? 135;
@@ -347,14 +401,14 @@ export class TentativeRenderer {
       const handlePosition = destinationPoint(center, radiusMeters, radiusHandleAngle);
 
       // Draw the center marker (shown below the radius change handle)
-      this.drawPointShape(center, this.circleCenterMarkerStyle);
+      this.drawPointShape(center, look.circleCenterMarker);
 
       // Draw the radius change handle (shown above the center marker)
-      this.drawPointShape(handlePosition, this.circleRadiusHandleStyle);
+      this.drawPointShape(handlePosition, look.circleRadiusHandle);
     } else {
       // When the radius is 0, only the radius change handle is shown at the center position
-      this.drawPointShape(center, this.circleCenterMarkerStyle);
-      this.drawPointShape(center, this.circleRadiusHandleStyle);
+      this.drawPointShape(center, look.circleCenterMarker);
+      this.drawPointShape(center, look.circleRadiusHandle);
     }
   }
 
@@ -365,6 +419,7 @@ export class TentativeRenderer {
    */
   private drawFreehandGeometry(
     tentative: TentativeState,
+    look: Look,
     projectionData: ProjectionData,
     zoom: number,
   ): void {
@@ -377,7 +432,7 @@ export class TentativeRenderer {
     // Draw the line
     this.sdfLineRenderer.draw(
       coords as [number, number][],
-      this.strokeStyle,
+      look.stroke,
       { widthUnit: 'pixels', closed: false },
       zoom,
       projectionData,
