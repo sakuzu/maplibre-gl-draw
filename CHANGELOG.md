@@ -23,6 +23,10 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Added in 3.0.0
 
+- A sketch can have a look of its own: `SketchInput.previewStyle`,
+  `SketchPatch.previewStyle` and `Sketch.previewStyle` take a
+  `Partial<FeatureStyle>` laid over the option `previewStyle` for the shapes
+  the sketch draws, so that two sketches drawn at once can be told apart
 - The images and the tables of the drape are under `rendering.gpuLimitBytes`:
   past it the images off the screen are given up, an image on the screen is
   drawn from a smaller picture until there is room for the whole one, and a
@@ -347,6 +351,9 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- The option `previewStyle` and the look of a sketch read the keys of the
+  fill for the shape being drawn; the fill of a polygon or a circle being
+  drawn was fixed before
 - Every string value of the API is in camelCase: the codes of `DrawError`
   and `GeometryError` (`invalid-input` is `invalidInput`), the names of the
   modes (`draw_point` is `drawPoint`), the reasons a sketch ends
