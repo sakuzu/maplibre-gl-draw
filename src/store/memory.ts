@@ -472,13 +472,20 @@ export class MemoryDocumentStore implements DocumentStore {
     this.#layers.set(layer.id, stored);
     this.#freshLayers.add(layer.id);
     this.#layerOrderIndex.set(layer.id, new Set(layer.items));
-    // An id the application already placed on the stacking order keeps its position
-    if (!this.#layerOrder.includes(layer.id)) this.#layerOrder.push(layer.id);
+    // An id the application already placed on the stacking order keeps its position (the order
+    // is told changed only when the layer is put in it)
+    const previous = this.#layerOrder.includes(layer.id) ? null : [...this.#layerOrder];
+    if (previous) this.#layerOrder.push(layer.id);
     this.#syncGroupLayers(stored);
     // The created entry is the layer as it was created (the stored one may still gain members
     // in the same notification)
     const created = Object.freeze({ ...stored, items: Object.freeze([...stored.items]) });
-    this.#bus.merge({ layers: { created: [created as ObjectLayer] } });
+    this.#bus.merge({
+      layers: {
+        created: [created as ObjectLayer],
+        ...(previous && { orderChanged: { order: [...this.#layerOrder], previous } }),
+      },
+    });
   }
 
   updateLayer(id: string, updates: Partial<ObjectLayer>): void {
@@ -534,10 +541,17 @@ export class MemoryDocumentStore implements DocumentStore {
     this.#layers.delete(id);
     this.#layerOrderIndex.delete(id);
 
+    // The order is told changed when the layer is taken out of it
     const idx = this.#layerOrder.indexOf(id);
+    const previous = idx === -1 ? null : [...this.#layerOrder];
     if (idx !== -1) this.#layerOrder.splice(idx, 1);
 
-    this.#bus.merge({ layers: { deleted: [deleted] } });
+    this.#bus.merge({
+      layers: {
+        deleted: [deleted],
+        ...(previous && { orderChanged: { order: [...this.#layerOrder], previous } }),
+      },
+    });
   }
 
   getLayerOrder(): readonly string[] {

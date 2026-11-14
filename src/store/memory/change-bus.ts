@@ -279,8 +279,8 @@ function rowsOfFolds(folds: ReadonlyMap<string, RowsFold>): RowsChange {
 /**
  * Appends changes destructively to target. Array categories (created/updated/deleted, etc.)
  * are concatenated with push, and single-value categories (selection/mode, etc.) are
- * overwritten. The change of the order of the layers keeps the order before the transaction
- * (`previous` of the first) with the order after it (`order` of the last). The final result matches mergeChanges (the immutable version), but target
+ * overwritten. The change of the order of the layers and of the metadata keeps the value before
+ * the transaction (`previous` of the first) with the value after it (of the last). The final result matches mergeChanges (the immutable version), but target
  * is not recreated every time.
  */
 // If an existing array is given, push into it destructively; otherwise create and return a new
@@ -632,11 +632,17 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
     if (changes.editing.ended) t.ended = appendField(t.ended, changes.editing.ended);
   }
 
-  // mode / metadata (overwritten)
+  // mode (overwritten)
   if (changes.mode) target.mode = changes.mode;
   if (changes.uiStateChanged) target.uiStateChanged = true;
   if (changes.reset === true) target.reset = true;
-  if (changes.metadata) target.metadata = changes.metadata;
+  // metadata: the metadata before the transaction (the first previous) and after it (the last),
+  // as the order of the layers
+  if (changes.metadata) {
+    target.metadata = target.metadata
+      ? { metadata: changes.metadata.metadata, previous: target.metadata.previous }
+      : changes.metadata;
+  }
 
   // rows held as columns (one entry per row): folded in the index, made at the flush
   if (changes.rows) foldRows(index.rows, changes.rows);

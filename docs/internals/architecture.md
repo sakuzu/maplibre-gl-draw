@@ -387,9 +387,11 @@ they are grouped; the transaction does.
 `transact(fn, source)` groups writes: listeners get one notification per
 outermost transaction, or per write made outside one. The accumulation is
 done by `ChangeBus` (`src/store/memory/change-bus.ts`) by appending in
-place. Array categories are concatenated; single-value categories
-(`orderChanged`, `selection`, `mode` and so on) are overwritten by the later
-value.
+place. Array categories are concatenated; single-value categories (`mode`
+and so on) are overwritten by the later value. `orderChanged`, `metadata`
+and `selection` keep the value before the transaction (the `previous` of the
+first) with the value after it (of the last), so that taking the
+transaction back puts what was there before it.
 
 `layers.updated` and `groups.updated` are folded to one entry per id.
 Creating one feature changes `layer.order`, and each entry carries a full

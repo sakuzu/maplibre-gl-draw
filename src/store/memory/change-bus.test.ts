@@ -502,3 +502,20 @@ describe('the stacking order of the layers changed many times in a transaction',
     expect(change.layers?.orderChanged).toEqual(once);
   });
 });
+
+describe('the metadata changed many times in a transaction', () => {
+  it('is told from the metadata before the first change to the metadata after the last one', () => {
+    const change = toldOf((bus) => {
+      bus.merge({ metadata: { metadata: { title: 'b' }, previous: { title: 'a' } } });
+      bus.merge({ metadata: { metadata: { title: 'c' }, previous: { title: 'b' } } });
+      bus.merge({ metadata: { metadata: { title: 'd' }, previous: { title: 'c' } } });
+    });
+    expect(change.metadata).toEqual({ metadata: { title: 'd' }, previous: { title: 'a' } });
+  });
+
+  it('is told as it came when it changed once', () => {
+    const once = { metadata: { title: 'b' }, previous: { title: 'a' } };
+    const change = toldOf((bus) => bus.merge({ metadata: once }));
+    expect(change.metadata).toEqual(once);
+  });
+});

@@ -334,7 +334,18 @@ function applyInverse(store: Store, inverse: Inverse): void {
   // items going back left empty, and so deleted, is created again as it was before the commit
   // where its deletion is taken back (in a Store that keeps the keys of the order, with the key it
   // had: it is not moved either)
+  // A row put back in such a group after the items going back left it empty (a row created and
+  // put in the group: it goes back to where it was created, then into the group) finds it created
+  // again the same way first
   const groupsBack = new Set(inverse.groupsDeleted.map((group) => group.id));
+  const restorePlaces = (before: RowValues): void => {
+    for (const parent of before.fields.get('parent') ?? []) {
+      if (typeof parent !== 'string' || store.getGroup(parent) || store.getLayer(parent)) continue;
+      const group = inverse.groupsBefore.get(parent);
+      if (group) createGroupAgain(store, group);
+    }
+    store.restoreRows(before);
+  };
   for (let i = inverse.moves.length - 1; i >= 0; i--) {
     const move = inverse.moves[i];
     if (move.kind === 'item' && move.to === null && !store.getGroup(move.itemId)) {
@@ -348,11 +359,11 @@ function applyInverse(store: Store, inverse: Inverse): void {
       continue;
     }
     if (move.kind === 'rows') {
-      if (tables) store.restoreRows(move.before);
+      if (tables) restorePlaces(move.before);
       continue;
     }
     if (move.before && tables) {
-      store.restoreRows(move.before);
+      restorePlaces(move.before);
       continue;
     }
     const from = move.from;
