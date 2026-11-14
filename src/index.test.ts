@@ -356,7 +356,26 @@ const KASANE = [
 ];
 
 /** The entry of who plugs a storage or an extension into the library (follows semver) */
-const EXTEND = ['RowSprite', 'RowSpriteScaleStop', 'RowSpriteSource'];
+const EXTEND = [
+  'applyOperations',
+  'Batch',
+  'BatchHeader',
+  'createObservable',
+  'createPartCollector',
+  'createStoredDocument',
+  'FeatureRecord',
+  'FileRecord',
+  'GroupRecord',
+  'LayerRecord',
+  'PartCollector',
+  'RowSprite',
+  'RowSpriteScaleStop',
+  'RowSpriteSource',
+  'StoredDocument',
+  'UnsetKeys',
+  'ValueBatch',
+  'ValueOperation',
+];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
 const WEBGL = [
