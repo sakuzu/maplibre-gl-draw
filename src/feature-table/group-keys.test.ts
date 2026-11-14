@@ -110,7 +110,7 @@ describe('the key of the order of a group of features', () => {
     const read: Array<string | undefined> = [];
     store.subscribe((change) => {
       for (const group of change.groups?.created ?? []) {
-        read.push(tables.getGroupKey(tables.findGroup(group.id) ?? -1));
+        read.push(tables.getGroupKey(tables.getGroupRef(group.id) ?? -1));
       }
     });
     store.createGroup({
@@ -123,7 +123,7 @@ describe('the key of the order of a group of features', () => {
     });
     // The group takes the place of its first member
     expect(read).toEqual([key(2)]);
-    expect(tables.getGroupKey(tables.findGroup('g') ?? -1)).toBe(key(2));
+    expect(tables.getGroupKey(tables.getGroupRef('g') ?? -1)).toBe(key(2));
   });
 
   it('is the new key in the notification of a move, while the rows are read in the order before', () => {
@@ -137,7 +137,7 @@ describe('the key of the order of a group of features', () => {
       locked: false,
     });
     draw();
-    const handle = tables.findGroup('g') as number;
+    const handle = tables.getGroupRef('g') as number;
     const before = tables.getGroupKey(handle) as string;
     expect(items('a')).toEqual(['r0', 'r1', 'g', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
     const read: Array<{ key: string | undefined; drawn: string | undefined; items: unknown[] }> =
@@ -181,7 +181,7 @@ describe('the key of the order of a group of features', () => {
       locked: false,
     });
     draw();
-    const handle = tables.findGroup('g') as number;
+    const handle = tables.getGroupRef('g') as number;
     const read: Array<string | undefined> = [];
     store.subscribe((change) => {
       if (change.order) read.push(tables.getGroupKey(handle));
@@ -209,7 +209,7 @@ describe('the key of the order of a group of features', () => {
       locked: false,
     });
     draw();
-    const handle = tables.findGroup('g') as number;
+    const handle = tables.getGroupRef('g') as number;
     const before = tables.getGroupKey(handle);
     const read: Array<{ key: string | undefined; layerId: string | undefined }> = [];
     let updated: string | undefined;
@@ -250,7 +250,7 @@ describe('the order written, while the drawing holds the reorder of a group', ()
       locked: false,
     });
     setupOf.draw();
-    return { ...setupOf, handle: setupOf.tables.findGroup('g') as number };
+    return { ...setupOf, handle: setupOf.tables.getGroupRef('g') as number };
   }
 
   it('puts an item just above a group moved to the front, where its new key puts it', () => {
@@ -397,7 +397,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     });
     setupOf.draw();
     setupOf.store.moveItem('g', { layerId: 'a', above: null });
-    const handle = setupOf.tables.findGroup('g') as number;
+    const handle = setupOf.tables.getGroupRef('g') as number;
     const written = setupOf.tables.getGroupKey(handle) as string;
     expect(setupOf.internals.writtenOrders.get(handle)).toBe(written);
     // After the last row in the order drawn, and around the new key of the group
@@ -571,7 +571,7 @@ describe('the groups written through the writer of the Store of rows', () => {
       locked: false,
     });
     draw();
-    const handle = tables.findGroup('g') as number;
+    const handle = tables.getGroupRef('g') as number;
     const members = ['r2', 'r3'].map((id) => tables.getRowRef(id) as number);
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
@@ -620,7 +620,7 @@ describe('the groups written through the writer of the Store of rows', () => {
       visible: true,
       locked: false,
     });
-    const handle = tables.findGroup('g') as number;
+    const handle = tables.getGroupRef('g') as number;
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
     store.transact(() => {
@@ -684,8 +684,8 @@ describe('the groups written through the writer of the Store of rows', () => {
       visible: true,
       locked: false,
     });
-    expect(tables.findGroup('near')).toBeGreaterThan(40);
-    expect(tables.findGroup('far')).toBe(40);
+    expect(tables.getGroupRef('near')).toBeGreaterThan(40);
+    expect(tables.getGroupRef('far')).toBe(40);
     notified.length = 0;
     store.transact(() => {
       writer.writeGroups({

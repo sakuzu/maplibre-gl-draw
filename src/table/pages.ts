@@ -33,7 +33,7 @@ export function createPageBuilder(options: PageBuilderOptions = {}): FeaturePage
 /**
  * Merges rows of pages into new pages, in the order of the layer
  *
- * @returns The new pages (none for no row); their handles are those of the rows
+ * @returns The new pages (none for no row); their references are those of the rows
  * @throws `DrawError` with the code `invalidInput` when a source holds styles not numbered yet,
  *   or `notFound` when a row names a group of features the keys do not give
  */

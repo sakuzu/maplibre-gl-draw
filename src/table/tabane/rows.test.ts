@@ -563,7 +563,7 @@ describe('a page that writes the key of each row', () => {
     });
     internals.flushVersions();
     // The group takes the key of its first member
-    const group = tables.findGroup('g') as number;
+    const group = tables.getGroupRef('g') as number;
     expect(tables.getGroupKey(group)).toBe('G1');
     expect(items()).toEqual([id(1), 'g', id(4)]);
     // A key before the key of the group, the same key (then the ids decide) and a key after it

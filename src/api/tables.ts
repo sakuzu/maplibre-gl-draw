@@ -65,10 +65,10 @@ export type {
 };
 
 /**
- * The handle of a row: a number the document gives a row the first time it sees its id, and
+ * The reference of a row: a number the document gives a row the first time it sees its id, and
  * never changes while the document is open, whatever group, layer or place the row moves to.
  *
- * A host or an extension that keeps a value per row outside the row keys it by the handle, so
+ * A host or an extension that keeps a value per row outside the row keys it by the reference, so
  * the value stays with its row when the rows are built again or reordered.
  */
 export type RowRef = number;
@@ -88,7 +88,7 @@ export interface LayerTableView {
    */
   readonly rowCountWithDeleted: number;
   /**
-   * The handles of the rows drawn whose box as drawn meets a box `[west, south, east, north]`, in
+   * The references of the rows drawn whose box as drawn meets a box `[west, south, east, north]`, in
    * the order of the layer (a hidden row is not drawn). The box as drawn is the box of the
    * positions of a row, or for a type whose extent is worked out from its feature (an Image, a
    * Circle, a type of an extension that gives its `bbox`), the box it covers
@@ -100,24 +100,24 @@ export interface LayerTableView {
    * the box as drawn of a type whose extent is worked out from its feature, which
    * {@link LayerTableView.listDrawnRows} meets
    */
-  getRowBBox(handle: RowRef): BBox | null;
+  getRowBBox(row: RowRef): BBox | null;
   /** The type of a row (null for a row not in this layer) */
-  getRowType(handle: RowRef): FeatureType | null;
+  getRowType(row: RowRef): FeatureType | null;
   /** The position of a row whose geometry is a Point, `[x, y]` (null for any other row) */
-  getRowPoint(handle: RowRef): Position | null;
+  getRowPoint(row: RowRef): Position | null;
   /** The value of an attribute of a row (undefined when it does not hold the key) */
-  getRowValue(handle: RowRef, key: string): unknown;
+  getRowValue(row: RowRef, key: string): unknown;
   /**
    * The style of a row (undefined for a row not in this layer): the object the table of styles
    * shares between the rows of the same style, frozen, read without a copy
    */
-  getRowStyle(handle: RowRef): Readonly<FeatureStyle> | undefined;
+  getRowStyle(row: RowRef): Readonly<FeatureStyle> | undefined;
   /**
    * A row as a feature, which is not to be changed: the same object is given again while the row
    * is not written, a few rows at a time, so read the values above for what is read often
    * (undefined for a deleted row or one not in this layer)
    */
-  getRow(handle: RowRef): Feature | undefined;
+  getRow(row: RowRef): Feature | undefined;
   /** Changes whenever the rows drawn may have changed (added, hidden, shown) */
   getDrawnRowsRevision(): number;
   /**
@@ -133,17 +133,17 @@ export interface LayerTableView {
   /** `count` items from the `start`-th one, in the order of the layer */
   listItems(start: number, count: number): ItemRefs;
   /** The number of the rows of a group of features in this layer (deleted rows left out) */
-  countGroupMembers(groupHandle: number): number;
+  countGroupMembers(group: number): number;
   /**
-   * The handles of `count` rows of a group of features from the `start`-th one, in the order of
+   * The references of `count` rows of a group of features from the `start`-th one, in the order of
    * the layer (they follow each other at the place of the group)
    */
-  listGroupMembers(groupHandle: number, start: number, count: number): Int32Array;
+  listGroupMembers(group: number, start: number, count: number): Int32Array;
 }
 
-/** An item of {@link ItemRefs} that is a row (its handle is a {@link RowRef}) */
+/** An item of {@link ItemRefs} that is a row (its reference is a {@link RowRef}) */
 export const ITEM_ROW = 0;
-/** An item of {@link ItemRefs} that is a group of features (its handle is the handle of the group) */
+/** An item of {@link ItemRefs} that is a group of features (its reference is the reference of the group) */
 export const ITEM_GROUP = 1;
 
 /**
@@ -162,15 +162,15 @@ export interface TableScanOptions {
    * less when a box is given
    */
   readonly order?: 'layer' | 'any';
-  /** The number of handles read at a time (1,024 when omitted) */
+  /** The number of references read at a time (1,024 when omitted) */
   readonly batchSize?: number;
 }
 
 /**
- * Reads the handles of rows a batch at a time.
+ * Reads the references of rows a batch at a time.
  */
 export interface RowCursor {
-  /** The handles of the next rows (null once every row is read) */
+  /** The references of the next rows (null once every row is read) */
   next(): Int32Array | null;
 }
 
@@ -200,7 +200,7 @@ export interface RowPlacement {
 /**
  * A write of rows of this client, given to the implementation of the Store (`Store.applyRows`):
  * the values of rows there are, new rows, the place rows go to, and the values the rows had
- * before. The implementation makes the keys of the order and the handles of the new rows, and
+ * before. The implementation makes the keys of the order and the references of the new rows, and
  * writes the rows with the writer of its tables; the values before go with the notification
  * (`DocumentChange.previousValues`).
  */
@@ -322,17 +322,17 @@ export function rowValuesOf(values: FeatureValues): RowValues {
 export interface FeatureTables {
   /** The rows of a layer (undefined for a layer that holds no rows) */
   get(layerId: string): LayerTableView | undefined;
-  /** The handle of the row of an id (undefined for an unknown or deleted row) */
+  /** The reference of the row of an id (undefined for an unknown or deleted row) */
   getRowRef(id: string): RowRef | undefined;
-  /** The id of the row of a handle (undefined for an unknown handle) */
-  getRowId(handle: RowRef): string | undefined;
+  /** The id of the row of a reference (undefined for an unknown reference) */
+  getRowId(row: RowRef): string | undefined;
   /**
-   * The id of the group of features of a handle, as {@link ItemRefs} and
-   * {@link LayerTableView.listGroupMembers} name it (undefined for an unknown handle)
+   * The id of the group of features of a reference, as {@link ItemRefs} and
+   * {@link LayerTableView.listGroupMembers} name it (undefined for an unknown reference)
    */
-  getGroupId(groupHandle: number): string | undefined;
-  /** The handle of a group of features by its id (undefined for an unknown group) */
-  findGroup(id: string): number | undefined;
+  getGroupId(group: number): string | undefined;
+  /** The reference of a group of features by its id (undefined for an unknown group) */
+  getGroupRef(id: string): number | undefined;
   /**
    * The key of the order of a group of features: where the group stands among the items of its
    * layer (the key of the order of a row, a fractional index, compared byte by byte; its members
@@ -341,12 +341,12 @@ export interface FeatureTables {
    * before until then. A group is answered whether its layer holds rows or not; the layer of the
    * group is its `layerId` (`Store.getGroup`).
    *
-   * @param groupHandle - The handle of the group ({@link FeatureTables.findGroup})
-   * @returns The key (undefined for an unknown handle)
+   * @param group - The reference of the group ({@link FeatureTables.getGroupRef})
+   * @returns The key (undefined for an unknown reference)
    */
-  getGroupKey(groupHandle: number): string | undefined;
+  getGroupKey(group: number): string | undefined;
   /**
-   * Reads the handles of the rows of layers, a batch at a time (the deleted rows left out); read
+   * Reads the references of the rows of layers, a batch at a time (the deleted rows left out); read
    * their values with {@link LayerTableView}.
    */
   scan(options?: TableScanOptions): RowCursor;
@@ -368,18 +368,18 @@ export interface FeatureTables {
  */
 export interface FeatureTablesWriter {
   /**
-   * The handle of the row of an id, deleted rows included (with `deleted`), until the id is
+   * The reference of the row of an id, deleted rows included (with `deleted`), until the id is
    * forgotten (undefined for an id never seen, or forgotten)
    */
-  lookup(id: string): { readonly handle: RowRef; readonly deleted: boolean } | undefined;
+  lookup(id: string): { readonly row: RowRef; readonly deleted: boolean } | undefined;
   /** A new token to keep the rows and groups a write deletes (`RowApplyOptions.restoreToken`) */
   createRestoreToken(): RestoreToken;
   /**
    * Forgets the ids of deleted rows that nothing keeps any more: they leave the table of the ids
-   * (an id seen again is a new row), and their handles are given again once their rows are gone.
+   * (an id seen again is a new row), and their references are given again once their rows are gone.
    * A row that is not deleted, or is kept, is left as it is
    */
-  forget(handles: Int32Array): void;
+  forget(rows: Int32Array): void;
   /**
    * The reference of the row of each id, given to the ids not seen yet.
    *
@@ -391,7 +391,7 @@ export interface FeatureTablesWriter {
    * the Store recorded them.
    *
    * Every page is checked before any is added. Then each is put at its place in the order of
-   * the layer: its rows that have no handle yet (-1) get one (from the hashes of `idHashes`,
+   * the layer: its rows that have no reference yet (-1) get one (from the hashes of `idHashes`,
    * computed where the page was built), and its styles built in a Worker are numbered in the
    * table of styles. The pages are kept as they are: do not change their arrays afterwards.
    * The rows are told as created, as a write of `writeRows` tells them (`DocumentChange.rows`, in the
@@ -428,7 +428,7 @@ export interface FeatureTablesWriter {
    * A row whose change moves it in the order of its layer or to another layer (`type`, `parent`,
    * `key`, or an attribute the cutting of the rows into chunks reads, the created zoom) goes to the
    * rows of its layer changed since their pages were built (the delta), and so does a new row:
-   * a handle that names no row, with at least its `type`, `parent`, `geometry` and `key` (the other
+   * a reference that names no row, with at least its `type`, `parent`, `geometry` and `key` (the other
    * fields take the defaults of a feature). The
    * readers read the row there at once, and the drawing draws it at its place in the order; the
    * rebuilt page its key falls in takes it, over the draws. New rows whose keys
@@ -441,7 +441,7 @@ export interface FeatureTablesWriter {
    * than the dimensions is refused rather than cut.
    *
    * @returns The rows written, by layer
-   * @throws `DrawError`: `notFound` when a handle names no row; `invalidInput` when a field a
+   * @throws `DrawError`: `notFound` when a reference names no row; `invalidInput` when a field a
    *   new row needs is missing, when a parent is not an id, when a row is moved without
    *   a geometry to a layer of dimensions that would read its positions otherwise (only `xy` into
    *   any, and `xyz` into `xyzm`, keep them), or when a value cannot be held (nothing is written
@@ -452,7 +452,7 @@ export interface FeatureTablesWriter {
   /**
    * Writes values of groups of features, after the implementation of the Store recorded them.
    *
-   * A new group (a handle no group has) needs its `id`, `key` and `parent` (its layer); its `name`
+   * A new group (a reference no group has) needs its `id`, `key` and `parent` (its layer); its `name`
    * is held by the Store, not by the tables (the Store of rows of `createTableStore` creates, changes and
    * deletes its groups as the values say, and notifies them). A new key of the order of a group
    * moves its members, which follow each other at the place of the group: the pages are cut at
@@ -461,8 +461,8 @@ export interface FeatureTablesWriter {
    * given another `parent` is in that layer from then on, and its members go there with it (told
    * as rows written). A group `hidden` or shown hides or shows its members. A group deleted is
    * taken out once no row names it and no token keeps it: deleted with a token
-   * (`RowApplyOptions.restoreToken`, added to the notification), it keeps its handle, its key and
-   * its layer until the token is let go of, so that writing it again with its handle puts it back
+   * (`RowApplyOptions.restoreToken`, added to the notification), it keeps its reference, its key and
+   * its layer until the token is let go of, so that writing it again with its reference puts it back
    * where it was.
    *
    * @throws `DrawError` with the code `invalidInput` when a new group misses its id, its key or
@@ -479,9 +479,9 @@ export interface FeatureTablesWriter {
    * the Worker are dropped (what the Worker gives back is not taken in), the pages queued and the
    * new rows not built yet go, and so do the rows and the groups of features the deletions kept
    * (their tokens keep nothing any more). The groups of features stay, with the keys of their
-   * order, and the layers keep the dimensions of their coordinates. An id keeps its handle until
-   * the Store forgets it (`forget`): a row of an id seen before gets the same handle when its
-   * page is added, so that what is kept by the handles (the values of the rows written before,
+   * order, and the layers keep the dimensions of their coordinates. An id keeps its reference until
+   * the Store forgets it (`forget`): a row of an id seen before gets the same reference when its
+   * page is added, so that what is kept by the references (the values of the rows written before,
    * the rows hidden on this client) goes on; the Store forgets the ids that do not come back.
    *
    * It is told as a replacement of the document (`DocumentChange.reset`). The Store of core lets
@@ -504,7 +504,7 @@ export interface FeatureTablesOptions {
    * Tells the Store the deleted rows nothing keeps any more (a token let go of): it forgets them
    * (`FeatureTablesWriter.forget`) once it no longer needs their ids
    */
-  readonly onRelease?: (handles: Int32Array) => void;
+  readonly onRelease?: (rows: Int32Array) => void;
   /**
    * The dimensions of the coordinates of the rows of a table, read once, when the table first
    * holds rows (`xy` for every table when omitted): `xy`, `xyz`, `xym` or `xyzm`. The rows of a

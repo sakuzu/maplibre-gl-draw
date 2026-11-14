@@ -255,7 +255,7 @@ export function insertGroup(
   const kept =
     heldAsRows(store, layerId) &&
     store.getGroup(group.id) === undefined &&
-    store.tables?.findGroup(group.id) !== undefined;
+    store.tables?.getGroupRef(group.id) !== undefined;
   // The last of members listed in stacking order is the frontmost
   const listed = group.kind === 'table' ? [] : group.featureIds;
   const frontmost =

@@ -95,7 +95,7 @@ function rowsBack(
   ids: readonly string[],
 ): ReturnType<ReturnType<typeof createPageBuilder>['finish']> {
   const { tables } = setupOf;
-  const group = tables.findGroup('g') as number;
+  const group = tables.getGroupRef('g') as number;
   const groups: GroupEntry[] = [
     { group: group, id: 'g', key: tables.getGroupKey(group) as string },
   ];
@@ -128,8 +128,8 @@ describe('every row taken out of the tables', () => {
     expect(store.getFeature('a1')).toBeUndefined();
     const change = notified[notified.length - 1];
     expect(change.reset).toBe(true);
-    // The id keeps its handle, its row gone
-    expect(writer.lookup('a1')).toEqual({ handle: a1, deleted: true });
+    // The id keeps its reference, its row gone
+    expect(writer.lookup('a1')).toEqual({ row: a1, deleted: true });
     // The features selected stay selected, the groups and the layers stay
     expect(store.getSelection().ids).toEqual(['a1']);
     expect(store.getGroup('g')).toBeDefined();

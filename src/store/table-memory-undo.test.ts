@@ -72,7 +72,7 @@ describe('the deletions of this client kept', () => {
     store.deleteFeature('p2');
     const retain = notified[0].restoreToken as RestoreToken;
     expect(retain).toBeDefined();
-    expect(writer.lookup('p2')).toEqual({ handle, deleted: true });
+    expect(writer.lookup('p2')).toEqual({ row: handle, deleted: true });
     internals?.flushVersions();
     expect(rowsOf(tables)).toContain('p2');
     // Written not deleted, it is back where it was
@@ -250,14 +250,14 @@ describe('the rows deleted from elsewhere', () => {
     store.transact(() => store.deleteLayer('other'), 'remote');
     expect(notified[notified.length - 1].restoreToken).toBeUndefined();
     // Nothing keeps them: their ids can be forgotten
-    const handles = ['p1', 'q'].map((id) => writer.lookup(id)?.handle as number);
+    const handles = ['p1', 'q'].map((id) => writer.lookup(id)?.row as number);
     writer.forget(Int32Array.from(handles));
     expect(writer.lookup('p1')).toBeUndefined();
     expect(writer.lookup('q')).toBeUndefined();
     // A deletion of this client is kept
     store.deleteFeature('p2');
     expect(notified[notified.length - 1].restoreToken).toBeDefined();
-    writer.forget(Int32Array.of(writer.lookup('p2')?.handle as number));
+    writer.forget(Int32Array.of(writer.lookup('p2')?.row as number));
     expect(writer.lookup('p2')).toMatchObject({ deleted: true });
   });
 

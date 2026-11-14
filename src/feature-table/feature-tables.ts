@@ -181,7 +181,7 @@ export function createTables(options: TablesInternalOptions): {
         throw tablesError(error);
       }
     },
-    findGroup: (id) => {
+    getGroupRef: (id) => {
       try {
         gate();
         const group = store.groups.handleOfId(id);

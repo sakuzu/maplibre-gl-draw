@@ -374,6 +374,9 @@ writing it. Its changes are listed after those of 3.0.0.
 - The group of `GroupEntry` of `/kasane` is `group` (was `handle`)
 - `FeatureTablesWriter.allocateHandles` of `/kasane` is `allocateRowRefs`
 - `LayerTableView.listRowHandles` of `/kasane` is `listRowRefs`
+- `FeatureTablesWriter.lookup` of `/kasane` gives the reference of the row
+  as `row` (was `handle`)
+- `FeatureTables.findGroup` of `/kasane` is `getGroupRef`
 - The keys of the values of a style that changed in `LayerRowsChange` of
   `/kasane` are `changedKeys` (was `styleKeys`)
 - `selection.get()` is `selection.value` (`SelectionValue`): the type, the

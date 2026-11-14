@@ -333,7 +333,7 @@ export function createFeatureTablesWriter(
     lookup: (id) => {
       try {
         const found = tables.lookup(id);
-        return found && { handle: found.row, deleted: found.deleted };
+        return found && { row: found.row, deleted: found.deleted };
       } catch (error) {
         throw writerError(error);
       }

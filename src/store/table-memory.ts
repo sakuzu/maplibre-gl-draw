@@ -1506,7 +1506,7 @@ export class TableContractStore implements StoreContract {
     // A row hidden on this client is hidden in its state, and the rows of a group by the group
     const handle = this.tables.getRowRef(id);
     if (handle !== undefined) this.#internals.states.setHidden(Int32Array.of(handle), hidden);
-    else if (this.tables.findGroup(id) !== undefined || !hidden) {
+    else if (this.tables.getGroupRef(id) !== undefined || !hidden) {
       this.#internals.states.setGroupHidden(id, hidden);
     }
   }
@@ -1684,7 +1684,7 @@ export class TableContractStore implements StoreContract {
     }
     for (const feature of changes.features?.deleted ?? []) {
       const found = this.writer.lookup(feature.id);
-      if (found?.deleted) this.#remoteDeleted.push(found.handle);
+      if (found?.deleted) this.#remoteDeleted.push(found.row);
     }
     const excess = this.#remoteDeleted.length - REMOTE_DELETED_KEPT;
     if (excess <= 0) return;

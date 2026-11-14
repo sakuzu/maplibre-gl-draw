@@ -114,7 +114,7 @@ function tableItemIds(tables: FeatureTables | undefined, layerId: string): strin
 /** The ids of the members of a group of a layer held as rows, in their order */
 function tableMemberIds(tables: FeatureTables | undefined, group: Group): string[] {
   const view = tables?.get(group.layerId);
-  const handle = tables?.findGroup(group.id);
+  const handle = tables?.getGroupRef(group.id);
   if (!tables || !view || handle === undefined) return [];
   const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
   return Array.from(members, (row) => tables.getRowId(row) as string);
@@ -150,7 +150,8 @@ export function rowMatcher(
   const tables = store.tables;
   const internals = featureTablesInternals(tables);
   if (!tables || !internals) return null;
-  const groupHandle = filter.groupId !== undefined ? (tables.findGroup(filter.groupId) ?? -2) : -1;
+  const groupHandle =
+    filter.groupId !== undefined ? (tables.getGroupRef(filter.groupId) ?? -2) : -1;
   if (groupHandle === -2) return null;
   const layerShown = new Map<string, boolean>();
   return (handle) => {

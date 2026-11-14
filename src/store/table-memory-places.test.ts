@@ -73,7 +73,7 @@ describe('a group moved to a layer of fewer dimensions', () => {
     );
     const tables = store.tables;
     if (!tables) throw new Error('a Store of rows has tables');
-    const handle = tables.findGroup('g') as number;
+    const handle = tables.getGroupRef('g') as number;
     expect(() => store.moveItems?.(['g'], { layerId: 'a', below: null })).toThrow(
       /coordinates of xyz/,
     );

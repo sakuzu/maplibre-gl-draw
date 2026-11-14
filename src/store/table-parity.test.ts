@@ -706,7 +706,7 @@ const CASES: readonly Case[] = [
       settle(tables);
       step('the versions after it');
       const known = writer.lookup('f2');
-      writer.forget(Int32Array.of(known?.handle ?? -1));
+      writer.forget(Int32Array.of(known?.row ?? -1));
       step(`forgotten (${known?.deleted})`);
     },
   },

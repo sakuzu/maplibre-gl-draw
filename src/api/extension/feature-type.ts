@@ -94,7 +94,7 @@ export interface FeatureTypeRows {
    * the type to ask `appliesTo` whenever the rows are classified for the drawing, so a type of many
    * rows should have it.
    */
-  appliesTo(view: LayerTableView, handle: RowRef): boolean;
+  appliesTo(view: LayerTableView, row: RowRef): boolean;
 }
 
 /**

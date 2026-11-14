@@ -13,7 +13,7 @@ import type { Value } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 
 /**
- * The rows of one layer a change created, updated or deleted, by handle (`LayerRowsChange`): the
+ * The rows of one layer a change created, updated or deleted, by reference (`LayerRowsChange`): the
  * tables declare it, a layer being a table
  */
 export type { RowField, TableRowsChange as LayerRowsChange };

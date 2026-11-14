@@ -96,8 +96,8 @@ export function copyTableStore(
       const { kind: _kind, ...fields } = group as Group & { featureIds?: unknown };
       delete (fields as { featureIds?: unknown }).featureIds;
       store.createGroup({ ...fields, kind: 'table' } as Group);
-      const sourceHandle = tables.findGroup(group.id);
-      const targetHandle = store.tables?.findGroup(group.id);
+      const sourceHandle = tables.getGroupRef(group.id);
+      const targetHandle = store.tables?.getGroupRef(group.id);
       const key = sourceHandle === undefined ? undefined : groupOrderOf(sourceHandle);
       if (key !== undefined && targetHandle !== undefined) {
         writer.writeGroups({
@@ -137,8 +137,8 @@ export function copyTableStore(
   const groupEntries = new Map<string, GroupEntry[]>();
   const targetGroupOf = new Map<number, number>();
   for (const group of groups) {
-    const sourceHandle = tables.findGroup(group.id);
-    const targetHandle = store.tables?.findGroup(group.id);
+    const sourceHandle = tables.getGroupRef(group.id);
+    const targetHandle = store.tables?.getGroupRef(group.id);
     const key = sourceHandle === undefined ? undefined : groupOrderOf(sourceHandle);
     if (sourceHandle === undefined || targetHandle === undefined || key === undefined) continue;
     targetGroupOf.set(sourceHandle, targetHandle);

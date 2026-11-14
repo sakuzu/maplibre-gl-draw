@@ -87,13 +87,13 @@ export function keepSelectedRows(value: SelectionValue, rows: TableSelection): v
 }
 
 /**
- * The handles of the rows of features selected in bulk, from the value of their selection
+ * The references of the rows of features selected in bulk, from the value of their selection
  * (`draw.selection.value` whose `ids` is `null`, the `bulk` of `drag.started`): what a plugin
  * reads them by, without their IDs. Empty for a value of features listed by their IDs, or one
  * the instance did not give
  *
  * @param selection - The value of the selection of the features selected in bulk
- * @returns The handles of their rows, ascending
+ * @returns The references of their rows, ascending
  * @experimental
  */
 export function listSelectedRows(selection: PublicSelectionValue): Int32Array {

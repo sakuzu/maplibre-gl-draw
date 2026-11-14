@@ -139,7 +139,7 @@ export interface CompanionProviderRows {
    * the feature of the row (the two must agree). Without it, a feature is made from each row to
    * ask `has` whenever the rows are classified for the drawing, so a provider should have it.
    */
-  has(view: LayerTableView, handle: RowRef): boolean;
+  has(view: LayerTableView, row: RowRef): boolean;
   /**
    * The keys of `properties` the answers of `has` and `CompanionProvider.has` read, so that a
    * write of other attributes of a row is drawn without asking them again. Without it, they are

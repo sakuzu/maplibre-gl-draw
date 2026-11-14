@@ -98,7 +98,7 @@ export function groupMemberIds(store: Store, group: Group, range: Range): string
   if (group.kind !== 'table') return slice(group.featureIds, range);
   const tables = store.tables;
   const view = tables?.get(group.layerId);
-  const handle = tables?.findGroup(group.id);
+  const handle = tables?.getGroupRef(group.id);
   if (!tables || !view || handle === undefined) return [];
   const count = range.limit ?? Math.max(0, view.countGroupMembers(handle) - range.offset);
   const members = view.listGroupMembers(handle, range.offset, count);

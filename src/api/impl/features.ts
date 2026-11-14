@@ -162,7 +162,7 @@ export function createFeatures(deps: ResourceDeps): FeatureResource {
     if (groupId !== undefined) {
       const group = typeof groupId === 'string' ? store.getGroup(groupId) : undefined;
       if (!group || (layerId !== undefined && group.layerId !== layerId)) return 0;
-      const handle = tables.findGroup(group.id);
+      const handle = tables.getGroupRef(group.id);
       const view = tables.get(group.layerId);
       return handle === undefined || !view ? 0 : view.countGroupMembers(handle);
     }
