@@ -17,8 +17,11 @@
 import {
   type CoordinateDimensions,
   readBlockHeader,
+  strideOf,
   type TabaneBlock,
   type TabaneCache,
+  type TabaneRow,
+  type TabaneShape,
   writeBlocks,
 } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
@@ -90,6 +93,28 @@ function dimensionsOf(rows: readonly TabaneFeatureRow[]): CoordinateDimensions {
   return longest >= 4 ? 'xyzm' : longest === 3 ? 'xyz' : 'xy';
 }
 
+/**
+ * A row in the dimensions of its layer: Tabane takes the dimensions of each row from its user, and
+ * a position of fewer values gets NaN for the others, at its end
+ */
+function inDimensions(row: TabaneRow, dimensions: CoordinateDimensions): TabaneRow {
+  const shape = row.values?.geometry as TabaneShape | undefined;
+  if (dimensions === 'xy' || shape === undefined) return row;
+  const stride = strideOf(dimensions);
+  const pad = (v: unknown, level: number): unknown => {
+    if (!Array.isArray(v)) return v;
+    if (level < shape.depth) return v.map((item) => pad(item, level + 1));
+    if (v.length >= stride) return v;
+    return [...v, ...new Array(stride - v.length).fill(Number.NaN)];
+  };
+  const points = pad(shape.points, 0);
+  return {
+    ...row,
+    dimensions,
+    values: { ...row.values, geometry: { ...shape, points: points as TabaneShape['points'] } },
+  };
+}
+
 /** `writeBlocks` of `@sakuzu/tabane`, its errors those of the library */
 function writeBlocksWithDrawErrors(input: Parameters<typeof writeBlocks>[0]): TabaneBlock[] {
   try {
@@ -124,9 +149,8 @@ export function writeTabaneFeatureBlocks(input: TabaneFeatureBlocksInput): Taban
   const blocks = writeBlocksWithDrawErrors({
     parent: input.parent,
     head: input.head,
-    dimensions,
     columns: TABANE_FEATURE_COLUMNS,
-    rows: rows.map(tabaneRowOf),
+    rows: rows.map((row) => inDimensions(tabaneRowOf(row), dimensions)),
     ...(input.targetRows !== undefined && { targetRows: input.targetRows }),
     ...(input.targetVertices !== undefined && { targetVertices: input.targetVertices }),
     ...(input.targetBytes !== undefined && { targetBytes: input.targetBytes }),
