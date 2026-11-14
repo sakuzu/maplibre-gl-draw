@@ -163,11 +163,11 @@ export interface TableScanOptions {
    */
   readonly order?: 'layer' | 'any';
   /** The number of references read at a time (1,024 when omitted) */
-  readonly batchSize?: number;
+  readonly rowsPerRead?: number;
 }
 
 /**
- * Reads the references of rows a batch at a time.
+ * Reads the references of rows some at a time.
  */
 export interface RowCursor {
   /** The references of the next rows (null once every row is read) */
@@ -346,7 +346,7 @@ export interface FeatureTables {
    */
   getGroupKey(group: number): string | undefined;
   /**
-   * Reads the references of the rows of layers, a batch at a time (the deleted rows left out); read
+   * Reads the references of the rows of layers, some at a time (the deleted rows left out); read
    * their values with {@link LayerTableView}.
    */
   scan(options?: TableScanOptions): RowCursor;

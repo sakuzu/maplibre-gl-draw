@@ -68,7 +68,7 @@ describe('scan', () => {
     const { tables, writer, internals } = tablesOfFeatures('layer', points(50), 8);
     const ids = (handles: number[]) => handles.map((h) => tables.getRowId(h));
     const batches: number[] = [];
-    const cursor = tables.scan({ layerIds: ['layer'], batchSize: 7 });
+    const cursor = tables.scan({ layerIds: ['layer'], rowsPerRead: 7 });
     for (let batch = cursor.next(); batch; batch = cursor.next()) batches.push(batch.length);
     expect(batches.slice(0, -1).every((n) => n === 7)).toBe(true);
     expect(ids(readAll(tables.scan()))).toEqual(points(50).map((f) => f.id));

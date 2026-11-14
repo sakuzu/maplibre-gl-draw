@@ -237,7 +237,7 @@ function tableScanOf(options: TableScanOptions): TablesScanOptions {
     tableIds: options.layerIds,
     bbox: options.bbox,
     order: options.order === 'any' ? 'any' : 'table',
-    batchSize: options.batchSize,
+    rowsPerRead: options.rowsPerRead,
   };
 }
 

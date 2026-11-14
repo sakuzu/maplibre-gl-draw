@@ -1002,7 +1002,7 @@ export function expectTablesMatch(
     expect(view.rowCount).toBe(rows.filter((row) => !row.deleted).length);
     // The rows that are not deleted, a batch at a time
     const scanned: number[] = [];
-    const cursor = tables.scan({ layerIds: [layerId], batchSize: 7 });
+    const cursor = tables.scan({ layerIds: [layerId], rowsPerRead: 7 });
     for (let batch = cursor.next(); batch; batch = cursor.next()) scanned.push(...batch);
     const live = rows.filter((row) => !row.deleted);
     expect(idsOf(scanned)).toEqual(live.map((row) => row.id));

@@ -504,7 +504,7 @@ function record(store: Store, tables: FeatureTables): unknown {
     all.add(id);
   }
   const scanned: string[] = [];
-  const cursor = tables.scan({ bbox: [0, -1, 12, 2], order: 'any', batchSize: 3 });
+  const cursor = tables.scan({ bbox: [0, -1, 12, 2], order: 'any', rowsPerRead: 3 });
   for (let batch = cursor.next(); batch; batch = cursor.next())
     scanned.push(...idsOf(tables, batch));
   const sorted = Int32Array.from(handles).sort();

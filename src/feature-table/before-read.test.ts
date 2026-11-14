@@ -54,7 +54,7 @@ describe('what the tables call before a read', () => {
     expect(view?.rowCount).toBe(5);
     expect(view?.getRowPoint(handle)).toEqual([2, 0]);
     expect(calls).toBe(5);
-    const cursor = tables.scan({ layerIds: ['a'], batchSize: 2 });
+    const cursor = tables.scan({ layerIds: ['a'], rowsPerRead: 2 });
     expect(calls).toBe(6);
     let batches = 0;
     while (cursor.next()) batches++;
