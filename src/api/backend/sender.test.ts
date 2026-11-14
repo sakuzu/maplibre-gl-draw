@@ -188,7 +188,8 @@ describe('the commits sent to a storage', () => {
 
   it('sends a commit with the ID of its write and of its change', async () => {
     const storage = recording();
-    draw = drawWith(new MemoryStore(), storage.backend);
+    const store = new MemoryStore();
+    draw = drawWith(store, storage.backend);
     const changes: Change[] = [];
     draw.on('change', (change) => changes.push(change));
     const write = draw.write((tx) => tx.layers.create({ id: 'a', name: 'A' }), { label: 'made' });
@@ -196,7 +197,7 @@ describe('the commits sent to a storage', () => {
     expect(storage.sent.map((batch) => [batch.commit, batch.label])).toEqual([[write.id, 'made']]);
     expect(changes.map((change) => change.commit)).toEqual([write.id]);
     // A write of the host to the Store, with no write of the instance: one ID too
-    (draw.getStore() as unknown as Store).createFeature({
+    store.createFeature({
       id: 'p',
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 2] },

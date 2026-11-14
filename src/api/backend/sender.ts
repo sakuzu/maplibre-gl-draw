@@ -46,6 +46,9 @@ const DEFAULT_MAX_BATCH_BYTES = 1 << 20;
 /** The time of one step of the reading and the cutting of a commit, in a task of its own (ms) */
 const STEP_MS = 8;
 
+/** The statuses of an answer */
+const ANSWERS: ReadonlySet<unknown> = new Set(['partial', 'accepted', 'refused', 'closed']);
+
 /** The stages in their order */
 const STAGES: readonly SaveStage[] = ['local', 'stored', 'accepted', 'durable'];
 
@@ -358,7 +361,10 @@ export class Sender {
       let answer: Answer;
       try {
         answer = await this.#backend.send(batch, this.#task());
-        if (answer?.status === 'partial' && last) {
+        if (!ANSWERS.has((answer as { status?: unknown } | undefined)?.status)) {
+          throw new DrawError('invalidState', 'The storage gave an answer of no known status');
+        }
+        if (answer.status === 'partial' && last) {
           throw new DrawError('invalidState', 'The storage answered partial to the last part');
         }
       } catch (thrown) {
@@ -420,8 +426,6 @@ export class Sender {
         case 'closed':
           this.#close(answer.reason, answer.message);
           return;
-        default:
-          throw new DrawError('invalidState', 'The storage gave an answer of no known status');
       }
     }
   }
