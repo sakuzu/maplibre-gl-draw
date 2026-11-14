@@ -76,7 +76,6 @@ import { DisplayListCache } from './display-list.js';
 import { DrapePlanner } from './drape-planner.js';
 import { type FrameRenderDeps, renderForeground, renderSegment } from './frame-render.js';
 import { buildFrameState, type FrameState, StyleZoom } from './frame-state.js';
-import { heldDrawing } from './held-drawing.js';
 import { createRenderScope } from './render-scope.js';
 import { disposeRenderers, initRenderers, type Renderers } from './renderers.js';
 import { createShownStore } from './shown-store.js';
@@ -634,9 +633,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       extensions: renderScope.selection.extensions,
       screenScale: () => (engine.mapInstance ? screenScaleFrameOf(engine.mapInstance) : null),
       rowMotion: (tables, set) => shapes.rowMotion(tables, set),
-      // The second way to draw a write over several tasks (`held-drawing.ts`)
-      holdDrawing: () =>
-        heldDrawing.mode === 'kept' && own.slicedWritePending && own.readSnapshot() !== undefined,
     });
   }
 
