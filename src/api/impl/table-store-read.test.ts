@@ -273,6 +273,67 @@ describe('features.list and features.count over a Store of rows', () => {
     expect(firsts).toEqual(Array.from({ length: 9 }, (_, i) => `p${i * 7}`));
   });
 
+  describe('a page after a row, over two layers', () => {
+    let store: Store;
+    let features: FeaturesCollection;
+    beforeEach(() => {
+      store = createTableStore().store;
+      store.createLayer(layerOf('l1', true));
+      store.createLayer(layerOf('l2', true));
+      store.createGroup(groupOf('g', 'l1', true));
+      for (let i = 0; i < 40; i++) {
+        store.createFeature(
+          featureOf(`p${i}`, i, {
+            layerId: i < 20 ? 'l1' : 'l2',
+            ...(i < 20 && i % 3 === 0 && { groupId: 'g' }),
+          }),
+        );
+      }
+      features = createFeatures(createResourceDeps(store));
+    });
+
+    /** Every feature a filter lists, read a page of `limit` at a time */
+    const pages = (filter: FeatureFilter, limit: number): string[] => {
+      const ids: string[] = [];
+      let after: string | undefined;
+      for (;;) {
+        const page = features.list(filter, { limit, ...(after !== undefined && { after }) });
+        ids.push(...page.map((feature) => feature.id));
+        if (page.length < limit) return ids;
+        after = page[page.length - 1].id;
+      }
+    };
+
+    it('reads the rows a box finds on into the next layer', () => {
+      const filter: FeatureFilter = { bbox: [10.5, 10.5, 30.5, 30.5] };
+      const all = features.list(filter, { limit: 100 }).map((feature) => feature.id);
+      const inBox = new Set(Array.from({ length: 20 }, (_, i) => `p${i + 11}`));
+      const order = [...featuresInOrder(store)].map((feature) => feature.id);
+      expect(all).toEqual(order.filter((id) => inBox.has(id)));
+      for (const limit of [1, 3, 4, 9]) expect(pages(filter, limit)).toEqual(all);
+    });
+
+    it('reads the members of a group a page at a time', () => {
+      const all = features.list({ groupId: 'g' }, { limit: 100 }).map((feature) => feature.id);
+      expect(all).toHaveLength(7);
+      for (const limit of [1, 2, 3]) expect(pages({ groupId: 'g' }, limit)).toEqual(all);
+    });
+
+    it('reads on from the place of the row it starts after, when the row moved to another layer', () => {
+      const before = [...featuresInOrder(store)].map((feature) => feature.id);
+      const first = features.list(undefined, { limit: 10 }).map((feature) => feature.id);
+      expect(first).toEqual(before.slice(0, 10));
+      const last = first[9];
+      store.updateFeature(last, { layerId: 'l2' });
+      const order = [...featuresInOrder(store)].map((feature) => feature.id);
+      expect(order.indexOf(last)).toBeGreaterThanOrEqual(20);
+      const next = features.list(undefined, { limit: 100, after: last }).map((f) => f.id);
+      expect(next).toEqual(order.slice(order.indexOf(last) + 1));
+      // The rows of the first layer after its place before are not read
+      expect(next).not.toContain(before[10]);
+    });
+  });
+
   it('throws notFound for a feature to read after that is not there', () => {
     expect(codeOf(() => fromRows.list(undefined, { limit: 2, after: 'nothing' }))).toBe('notFound');
     expect(codeOf(() => fromObjects.list(undefined, { limit: 2, after: 'nothing' }))).toBe(
