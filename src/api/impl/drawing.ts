@@ -29,6 +29,7 @@ import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } 
 import type { Write, WriteResult } from '../write.js';
 import type { DrawingCommit } from './contexts.js';
 import type { Engine } from './engine.js';
+import { writeOf } from './saving.js';
 import { invalidInput, isRecord, notFound } from './shared.js';
 import { abortedError, checkWriteOptions } from './write.js';
 
@@ -277,9 +278,7 @@ export function createModeSet(
 
 /** A write that failed before anything was committed, with the ID it would have had */
 function failedWrite<T>(error: unknown, id = createId()): Write<T> {
-  const result = Promise.reject<WriteResult<T>>(error);
-  const done = result.then(({ value }) => value);
-  return Object.assign(done, { id, result }) as Write<T>;
+  return writeOf<T>(null, id, Promise.reject<WriteResult<T>>(error));
 }
 
 /**
@@ -358,9 +357,7 @@ export function createModeDrawing(
           id,
         );
       }
-      const result = Promise.resolve<WriteResult<Feature>>({ value: made, skipped: 0 });
-      const done = result.then(({ value }) => value);
-      return Object.assign(done, { id, result }) as Write<Feature>;
+      return writeOf(store, id, Promise.resolve<WriteResult<Feature>>({ value: made, skipped: 0 }));
     },
 
     cancel() {

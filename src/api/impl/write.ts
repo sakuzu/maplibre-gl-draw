@@ -109,6 +109,7 @@ import type { LayerResource } from './layer-resource.js';
 import { createLayers, prepareLayer, prepareLayerPatch } from './layers.js';
 import { placementOf, resolveMoveTarget } from './placement.js';
 import { publishedStore } from './published-store.js';
+import { writeOf } from './saving.js';
 import type { SelectionWrites } from './selection-resource.js';
 import type { ResourceDeps } from './shared.js';
 import {
@@ -262,8 +263,7 @@ export function createWriter(writerDeps: WriterDeps): Writer {
         throw error;
       },
     );
-    const done = result.then(({ value }) => value);
-    return Object.assign(done, { id, result }) as Write<T>;
+    return writeOf(store, id, result);
   };
 
   return {

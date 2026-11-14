@@ -12,6 +12,7 @@
       "playground/**",
       "bench/**",
       "ui/**",
+      "testing/**",
       "!**/dist"
     ]
   },

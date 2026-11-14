@@ -23,6 +23,7 @@ import type { RenderedResource } from './rendered.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { SketchesCollection } from './sketches.js';
 import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
+import type { Status } from './status.js';
 import type { View } from './view.js';
 import type {
   OpenResult,
@@ -49,10 +50,38 @@ export interface CaptureImageOptions {
 }
 
 /**
+ * What reads the document and the state of an instance, and writes nothing: a function that only
+ * reads takes it (a storage is given it)
+ */
+export interface DrawReader {
+  /** The features of the document */
+  readonly features: FeaturesCollection;
+  /** The layers of the document */
+  readonly layers: LayersCollection;
+  /** The groups of the document */
+  readonly groups: GroupsCollection;
+  /** The whole document, to load and to write out */
+  readonly document: DocumentResource;
+  /**
+   * What an application shows of the instance, in one value: whether the document is open, how
+   * far its commits are saved, the connection to the storage, the steps of undo, whether it can be
+   * written now, and the failures nobody waits for
+   */
+  readonly status: Observable<Status>;
+  /**
+   * Subscribes to an event.
+   *
+   * @returns The function that unsubscribes
+   * @throws `DrawError` with the code `invalidInput` when there is no event of this name
+   */
+  on<K extends keyof DrawEvents>(event: K, listener: (payload: DrawEvents[K]) => void): () => void;
+}
+
+/**
  * A draw instance on a map: the collections and resources of the document and of this
  * client, and the members that belong to no resource.
  */
-export interface Draw {
+export interface Draw extends DrawReader {
   // Resources
 
   /** The features of the document */
@@ -85,6 +114,12 @@ export interface Draw {
   readonly extensions: ExtensionsCollections;
   /** The memory the documents drawn on the page take, against the limit of the device */
   readonly memory: MemoryResource;
+  /**
+   * What an application shows of the instance, in one value: whether the document is open, how
+   * far its commits are saved, the connection to the storage, the steps of undo, whether it can be
+   * written now, and the failures nobody waits for
+   */
+  readonly status: Observable<Status>;
 
   // The map and the Store
 

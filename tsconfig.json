@@ -17,13 +17,16 @@
     "declarationMap": true,
     "stripInternal": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@sakuzu/maplibre-gl-draw-testing": ["./testing/src/index.ts"],
+      "@sakuzu/maplibre-gl-draw/extend": ["./src/extend/index.ts"]
+    }
   },
   "include": [
     "src"

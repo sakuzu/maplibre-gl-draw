@@ -36,7 +36,9 @@ import type {
   Layer as StoredLayer,
 } from '../../store/types.js';
 import { DrawError } from '../errors.js';
+import type { HistoryState } from '../status.js';
 import type { TaskOptions, Write } from '../write.js';
+import { writeOf } from './saving.js';
 import { withLocksIgnored } from './shared.js';
 import { queueCommit } from './write.js';
 
@@ -48,6 +50,14 @@ export interface History {
   clear(): void;
   /** Stops following the Store */
   stop(): void;
+  /** The steps there are to take back and to make again */
+  state(): HistoryState;
+  /**
+   * Calls `listener` each time the steps change
+   *
+   * @returns The function that stops calling it
+   */
+  onChange(listener: () => void): () => void;
 }
 
 /** The limits of the steps kept */
@@ -57,6 +67,14 @@ export interface HistoryOptions {
 }
 
 const DEFAULT_MAX_STEPS = 100;
+
+/** The state when there is no step of undo */
+const NO_STEPS: HistoryState = {
+  canUndo: false,
+  canRedo: false,
+  undoLabel: undefined,
+  redoLabel: undefined,
+};
 
 /** What takes one notification of the Store back */
 interface Inverse {
@@ -114,6 +132,34 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
   const dropAll = (steps: Step[]): void => {
     for (const step of steps.splice(0)) release(step);
   };
+  const listeners = new Set<() => void>();
+  let told: HistoryState = NO_STEPS;
+  const state = (): HistoryState => {
+    const undoStep = undoSteps[undoSteps.length - 1] as Step | undefined;
+    const redoStep = redoSteps[redoSteps.length - 1] as Step | undefined;
+    const now: HistoryState = {
+      canUndo: undoStep !== undefined,
+      canRedo: redoStep !== undefined,
+      undoLabel: undoStep?.label,
+      redoLabel: redoStep?.label,
+    };
+    if (
+      now.canUndo === told.canUndo &&
+      now.canRedo === told.canRedo &&
+      now.undoLabel === told.undoLabel &&
+      now.redoLabel === told.redoLabel
+    ) {
+      return told;
+    }
+    told = now;
+    return now;
+  };
+  /** Tells the listeners once the steps changed */
+  const changed = (): void => {
+    const was = told;
+    if (state() === was) return;
+    for (const listener of [...listeners]) listener();
+  };
 
   const follow = (change: StoreChange): void => {
     if (applying) {
@@ -133,6 +179,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
       taken = null;
       dropAll(undoSteps);
       dropAll(redoSteps);
+      changed();
       return;
     }
     const commit = commitOf(store);
@@ -150,6 +197,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         if (dropped) release(dropped);
       }
       dropAll(redoSteps);
+      changed();
     }
     if (!store.slicedWritePending) open = null;
   };
@@ -189,14 +237,14 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         const reversed: Step = { label: step.label, parts };
         (direction === 'undo' ? redoSteps : undoSteps).push(reversed);
         taken = { direction, step: reversed };
+        changed();
         // A step of many rows is written over several tasks: it settles once its last rows are
         // written, so that what reads after it reads them
         const result = { value: undefined, skipped: 0 };
         return store.slicedWritePending ? store.whenWritten().then(() => result) : result;
       });
     })();
-    const done = result.then(() => undefined);
-    return Object.assign(done, { id, result }) as Write<void>;
+    return writeOf(store, id, result);
   };
 
   return {
@@ -207,11 +255,20 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
       taken = null;
       dropAll(undoSteps);
       dropAll(redoSteps);
+      changed();
     },
     stop() {
       stopListening();
       dropAll(undoSteps);
       dropAll(redoSteps);
+      listeners.clear();
+    },
+    state,
+    onChange(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }

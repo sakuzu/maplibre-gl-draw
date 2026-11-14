@@ -28,6 +28,18 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
+  'CloseReason',
+  'Connection',
+  'DocumentState',
+  'DrawReader',
+  'HistoryState',
+  'Problem',
+  'RefuseReason',
+  'SaveGoal',
+  'SaveOptions',
+  'SaveStage',
+  'SaveState',
+  'Status',
   'BBox',
   'ConsistencyCheck',
   'ConsistencyCheckOptions',
@@ -357,7 +369,11 @@ const KASANE = [
 
 /** The entry of who plugs a storage or an extension into the library (follows semver) */
 const EXTEND = [
+  'Answer',
   'applyOperations',
+  'Backend',
+  'BackendBase',
+  'Task',
   'Batch',
   'BatchHeader',
   'createObservable',

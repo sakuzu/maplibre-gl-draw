@@ -9,11 +9,13 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import { ConsistencyChecks } from '../../debug/consistency.js';
 import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
+import { Sender, type SenderOptions } from '../backend/sender.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
 import type { FeaturesCollection } from '../features.js';
 import type { DrawOptions } from '../options.js';
+import type { Write } from '../write.js';
 import { captureImage } from './capture.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
@@ -42,11 +44,13 @@ import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { publishedStore } from './published-store.js';
 import { createRendered } from './rendered.js';
+import { setCommitSaver } from './saving.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { SelectionWrites } from './selection-resource.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound } from './shared.js';
 import { createSketches } from './sketches.js';
+import { createStatus } from './status.js';
 import { attachTableDiagnostics } from './table-diagnostics.js';
 import { createView } from './view.js';
 import { appValuesOf, createWriter, type Writers } from './write.js';
@@ -134,6 +138,7 @@ export function createDrawOnEngine(
   engine: Engine,
   options: DrawOptions = {},
   setExternalEntry: (fn: ((id: string) => boolean) | undefined) => void = () => {},
+  senderOptions: Pick<SenderOptions, 'rowsReadAtOnce' | 'retryDelay'> = {},
 ): Draw {
   const drawOptions = createOptions(engine, options, setExternalEntry, (payload) =>
     engine.events.emit('options.changed', payload),
@@ -211,6 +216,38 @@ export function createDrawOnEngine(
     reads: { features, layers, groups },
   });
   const history = createHistory(store, options.history);
+  // The storage: the commits of this client are sent to it, and the state tells how far
+  let sender: Sender | null = null;
+  const status = createStatus({ store, history, events, sender: () => sender });
+  if (options.backend) {
+    sender = new Sender(store, options.backend, {
+      ...senderOptions,
+      onChange: () => status.changed(),
+      onSkipped: (skipped) => status.problem({ type: 'skipped', ...skipped }),
+    });
+    setCommitSaver(store, sender);
+    status.changed();
+  }
+  // A commit that left out writes whose targets were gone is a problem nobody waits for
+  const noteSkipped = <T>(write: Write<T>, label: string | undefined): Write<T> => {
+    write.result.then(
+      ({ skipped }) => {
+        if (skipped === 0 || destroyed) return;
+        status.problem({
+          type: 'skipped',
+          error: new DrawError(
+            'notFound',
+            `The commit left out ${skipped} writes: what they named was gone`,
+          ),
+          label,
+          commit: write.id,
+          count: skipped,
+        });
+      },
+      () => {},
+    );
+    return write;
+  };
   // The image mode asks the application for an image (`requestImage`), placed as one commit
   let imageRequest: AbortController | null = null;
   const onImageRequest = (asked: {
@@ -328,6 +365,7 @@ export function createDrawOnEngine(
     }),
     extensions: engine.extensions.collections,
     memory: memory.memory,
+    status: status.status,
 
     getMap: () => map,
     getStore: () => view,
@@ -358,7 +396,7 @@ export function createDrawOnEngine(
       if (value === true && modeManager.getMode() !== 'select') modeManager.setMode('select');
     },
 
-    write: (fn, writeOptions) => writer.write(fn, writeOptions),
+    write: (fn, writeOptions) => noteSkipped(writer.write(fn, writeOptions), writeOptions?.label),
     undo: (taskOptions) => history.undo(taskOptions),
     redo: (taskOptions) => history.redo(taskOptions),
     open: (source, taskOptions) =>
@@ -387,6 +425,9 @@ export function createDrawOnEngine(
       if (destroyed) return;
       try {
         stopChecks();
+        sender?.stop();
+        setCommitSaver(store, null);
+        status.stop();
         history.stop();
         imageRequest?.abort();
         context.eventEmitter.off('image.request', onImageRequest);

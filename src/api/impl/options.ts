@@ -308,6 +308,9 @@ const STORE_METHODS = [
  */
 export function checkDrawOptions(options: unknown): asserts options is DrawOptions {
   if (!isRecord(options)) throw invalidInput('The options must be an object');
+  if (options.store !== undefined && options.backend !== undefined) {
+    throw invalidInput('The options take a store or a backend, not both');
+  }
   checkFields(options, 'options', {
     ...RUNTIME_CHECKS,
     defaultMode: string,
@@ -326,6 +329,30 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
     debug(value, what) {
       if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
       checkFields(value, what, { checks: checkChecks });
+    },
+    backend(value, what) {
+      if (!isRecord(value)) throw invalidInput(`${what} must be a storage`);
+      for (const method of ['load', 'send'] as const) {
+        if (typeof value[method] !== 'function') {
+          throw invalidInput(`${what} must be a storage: ${method} is missing`);
+        }
+      }
+      if (value.instructions !== undefined) {
+        throw invalidInput(`${what} must be a storage of values: instructions are not taken yet`);
+      }
+      if (value.abandon !== undefined && typeof value.abandon !== 'function') {
+        throw invalidInput(`${what}.abandon must be a function`);
+      }
+      if (value.stages !== undefined && !Array.isArray(value.stages)) {
+        throw invalidInput(`${what}.stages must be an array of stages`);
+      }
+      const bytes = value.maxBatchBytes;
+      if (bytes !== undefined && (typeof bytes !== 'number' || !(bytes > 0))) {
+        throw invalidInput(`${what}.maxBatchBytes must be a number above 0`);
+      }
+      if (value.retry !== undefined && !isRecord(value.retry)) {
+        throw invalidInput(`${what}.retry must be an object`);
+      }
     },
     store(value, what) {
       if (!isRecord(value) && !(value instanceof DrawStore)) {

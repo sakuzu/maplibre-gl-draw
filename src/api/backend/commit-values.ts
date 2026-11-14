@@ -206,8 +206,14 @@ export class CommitValues {
    * again with {@link documentOperations})
    *
    * @param atOnce - The most rows read now (more are read by `step`)
+   * @param values - False to keep the places only, for a notification whose operations are not
+   *   sent (one from elsewhere): no row is read
    */
-  readChange(changes: StoreChange, atOnce = ROWS_READ_AT_ONCE): ChangeReading | null {
+  readChange(
+    changes: StoreChange,
+    atOnce = ROWS_READ_AT_ONCE,
+    values = true,
+  ): ChangeReading | null {
     if (changes.reset === true) {
       this.#placeDocument();
       return null;
@@ -221,7 +227,7 @@ export class CommitValues {
     const rows = this.#features(change, changes, out, groups);
     this.#document(changes, out);
     const count = rows.created.length + rows.updated.length;
-    if (count === 0) return readingOf(out, null);
+    if (count === 0 || !values) return readingOf(out, null);
     const lasting = count > atOnce ? this.store.openSnapshot() : undefined;
     if (!lasting) {
       // Read now, from the Store as the notification left it

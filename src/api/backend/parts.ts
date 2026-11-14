@@ -96,6 +96,27 @@ export function batchesOf(
   operations: readonly ValueOperation[],
   maxBytes: number,
 ): ValueBatch[] {
+  const cutting = batchesInSteps(header, operations, maxBytes);
+  let next = cutting.next();
+  while (!next.done) next = cutting.next();
+  return next.value;
+}
+
+/** The operations measured between two yields of {@link batchesInSteps} */
+const OPERATIONS_PER_YIELD = 256;
+
+/**
+ * {@link batchesOf} a few operations at a time: it yields between them, so that the one who cuts
+ * a commit of many operations looks at the time and goes on in a later task
+ *
+ * @returns The batches, once every operation is cut
+ * @internal
+ */
+export function* batchesInSteps(
+  header: CommitHeader,
+  operations: readonly ValueOperation[],
+  maxBytes: number,
+): Generator<void, ValueBatch[], undefined> {
   if (operations.length === 0) return [];
   const base = {
     schema: 1 as const,
@@ -124,8 +145,9 @@ export function batchesOf(
     used += current.length === 0 ? size : size + 1;
     current.push(operation);
   };
-  for (const operation of operations) {
-    for (const piece of piecesOf(operation, room)) put(piece.operation, piece.size);
+  for (let i = 0; i < operations.length; i++) {
+    for (const piece of piecesOf(operations[i], room)) put(piece.operation, piece.size);
+    if ((i + 1) % OPERATIONS_PER_YIELD === 0) yield;
   }
   close();
   return parts.map((part, index) => ({

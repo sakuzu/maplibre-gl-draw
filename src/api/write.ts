@@ -25,6 +25,7 @@ import type {
   Properties,
 } from './model.js';
 import type { SelectionTarget } from './state.js';
+import type { SaveGoal } from './status.js';
 
 /**
  * The progress of a long task, in one shape. `total` is `null` while it is not known. The last
@@ -63,13 +64,30 @@ export interface WriteResult<T> {
 
 /**
  * What `draw.write` returns: a promise of what the function returned, settled once the commit is
- * made here, with the ID of the commit.
+ * made here, with the ID of the commit and the way to follow how far it is saved.
  */
 export interface Write<T> extends Promise<T> {
-  /** The ID of the commit, which `change` tells as `commit` */
+  /** The ID of the commit: the `commit` of `change` and of the `Batch` a storage receives */
   readonly id: string;
   /** The value of the function, with the writes the commit left out; it fails as this promise */
   readonly result: Promise<WriteResult<T>>;
+  /**
+   * Brings the commit to the storage, up to the stage `until` (`accepted` when left out): it
+   * settles once the commit is there, and sends now a commit waiting to be sent again. A commit
+   * that changed nothing of the document has nothing to save: it settles once made.
+   *
+   * @throws `DrawError` (the promise rejects) as the write fails when it fails; with the code
+   *   `refused` when the storage refuses the commit, `invalidState` when there is no storage or
+   *   it goes through no stage `until` (`status.saving.stages`), or the code of the connection
+   *   closed (`credential`, `permission`, `network`) when the commit can no longer be sent
+   */
+  save(options?: SaveOptions): Promise<void>;
+}
+
+/** The options of {@link Write.save} */
+export interface SaveOptions extends TaskOptions {
+  /** The stage to wait for: `accepted` when left out */
+  readonly until?: SaveGoal;
 }
 
 // ============================================================================

@@ -1,0 +1,33 @@
+{
+  "name": "@sakuzu/maplibre-gl-draw-testing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The tests of a storage of @sakuzu/maplibre-gl-draw, and the reference storage that keeps a document in memory.",
+  "license": "AGPL-3.0-only",
+  "author": "SAKAIDA Atsushi",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@sakuzu/maplibre-gl-draw": "*"
+  }
+}

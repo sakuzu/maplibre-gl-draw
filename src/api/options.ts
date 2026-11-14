@@ -9,6 +9,7 @@
 import type { Position } from 'geojson';
 import type { ConsistencyCheckOptions } from '../debug/types.js';
 import type { Messages } from '../messages.js';
+import type { Backend } from './backend/backend.js';
 import type { Observable } from './events.js';
 import type { Store } from './extension/store.js';
 import type { FeatureStyle, FeatureType, LineStyle } from './model.js';
@@ -478,8 +479,17 @@ export interface RuntimeOptions {
 export interface DrawOptions extends RuntimeOptions {
   /** The mode to start in */
   defaultMode?: Mode;
-  /** The Store that keeps the document, instead of the built-in one; only at creation */
+  /**
+   * The Store that keeps the document, instead of the built-in one; only at creation. It cannot
+   * be given with `backend`
+   */
   store?: Store;
+  /**
+   * The storage of the document; only at creation. Without it the document is only in the memory
+   * of this client. The commits of this client are sent to it one at a time, in their order, and
+   * `draw.status` tells how far they are saved
+   */
+  backend?: Backend;
   /** Whether a layer is created when there is none; only at creation */
   initDefaultLayer?: boolean;
   /**

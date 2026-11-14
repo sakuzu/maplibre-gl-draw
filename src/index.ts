@@ -70,7 +70,19 @@
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by topic
 
 // Entry and options
-export type { CaptureImageOptions, Draw } from './api/draw.js';
+export type { CaptureImageOptions, Draw, DrawReader } from './api/draw.js';
+export type {
+  CloseReason,
+  Connection,
+  DocumentState,
+  HistoryState,
+  Problem,
+  RefuseReason,
+  SaveGoal,
+  SaveStage,
+  SaveState,
+  Status,
+} from './api/status.js';
 export { createDraw } from './api/draw.js';
 export type {
   AutoNameOptions,
@@ -121,6 +133,7 @@ export type {
   Placement,
   Progress,
   Rotate,
+  SaveOptions,
   Scale,
   SkippedFeature,
   Target,
