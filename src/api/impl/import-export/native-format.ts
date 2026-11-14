@@ -168,14 +168,17 @@ export async function prepareNative(
       }
     }
 
-    // 3. Import the groups
-    for (const group of groups) {
+    // 3. Import the features, in one write (a Store of rows writes the rows of each layer at
+    //    once, rather than the rows of the layer once per feature). The members of a group are
+    //    created in their layer first: a group is created with features that exist (a Store
+    //    refuses a group that lists a feature it does not have)
+    store.createFeatures(features.map(withoutGroup));
+
+    // 4. Import the groups, which take their members (each takes the place of its first
+    //    member in its layer)
+    for (const group of groupsWithMembers(groups, features)) {
       store.createGroup(group);
     }
-
-    // 4. Import the features, in one write (a Store of rows writes the rows of each layer at
-    //    once, rather than the rows of the layer once per feature)
-    store.createFeatures(features);
 
     // 5. Import the files
     for (const file of files) {
@@ -204,6 +207,38 @@ export async function prepareNative(
     };
   };
   return { write };
+}
+
+/** The feature without its group: it is created in its layer and joins its group after */
+function withoutGroup(feature: Feature): Feature {
+  return feature.groupId === undefined ? feature : { ...feature, groupId: undefined };
+}
+
+/**
+ * The groups with the features that name them as their members: those the group lists, in its
+ * order, then those it does not list, in the order of the data (the group of a feature is the
+ * one it names, so a listed id of a feature that names another group, or of no feature, is left
+ * out)
+ */
+function groupsWithMembers(groups: readonly Group[], features: readonly Feature[]): Group[] {
+  const members = new Map<string, string[]>();
+  for (const feature of features) {
+    if (feature.groupId === undefined) continue;
+    let list = members.get(feature.groupId);
+    if (!list) {
+      list = [];
+      members.set(feature.groupId, list);
+    }
+    list.push(feature.id);
+  }
+  return groups.map((group) => {
+    const named = members.get(group.id) ?? [];
+    const listed = 'featureIds' in group ? group.featureIds : [];
+    const of = new Set(named);
+    const featureIds = listed.filter((id) => of.delete(id));
+    for (const id of named) if (of.has(id)) featureIds.push(id);
+    return { ...group, featureIds } as Group;
+  });
 }
 
 /**
