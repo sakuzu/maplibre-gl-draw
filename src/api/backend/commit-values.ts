@@ -89,12 +89,15 @@ export interface ChangeReading {
 interface RowsToRead {
   /** The rows created, with their keys */
   readonly created: { readonly id: string; readonly key: string }[];
-  /** The rows updated, with their handles */
-  readonly updated: { readonly id: string; readonly handle: number }[];
+  /** The rows updated, and their handles where the notification went out */
+  updated: readonly string[];
+  handles: ArrayLike<number>;
   /** The first of `created`, then of `updated`, not read yet */
   at: number;
-  /** The values before of the rows updated, read from the snapshot (made at the first) */
-  before: ((handle: number, now: StoredFeature) => Feature | undefined) | null;
+  /** Where each row is among the values before of the notification, made a part a step */
+  readonly index: Map<number, number>;
+  /** How many of the values before are in `index` */
+  indexed: number;
 }
 
 /** What the groups of a notification moved, for the features */
@@ -400,7 +403,14 @@ export class CommitValues {
     const rowPlaces = this.#rowPlaces(unique(rows));
     const created = new Set(ids.created);
     // The features of objects are read now; the rows are read by `#readRows`
-    const toRead: RowsToRead = { created: [], updated: [], at: 0, before: null };
+    const toRead: RowsToRead = {
+      created: [],
+      updated: [],
+      handles: [],
+      at: 0,
+      index: new Map(),
+      indexed: 0,
+    };
     const tables = store.tables;
     for (const id of ids.created) {
       const key = rowPlaces.get(id)?.key ?? this.#places.get(id)?.key ?? '';
@@ -420,10 +430,21 @@ export class CommitValues {
       unique(placed),
       (id) => (rowPlaces.get(id) ?? this.#places.get(id)) as Place,
     );
+    // Every feature updated is a row (a write of many rows): the IDs `change` lists are those of
+    // the handles the notification lists, in their order
+    const rowHandles = rowsUpdatedOf(changes);
+    if (ids.updated.length > 0 && ids.updated.length === rowHandles.length) {
+      toRead.updated = ids.updated;
+      toRead.handles = rowHandles;
+      return toRead;
+    }
+    const updated: string[] = [];
+    const handles: number[] = [];
     for (const id of ids.updated) {
       const handle = tables?.getRowRef(id);
       if (handle !== undefined) {
-        toRead.updated.push({ id, handle: handle as number });
+        updated.push(id);
+        handles.push(handle as number);
         continue;
       }
       const now = store.getFeature(id);
@@ -431,6 +452,8 @@ export class CommitValues {
       const set = featureSet(change.previous(id), toFeature(now));
       if (set) out.set.push(set(id));
     }
+    toRead.updated = updated;
+    toRead.handles = handles;
     return toRead;
   }
 
@@ -464,12 +487,27 @@ export class CommitValues {
       if (feature) out.createdFeatures.push(createFeature(feature, key));
       if (late()) return false;
     }
-    if (lasting) rows.before ??= valuesBeforeOf(changes);
+    const values = changes.previousValues as RowValues | undefined;
+    if (lasting && values && rows.at < created.length + updated.length) {
+      // Where each row is among the values before, a part at a time
+      const { index } = rows;
+      while (rows.indexed < values.rows.length) {
+        const end = Math.min(values.rows.length, rows.indexed + ROWS_PER_LOOK * 32);
+        for (let i = rows.indexed; i < end; i++)
+          if (!index.has(values.rows[i])) index.set(values.rows[i], i);
+        rows.indexed = end;
+        if (performance.now() >= deadline) return false;
+      }
+    }
     while (rows.at < created.length + updated.length) {
-      const { id, handle } = updated[rows.at++ - created.length];
+      const at = rows.at++ - created.length;
+      const id = updated[at];
+      const handle = rows.handles[at];
       const now = read(id);
       if (now) {
-        const was = rows.before ? rows.before(handle, now) : change.previous(id);
+        const was = lasting
+          ? valuesBefore(values, rows.index.get(handle), now)
+          : change.previous(id);
         const set = featureSet(was, toFeature(now));
         if (set) out.set.push(set(id));
       }
@@ -682,23 +720,42 @@ function readingOf(
 }
 
 /**
- * The feature of a row before a notification, from what it is after it: the values it had for the
- * fields the notification wrote (`StoreChange.previousValues`), the others being the same
+ * The handles of the rows a notification updated, besides those it only put in another place, in
+ * the order `change` lists their IDs
  */
-function valuesBeforeOf(
-  changes: StoreChange,
-): (handle: number, now: StoredFeature) => Feature | undefined {
-  const values = changes.previousValues as RowValues | undefined;
-  let indexOf: Map<number, number> | null = null;
-  return (handle, now) => {
-    if (!values) return undefined;
-    indexOf ??= new Map(Array.from(values.rows, (row, index) => [row, index]));
-    const index = indexOf.get(handle);
-    if (index === undefined) return undefined;
-    const fields = new Map<RowField, unknown>();
-    for (const [field, list] of values.fields) fields.set(field, list[index]);
-    return toFeature(featureWithFields(now, fields));
-  };
+function rowsUpdatedOf(changes: StoreChange): Int32Array {
+  const lists: Int32Array[] = [];
+  let count = 0;
+  for (const rows of changes.rows?.layers.values() ?? []) {
+    let placedOnly = rows.fields.size > 0;
+    for (const field of rows.fields) if (field !== 'parent' && field !== 'key') placedOnly = false;
+    if (placedOnly) continue;
+    lists.push(rows.updated);
+    count += rows.updated.length;
+  }
+  const out = new Int32Array(count);
+  let at = 0;
+  for (const list of lists) {
+    out.set(list, at);
+    at += list.length;
+  }
+  return out;
+}
+
+/**
+ * The feature of a row before a notification, from what it is after it: the values it had for the
+ * fields the notification wrote (`StoreChange.previousValues`, at `index`), the others being the
+ * same
+ */
+function valuesBefore(
+  values: RowValues | undefined,
+  index: number | undefined,
+  now: StoredFeature,
+): Feature | undefined {
+  if (!values || index === undefined) return undefined;
+  const fields = new Map<RowField, unknown>();
+  for (const [field, list] of values.fields) fields.set(field, list[index]);
+  return toFeature(featureWithFields(now, fields));
 }
 
 function emptyOperations(): Operations {

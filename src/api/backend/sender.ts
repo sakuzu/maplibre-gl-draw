@@ -281,7 +281,8 @@ export class Sender {
     if (!entry) return;
     entry.open = false;
     this.#open = null;
-    void this.#run();
+    // Read and sent from a later task: not in the task of the commit
+    if (!this.#running) setTimeout(() => void this.#run(), 0);
   }
 
   /** Sends the complete commits, one at a time in their order */
