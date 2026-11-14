@@ -104,7 +104,7 @@ function setup(options: { selectionIdsLimit?: number; prepare?: (draw: Draw) => 
   const notified: StoreChange[] = [];
   instance.getStore().subscribe((change) => notified.push(change));
   const patch = createRowValues({
-    handles,
+    rows: handles,
     fields: new Map(),
     deleted: new Uint8Array(COUNT).fill(1),
   });
@@ -173,14 +173,14 @@ describe('features.restore of many rows', () => {
     const change = notified[0] as StoreChange;
     expect(change.source).toBe('history');
     expect(change.rows?.layers.get('rows')?.created.length).toBe(COUNT);
-    expect(rowValuesOf(change.previousValues as FeatureValues).handles.length).toBe(COUNT);
+    expect(rowValuesOf(change.previousValues as FeatureValues).rows.length).toBe(COUNT);
   });
 
   it('writes few rows at once, as one notification', () => {
     const { draw, store, tables, handles, notified, before } = setup();
     const few = rowValuesOf(before);
     const values = createRowValues({
-      handles: few.handles.slice(0, BULK_SLICE_ROWS),
+      rows: few.rows.slice(0, BULK_SLICE_ROWS),
       fields: new Map(),
       deleted: (few.deleted as Uint8Array).slice(0, BULK_SLICE_ROWS),
     });
@@ -205,7 +205,7 @@ describe('features.restore of many rows', () => {
     const { draw, tables, handles, notified, before } = setup();
     writesOf(draw).features.restore(before);
     const read = tables.readValues({
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>(),
       deleted: new Uint8Array(0),
     });
@@ -239,7 +239,7 @@ describe('features.restore of many rows', () => {
     const first = rowValuesOf(before);
     // The first rows deleted again
     const again = createRowValues({
-      handles: first.handles.slice(0, 10),
+      rows: first.rows.slice(0, 10),
       fields: new Map(),
       deleted: new Uint8Array(10).fill(1),
     });
@@ -266,7 +266,7 @@ describe('features.restore of many rows', () => {
     notified.length = 0;
     // Deleted again, in steps
     writesOf(draw).features.restore(
-      createRowValues({ handles, fields: new Map(), deleted: new Uint8Array(COUNT).fill(1) }),
+      createRowValues({ rows: handles, fields: new Map(), deleted: new Uint8Array(COUNT).fill(1) }),
     );
     expect(store.slicedWritePending).toBe(true);
     runSteps();
@@ -293,7 +293,7 @@ describe('features.restore of many rows', () => {
     } as never);
     notified.length = 0;
     writesOf(draw).features.restore(
-      createRowValues({ handles, fields: new Map(), deleted: new Uint8Array(COUNT).fill(1) }),
+      createRowValues({ rows: handles, fields: new Map(), deleted: new Uint8Array(COUNT).fill(1) }),
     );
     // Between two steps, the group is there
     vi.advanceTimersToNextTimer();
@@ -347,9 +347,9 @@ describe('features.restore of many rows', () => {
     const reads: Array<(view: LayerTableView) => unknown> = [
       (view) => view.rowCount,
       (view) => view.itemCount,
-      (view) => view.getRow(view.listRowHandles(COUNT - 1, 1)[0] as number)?.id,
-      (view) => view.listItems(0, COUNT).handles.length,
-      (view) => view.listRowHandles(0, COUNT).length,
+      (view) => view.getRow(view.listRowRefs(COUNT - 1, 1)[0] as number)?.id,
+      (view) => view.listItems(0, COUNT).refs.length,
+      (view) => view.listRowRefs(0, COUNT).length,
     ];
     const expected: unknown[] = [COUNT, COUNT, `p${COUNT - 1}`, COUNT, COUNT];
     reads.forEach((read, k) => {

@@ -485,8 +485,8 @@ describe('a page that writes the key of each row', () => {
     const view = tables.get('l');
     if (!view) return [];
     const refs = view.listItems(0, view.itemCount);
-    return Array.from(refs.handles, (h, i) =>
-      refs.kinds[i] === 0 ? tables.getRowId(h) : tables.getGroupId(h),
+    return Array.from(refs.refs, (h, i) =>
+      refs.types[i] === 0 ? tables.getRowId(h) : tables.getGroupId(h),
     );
   }
 

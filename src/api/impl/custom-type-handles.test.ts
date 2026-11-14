@@ -413,7 +413,7 @@ describe('the handles of a footprint laid on the map, of features selected in bu
     const angles = ids.map((id) => {
       const handle = store.tables?.getRowRef(id) as number;
       const read = store.tables?.readValues({
-        handles: Int32Array.of(handle),
+        rows: Int32Array.of(handle),
         fields: new Map([[`properties:${ANGLE}`, []]]),
       });
       return read?.fields.get(`properties:${ANGLE}`)?.[0];

@@ -528,7 +528,7 @@ function rowsInParts(
 }
 
 /** Values of no row: what a write of rows told by their order keeps of before */
-const NO_ROWS: RowValues = { handles: new Int32Array(0), fields: new Map() };
+const NO_ROWS: RowValues = { rows: new Int32Array(0), fields: new Map() };
 
 /**
  * Puts rows in a place in parts: their parents and the keys of their order are made at once, as
@@ -550,7 +550,7 @@ function placeRowsInParts(
     const end = store.beginRowParts(values);
     try {
       yield 0;
-      return yield* inParts(values.handles.length, (from, at) =>
+      return yield* inParts(values.rows.length, (from, at) =>
         store.applyRows({ patch: sliceRowValues(values, from, at), before: NO_ROWS }),
       );
     } finally {
@@ -562,7 +562,7 @@ function placeRowsInParts(
 /** The deletion of rows, as the values of a write of them */
 function deletionOf(handles: ArrayLike<number>): RowValues {
   return {
-    handles: Int32Array.from(handles),
+    rows: Int32Array.from(handles),
     fields: new Map(),
     deleted: new Uint8Array(handles.length).fill(1),
   };

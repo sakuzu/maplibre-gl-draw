@@ -36,7 +36,7 @@ function setup() {
   const list = Array.from({ length: 12 }, (_, i) => feature(`p${i}`, 'Polygon', square(i * 2)));
   const tables = tablesOfFeatures('layer', list, 4);
   const ids = () =>
-    Array.from(tables.tables.get('layer')?.listRowHandles(0, 100) ?? [], (h) =>
+    Array.from(tables.tables.get('layer')?.listRowRefs(0, 100) ?? [], (h) =>
       tables.tables.getRowId(h),
     );
   return { ...tables, ids };
@@ -134,7 +134,7 @@ describe('the sketches drawn over rows for this client', () => {
     );
     // A row moved in the same layer goes to the delta and to the next version
     writer.writeRows({
-      handles: Int32Array.of(tables.getRowRef('p1') ?? -1),
+      rows: Int32Array.of(tables.getRowRef('p1') ?? -1),
       fields: new Map([['key', ['k000009m']]]),
     });
     internals.flushVersions();

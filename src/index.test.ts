@@ -322,7 +322,7 @@ const KASANE = [
   'GroupEntry',
   'ITEM_GROUP',
   'ITEM_ROW',
-  'ItemHandles',
+  'ItemRefs',
   'LayerRowsChange',
   'listSelectedRows',
   'mergePages',

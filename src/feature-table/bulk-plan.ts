@@ -138,7 +138,7 @@ function planDelete(
   }
   if (handles.length === 0) return null;
   const patch: RowValues = {
-    handles: Int32Array.from(handles),
+    rows: Int32Array.from(handles),
     fields: new Map(),
     deleted: new Uint8Array(handles.length).fill(1),
   };
@@ -254,7 +254,7 @@ function planUpdate(
   const fields = new Map<RowField, unknown[]>();
   // The values before (what an undo writes back)
   const current: RowValues = internals.readRowValues({
-    handles,
+    rows: handles,
     fields: new Map([...fieldNames].map((field) => [field, []])),
   });
   for (const field of fieldNames) {
@@ -279,7 +279,7 @@ function planUpdate(
     }
     fields.set(field, values);
   }
-  const patch: RowValues = { handles, fields };
+  const patch: RowValues = { rows: handles, fields };
   return { patch, before: current };
 }
 
@@ -370,7 +370,7 @@ function planRows(
   }
   if (handles.length === 0) return null;
   const patch: RowValues = {
-    handles: Int32Array.from(handles),
+    rows: Int32Array.from(handles),
     fields: new Map(op.fields.map((field, f) => [field, columns[f]])),
   };
   return { patch, before: internals.readRowValues(patch) };
@@ -396,7 +396,7 @@ function planPlace(
   const ordered: number[] = [];
   for (const handles of rowsByLayerInOrder(internals, rows).values()) ordered.push(...handles);
   if (ordered.length === 0) return null;
-  const patch: RowValues = { handles: new Int32Array(0), fields: new Map() };
+  const patch: RowValues = { rows: new Int32Array(0), fields: new Map() };
   return {
     patch,
     place: { rows: Int32Array.from(ordered), to },

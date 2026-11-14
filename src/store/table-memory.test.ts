@@ -82,7 +82,7 @@ describe('the in-memory Store of rows', () => {
     expect(() => store.listFeatures()).toThrow();
     expect(() => store.listFeaturesInOrder()).toThrow();
     const view = tables.get('layer');
-    const order = Array.from(view?.listRowHandles(0, 10) ?? [], (h) => tables.getRowId(h));
+    const order = Array.from(view?.listRowRefs(0, 10) ?? [], (h) => tables.getRowId(h));
     expect(order).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
   });
 
@@ -145,7 +145,7 @@ describe('the in-memory Store of rows', () => {
     const handle = tables.getRowRef('p2') ?? -1;
     store.transact(() => {
       writer.writeRows({
-        handles: Int32Array.of(handle),
+        rows: Int32Array.of(handle),
         fields: new Map(),
         deleted: Uint8Array.of(1),
       });
@@ -201,8 +201,8 @@ describe('the order of the in-memory Store of rows', () => {
     const view = tables.get('layer');
     if (!view) return [];
     const refs = view.listItems(0, view.itemCount);
-    return Array.from(refs.handles, (h, i) =>
-      refs.kinds[i] === 0
+    return Array.from(refs.refs, (h, i) =>
+      refs.types[i] === 0
         ? tables.getRowId(h)
         : store
             .listGroups()
@@ -304,7 +304,7 @@ describe('the order of the in-memory Store of rows', () => {
     );
     // One write of the rows of the members, in one notification
     expect(apply).toHaveBeenCalledTimes(1);
-    expect(Array.from(apply.mock.calls[0][0].handles, (h) => tables.getRowId(h))).toEqual([
+    expect(Array.from(apply.mock.calls[0][0].rows, (h) => tables.getRowId(h))).toEqual([
       'p1',
       'p3',
       'p5',
@@ -431,13 +431,13 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
     const handle = tables.getRowRef('l') as number;
     const geometryOf = () =>
       tables
-        .readValues({ handles: Int32Array.of(handle), fields: new Map([['geometry', [0]]]) })
+        .readValues({ rows: Int32Array.of(handle), fields: new Map([['geometry', [0]]]) })
         .fields.get('geometry')?.[0];
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
     // A write of this client with the values before, as an edit writes it
     const patch = {
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
         [
           'geometry',
@@ -469,7 +469,7 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
     });
     // The values before written back
     store.applyRows?.({
-      patch: { handles: before.handles, fields: before.fields },
+      patch: { rows: before.rows, fields: before.fields },
       before: tables.readValues(patch),
     });
     expect(geometryOf()).toEqual(line);

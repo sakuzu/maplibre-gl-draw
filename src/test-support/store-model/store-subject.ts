@@ -119,9 +119,9 @@ function itemsOf(
   if (!tables || !view) return { items: [], members };
   const listed = view.listItems(0, view.itemCount);
   const items: string[] = [];
-  for (let i = 0; i < listed.kinds.length; i++) {
-    const handle = listed.handles[i];
-    if (listed.kinds[i] === ITEM_GROUP) {
+  for (let i = 0; i < listed.types.length; i++) {
+    const handle = listed.refs[i];
+    if (listed.types[i] === ITEM_GROUP) {
       const id = tables.getGroupId(handle) ?? `?group ${handle}`;
       items.push(id);
       const rows = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));

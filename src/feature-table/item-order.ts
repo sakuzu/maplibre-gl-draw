@@ -279,7 +279,7 @@ export class ItemOrderWatch {
         (fields.get(field) as unknown[]).push(values[k]);
       });
     }
-    return { handles, fields };
+    return { rows: handles, fields };
   }
 
   /**
@@ -420,7 +420,7 @@ export class ItemOrderWatch {
                 ),
           above: above === null ? null : this.idOf(above, groupIds),
         };
-        out.push({ kind: 'rows', layerId: layer.tableId, handles, to, before });
+        out.push({ kind: 'rows', layerId: layer.tableId, rows: handles, to, before });
         continue;
       }
       const kinds = new Uint8Array(rows.length);
@@ -433,8 +433,8 @@ export class ItemOrderWatch {
       out.push({
         kind: 'rows',
         layerId: layer.tableId,
-        handles,
-        belows: { kinds, handles: belows },
+        rows: handles,
+        belows: { types: kinds, refs: belows },
         before,
       });
     }
@@ -485,7 +485,7 @@ export class PlacementOrder {
     private readonly values: RowValues,
     private readonly placement: RowsPlacement,
   ) {
-    const n = values.handles.length;
+    const n = values.rows.length;
     this.there = new Uint8Array(n);
     this.moved = new Uint8Array(n);
     this.parents = new Array<unknown>(n);
@@ -494,10 +494,10 @@ export class PlacementOrder {
 
   /** A part, before it is written: where its rows were, and whether they move */
   part(part: RowValues): void {
-    const { handles } = this.values;
+    const { rows: handles } = this.values;
     const parents = this.values.fields.get('parent');
     const keys = this.values.fields.get('key');
-    for (const handle of part.handles) {
+    for (const handle of part.rows) {
       let i = this.next;
       if (handles[i] !== handle) {
         if (!this.indexOf) this.indexOf = new Map(Array.from(handles, (h, k) => [h, k]));
@@ -522,7 +522,7 @@ export class PlacementOrder {
 
   /** The changes of the order, once the last part is written */
   finish(): ItemOrderChange[] {
-    const n = this.values.handles.length;
+    const n = this.values.rows.length;
     let count = 0;
     let all = true;
     for (let i = 0; i < n; i++) {
@@ -543,13 +543,13 @@ export class PlacementOrder {
     for (let i = 0; i < n; i++) {
       if (!this.there[i]) continue;
       if (this.moved[i]) {
-        handles[k] = this.values.handles[i];
+        handles[k] = this.values.rows[i];
         parents[k] = this.parents[i];
         keys[k] = this.keys[i];
         if (kinds && belows) {
           if (last >= 0) {
             kinds[k] = 0;
-            belows[k] = this.values.handles[last];
+            belows[k] = this.values.rows[last];
           } else {
             kinds[k] = below === null ? 0 : below & 1;
             belows[k] = below === null ? -1 : below >> 1;
@@ -560,14 +560,16 @@ export class PlacementOrder {
       last = i;
     }
     const before = {
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([
         ['parent', parents],
         ['key', keys],
       ]),
     };
     if (kinds && belows) {
-      return [{ kind: 'rows', layerId, handles, belows: { kinds, handles: belows }, before }];
+      return [
+        { kind: 'rows', layerId, rows: handles, belows: { types: kinds, refs: belows }, before },
+      ];
     }
     const to: ItemPosition = {
       layerId,
@@ -575,7 +577,7 @@ export class PlacementOrder {
       below: below === null ? null : this.idOf(below),
       above: above === null ? null : this.idOf(above),
     };
-    return [{ kind: 'rows', layerId, handles, to, before }];
+    return [{ kind: 'rows', layerId, rows: handles, to, before }];
   }
 
   /** The id of an item */

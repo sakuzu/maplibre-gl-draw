@@ -97,8 +97,8 @@ function setup() {
     const view = tables.get(layerId);
     if (!view) return [];
     const refs = view.listItems(0, view.itemCount);
-    return Array.from(refs.handles, (h, i) =>
-      refs.kinds[i] === 0 ? tables.getRowId(h) : tables.getGroupId(h),
+    return Array.from(refs.refs, (h, i) =>
+      refs.types[i] === 0 ? tables.getRowId(h) : tables.getGroupId(h),
     );
   };
   return { store, writer, tables, internals, draw, frame, items };
@@ -467,9 +467,9 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     n = 80,
   ) {
     const ids = Array.from({ length: n }, (_, i) => `c${String(i).padStart(2, '0')}`);
-    const handles = writer.allocateHandles(byteColumnFromStrings(ids));
+    const handles = writer.allocateRowRefs(byteColumnFromStrings(ids));
     writer.writeRows({
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
         ['parent', ids.map(() => 'a')],
@@ -533,9 +533,9 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     const keys = ids.map((_, i) =>
       i < n / 2 ? `${low}${String(i).padStart(2, '0')}` : `${high}${String(i).padStart(2, '0')}`,
     );
-    const handles = writer.allocateHandles(byteColumnFromStrings(ids));
+    const handles = writer.allocateRowRefs(byteColumnFromStrings(ids));
     writer.writeRows({
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
         ['parent', ids.map(() => 'a')],
@@ -545,7 +545,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     });
     // A row of them written before they are built
     writer.writeRows({
-      handles: handles.subarray(0, 1),
+      rows: handles.subarray(0, 1),
       fields: new Map<RowField, unknown[]>([
         ['geometry', [{ type: 'Point', coordinates: [9, 9] }]],
       ]),
@@ -579,14 +579,14 @@ describe('the groups written through the writer of the Store of rows', () => {
       // The group goes to the other layer, and its members follow it there (their parent is the
       // group, in that layer now)
       writer.writeGroups({
-        handles: Int32Array.of(handle),
+        groups: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([
           ['parent', ['b']],
           ['key', ['m']],
         ]),
       });
       writer.writeRows({
-        handles: Int32Array.from(members),
+        rows: Int32Array.from(members),
         fields: new Map<RowField, unknown[]>([['parent', ['g', 'g']]]),
       });
     }, 'remote');
@@ -625,7 +625,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     store.subscribe((change) => notified.push(change));
     store.transact(() => {
       writer.writeGroups({
-        handles: Int32Array.of(handle),
+        groups: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([
           ['name', ['renamed']],
           ['hidden', [true]],
@@ -640,7 +640,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     notified.length = 0;
     store.transact(() => {
       writer.writeGroups({
-        handles: Int32Array.of(handle),
+        groups: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([['hidden', [true]]]),
       });
     }, 'remote');
@@ -658,7 +658,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     store.subscribe((change) => notified.push(change));
     store.transact(() => {
       writer.writeGroups({
-        handles: Int32Array.of(40),
+        groups: Int32Array.of(40),
         fields: new Map<TableGroupField, unknown[]>([
           ['id', ['far']],
           ['name', ['Far']],
@@ -689,7 +689,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     notified.length = 0;
     store.transact(() => {
       writer.writeGroups({
-        handles: Int32Array.of(40),
+        groups: Int32Array.of(40),
         fields: new Map(),
         deleted: Uint8Array.of(1),
       });
@@ -721,7 +721,7 @@ describe('taking in the row groups without a drawing', () => {
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     expect(internals.hasQueuedBlocks).toBe(false);
     const view = tables.get('a');
-    const order = Array.from(view?.listRowHandles(0, 20) ?? [], (h) => tables.getRowId(h));
+    const order = Array.from(view?.listRowRefs(0, 20) ?? [], (h) => tables.getRowId(h));
     expect(order).toEqual(Array.from({ length: 10 }, (_, i) => `r${i}`));
   });
 
@@ -733,9 +733,9 @@ describe('taking in the row groups without a drawing', () => {
     // A run of new rows after the last row: built into row groups of their own over the frames
     const n = 100;
     const ids = Array.from({ length: n }, (_, i) => `r${i + 4}`);
-    const handles = writer.allocateHandles(byteColumnFromStrings(ids));
+    const handles = writer.allocateRowRefs(byteColumnFromStrings(ids));
     writer.writeRows({
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
         ['parent', ids.map(() => 'a')],
@@ -754,7 +754,7 @@ describe('taking in the row groups without a drawing', () => {
     expect(internals.deltaRowCount()).toBe(0);
     const view = tables.get('a');
     expect(view?.rowCount).toBe(n + 4);
-    const order = Array.from(view?.listRowHandles(0, n + 4) ?? [], (h) => tables.getRowId(h));
+    const order = Array.from(view?.listRowRefs(0, n + 4) ?? [], (h) => tables.getRowId(h));
     expect(order).toEqual(Array.from({ length: n + 4 }, (_, i) => `r${i}`));
   });
 

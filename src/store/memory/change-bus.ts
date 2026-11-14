@@ -362,10 +362,10 @@ export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
  */
 function mergeSnapshots(a: RowValues, b: RowValues): RowValues {
   const rowsOf = (snapshot: RowValues) =>
-    new Map(Array.from(snapshot.handles, (handle, i) => [handle, i]));
+    new Map(Array.from(snapshot.rows, (handle, i) => [handle, i]));
   const ra = rowsOf(a);
   const rb = rowsOf(b);
-  const handles = [...a.handles, ...Array.from(b.handles).filter((handle) => !ra.has(handle))];
+  const handles = [...a.rows, ...Array.from(b.rows).filter((handle) => !ra.has(handle))];
   const fields = new Map<RowField, unknown[]>();
   for (const field of new Set([...a.fields.keys(), ...b.fields.keys()])) {
     fields.set(
@@ -387,7 +387,7 @@ function mergeSnapshots(a: RowValues, b: RowValues): RowValues {
           return j !== undefined && b.deleted ? b.deleted[j] : 0;
         })
       : undefined;
-  return { handles: Int32Array.from(handles), fields, ...(deleted && { deleted }) };
+  return { rows: Int32Array.from(handles), fields, ...(deleted && { deleted }) };
 }
 
 /**

@@ -79,7 +79,7 @@ function create(
   parts.forEach((part, i) => {
     bytes.set(part, offsets[i]);
   });
-  const handles = setup.writer.allocateHandles({ offsets, bytes });
+  const handles = setup.writer.allocateRowRefs({ offsets, bytes });
   const change = setup.writer.writeRows(
     rowPatch(Array.from(handles), {
       type: rows.map(() => 'Point'),

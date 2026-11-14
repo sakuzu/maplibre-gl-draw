@@ -251,7 +251,7 @@ describe('the rows with companions of a layer held as rows', () => {
           // A group of features put at another place of the order
           const group = groupHandleOf(random() < 0.5 ? 'ga' : 'gb');
           writer.writeGroups({
-            handles: Int32Array.of(group),
+            groups: Int32Array.of(group),
             fields: new Map<TableGroupField, unknown[]>([['key', [referenceKey(random() * 1e6)]]]),
           });
           if (random() < 0.5) internals.flushVersions();
@@ -282,7 +282,7 @@ describe('the rows with companions of a layer held as rows', () => {
           const layerId = layerIds[Math.floor(random() * layerIds.length)];
           const n = 70;
           const ids = Array.from({ length: n }, (_, k) => `many${step}-${k}`);
-          const handles = Array.from(writer.allocateHandles(byteColumnFromStrings(ids)));
+          const handles = Array.from(writer.allocateRowRefs(byteColumnFromStrings(ids)));
           const base = 3_000_000 + step * 1000;
           write(
             rowPatch(handles, {
@@ -350,7 +350,7 @@ describe('the rows with companions of a layer held as rows', () => {
     internals.flushVersions();
     for (const table of [a, b]) expect(ids(table)).toEqual(walked(internals, table));
     const fields = new Map<RowField, unknown[]>([['properties:band', [1]]]);
-    writer.writeRows({ handles: Int32Array.of(tables.getRowRef('z') as number), fields });
+    writer.writeRows({ rows: Int32Array.of(tables.getRowRef('z') as number), fields });
     expect(ids(b)).toEqual(['z']);
   });
 });

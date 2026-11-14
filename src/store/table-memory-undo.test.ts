@@ -52,7 +52,7 @@ function setup(count = 6, options: Parameters<typeof createTableStore>[0] = {}) 
 /** The ids of the rows of a layer in their order, the deleted ones included until dropped */
 function rowsOf(tables: FeatureTables, layerId = 'layer'): string[] {
   const view = tables.get(layerId);
-  return Array.from(view?.listRowHandles(0, 1_000_000) ?? [], (h) => tables.getRowId(h) as string);
+  return Array.from(view?.listRowRefs(0, 1_000_000) ?? [], (h) => tables.getRowId(h) as string);
 }
 
 /** The ids of the rows not deleted of a layer */
@@ -78,7 +78,7 @@ describe('the deletions of this client kept', () => {
     // Written not deleted, it is back where it was
     store.transact(() =>
       writer.writeRows({
-        handles: Int32Array.of(handle),
+        rows: Int32Array.of(handle),
         fields: new Map(),
         deleted: Uint8Array.of(0),
       }),
@@ -93,7 +93,7 @@ describe('the deletions of this client kept', () => {
     expect(rowsOf(tables)).not.toContain('p2');
     expect(writer.lookup('p2')).toBeUndefined();
     // The handle is given again to a new id
-    const [next] = writer.allocateHandles({
+    const [next] = writer.allocateRowRefs({
       offsets: Int32Array.of(0, 3),
       bytes: new TextEncoder().encode('new'),
     });
@@ -159,7 +159,7 @@ describe('the deletions of this client kept', () => {
         locked: false,
       });
       store.restoreRows({
-        handles: Int32Array.from(deleted),
+        rows: Int32Array.from(deleted),
         fields: new Map(),
         deleted: new Uint8Array(deleted.length),
       });
@@ -176,7 +176,7 @@ describe('the rows written for this client through the Store', () => {
     const { store, tables, notified } = setup();
     const handles = Int32Array.from(['p1', 'p3'], (id) => tables.getRowRef(id) as number);
     const patch = {
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([
         ['style', [{ pointColor: '#ff0000' }, { pointColor: '#00ff00' }]],
         ['properties:n', [10, 30]],
@@ -205,7 +205,7 @@ describe('the rows written for this client through the Store', () => {
     const handle = tables.getRowRef('p1') as number;
     expect(
       store.restoreRows({
-        handles: Int32Array.of(handle),
+        rows: Int32Array.of(handle),
         fields: new Map([['properties:n', [5]]]),
       }),
     ).toBeNull();
@@ -216,7 +216,7 @@ describe('the rows written for this client through the Store', () => {
     const { store, tables } = setup();
     const handles = Int32Array.from(['p4', 'p5'], (id) => tables.getRowRef(id) as number);
     store.applyRows({
-      patch: { handles: new Int32Array(0), fields: new Map() },
+      patch: { rows: new Int32Array(0), fields: new Map() },
       created: {
         ids: { offsets: Int32Array.of(0, 2), bytes: new TextEncoder().encode('q0') },
         fields: new Map<RowField, unknown[]>([
@@ -225,7 +225,7 @@ describe('the rows written for this client through the Store', () => {
         ]),
       },
       place: { rows: handles, to: { layerId: 'layer', below: 'p0' } },
-      before: { handles: new Int32Array(0), fields: new Map() },
+      before: { rows: new Int32Array(0), fields: new Map() },
     });
     expect(liveOf(tables)).toEqual(['p0', 'p4', 'p5', 'q0', 'p1', 'p2', 'p3']);
   });
@@ -277,10 +277,10 @@ describe('the rows deleted from elsewhere', () => {
       parts.forEach((part, i) => {
         bytes.set(part, offsets[i]);
       });
-      const handles = writer.allocateHandles({ offsets, bytes });
+      const handles = writer.allocateRowRefs({ offsets, bytes });
       write((w) =>
         w.writeRows({
-          handles,
+          rows: handles,
           fields: new Map<RowField, unknown[]>([
             ['type', ids.map(() => 'Point')],
             ['parent', ids.map(() => 'layer')],
@@ -292,7 +292,7 @@ describe('the rows deleted from elsewhere', () => {
       internals?.flushVersions();
       write((w) =>
         w.writeRows({
-          handles,
+          rows: handles,
           fields: new Map(),
           deleted: new Uint8Array(handles.length).fill(1),
         }),

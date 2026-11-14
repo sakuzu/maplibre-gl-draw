@@ -208,7 +208,7 @@ describe('every row taken out of the tables', () => {
     });
     store.transact(() => {
       writer.writeRows({
-        handles: writer.allocateHandles({ offsets, bytes }),
+        rows: writer.allocateRowRefs({ offsets, bytes }),
         fields: new Map<never, unknown[]>([
           ['type' as never, ids.map(() => 'Point')],
           ['parent' as never, ids.map(() => 'a')],
@@ -247,7 +247,7 @@ describe('every row taken out of the tables', () => {
     expect(
       tables
         .readValues({
-          handles: Int32Array.of(tables.getRowRef('high') as number),
+          rows: Int32Array.of(tables.getRowRef('high') as number),
           fields: new Map([['geometry', []]]),
         })
         .fields.get('geometry'),

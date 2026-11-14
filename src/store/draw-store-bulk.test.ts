@@ -181,11 +181,11 @@ describe('features selected in bulk', () => {
     const moved = store.getSelection().bulk;
     store.applyRows({
       patch: {
-        handles: Int32Array.of(handleOf('f0')),
+        rows: Int32Array.of(handleOf('f0')),
         fields: new Map([['geometry', [square('f0', -10).geometry]]]),
       },
       before: {
-        handles: Int32Array.of(handleOf('f0')),
+        rows: Int32Array.of(handleOf('f0')),
         fields: new Map([['geometry', [square('f0', 0).geometry]]]),
       },
     });
@@ -248,7 +248,7 @@ describe('features selected in bulk', () => {
     store.transact(
       () =>
         contract.writer.writeRows({
-          handles,
+          rows: handles,
           fields: new Map(),
           deleted: new Uint8Array(handles.length).fill(1),
         }),

@@ -19,12 +19,12 @@ import type { Geometry, Position } from 'geojson';
 export type { RowField, TableRowsChange as LayerRowsChange };
 
 /**
- * Values of rows: the rows by their handles, and the values of fields, one per row. Read from
+ * Values of rows: the rows by their references, and the values of fields, one per row. Read from
  * the rows, they are the values the rows have; written to them, they put the values there.
  */
 export interface RowValues {
   /** The rows */
-  readonly handles: Int32Array;
+  readonly rows: Int32Array;
   /** The values of each field, one per row */
   readonly fields: ReadonlyMap<RowField, RowFieldValues>;
   /**
@@ -45,12 +45,12 @@ export interface RowValues {
 export type TableGroupField = 'id' | 'name' | 'parent' | 'key' | 'hidden' | 'locked';
 
 /**
- * Values written to groups of features held as rows: the groups by their handles (the handles
- * rows name in their pages, `GroupEntry.handle`).
+ * Values written to groups of features held as rows: the groups by their references (the
+ * references rows name in their pages, `GroupEntry.group`).
  */
 export interface TableGroupPatch {
   /** The groups written */
-  readonly handles: Int32Array;
+  readonly groups: Int32Array;
   /** The values of each field written, one per group */
   readonly fields: ReadonlyMap<TableGroupField, readonly unknown[]>;
   /** Non-zero for a group deleted */
@@ -864,11 +864,11 @@ export interface FeatureValues {
 /**
  * Items of a layer, in their order: rows and groups of features.
  */
-export interface ItemHandles {
-  /** The kind of each item: 0 for a row, 1 for a group of features */
-  readonly kinds: Uint8Array;
-  /** The handle of each item: of its row, or of its group (-1 for none) */
-  readonly handles: Int32Array;
+export interface ItemRefs {
+  /** The type of each item: 0 for a row, 1 for a group of features */
+  readonly types: Uint8Array;
+  /** The reference of each item: of its row, or of its group (-1 for none) */
+  readonly refs: Int32Array;
 }
 
 /**
@@ -941,11 +941,11 @@ export interface RowsMove {
   /** The layer the rows are in */
   readonly layerId: string;
   /** The rows, in the order they were put */
-  readonly handles: Int32Array;
+  readonly rows: Int32Array;
   /** The place they were put at, one after the other (absent when `belows` is given) */
   readonly to?: ItemPosition;
   /** The item just below each row (absent when `to` is given) */
-  readonly belows?: ItemHandles;
+  readonly belows?: ItemRefs;
   /** Their layer, group and keys of their order before */
   readonly before: RowValues;
 }

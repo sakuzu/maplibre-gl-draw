@@ -148,7 +148,7 @@ describe('the write mark of a Store of rows', () => {
     );
     const values = Array.from({ length: count }, (_, i) => i + 1000);
     store.restoreRows({
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([['properties:n', values]]),
     });
     expect(given).toEqual([before + 1]);

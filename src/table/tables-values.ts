@@ -5,9 +5,9 @@
  * The values of rows and of groups as core names them, and as the tables of `@sakuzu/kasane`
  * name them: the one place core turns the ones into the others
  *
- * Core names the rows and the groups of its values by their handles (`RowValues.handles`,
- * `TableGroupPatch.handles`, `GroupEntry.handle`), as its entries give them; the tables name them
- * by their references (`rows`, `groups`, `group`). The arrays are not copied.
+ * Core names the rows and the groups of its values by their references in the fields the tables
+ * name them by (`RowValues.rows`, `TableGroupPatch.groups`, `GroupEntry.group`), as its entries
+ * give them. The arrays are not copied.
  *
  * A pure module: it depends on nothing but `@sakuzu/kasane` and the types of `shared/`, so it
  * runs in a Worker as well.
@@ -24,11 +24,11 @@ import type {
 import type { RowValues, TableGroupPatch } from '../shared/types/model.js';
 
 /**
- * A group the rows can belong to: its handle, its id and the key of its order
+ * A group the rows can belong to: its reference, its id and the key of its order
  */
 export interface GroupEntry {
-  /** The handle of the group, which a row names */
-  readonly handle: number;
+  /** The reference of the group, which a row names */
+  readonly group: number;
   /** The id of the group */
   readonly id: string;
   /** The key of the order of the group among the items of its layer */
@@ -37,7 +37,7 @@ export interface GroupEntry {
 
 /**
  * The options of `createPageBuilder`: those of the builder of the tables, the groups named by
- * their handles
+ * their references
  */
 export interface PageBuilderOptions extends Omit<TablesPageBuilderOptions, 'groups'> {
   /** The groups the rows can belong to (none when omitted) */
@@ -46,7 +46,7 @@ export interface PageBuilderOptions extends Omit<TablesPageBuilderOptions, 'grou
 
 /**
  * What `mergePages` merges: what the merge of the tables merges, the groups named by their
- * handles
+ * references
  */
 export interface PageMerge extends Omit<TablesPageMerge, 'groups'> {
   /** The groups the rows name (their keys order their members) */
@@ -60,8 +60,8 @@ export interface PageMerge extends Omit<TablesPageMerge, 'groups'> {
  */
 export function tablesValuesOf(values: RowValues): TablesRowValues {
   return values.deleted
-    ? { rows: values.handles, fields: values.fields, deleted: values.deleted }
-    : { rows: values.handles, fields: values.fields };
+    ? { rows: values.rows, fields: values.fields, deleted: values.deleted }
+    : { rows: values.rows, fields: values.fields };
 }
 
 /**
@@ -71,8 +71,8 @@ export function tablesValuesOf(values: RowValues): TablesRowValues {
  */
 export function rowValuesOfTables(values: TablesRowValues): RowValues {
   return values.deleted
-    ? { handles: values.rows, fields: values.fields, deleted: values.deleted }
-    : { handles: values.rows, fields: values.fields };
+    ? { rows: values.rows, fields: values.fields, deleted: values.deleted }
+    : { rows: values.rows, fields: values.fields };
 }
 
 /**
@@ -83,8 +83,8 @@ export function rowValuesOfTables(values: TablesRowValues): RowValues {
  */
 export function tablesValuesToCheck(values: unknown): unknown {
   if (typeof values !== 'object' || values === null || Array.isArray(values)) return values;
-  const { handles, fields, deleted } = values as Partial<RowValues>;
-  return deleted === undefined ? { rows: handles, fields } : { rows: handles, fields, deleted };
+  const { rows, fields, deleted } = values as Partial<RowValues>;
+  return deleted === undefined ? { rows, fields } : { rows, fields, deleted };
 }
 
 /**
@@ -106,8 +106,8 @@ export function fieldsToRead(values: RowValues): RowField[] {
  */
 export function tablesGroupPatchOf(patch: TableGroupPatch): TablesGroupPatch {
   return patch.deleted
-    ? { groups: patch.handles, fields: patch.fields, deleted: patch.deleted }
-    : { groups: patch.handles, fields: patch.fields };
+    ? { groups: patch.groups, fields: patch.fields, deleted: patch.deleted }
+    : { groups: patch.groups, fields: patch.fields };
 }
 
 /**
@@ -116,7 +116,7 @@ export function tablesGroupPatchOf(patch: TableGroupPatch): TablesGroupPatch {
  * @internal
  */
 export function tablesGroupsOf(groups: readonly GroupEntry[]): TablesGroupEntry[] {
-  return groups.map(({ handle, id, key }) => ({ group: handle, id, key }));
+  return groups.map(({ group, id, key }) => ({ group, id, key }));
 }
 
 /**
@@ -125,7 +125,7 @@ export function tablesGroupsOf(groups: readonly GroupEntry[]): TablesGroupEntry[
  * @internal
  */
 export function groupsOfTables(groups: readonly TablesGroupEntry[]): GroupEntry[] {
-  return groups.map(({ group, id, key }) => ({ handle: group, id, key }));
+  return groups.map(({ group, id, key }) => ({ group, id, key }));
 }
 
 /**

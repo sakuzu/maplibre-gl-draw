@@ -58,7 +58,7 @@ describe('a group moved to a layer of fewer dimensions', () => {
     store.createLayer(layer('z'));
     store.createLayer(layer('a'));
     store.createGroup(group('g', 'z'));
-    const [h] = writer.allocateHandles(byteColumnFromStrings(['f']));
+    const [h] = writer.allocateRowRefs(byteColumnFromStrings(['f']));
     store.transact(
       () =>
         writer.writeRows(
@@ -108,7 +108,7 @@ describe('the parent of a row written from elsewhere', () => {
 
   it('may name a new table when the tables have no Store', () => {
     const { tables, writer } = createFeatureTables();
-    const [h] = writer.allocateHandles(byteColumnFromStrings(['r']));
+    const [h] = writer.allocateRowRefs(byteColumnFromStrings(['r']));
     writer.writeRows(
       rowPatch([h as number], {
         type: ['Point'],

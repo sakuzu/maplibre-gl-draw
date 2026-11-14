@@ -40,7 +40,7 @@ function groupPatch(
   deleted?: number[],
 ): TableGroupPatch {
   return {
-    handles: Int32Array.from(handles),
+    groups: Int32Array.from(handles),
     fields: new Map(Object.entries(fields) as Array<[TableGroupField, unknown[]]>),
     deleted: deleted ? Uint8Array.from(deleted) : undefined,
   };
@@ -110,14 +110,14 @@ describe('the groups of features written', () => {
     const setup = tablesOfReference(reference, ['a'], 8);
     const { tables, writer, internals, groupHandleOf } = setup;
     const sides = gate(internals);
-    const before = Array.from(tables.get('a')?.listRowHandles(0, 100) ?? []);
+    const before = Array.from(tables.get('a')?.listRowRefs(0, 100) ?? []);
     const keysBefore = internals
       .rowTable('a')
       ?.rowOrder()
       .groups.map((group) => group.data.keys);
     writer.writeGroups(groupPatch([groupHandleOf('g')], { key: [key(55_500)] }));
     // Until swapped in, the order before
-    expect(Array.from(tables.get('a')?.listRowHandles(0, 100) ?? [])).toEqual(before);
+    expect(Array.from(tables.get('a')?.listRowRefs(0, 100) ?? [])).toEqual(before);
     expect(internals.builtVersions('a').some((v) => v.orders !== null)).toBe(true);
     sides.open();
     internals.swap();

@@ -937,11 +937,11 @@ export type MoveTarget =
 
 export type {
   FeatureValues,
-  ItemHandles,
   ItemMove,
   ItemOrderChange,
   ItemPlacement,
   ItemPosition,
+  ItemRefs,
   RestoreToken,
   RowsMove,
   RowValues,

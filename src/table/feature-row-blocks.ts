@@ -61,7 +61,7 @@ export interface FeatureRowInput {
    */
   readonly key: string;
   /**
-   * The handle of the group of the row (`GroupEntry.handle`; outside a group when
+   * The reference of the group of the row (`GroupEntry.group`; outside a group when
    * omitted or negative)
    */
   readonly group?: number;
@@ -145,7 +145,7 @@ export function tablesWorkerOf(worker: FeatureTablesWorker): TablesWorker {
   };
 }
 
-/** A merge of the tables as the Worker of the host takes it: the groups named by their handles */
+/** A merge of the tables as the Worker of the host takes it: the groups named by their references */
 function mergeOfTables(merge: TablesPageMerge): PageMerge {
   const { groups, ...rest } = merge;
   return groups ? { ...rest, groups: groupsOfTables(groups) } : rest;

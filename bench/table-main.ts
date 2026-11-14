@@ -500,12 +500,12 @@ async function putBigArea(extent: [number, number, number, number]): Promise<voi
     // A key before the keys of the rows (`k...`)
     const encoder = new TextEncoder();
     const bytes = encoder.encode('bigArea');
-    const [handle] = tablesOfPage.writer.allocateHandles({
+    const [handle] = tablesOfPage.writer.allocateRowRefs({
       offsets: Int32Array.of(0, bytes.length),
       bytes,
     });
     tablesOfPage.writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
         ['type', ['Polygon']],
         ['parent', [LAYER_ID]],

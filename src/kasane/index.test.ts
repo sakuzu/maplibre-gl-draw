@@ -104,18 +104,18 @@ describe('the kasane subpath', () => {
     expect(codeOf(() => writer.addPages('l', [{ ...builder.finish()[0], length: 0 }]))).toBe(
       'invalidInput',
     );
-    expect(codeOf(() => writer.writeRows({ handles: Int32Array.of(99), fields: new Map() }))).toBe(
+    expect(codeOf(() => writer.writeRows({ rows: Int32Array.of(99), fields: new Map() }))).toBe(
       'notFound',
     );
     // A handle given to a new id, written without what a new row needs
-    const [handle] = writer.allocateHandles({
+    const [handle] = writer.allocateRowRefs({
       offsets: Int32Array.of(0, 1),
       bytes: new TextEncoder().encode('n'),
     });
     expect(
       codeOf(() =>
         writer.writeRows({
-          handles: Int32Array.of(handle),
+          rows: Int32Array.of(handle),
           fields: new Map([['hidden', [false]]]),
         }),
       ),
@@ -175,12 +175,12 @@ describe('the kasane subpath', () => {
     writer.addPages('l', one.finish());
     const handles = Int32Array.of(tables.getRowRef('a') as number);
     const surrogate = wrapped(() =>
-      writer.writeRows({ handles, fields: new Map([['properties:x', ['\ud800']]]) }),
+      writer.writeRows({ rows: handles, fields: new Map([['properties:x', ['\ud800']]]) }),
     );
     expect(surrogate.error.code).toBe('invalidInput');
     expect(surrogate.error.message).toBe('ValueOverrides: a string with a lone surrogate');
     const notValue = wrapped(() =>
-      writer.writeRows({ handles, fields: new Map([['properties:x', [() => 1]]]) }),
+      writer.writeRows({ rows: handles, fields: new Map([['properties:x', [() => 1]]]) }),
     );
     expect(notValue.error.code).toBe('invalidInput');
     expect(notValue.cause.cause).toBeInstanceOf(TabaneError);
@@ -216,7 +216,7 @@ describe('the kasane subpath', () => {
     const token = writer.createRestoreToken();
     writer.writeRows(
       {
-        handles: Int32Array.of(tables.getRowRef('a') as number),
+        rows: Int32Array.of(tables.getRowRef('a') as number),
         fields: new Map(),
         deleted: Uint8Array.of(1),
       },

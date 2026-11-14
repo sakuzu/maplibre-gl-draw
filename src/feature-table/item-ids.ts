@@ -79,8 +79,8 @@ export function tableLayerFeatureCount(tables: FeatureTables | undefined, layerI
   if (!view) return 0;
   const items = view.listItems(0, view.itemCount);
   let count = 0;
-  for (let i = 0; i < items.kinds.length; i++) {
-    count += items.kinds[i] === 0 ? 1 : view.countGroupMembers(items.handles[i]);
+  for (let i = 0; i < items.types.length; i++) {
+    count += items.types[i] === 0 ? 1 : view.countGroupMembers(items.refs[i]);
   }
   return count;
 }

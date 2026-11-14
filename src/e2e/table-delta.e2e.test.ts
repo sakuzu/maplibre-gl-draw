@@ -246,7 +246,7 @@ async function drawWritten(
       if (change) {
         const ids = change.moves.map((m) => m.id);
         writer.writeRows({
-          handles: Int32Array.from(ids.map((id) => tables.getRowRef(id) as number)),
+          rows: Int32Array.from(ids.map((id) => tables.getRowRef(id) as number)),
           fields: new Map([['key', change.moves.map((m) => m.order)]]),
         });
         const encoder = new TextEncoder();
@@ -257,9 +257,9 @@ async function drawWritten(
         parts.forEach((part, i) => {
           bytes.set(part, offsets[i]);
         });
-        const handles = writer.allocateHandles({ offsets, bytes });
+        const handles = writer.allocateRowRefs({ offsets, bytes });
         writer.writeRows({
-          handles,
+          rows: handles,
           fields: new Map<never, unknown[]>([
             ['type' as never, change.created.map((f) => f.type)],
             ['parent' as never, change.created.map(() => 'rows')],

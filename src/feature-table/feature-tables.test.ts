@@ -77,14 +77,14 @@ describe('the counts and the lists of the rows of a layer', () => {
     featureTablesInternals(tables)?.addQueuedPages();
     const view = tables.get('layer') as LayerTableView;
     writer.writeRows({
-      handles: Int32Array.of(tables.getRowRef('r2') as number),
+      rows: Int32Array.of(tables.getRowRef('r2') as number),
       fields: new Map(),
       deleted: Uint8Array.of(1),
     });
     expect(view.rowCount).toBe(5);
     expect(view.rowCountWithDeleted).toBe(6);
     expect(
-      Array.from(view.listRowHandles(0, view.rowCountWithDeleted), (h) => tables.getRowId(h)),
+      Array.from(view.listRowRefs(0, view.rowCountWithDeleted), (h) => tables.getRowId(h)),
     ).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
   });
 
@@ -111,10 +111,10 @@ describe('createFeatureTables', () => {
     expect(view?.getRowValue(handle, 'name')).toBe('name 3');
     expect(view?.getRowValue(handle, 'missing')).toBeUndefined();
     expect(view?.getRowType(handle)).toBe('Point');
-    expect(Array.from(view?.listRowHandles(0, 10) ?? []).map((h) => tables.getRowId(h))).toEqual(
+    expect(Array.from(view?.listRowRefs(0, 10) ?? []).map((h) => tables.getRowId(h))).toEqual(
       Array.from({ length: 10 }, (_, i) => `r${i}`),
     );
-    expect(Array.from(view?.listRowHandles(8, 5) ?? []).map((h) => tables.getRowId(h))).toEqual([
+    expect(Array.from(view?.listRowRefs(8, 5) ?? []).map((h) => tables.getRowId(h))).toEqual([
       'r8',
       'r9',
     ]);
@@ -123,7 +123,7 @@ describe('createFeatureTables', () => {
   it('keeps handles given beforehand', () => {
     const { tables, writer } = createFeatureTablesStore();
     const [group] = groups(3);
-    const handles = writer.allocateHandles(group.ids, group.idHashes);
+    const handles = writer.allocateRowRefs(group.ids, group.idHashes);
     group.rows.set(handles);
     writer.addPages('layer', [group]);
     expect(tables.getRowRef('r1')).toBe(handles[1]);
@@ -164,7 +164,7 @@ describe('createFeatureTables', () => {
     writer.addPages('layer', groups(3, { keyOffset: 0, prefix: 'a' }));
     writer.addPages('layer', groups(3, { keyOffset: 20, prefix: 'c' }));
     const view = tables.get('layer');
-    expect(Array.from(view?.listRowHandles(0, 9) ?? []).map((h) => tables.getRowId(h))).toEqual([
+    expect(Array.from(view?.listRowRefs(0, 9) ?? []).map((h) => tables.getRowId(h))).toEqual([
       'a0',
       'a1',
       'a2',
@@ -186,7 +186,7 @@ describe('createFeatureTables', () => {
     const x3 = tables.getRowRef('x3') as number;
     expect(internals.ids.deltaTable(x3)).toBeGreaterThanOrEqual(0);
     const view = tables.get('layer');
-    const ids = () => Array.from(view?.listRowHandles(0, 10) ?? []).map((h) => tables.getRowId(h));
+    const ids = () => Array.from(view?.listRowRefs(0, 10) ?? []).map((h) => tables.getRowId(h));
     const order = ['r0', 'r1', 'r2', 'r3', 'x3', 'r4', 'x4'];
     expect(ids()).toEqual(order);
     expect(view?.getRow(x3)?.properties).toEqual({ n: 3, name: 'name 3' });
@@ -213,7 +213,7 @@ describe('createFeatureTables', () => {
     const u100 = tables.getRowRef('u100') as number;
     expect(internals.ids.deltaTable(u100)).toBeGreaterThanOrEqual(0);
     const view = tables.get('layer');
-    const ids = () => Array.from(view?.listRowHandles(0, 10) ?? []).map((h) => tables.getRowId(h));
+    const ids = () => Array.from(view?.listRowRefs(0, 10) ?? []).map((h) => tables.getRowId(h));
     const order = ['r0', 'r1', 'r2', 'u101', 'u100'];
     expect(ids()).toEqual(order);
     const drawn = Array.from(view?.listDrawnRows([-1, -1, 200, 200]) ?? []).map((h) =>
@@ -316,7 +316,7 @@ describe('createFeatureTables', () => {
 
   it('allocates handles for the ids of a column', () => {
     const { tables, writer } = createFeatureTablesStore();
-    const handles = writer.allocateHandles(byteColumnFromStrings(['x', 'y']));
+    const handles = writer.allocateRowRefs(byteColumnFromStrings(['x', 'y']));
     expect(tables.getRowId(handles[1])).toBe('y');
     // A handle with no row yet is not a row
     expect(tables.getRowRef('x')).toBeUndefined();
@@ -365,7 +365,7 @@ describe('adding pages', () => {
     expect(added.layers.get('layer')?.fields.has('properties:name')).toBe(true);
     writer.addPages('layer', groups(3, { keyOffset: 20, prefix: 'z', targetRows: 3 }));
     const view = tables.get('layer');
-    expect(Array.from(view?.listRowHandles(0, 12) ?? []).map((h) => tables.getRowId(h))).toEqual([
+    expect(Array.from(view?.listRowRefs(0, 12) ?? []).map((h) => tables.getRowId(h))).toEqual([
       ...Array.from({ length: 9 }, (_, i) => `r${i}`),
       'z20',
       'z21',

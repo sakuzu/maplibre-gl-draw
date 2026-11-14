@@ -27,9 +27,9 @@ function listsOf(tables: FeatureTables, layerIds: readonly string[]): Lists {
     if (!view) continue;
     const items = view.listItems(0, view.itemCount);
     const ids: string[] = [];
-    for (let i = 0; i < items.kinds.length; i++) {
-      const handle = items.handles[i];
-      if (items.kinds[i] === 0) {
+    for (let i = 0; i < items.types.length; i++) {
+      const handle = items.refs[i];
+      if (items.types[i] === 0) {
         ids.push(tables.getRowId(handle) as string);
         continue;
       }
@@ -114,7 +114,7 @@ function writeKeys(
   store.transact(
     () =>
       writer.writeRows({
-        handles: Int32Array.from(keys, ([id]) => tables.getRowRef(id) as number),
+        rows: Int32Array.from(keys, ([id]) => tables.getRowRef(id) as number),
         fields: new Map<RowField, unknown[]>([['key', keys.map(([, key]) => key)]]),
       }),
     'remote',
@@ -222,7 +222,7 @@ describe('the changes of the order of a Store of rows', () => {
     expect(order).toHaveLength(1);
     const move = order[0] as RowsMove;
     expect(move.kind).toBe('rows');
-    expect(Array.from(move.handles, (h) => tables.getRowId(h))).toEqual(moved);
+    expect(Array.from(move.rows, (h) => tables.getRowId(h))).toEqual(moved);
     expect(move.to).toEqual({ layerId: 'a', groupId: undefined, below: null, above: ids[0] });
     expect(move.belows).toBeUndefined();
     // The values before written back put the rows back
@@ -253,7 +253,7 @@ describe('the changes of the order of a Store of rows', () => {
     const move = order[0] as RowsMove;
     expect(move.to).toBeUndefined();
     // The item just below each row moved is the one it went past
-    const below = Array.from(move.belows?.handles ?? [], (h) => tables.getRowId(h));
+    const below = Array.from(move.belows?.refs ?? [], (h) => tables.getRowId(h));
     expect(below).toEqual(keys.map(([id]) => ids[ids.indexOf(id) + 1]));
     store.transact(() => writer.writeRows(move.before), 'remote');
     expect(listsOf(tables, ['a'])).toEqual(before);
@@ -270,7 +270,7 @@ describe('the changes of the order of a Store of rows', () => {
     const moves = notified.flatMap((change) => change.order ?? []) as ItemMove[];
     expect(moves).toHaveLength(1);
     const move = moves[0] as ItemMove;
-    expect(move.before?.handles).toEqual(Int32Array.of(tables.getRowRef('f3') as number));
+    expect(move.before?.rows).toEqual(Int32Array.of(tables.getRowRef('f3') as number));
     expect(move.before?.fields.get('parent')).toEqual(['a']);
     // Its keys before, written back, put the row back
     store.transact(
@@ -310,7 +310,7 @@ describe('the changes of the order of a Store of rows', () => {
     store.transact(
       () =>
         writer.writeGroups({
-          handles: Int32Array.of(groups?.handleOfId('g') as number),
+          groups: Int32Array.of(groups?.handleOfId('g') as number),
           fields: new Map([['key', ['0']]]),
         }),
       'remote',

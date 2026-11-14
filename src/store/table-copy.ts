@@ -101,7 +101,7 @@ export function copyTableStore(
       const key = sourceHandle === undefined ? undefined : groupOrderOf(sourceHandle);
       if (key !== undefined && targetHandle !== undefined) {
         writer.writeGroups({
-          handles: Int32Array.of(targetHandle),
+          groups: Int32Array.of(targetHandle),
           fields: new Map([['key', [key]]]),
         });
       }
@@ -129,7 +129,7 @@ export function copyTableStore(
     if (!view || layer.kind !== 'table') continue;
     pending.push({
       layerId: layer.id,
-      handles: view.listRowHandles(0, view.rowCountWithDeleted),
+      handles: view.listRowRefs(0, view.rowCountWithDeleted),
       at: 0,
     });
   }
@@ -147,7 +147,7 @@ export function copyTableStore(
       entries = [];
       groupEntries.set(group.layerId, entries);
     }
-    entries.push({ handle: targetHandle, id: group.id, key });
+    entries.push({ group: targetHandle, id: group.id, key });
   }
 
   return {

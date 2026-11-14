@@ -789,7 +789,7 @@ describe('the check of the classification of a row written in place', () => {
     const line = features.find((f) => f.id.startsWith('l')) as Feature;
     const handle = tables.getRowRef(line.id) as number;
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map([['properties:ring', [true]]]),
     });
     let atOnce = false;
@@ -829,7 +829,7 @@ describe('the check of the classification of a row written in place', () => {
     asked.length = 0;
     // A key it does not read: the row keeps its classification, the provider is not asked
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map([['properties:name', ['n']]]),
     });
     for (let i = 0; i < 2; i++) {
@@ -841,7 +841,7 @@ describe('the check of the classification of a row written in place', () => {
     expect(internals.deltaRowCount()).toBe(0);
     // The key it reads: classified again, drawn at once from the delta with its companion
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map([['properties:ring', [true]]]),
     });
     let atOnce = false;
@@ -877,7 +877,7 @@ describe('the check of the classification of a row written in place', () => {
     const handle = tables.getRowRef(line.id) as number;
     asked.length = 0;
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map([['properties:name', ['n']]]),
     });
     frame();
@@ -893,7 +893,7 @@ describe('the check of the classification of a row written in place', () => {
     const polygon = features.find((f) => f.id.startsWith('g')) as Feature;
     const handle = tables.getRowRef(polygon.id) as number;
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
         ['properties:name', ['a name']],
         ['hidden', [true]],
@@ -933,7 +933,7 @@ describe('the check of the classification of a row written in place', () => {
     frame();
     frame();
     writer.writeRows({
-      handles: Int32Array.of(tables.getRowRef('c1') as number),
+      rows: Int32Array.of(tables.getRowRef('c1') as number),
       fields: new Map([['properties:custom', [true]]]),
     });
     for (let i = 0; i < 3; i++) {
@@ -1481,7 +1481,7 @@ describe('the rows an extension holds on the GPU', () => {
     frame();
     const handle = tables.getRowRef('r1') as number;
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map([['properties:name', ['n']]]),
     });
     log.length = 0;
@@ -1489,7 +1489,7 @@ describe('the rows an extension holds on the GPU', () => {
     expect(log).toEqual([]);
     expect(made[0].writes).toEqual([[1, handle]]);
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map([['style', [{ strokeColor: '#00ff00' }]]]),
     });
     frame();
@@ -1503,7 +1503,7 @@ describe('the rows an extension holds on the GPU', () => {
     });
     frame();
     writer.writeRows({
-      handles: Int32Array.of(tables.getRowRef('r1') as number),
+      rows: Int32Array.of(tables.getRowRef('r1') as number),
       fields: new Map([['properties:name', ['n']]]),
     });
     log.length = 0;
@@ -1530,7 +1530,7 @@ describe('the rows an extension holds on the GPU', () => {
     });
     frame();
     writer.writeRows({
-      handles: Int32Array.of(tables.getRowRef('r1') as number),
+      rows: Int32Array.of(tables.getRowRef('r1') as number),
       fields: new Map([['properties:ring', [true]]]),
     });
     log.length = 0;
@@ -1800,7 +1800,7 @@ describe('the rows an extension holds on the GPU', () => {
       const handle = tables.getRowRef('r1') as number;
       const write = (value: string) =>
         writer.writeRows({
-          handles: Int32Array.of(handle),
+          rows: Int32Array.of(handle),
           fields: new Map([['properties:name', [value]]]),
         });
       write('a');

@@ -304,7 +304,7 @@ async function drawWritten(
         const handle = tables.getRowRef(write.id);
         if (handle === undefined) throw new Error(`no row ${write.id}`);
         writer.writeRows({
-          handles: Int32Array.of(handle),
+          rows: Int32Array.of(handle),
           fields: new Map([[write.field as never, [write.value]]]),
         });
       }

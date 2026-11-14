@@ -114,7 +114,7 @@ describe('the deltas and the versions at their edges', () => {
     const reference = pointsReference(10);
     const setup = tablesOfReference(reference, ['a'], 4);
     const { tables, writer, internals, groupHandleOf } = setup;
-    const [fresh] = writer.allocateHandles(byteColumnFromStrings(['alone']));
+    const [fresh] = writer.allocateRowRefs(byteColumnFromStrings(['alone']));
     writer.writeRows(
       rowPatch([fresh], {
         type: ['Point'],

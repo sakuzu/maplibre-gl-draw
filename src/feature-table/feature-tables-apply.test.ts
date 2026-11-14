@@ -60,7 +60,7 @@ function readAll(cursor: { next(): Int32Array | null }): number[] {
 
 /** A patch of one field of rows */
 function patchOf(handles: number[], field: RowField, values: unknown[]): RowValues {
-  return { handles: Int32Array.from(handles), fields: new Map([[field, values]]) };
+  return { rows: Int32Array.from(handles), fields: new Map([[field, values]]) };
 }
 
 describe('scan', () => {
@@ -74,7 +74,7 @@ describe('scan', () => {
     expect(ids(readAll(tables.scan()))).toEqual(points(50).map((f) => f.id));
     const handle = internals.ids.handleOf('p3');
     writer.writeRows({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map(),
       deleted: Uint8Array.of(1),
     });
@@ -128,14 +128,14 @@ describe('the items of a layer', () => {
     expect(view.itemCount).toBe(4);
     const items = view.listItems(0, 10);
     const handle = (id: string) => tables.getRowRef(id) as number;
-    expect(Array.from(items.kinds)).toEqual([ITEM_ROW, ITEM_ROW, ITEM_GROUP, ITEM_ROW]);
-    expect(Array.from(items.handles)).toEqual([handle('f0'), handle('f3'), 7, handle('f5')]);
+    expect(Array.from(items.types)).toEqual([ITEM_ROW, ITEM_ROW, ITEM_GROUP, ITEM_ROW]);
+    expect(Array.from(items.refs)).toEqual([handle('f0'), handle('f3'), 7, handle('f5')]);
     expect(view.countGroupMembers(7)).toBe(3);
     expect(Array.from(view.listGroupMembers(7, 1, 5))).toEqual([handle('f2'), handle('f4')]);
-    expect(Array.from(view.listItems(1, 2).handles)).toEqual([handle('f3'), 7]);
+    expect(Array.from(view.listItems(1, 2).refs)).toEqual([handle('f3'), 7]);
     // A deleted member leaves the group, and a deleted row its item
     writer.writeRows({
-      handles: Int32Array.of(handle('f2'), handle('f3')),
+      rows: Int32Array.of(handle('f2'), handle('f3')),
       fields: new Map(),
       deleted: Uint8Array.of(1, 1),
     });
@@ -159,7 +159,7 @@ describe('writer.writeRows', () => {
     const a = internals.ids.handleOf('a');
     const b = internals.ids.handleOf('b');
     writer.writeRows({
-      handles: Int32Array.of(a, b),
+      rows: Int32Array.of(a, b),
       fields: new Map<RowField, unknown[]>([
         [
           'geometry',
@@ -207,13 +207,13 @@ describe('writer.writeRows', () => {
     const handle = internals.ids.handleOf('p1');
     // A known row and an unknown one: nothing is written
     const patch: RowValues = {
-      handles: Int32Array.of(handle, 999),
+      rows: Int32Array.of(handle, 999),
       fields: new Map([['properties:name', ['x', 'y']]]),
     };
     expect(() => writer.writeRows(patch)).toThrow(/no row/);
     expect(tables.get('layer')?.getRowValue(handle, 'name')).toBeUndefined();
     // A new row without what it needs
-    const [fresh] = writer.allocateHandles(byteColumnFromStrings(['new']));
+    const [fresh] = writer.allocateRowRefs(byteColumnFromStrings(['new']));
     expect(() => writer.writeRows(patchOf([fresh], 'properties:name', ['x']))).toThrow(
       /a new row needs type, parent, geometry, key/,
     );
@@ -342,7 +342,7 @@ describe('writer.writeRows', () => {
     const a = internals.ids.handleOf('p0');
     const red = { pointColor: '#ff0000' };
     writer.writeRows({
-      handles: Int32Array.of(a),
+      rows: Int32Array.of(a),
       fields: new Map<RowField, unknown[]>([
         ['style', [red]],
         ['key', [orderKey(5)]],
@@ -436,7 +436,7 @@ describe('writes at random against a list of features', () => {
           alive[i] = { ...current, properties };
         } else {
           writer.writeRows({
-            handles: Int32Array.of(handle),
+            rows: Int32Array.of(handle),
             fields: new Map(),
             deleted: Uint8Array.of(1),
           });
@@ -450,7 +450,7 @@ describe('writes at random against a list of features', () => {
       const expected = alive.filter((f): f is Feature => f !== null);
       const scanned = readAll(tables.scan());
       expect(scanned.map((h) => tables.getRowId(h))).toEqual(expected.map((f) => f.id));
-      expect(Array.from(view.listItems(0, 1000).handles)).toEqual(scanned);
+      expect(Array.from(view.listItems(0, 1000).refs)).toEqual(scanned);
       for (const f of expected) {
         const handle = tables.getRowRef(f.id) as number;
         const row = view.getRow(handle);

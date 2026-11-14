@@ -380,7 +380,7 @@ export class DrawStore implements Store {
     const before = tables.readValues(patch);
     // Many rows are written in steps by a Store of core that has them, as one transaction
     const steps = rowStepsOf.get(this.#contract);
-    if (steps && patch.handles.length > BULK_SLICE_ROWS) {
+    if (steps && patch.rows.length > BULK_SLICE_ROWS) {
       return this.#write(() => this.#restoreInSteps(steps, { patch, before })) ? before : null;
     }
     return this.applyRows({ patch, before }) ? before : null;
@@ -1844,12 +1844,12 @@ function placedRowsOf(changes: StoreChange): PlacedRows | null {
   for (const move of order) {
     if (move.kind !== 'rows' || !move.to) return null;
     places.push(move.to);
-    for (const handle of move.handles) if (handle >= size) size = handle + 1;
+    for (const handle of move.rows) if (handle >= size) size = handle + 1;
   }
   // The place of each row by its handle (its number among the places plus one; 0: none)
   const placeOf = new Int32Array(size);
   order.forEach((move, k) => {
-    for (const handle of (move as { handles: Int32Array }).handles) {
+    for (const handle of (move as { rows: Int32Array }).rows) {
       if (placeOf[handle] !== 0) size = -1;
       placeOf[handle] = k + 1;
     }

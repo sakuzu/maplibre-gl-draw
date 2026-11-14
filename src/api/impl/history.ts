@@ -306,7 +306,7 @@ function applyInverse(store: Store, inverse: Inverse): void {
 
   // 2. The rows: their values before (a row deleted comes back with them), then the rows created
   // deleted again
-  if (tables && inverse.rowsBefore && inverse.rowsBefore.handles.length > 0) {
+  if (tables && inverse.rowsBefore && inverse.rowsBefore.rows.length > 0) {
     store.restoreRows(inverse.rowsBefore);
   }
 
@@ -405,7 +405,7 @@ function applyInverse(store: Store, inverse: Inverse): void {
     }
     if (handles.length > 0) {
       store.restoreRows({
-        handles: Int32Array.from(handles),
+        rows: Int32Array.from(handles),
         fields: new Map(),
         deleted: new Uint8Array(handles.length).fill(1),
       } as RowValues);

@@ -275,7 +275,7 @@ export class HeldSnapshot implements DocumentSnapshot {
     if (!patch.fields.has('parent') && !patch.fields.has('key')) return;
     const { internals } = this.#source;
     const layers = new Set<string>();
-    const handles = patch.handles;
+    const handles = patch.rows;
     const parentless: number[] = [];
     // The layers the rows are in: none to look for once the order of every layer with rows is kept
     const findLayers = !this.#everyOrderKept();
@@ -298,7 +298,7 @@ export class HeldSnapshot implements DocumentSnapshot {
     if (parentless.length > 0) {
       const read = this.#source.through(() =>
         this.#source.tables.readValues({
-          handles: Int32Array.from(parentless),
+          rows: Int32Array.from(parentless),
           fields: new Map<RowField, unknown[]>([['parent', []]]),
         }),
       );
@@ -320,7 +320,7 @@ export class HeldSnapshot implements DocumentSnapshot {
     const { internals } = this.#source;
     const fields = [...patch.fields.keys()].filter((field) => !PLACE_FIELDS.has(field));
     const read: number[] = [];
-    for (const handle of patch.handles) {
+    for (const handle of patch.rows) {
       if (this.#created.has(handle)) continue;
       if (deletedNow(internals, handle)) {
         if (!this.#touched.has(handle)) this.#created.add(handle);
@@ -335,7 +335,7 @@ export class HeldSnapshot implements DocumentSnapshot {
     if (read.length === 0 || fields.length === 0) return;
     const values = this.#source.through(() =>
       this.#source.tables.readValues({
-        handles: Int32Array.from(read),
+        rows: Int32Array.from(read),
         fields: new Map(fields.map((field) => [field, []])),
       }),
     );
@@ -361,7 +361,7 @@ export class HeldSnapshot implements DocumentSnapshot {
     const groups = this.#source.internals.groups;
     const layers = new Set<string>();
     const known = this.containers.groups;
-    for (const handle of patch.handles) {
+    for (const handle of patch.groups) {
       // A group made since was not there: making it puts no row elsewhere (its members are put
       // into it by writes of rows)
       const id = groups.idOf(handle);
@@ -415,7 +415,7 @@ export class HeldSnapshot implements DocumentSnapshot {
     if (this.#taken > parts.length) this.#taken = 0;
     for (; this.#taken < parts.length; this.#taken++) {
       const part = parts[this.#taken];
-      const handles = part.handles;
+      const handles = part.rows;
       for (const [field, values] of part.fields) {
         if (PLACE_FIELDS.has(field)) continue;
         let column = this.#fields.get(field);

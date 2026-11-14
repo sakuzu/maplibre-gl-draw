@@ -56,6 +56,23 @@ For using the library rather than changing it, start with the
 | Footprint | What a feature covers, without the margin of its box |
 | Selection box | The footprint with the margin, around a selected feature |
 
+Some words of core mean another thing in what core works with. In core:
+
+- `created` and `deleted` of `ChangedIds` are the IDs a commit created or
+  deleted, not the fields of a row a document keeps (the write that made it,
+  its deleted mark)
+- `hidden` is the column a feature not visible (`visible: false`) is kept
+  as in the document, hidden for every client; what this client alone hides
+  is `draw.hidden`
+- `version` is the version of the format of a document
+  (`DrawDocument.version`), not a number that goes up at each change, nor a
+  saved version of a map
+- `part` is one geometry of a Multi geometry (`VertexRef.part`), not a part
+  of a file, nor one of the pieces a large commit is sent in
+- `Position` is the coordinates of a vertex, as GeoJSON names them; a sync
+  protocol may call the same value a point, and a `point` of core is a point
+  on the screen
+
 ## Responsibilities
 
 Core owns the logic of drawing and editing. It does not own the user

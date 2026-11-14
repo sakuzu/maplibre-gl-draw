@@ -84,8 +84,8 @@ function items(store: Store, layerId: string): string[] {
   if (!tables || !view) return [];
   const refs = view.listItems(0, view.itemCount);
   const groups = featureTablesInternals(tables)?.groups;
-  return Array.from(refs.handles, (h, i) =>
-    refs.kinds[i] === 0 ? (tables.getRowId(h) as string) : (groups?.idOf(h) as string),
+  return Array.from(refs.refs, (h, i) =>
+    refs.types[i] === 0 ? (tables.getRowId(h) as string) : (groups?.idOf(h) as string),
   );
 }
 
@@ -118,7 +118,7 @@ function keysOf(store: Store, layerId: string): string[] {
   const internals = featureTablesInternals(tables);
   const view = tables?.get(layerId);
   if (!tables || !view || !internals) return [];
-  return Array.from(view.listRowHandles(0, view.rowCount), (handle) => {
+  return Array.from(view.listRowRefs(0, view.rowCount), (handle) => {
     const at = internals.placeOf(handle);
     if (!at) return '';
     const data = at.group.data;
@@ -134,7 +134,7 @@ describe('many features created at once over a Store of rows', () => {
     expect(created).toHaveLength(2000);
     // One write per layer, whatever the number of features
     expect(apply).toHaveBeenCalledTimes(2);
-    const rows = apply.mock.calls.reduce((sum, [patch]) => sum + patch.handles.length, 0);
+    const rows = apply.mock.calls.reduce((sum, [patch]) => sum + patch.rows.length, 0);
     expect(rows).toBe(2000);
   });
 

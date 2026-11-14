@@ -969,7 +969,7 @@ function compareBytes(a: string, b: string): number {
 
 /**
  * Expects the tables to read as the reference: the rows of every layer in their order (by
- * `scan` and `listRowHandles`), the items and the members of the groups in their order, and the
+ * `scan` and `listRowRefs`), the items and the members of the groups in their order, and the
  * values of every row
  *
  * @param groupHandleOf The handle of a group of features by its id
@@ -997,7 +997,7 @@ export function expectTablesMatch(
       const handle = internals?.ids.handleOf(row.id) ?? -1;
       return handle >= 0 && internals?.placeOf(handle) !== undefined;
     });
-    expect(idsOf(view.listRowHandles(0, 1_000_000))).toEqual(present.map((row) => row.id));
+    expect(idsOf(view.listRowRefs(0, 1_000_000))).toEqual(present.map((row) => row.id));
     expect(view.rowCountWithDeleted).toBe(present.length);
     expect(view.rowCount).toBe(rows.filter((row) => !row.deleted).length);
     // The rows that are not deleted, a batch at a time
@@ -1010,10 +1010,10 @@ export function expectTablesMatch(
     const items = view.listItems(0, 1_000_000);
     const expected = reference.items(layerId);
     expect(
-      Array.from(items.kinds, (kind, i) =>
+      Array.from(items.types, (kind, i) =>
         kind === 0
-          ? { kind: 'row', id: tables.getRowId(items.handles[i]) }
-          : { kind: 'group', id: items.handles[i] },
+          ? { kind: 'row', id: tables.getRowId(items.refs[i]) }
+          : { kind: 'group', id: items.refs[i] },
       ),
     ).toEqual(
       expected.map((item) =>
@@ -1069,7 +1069,7 @@ export function rowPatch(
   deleted?: number[],
 ): RowValues {
   return {
-    handles: Int32Array.from(handles),
+    rows: Int32Array.from(handles),
     fields: new Map(Object.entries(fields) as Array<[RowField, unknown[]]>),
     deleted: deleted ? Uint8Array.from(deleted) : undefined,
   };
@@ -1276,7 +1276,7 @@ export function randomRowWrites(
       Object.assign(row, { groupId, member });
     } else if (pick < 0.78) {
       const fresh = `n${created++}`;
-      const [freshHandle] = writer.allocateHandles(byteColumnFromStrings([fresh]));
+      const [freshHandle] = writer.allocateRowRefs(byteColumnFromStrings([fresh]));
       const next = randomReferenceRow(
         random,
         fresh,

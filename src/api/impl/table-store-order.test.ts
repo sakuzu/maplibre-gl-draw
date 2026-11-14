@@ -56,8 +56,8 @@ function items(layerId = 'rows'): string[] {
   if (!tables || !view) return [];
   const refs = view.listItems(0, view.itemCount);
   const groups = featureTablesInternals(tables)?.groups;
-  return Array.from(refs.handles, (h, i) =>
-    refs.kinds[i] === 0 ? (tables.getRowId(h) as string) : (groups?.idOf(h) as string),
+  return Array.from(refs.refs, (h, i) =>
+    refs.types[i] === 0 ? (tables.getRowId(h) as string) : (groups?.idOf(h) as string),
   );
 }
 

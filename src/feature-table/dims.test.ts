@@ -148,7 +148,7 @@ describe('the rows of layers of every dimensions', () => {
             // groups, as they are
             const order = key(random() * 1e6);
             setup.writer.writeGroups({
-              handles: Int32Array.of(groupHandleOf('ga')),
+              groups: Int32Array.of(groupHandleOf('ga')),
               fields: new Map([['key', [order]]]),
             });
             const group = reference.groups.get('ga');
@@ -180,7 +180,7 @@ describe('the rows of layers of every dimensions', () => {
       const { tables, writer, internals, groupHandleOf } = setup;
       // Many new rows at once: built in the Worker
       const ids = Array.from({ length: 200 }, (_, i) => `w${i}`);
-      const handles = writer.allocateHandles(
+      const handles = writer.allocateRowRefs(
         (await import('@sakuzu/tabane')).byteColumnFromStrings(ids),
       );
       const rows: ReferenceRow[] = ids.map((id, i) => ({
@@ -363,7 +363,7 @@ describe('a write of the coordinates of a layer of z or m', () => {
     const before = tables.readValues(rowPatch([at('p'), at('r')], { geometry: [0, 0] }));
     writer.writeRows(rowPatch([at('p'), at('r')], { geometry: [point(7, 7), point(8, 8, 1)] }));
     expect(geometryOf('p')).toEqual(point(7, 7));
-    writer.writeRows({ handles: before.handles, fields: before.fields });
+    writer.writeRows({ rows: before.rows, fields: before.fields });
     expect(geometryOf('p')).toEqual(point(1, 2, 3, 4));
     expect(geometryOf('r')).toEqual(point(1, 2, Number.NaN, 9));
     // Of another shape: kept aside, with its values, until the next version

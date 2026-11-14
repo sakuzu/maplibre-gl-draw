@@ -28,7 +28,7 @@ function requireTables(store: ResourceDeps['store']): FeatureTables {
  */
 function rowsLocked(store: ResourceDeps['store'], tables: FeatureTables, rows: RowValues): boolean {
   const now = tables.readValues({
-    handles: rows.handles,
+    rows: rows.rows,
     fields: new Map([
       ['locked', []],
       ['parent', []],
@@ -36,7 +36,7 @@ function rowsLocked(store: ResourceDeps['store'], tables: FeatureTables, rows: R
   });
   const locked = now.fields.get('locked') ?? [];
   const parents = now.fields.get('parent') ?? [];
-  for (let i = 0; i < rows.handles.length; i++) {
+  for (let i = 0; i < rows.rows.length; i++) {
     if (locked[i] === true) return true;
     // The parent of a row is its group, in its layer, or its layer
     const parent = parents[i];
@@ -68,7 +68,7 @@ export function createRestore(deps: Pick<ResourceDeps, 'store'>): {
       const known = ids
         ? (handle: number) => ids.has(handle)
         : (handle: number) => tables.getRowId(handle) !== undefined;
-      for (const handle of rows.handles) {
+      for (const handle of rows.rows) {
         if (!known(handle)) throw notFound('feature of the row', handle);
       }
       if (store.isReadOnly()) return null;

@@ -80,8 +80,8 @@ function itemsOf(tables: FeatureTables): string[] {
   const view = tables.get('rows');
   if (!view) return [];
   const items = view.listItems(0, view.itemCount);
-  return Array.from(items.handles, (handle, i) => {
-    if (items.kinds[i] !== ITEM_GROUP) return tables.getRowId(handle) as string;
+  return Array.from(items.refs, (handle, i) => {
+    if (items.types[i] !== ITEM_GROUP) return tables.getRowId(handle) as string;
     const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
     return `${tables.getGroupId(handle)}[${Array.from(members, (m) => tables.getRowId(m)).join(',')}]`;
   });

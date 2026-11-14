@@ -81,7 +81,7 @@ describe('the delta of a layer', () => {
     const moved = tables.getRowRef('r3') as number;
     writer.writeRows(patchOf([moved], { parent: ['b'], key: [key(10)] }));
     Object.assign(reference.rows.get('r3') as ReferenceRow, { layerId: 'b', order: key(10) });
-    const [fresh] = writer.allocateHandles(byteColumnFromStrings(['new']));
+    const [fresh] = writer.allocateRowRefs(byteColumnFromStrings(['new']));
     const geometry: Geometry = { type: 'Point', coordinates: [1, 2] };
     const change = writer.writeRows(
       patchOf([fresh], {

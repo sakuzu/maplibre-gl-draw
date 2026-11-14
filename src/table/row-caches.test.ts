@@ -142,7 +142,7 @@ describe('the caches of the rows of the tables', () => {
     // A point written in place: its numbers are made again, into the column of its page
     writer.writeRows(
       tablesValuesOfShapes({
-        handles: Int32Array.of(point),
+        rows: Int32Array.of(point),
         fields: new Map([['geometry', [{ type: 'Point', coordinates: [7, 8] }]]]),
         deleted: new Uint8Array(1),
       }),
@@ -152,7 +152,7 @@ describe('the caches of the rows of the tables', () => {
     // A line of another shape: its numbers are made again (as many: into the column)
     writer.writeRows(
       tablesValuesOfShapes({
-        handles: Int32Array.of(line),
+        rows: Int32Array.of(line),
         fields: new Map([
           [
             'geometry',

@@ -58,7 +58,7 @@ export function combineValuesBefore(
     column.values[at] = value;
   };
   for (const part of parts) {
-    const rows = Array.from(part.handles, (handle) => {
+    const rows = Array.from(part.rows, (handle) => {
       let at = index.get(handle);
       if (at === undefined) {
         at = handles.length;
@@ -116,5 +116,5 @@ export function combineValuesBefore(
       ((deleted as Column<number>).values[at] ?? 0) !== 0 ? 1 : 0,
     );
   }
-  return { handles: all, fields: out, ...(deletedOut && { deleted: deletedOut }) };
+  return { rows: all, fields: out, ...(deletedOut && { deleted: deletedOut }) };
 }

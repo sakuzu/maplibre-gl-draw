@@ -103,9 +103,9 @@ function tableItemIds(tables: FeatureTables | undefined, layerId: string): strin
   if (!tables || !view) return [];
   const refs = view.listItems(0, view.itemCount);
   const out: string[] = [];
-  for (let i = 0; i < refs.kinds.length; i++) {
+  for (let i = 0; i < refs.types.length; i++) {
     const id =
-      refs.kinds[i] === 0 ? tables.getRowId(refs.handles[i]) : tables.getGroupId(refs.handles[i]);
+      refs.types[i] === 0 ? tables.getRowId(refs.refs[i]) : tables.getGroupId(refs.refs[i]);
     if (id !== undefined) out.push(id);
   }
   return out;
@@ -246,7 +246,7 @@ export function deleteFeaturesAndGroups(store: DocumentWriter): void {
       for (let batch = cursor.next(); batch; batch = cursor.next()) handles.push(...batch);
       if (handles.length === 0) continue;
       store.restoreRows({
-        handles: Int32Array.from(handles),
+        rows: Int32Array.from(handles),
         fields: new Map(),
         deleted: new Uint8Array(handles.length).fill(1),
       });

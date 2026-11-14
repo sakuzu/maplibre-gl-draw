@@ -136,7 +136,7 @@ export function createFeatureTablesWriter(
    */
   const watchOrder = (patch: RowValues): ItemOrderWatch | null => {
     if (!notify) return null;
-    const { handles, fields, deleted } = patch;
+    const { rows: handles, fields, deleted } = patch;
     const parents = fields.get('parent');
     const keys = fields.get('key');
     const placeFields = !!(parents || keys);
@@ -216,9 +216,9 @@ export function createFeatureTablesWriter(
     if (!parents) return null;
     const groups = internals.groups;
     const watch = new ItemOrderWatch(orderSource);
-    for (let i = 0; i < patch.handles.length; i++) {
+    for (let i = 0; i < patch.groups.length; i++) {
       const parent = parents[i];
-      const group = patch.handles[i];
+      const group = patch.groups[i];
       const before = groups.tableOf(group);
       if (patch.deleted?.[i] || typeof parent !== 'string' || before === undefined) continue;
       if (parent === before) continue;
@@ -242,7 +242,7 @@ export function createFeatureTablesWriter(
    * (nothing is told then)
    */
   const groupMovesOf = (patch: TableGroupPatch): ItemOrderChange[] => {
-    const { handles, fields, deleted } = patch;
+    const { groups: handles, fields, deleted } = patch;
     const orderValues = fields.get('key');
     if (!orderValues) return [];
     const layerValues = fields.get('parent');
@@ -353,7 +353,7 @@ export function createFeatureTablesWriter(
         throw writerError(error);
       }
     },
-    allocateHandles: (ids, hashes) => {
+    allocateRowRefs: (ids, hashes) => {
       try {
         return tables.allocateRowRefs(ids, hashes);
       } catch (error) {
@@ -411,7 +411,7 @@ export function createFeatureTablesWriter(
         const rows = rowsChangeOf(written.rows);
         const kept = written.kept;
         // A group created again whose id is hidden on this client is hidden again
-        internals.states.groupsWritten(patch.handles);
+        internals.states.groupsWritten(patch.groups);
         const order = [...(followers?.finish() ?? []), ...moves];
         if (rows.layers.size > 0) notify?.({ rows, ...(order.length > 0 && { order }) });
         else if (order.length > 0) notify?.({ order });
@@ -430,7 +430,7 @@ export function createFeatureTablesWriter(
     },
     watchOrderOf,
     watchPlacementOf: (patch, placement) => {
-      if (!notify || patch.handles.length <= ORDER_ITEM_LIMIT) return watchOrderOf(patch);
+      if (!notify || patch.rows.length <= ORDER_ITEM_LIMIT) return watchOrderOf(patch);
       const parts = { watch: null, placed: new PlacementOrder(orderSource, patch, placement) };
       partsWatch = parts;
       return () => {
@@ -456,7 +456,7 @@ function withoutNames(patch: TableGroupPatch): TablesGroupPatch {
     if (name !== undefined && typeof name !== 'string' && !patch.deleted?.[i]) {
       throw new DrawError(
         'invalidInput',
-        `FeatureTables: the name of the group ${patch.handles[i]} is not a string`,
+        `FeatureTables: the name of the group ${patch.groups[i]} is not a string`,
       );
     }
   });

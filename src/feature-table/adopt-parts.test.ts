@@ -64,7 +64,7 @@ function tablesOf(parts: readonly PageData[][]): FeatureTables {
 function readOf(tables: FeatureTables): unknown[] {
   const view = tables.get('rows');
   if (!view) return [];
-  return Array.from(view.listRowHandles(0, view.rowCount), (handle) => view.getRow(handle));
+  return Array.from(view.listRowRefs(0, view.rowCount), (handle) => view.getRow(handle));
 }
 
 describe('the rows of a layer built in parts', () => {

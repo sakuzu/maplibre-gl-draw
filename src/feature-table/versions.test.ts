@@ -214,7 +214,7 @@ describe('the next versions of the row groups', () => {
     // 9,000 new rows within the range of the middle group (between p5 and p6): into the delta,
     // and the next version of the group cut into groups of the target rows
     const ids = Array.from({ length: 9000 }, (_, i) => `n${i}`);
-    const handles = writer.allocateHandles(utfColumn(ids));
+    const handles = writer.allocateRowRefs(utfColumn(ids));
     writer.writeRows(
       rowPatch(Array.from(handles), {
         type: ids.map(() => 'Point'),

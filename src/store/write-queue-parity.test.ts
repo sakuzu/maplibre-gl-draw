@@ -114,7 +114,7 @@ function notificationOf(change: StoreChange): Record<string, unknown> {
   if (change.order) out.order = change.order.length;
   if (change.restoreToken !== undefined) out.restoreToken = true;
   if (change.previousValues) {
-    out.previousValues = rowValuesOf(change.previousValues as FeatureValues).handles.length;
+    out.previousValues = rowValuesOf(change.previousValues as FeatureValues).rows.length;
   }
   return out;
 }
@@ -141,7 +141,7 @@ function setup() {
   const changes: StoreChange[] = [];
   store.subscribe((change) => changes.push(change));
   const deleting = createRowValues({
-    handles: rHandles,
+    rows: rHandles,
     fields: new Map(),
     deleted: new Uint8Array(COUNT).fill(1),
   });
@@ -165,7 +165,7 @@ function setup() {
       n === COUNT
         ? before
         : {
-            handles: before.handles.slice(0, n),
+            rows: before.rows.slice(0, n),
             fields: new Map(
               Array.from(before.fields, ([field, column]) => [field, column.slice(0, n)]),
             ),

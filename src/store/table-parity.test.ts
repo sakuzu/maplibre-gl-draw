@@ -388,7 +388,7 @@ function valuesOf(
   // A parent that is neither a group nor a layer of rows is a group gone
   const isLayer = (parent: string): boolean => tables.get(parent) !== undefined;
   return {
-    rows: idsOf(tables, values.handles),
+    rows: idsOf(tables, values.rows),
     fields: plain(
       recordedFields(
         values.fields,
@@ -445,7 +445,7 @@ function notificationOf(tables: FeatureTables, change: StoreChange): unknown {
             before: valuesOf(tables, move.before, move.from?.layerId),
           }
         : {
-            rows: idsOf(tables, move.handles),
+            rows: idsOf(tables, move.rows),
             layerId: move.layerId,
             to: plain(move.to),
             belows: move.belows && plain(move.belows),
@@ -468,14 +468,14 @@ function record(store: Store, tables: FeatureTables): unknown {
       continue;
     }
     const items = view.listItems(0, view.itemCount);
-    const rows = view.listRowHandles(0, view.rowCountWithDeleted);
+    const rows = view.listRowRefs(0, view.rowCountWithDeleted);
     handles.push(...rows);
     layers[layerId] = {
       rowCount: view.rowCount,
       rowCountWithDeleted: view.rowCountWithDeleted,
       itemCount: view.itemCount,
-      items: Array.from(items.handles, (h, i) => {
-        if (items.kinds[i] === 0) return tables.getRowId(h);
+      items: Array.from(items.refs, (h, i) => {
+        if (items.types[i] === 0) return tables.getRowId(h);
         const n = view.countGroupMembers(h);
         return {
           group: tables.getGroupId(h),
@@ -509,7 +509,7 @@ function record(store: Store, tables: FeatureTables): unknown {
     scanned.push(...idsOf(tables, batch));
   const sorted = Int32Array.from(handles).sort();
   const read = tables.readValues({
-    handles: sorted,
+    rows: sorted,
     fields: new Map(
       [...new Set(READ_FIELDS.map(fieldNow))].map((f) => [f, Array.from(sorted, () => undefined)]),
     ),
@@ -748,7 +748,7 @@ const CASES: readonly Case[] = [
       settle(tables);
       step('added');
       const ids = ['f0', 'n0', 'zz'];
-      const given = Array.from(writer.allocateHandles(byteColumnFromStrings(ids)));
+      const given = Array.from(writer.allocateRowRefs(byteColumnFromStrings(ids)));
       step(`handles ${JSON.stringify(given.map((x, i) => x === tables.getRowRef(ids[i])))}`);
       store.transact(() => writer.clear(), 'remote');
       step('cleared');
@@ -820,7 +820,7 @@ describe('the Store of rows, as it was before its tables were reworked', () => {
     const s = setup();
     const view = s.tables.get('a');
     if (!view) throw new Error('layer a holds rows');
-    const rows = Array.from(view.listRowHandles(0, view.rowCountWithDeleted), (h) => {
+    const rows = Array.from(view.listRowRefs(0, view.rowCountWithDeleted), (h) => {
       const f = view.getRow(h);
       if (!f) throw new Error('a row of the layer');
       return {
@@ -843,7 +843,7 @@ describe('the Store of rows, as it was before its tables were reworked', () => {
     const tables = store.tables as FeatureTables;
     settle(tables);
     const back = tables.get('a');
-    const read = Array.from(back?.listRowHandles(0, back.rowCountWithDeleted) ?? [], (h) =>
+    const read = Array.from(back?.listRowRefs(0, back.rowCountWithDeleted) ?? [], (h) =>
       plain(back?.getRow(h)),
     );
     const lines = [

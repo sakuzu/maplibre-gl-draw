@@ -534,7 +534,7 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
     const told = handleSet(placedRows);
     for (const move of changes.order) {
       if (move.kind !== 'rows' || !tables) continue;
-      for (const handle of move.handles) {
+      for (const handle of move.rows) {
         if (handle < told.length && told[handle] === 1) continue;
         const id = tables.getRowId(handle);
         if (id !== undefined) add(id, placedFeatures);
@@ -721,7 +721,7 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
       const before = move.before;
       const parents = before?.fields.get('parent');
       if (!before || !parents) continue;
-      before.handles.forEach((handle, index) => {
+      before.rows.forEach((handle, index) => {
         if (out.has(handle)) return;
         if (move.kind === 'item' && move.from) {
           out.set(handle, { layerId: move.from.layerId, groupId: move.from.groupId });
@@ -739,7 +739,7 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
       if (handle === undefined || !internals) return undefined;
       const fields = new Map<RowField, unknown>();
       if (values) {
-        indexOf ??= new Map(Array.from(values.handles, (row, index) => [row, index]));
+        indexOf ??= new Map(Array.from(values.rows, (row, index) => [row, index]));
         const index = indexOf.get(handle);
         if (index !== undefined) {
           for (const [field, list] of values.fields) fields.set(field, list[index]);

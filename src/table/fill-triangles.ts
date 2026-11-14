@@ -95,7 +95,12 @@ export function fillTrianglesOf(row: RowRead, ring: Float64Array | null): ArrayL
     const shape = row.shape();
     const fill = shape ? polygonsOf(shape) : null;
     if (!shape || !fill) return NO_TRIANGLES;
-    made = triangulateRow(shape.column.flatCoordinates, fill.rings, fill.polygons, shape.column.stride);
+    made = triangulateRow(
+      shape.column.flatCoordinates,
+      fill.rings,
+      fill.polygons,
+      shape.column.stride,
+    );
   }
   return made.vertices >= WIDE_VERTICES ? Uint32Array.from(made.indices) : made.indices;
 }

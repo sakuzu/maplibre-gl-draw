@@ -366,6 +366,16 @@ writing it. Its changes are listed after those of 3.0.0.
   `GpuMemoryDiagnostics.byOwner` (`rowState`, `pointShapes`, `demAtlas`). A
   drape whose drawing could not be made tells `meshAllocFailed`,
   `shaderFailed` or `ensureFailed` in place of the message of the error
+- `ItemHandles` of `/kasane` is `ItemRefs`, its `kinds` are `types` and its
+  `handles` are `refs`
+- The rows of `RowValues`, `RowsMove` and `createRowValues` of `/kasane` are
+  `rows` (was `handles`)
+- The groups of `TableGroupPatch` of `/kasane` are `groups` (was `handles`)
+- The group of `GroupEntry` of `/kasane` is `group` (was `handle`)
+- `FeatureTablesWriter.allocateHandles` of `/kasane` is `allocateRowRefs`
+- `LayerTableView.listRowHandles` of `/kasane` is `listRowRefs`
+- The keys of the values of a style that changed in `LayerRowsChange` of
+  `/kasane` are `changedKeys` (was `styleKeys`)
 - `selection.get()` is `selection.value` (`SelectionValue`): the type, the
   number of the features, their layers and extent, and the IDs, `null` past
   2,000 features in a store that holds its features as rows. Nothing selected

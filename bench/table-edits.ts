@@ -214,7 +214,7 @@ async function writeRows(
       field(`properties:${key}`).push(value);
     }
   }
-  if (handles.length > 0) writer.writeRows({ handles: Int32Array.from(handles), fields });
+  if (handles.length > 0) writer.writeRows({ rows: Int32Array.from(handles), fields });
 }
 
 /** A color of a hue (0 to 360) */
@@ -335,9 +335,9 @@ async function createRows(
     });
     return;
   }
-  const handles = writer.allocateHandles(idColumn(rows.map((row) => row.id)));
+  const handles = writer.allocateRowRefs(idColumn(rows.map((row) => row.id)));
   writer.writeRows({
-    handles,
+    rows: handles,
     fields: new Map<RowField, unknown[]>([
       ['type', rows.map((row) => row.geometry.type)],
       ['parent', rows.map(() => target.layerId)],
@@ -695,7 +695,7 @@ function longestKey(target: EditTarget, ids: readonly string[]): number {
   const handles = ids.map((id) => tables.getRowRef(id)).filter((h) => h !== undefined) as number[];
   if (handles.length === 0) return 0;
   const read = tables.readValues({
-    handles: Int32Array.from(handles),
+    rows: Int32Array.from(handles),
     fields: new Map<RowField, unknown[]>([['key', handles.map(() => undefined)]]),
   });
   let longest = 0;
@@ -707,7 +707,7 @@ function longestKey(target: EditTarget, ids: readonly string[]): number {
 
 /** The bytes of values of rows as a history holds them (the values as JSON, and the handles) */
 function snapshotBytes(snapshot: RowValues): number {
-  let bytes = snapshot.handles.length * 4 + (snapshot.deleted?.length ?? 0);
+  let bytes = snapshot.rows.length * 4 + (snapshot.deleted?.length ?? 0);
   for (const values of snapshot.fields.values()) {
     for (const value of values) bytes += JSON.stringify(value ?? null).length;
   }
@@ -885,7 +885,7 @@ function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) 
   if (tables && rowsStore) {
     const handles = [...after.keys()].map((id) => tables.getRowRef(id) as number);
     const patch: RowValues = {
-      handles: Int32Array.from(handles),
+      rows: Int32Array.from(handles),
       fields: new Map<RowField, unknown[]>([
         ['geometry', [...after.values()].map((v) => v.geometry)],
         ['style', [...after.values()].map((v) => v.style)],
@@ -1098,7 +1098,7 @@ async function ensureGroups(target: EditTarget, params: TableBenchPageParams): P
     const members = ids.slice(g * params.members, (g + 1) * params.members);
     if (tables && writer) {
       writer.writeGroups({
-        handles: Int32Array.of(1000 + g),
+        groups: Int32Array.of(1000 + g),
         fields: new Map<'id' | 'key' | 'parent', unknown[]>([
           ['id', [id]],
           ['key', [keyAfter(params, (g * rowCount(target)) / count, 'g')]],
@@ -1107,7 +1107,7 @@ async function ensureGroups(target: EditTarget, params: TableBenchPageParams): P
       });
       const handles = members.map((m) => tables.getRowRef(m)).filter((h) => h !== undefined);
       writer.writeRows({
-        handles: Int32Array.from(handles as number[]),
+        rows: Int32Array.from(handles as number[]),
         fields: new Map<RowField, unknown[]>([
           ['parent', handles.map(() => id)],
           ['key', handles.map((_, k) => `m${String(k).padStart(4, '0')}`)],
@@ -1306,7 +1306,7 @@ async function runReorders(
     if (kind === 'group') {
       if (tables && writer) {
         writer.writeGroups({
-          handles: Int32Array.from(ids.map((id) => 1000 + pool.indexOf(id))),
+          groups: Int32Array.from(ids.map((id) => 1000 + pool.indexOf(id))),
           fields: new Map([['key', orders]]),
         });
       } else {
@@ -1321,7 +1321,7 @@ async function runReorders(
     if (tables && writer) {
       const handles = ids.map((id) => tables.getRowRef(id));
       writer.writeRows({
-        handles: Int32Array.from(handles.filter((h) => h !== undefined) as number[]),
+        rows: Int32Array.from(handles.filter((h) => h !== undefined) as number[]),
         fields: new Map<RowField, unknown[]>([
           ['key', orders.filter((_, k) => handles[k] !== undefined)],
         ]),

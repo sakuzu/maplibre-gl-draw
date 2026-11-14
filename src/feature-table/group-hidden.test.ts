@@ -57,7 +57,7 @@ function setup(n: number) {
       });
       // A key among the keys of the rows
       writer.writeGroups({
-        handles: Int32Array.of(internals.groups.handleOfId(id)),
+        groups: Int32Array.of(internals.groups.handleOfId(id)),
         fields: new Map([['key', [`k${String(k * 100 + 50).padStart(5, '0')}`]]]),
       });
     });
@@ -95,7 +95,7 @@ describe('a group shown or hidden', () => {
         } else {
           fields = new Map<RowField, unknown[]>([['key', Array.from(handles, () => key())]]);
         }
-        store.transact(() => writer.writeRows({ handles, fields, deleted }), 'remote');
+        store.transact(() => writer.writeRows({ rows: handles, fields, deleted }), 'remote');
         if (step % 3 === 0) {
           internals.addQueuedPages();
           internals.flushVersions();
@@ -113,7 +113,7 @@ describe('a group shown or hidden', () => {
           store.transact(
             () =>
               writer.writeGroups({
-                handles: Int32Array.of(group),
+                groups: Int32Array.of(group),
                 fields: new Map([['hidden', [!isGroupHidden(internals.groups, group)]]]),
               }),
             'remote',
@@ -134,7 +134,7 @@ describe('a group shown or hidden', () => {
           store.transact(
             () =>
               writer.writeGroups({
-                handles: Int32Array.from(orders.keys()),
+                groups: Int32Array.from(orders.keys()),
                 fields: new Map([['key', [...orders.values()]]]),
               }),
             'remote',

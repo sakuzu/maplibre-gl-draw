@@ -83,10 +83,7 @@ function setup() {
 /** The rows as features, in their order */
 function rowsOf(instance: Draw, tables: FeatureTables): Feature[] {
   const view = tables.get('rows');
-  return Array.from(
-    view?.listRowHandles(0, 100) ?? [],
-    (handle) => tables.getRowId(handle) as string,
-  )
+  return Array.from(view?.listRowRefs(0, 100) ?? [], (handle) => tables.getRowId(handle) as string)
     .filter((id) => tables.getRowRef(id) !== undefined)
     .map((id) => instance.getStore().getFeature(id) as Feature);
 }
@@ -98,7 +95,7 @@ describe('features.restore', () => {
     const handles = Int32Array.from(['p1', 'p2'], (id) => tables.getRowRef(id) as number);
     const before = writesOf(draw).features.restore(
       createRowValues({
-        handles,
+        rows: handles,
         fields: new Map<RowField, unknown[]>([
           ['style', [{ pointColor: '#ff0000' }, { pointColor: '#00ff00' }]],
           ['properties:n', [10, 20]],
@@ -131,7 +128,7 @@ describe('features.restore', () => {
     expect(
       writesOf(draw).features.restore(
         createRowValues({
-          handles: Int32Array.of(handle),
+          rows: Int32Array.of(handle),
           fields: new Map([['hidden', [true]]]),
         }),
       ),
@@ -143,7 +140,7 @@ describe('features.restore', () => {
     const { draw, tables } = setup();
     const values = (id: string) =>
       createRowValues({
-        handles: Int32Array.of(tables.getRowRef(id) as number),
+        rows: Int32Array.of(tables.getRowRef(id) as number),
         fields: new Map([['properties:n', [99]]]),
       });
     writesOf(draw).features.update('p1', { locked: true });
@@ -168,33 +165,33 @@ describe('features.restore', () => {
     }
   });
 
-  it('throws on values of the wrong shape or a handle of no row, writing nothing', () => {
+  it('throws on values of the wrong shape or a reference of no row, writing nothing', () => {
     const { draw, tables, notified } = setup();
     const handle = tables.getRowRef('p1') as number;
     const count = notified.length;
     const call = (values: unknown) => () =>
       writesOf(draw).features.restore(values as FeatureValues);
     expect(call(null)).toThrow(expect.objectContaining({ code: 'invalidInput' }));
-    expect(call({ handles: [handle], fields: new Map() })).toThrow(
+    expect(call({ rows: [handle], fields: new Map() })).toThrow(
       expect.objectContaining({ code: 'invalidInput' }),
     );
-    expect(call({ handles: Int32Array.of(handle), fields: new Map([['hidden', []]]) })).toThrow(
+    expect(call({ rows: Int32Array.of(handle), fields: new Map([['hidden', []]]) })).toThrow(
       expect.objectContaining({ code: 'invalidInput' }),
     );
-    expect(call({ handles: Int32Array.of(handle), fields: new Map([['size', [1]]]) })).toThrow(
+    expect(call({ rows: Int32Array.of(handle), fields: new Map([['size', [1]]]) })).toThrow(
       expect.objectContaining({ code: 'invalidInput' }),
     );
     expect(
-      call({ handles: Int32Array.of(handle), fields: new Map(), deleted: Uint8Array.of(1, 1) }),
+      call({ rows: Int32Array.of(handle), fields: new Map(), deleted: Uint8Array.of(1, 1) }),
     ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
-    expect(call({ handles: Int32Array.of(9999), fields: new Map() })).toThrow(
+    expect(call({ rows: Int32Array.of(9999), fields: new Map() })).toThrow(
       expect.objectContaining({ code: 'notFound' }),
     );
     expect(notified).toHaveLength(count);
   });
 
   it('throws invalidState on a Store of objects', () => {
-    const empty = createRowValues({ handles: new Int32Array(0), fields: new Map() });
+    const empty = createRowValues({ rows: new Int32Array(0), fields: new Map() });
     const objects = drawOn(undefined as unknown as Store);
     expect(() => writesOf(objects).features.restore(empty)).toThrow(
       expect.objectContaining({ code: 'invalidState' }),

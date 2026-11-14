@@ -1212,7 +1212,7 @@ const dashedFromElsewhere: Step = {
     if (!found) throw new Error('no row');
     writer.writeRows(
       createRowValues({
-        handles: Int32Array.of(found.handle),
+        rows: Int32Array.of(found.handle),
         fields: new Map([['style', [style]]]),
       }),
     );

@@ -131,7 +131,7 @@ export function sliceRowValues(values: RowValues, from: number, to: number): Row
   const fields = new Map<RowField, unknown[]>();
   for (const [field, column] of values.fields) fields.set(field, column.slice(from, to));
   return {
-    handles: values.handles.slice(from, to),
+    rows: values.rows.slice(from, to),
     fields,
     ...(values.deleted && { deleted: values.deleted.slice(from, to) }),
   };

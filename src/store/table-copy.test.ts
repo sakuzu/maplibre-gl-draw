@@ -66,7 +66,7 @@ function rowsOf(store: Store, layerId: string): Feature[] {
   const tables = store.tables;
   const view = tables?.get(layerId);
   if (!tables || !view) return [];
-  return Array.from(view.listRowHandles(0, view.rowCountWithDeleted))
+  return Array.from(view.listRowRefs(0, view.rowCountWithDeleted))
     .filter((handle) => tables.getRowRef(tables.getRowId(handle) as string) !== undefined)
     .map((handle) => view.getRow(handle) as Feature);
 }
@@ -118,8 +118,8 @@ describe('the copy of a document held as rows', () => {
     const items = (s: Store) => {
       const view = s.tables?.get('a');
       const handles = view?.listItems(0, view.itemCount);
-      return Array.from(handles?.handles ?? [], (h, i) =>
-        handles?.kinds[i] === 1 ? s.tables?.getGroupId(h) : s.tables?.getRowId(h),
+      return Array.from(handles?.refs ?? [], (h, i) =>
+        handles?.types[i] === 1 ? s.tables?.getGroupId(h) : s.tables?.getRowId(h),
       );
     };
     expect(items(copy.store)).toEqual(items(store));
@@ -151,7 +151,7 @@ describe('the copy of a document held as rows', () => {
     const read = (s: Store) =>
       s.tables
         ?.readValues({
-          handles: Int32Array.of(s.tables?.getRowRef('high') ?? -1),
+          rows: Int32Array.of(s.tables?.getRowRef('high') ?? -1),
           fields: new Map([['geometry', []]]),
         })
         .fields.get('geometry');

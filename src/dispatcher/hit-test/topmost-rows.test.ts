@@ -428,7 +428,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     const hitTest = companionTester();
     expect(hitTest(at(60, 50))).toBeNull();
     tables.writer.writeRows({
-      handles: Int32Array.of(tables.tables.getRowRef('a') as number),
+      rows: Int32Array.of(tables.tables.getRowRef('a') as number),
       fields: new Map([['properties:band', [50]]]),
     });
     asked.rows = 0;

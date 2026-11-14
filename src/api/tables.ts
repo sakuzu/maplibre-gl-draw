@@ -28,8 +28,8 @@ import { createFeatureTablesStore } from '../feature-table/feature-row-tables.js
 import type { BBox } from '../geometry/types.js';
 import { DrawError } from '../shared/draw-error.js';
 import type {
-  ItemHandles,
   ItemPlacement,
+  ItemRefs,
   LayerRowsChange,
   RestoreToken,
   RowsChange,
@@ -53,7 +53,7 @@ import type {
 
 export type {
   FeatureTablesWorker,
-  ItemHandles,
+  ItemRefs,
   LayerRowsChange,
   RestoreToken,
   RowField,
@@ -121,17 +121,17 @@ export interface LayerTableView {
   /** Changes whenever the rows drawn may have changed (added, hidden, shown) */
   getDrawnRowsRevision(): number;
   /**
-   * The handles of `count` rows from the `start`-th one, in the order of the layer: the rows read,
+   * The references of `count` rows from the `start`-th one, in the order of the layer: the rows read,
    * deleted rows included until they are dropped (`rowCountWithDeleted` of them)
    */
-  listRowHandles(start: number, count: number): Int32Array;
+  listRowRefs(start: number, count: number): Int32Array;
   /**
    * The number of items of the layer: its rows outside a group of features, and its groups of
    * features (a group is one item, at the place of its members), deleted rows left out
    */
   readonly itemCount: number;
   /** `count` items from the `start`-th one, in the order of the layer */
-  listItems(start: number, count: number): ItemHandles;
+  listItems(start: number, count: number): ItemRefs;
   /** The number of the rows of a group of features in this layer (deleted rows left out) */
   countGroupMembers(groupHandle: number): number;
   /**
@@ -141,9 +141,9 @@ export interface LayerTableView {
   listGroupMembers(groupHandle: number, start: number, count: number): Int32Array;
 }
 
-/** An item of {@link ItemHandles} that is a row (its handle is a {@link RowRef}) */
+/** An item of {@link ItemRefs} that is a row (its handle is a {@link RowRef}) */
 export const ITEM_ROW = 0;
-/** An item of {@link ItemHandles} that is a group of features (its handle is the handle of the group) */
+/** An item of {@link ItemRefs} that is a group of features (its handle is the handle of the group) */
 export const ITEM_GROUP = 1;
 
 /**
@@ -205,7 +205,7 @@ export interface RowPlacement {
  * (`DocumentChange.previousValues`).
  */
 export interface RowWrite {
-  /** The values of rows there are (by their handles) */
+  /** The values of rows there are (by their references) */
   readonly patch: RowValues;
   /** New rows */
   readonly created?: CreatedRows;
@@ -240,14 +240,14 @@ export interface RowApplyOptions {
 const FEATURE_FIELDS = new RowFields(FEATURE_TABLE_COLUMNS);
 
 /**
- * The values checked: rows by their handles, values of fields of a row of a feature, one per row
+ * The values checked: rows by their references, values of fields of a row of a feature, one per row
  *
  * @throws `DrawError` with the code `invalidInput` when they have another shape, or a field
  *   that is not one of a row of a feature
  * @internal
  */
 export function checkRowValues(values: unknown): RowValues {
-  checkHandles(values);
+  checkRows(values);
   try {
     FEATURE_FIELDS.check(checkShapeOfRowValues(tablesValuesToCheck(values)));
     return values as RowValues;
@@ -260,18 +260,18 @@ export function checkRowValues(values: unknown): RowValues {
  * Makes values of rows, checking their shape only: the writer checks the names of their fields
  * (`featureValuesOf` makes of them what `draw.features.restore` writes back)
  *
- * @param values - The rows by their handles, the values of each field, one per row, and the
+ * @param values - The rows by their references, the values of each field, one per row, and the
  *   deletion of each row (non-zero for a row deleted)
  * @returns The values
  * @throws `DrawError` with the code `invalidInput` when they have another shape: a field that is
  *   not a name, or not one value per row
  */
 export function createRowValues(values: {
-  readonly handles: Int32Array;
+  readonly rows: Int32Array;
   readonly fields: ReadonlyMap<RowField, RowFieldValues>;
   readonly deleted?: Uint8Array;
 }): RowValues {
-  checkHandles(values);
+  checkRows(values);
   try {
     return rowValuesOfTables(
       createRowValuesOf(tablesValuesToCheck(values) as Parameters<typeof createRowValuesOf>[0]),
@@ -282,15 +282,15 @@ export function createRowValues(values: {
 }
 
 /**
- * Checks that values of rows given as an object name their rows as core does (`handles`), so that
+ * Checks that values of rows given as an object name their rows as core does (`rows`), so that
  * what is refused is said in the words of core; the tables check the rest
  *
  * @throws `DrawError` with the code `invalidInput` when they do not
  */
-function checkHandles(values: unknown): void {
+function checkRows(values: unknown): void {
   if (typeof values !== 'object' || values === null || Array.isArray(values)) return;
-  if (!((values as { readonly handles?: unknown }).handles instanceof Int32Array)) {
-    throw new DrawError('invalidInput', 'The handles must be an Int32Array');
+  if (!((values as { readonly rows?: unknown }).rows instanceof Int32Array)) {
+    throw new DrawError('invalidInput', 'The rows must be an Int32Array');
   }
 }
 
@@ -309,7 +309,7 @@ export function featureValuesOf(rows: RowValues): FeatureValues {
  * Reads values of features as values of rows: what a Store that holds its features as rows
  * notifies (`DocumentChange.previousValues`) and `draw.features.restore` returns
  *
- * @returns The same values, as rows by their handles and values of fields
+ * @returns The same values, as rows by their references and values of fields
  * @throws `DrawError` with the code `invalidInput` when they are not values of rows
  */
 export function rowValuesOf(values: FeatureValues): RowValues {
@@ -327,7 +327,7 @@ export interface FeatureTables {
   /** The id of the row of a handle (undefined for an unknown handle) */
   getRowId(handle: RowRef): string | undefined;
   /**
-   * The id of the group of features of a handle, as {@link ItemHandles} and
+   * The id of the group of features of a handle, as {@link ItemRefs} and
    * {@link LayerTableView.listGroupMembers} name it (undefined for an unknown handle)
    */
   getGroupId(groupHandle: number): string | undefined;
@@ -381,11 +381,11 @@ export interface FeatureTablesWriter {
    */
   forget(handles: Int32Array): void;
   /**
-   * The handle of the row of each id, given to the ids not seen yet.
+   * The reference of the row of each id, given to the ids not seen yet.
    *
    * @param hashes - The hashes of the ids (`Page.idHashes`; computed when omitted)
    */
-  allocateHandles(ids: ByteColumn, hashes?: Uint32Array): Int32Array;
+  allocateRowRefs(ids: ByteColumn, hashes?: Uint32Array): Int32Array;
   /**
    * Adds pages to a layer at once, without copying their columns, after the implementation of
    * the Store recorded them.

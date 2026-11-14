@@ -551,7 +551,7 @@ describe('the styles resolved again', () => {
 describe('the styles of rows written again and again', () => {
   /** A patch of the style of one row */
   const styled = (handle: number, style: FeatureStyle) => ({
-    handles: Int32Array.of(handle),
+    rows: Int32Array.of(handle),
     fields: new Map([['style' as const, [style]]]),
   });
 

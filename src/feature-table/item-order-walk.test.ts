@@ -214,7 +214,7 @@ class FullListWatch {
       const fields = new Map<RowField, unknown[]>(
         PLACE_FIELDS.map((field, k) => [field, [values[k]]]),
       );
-      return { ...move, before: { handles: Int32Array.of(handle), fields } };
+      return { ...move, before: { rows: Int32Array.of(handle), fields } };
     });
   }
 
@@ -258,7 +258,7 @@ class FullListWatch {
           (fields.get(field) as unknown[]).push(values[k]);
         });
       }
-      const before = { handles, fields };
+      const before = { rows: handles, fields };
       // Where each row is among the items of the layer, or the members of its group
       const items = layer.itemsOf();
       const itemIndex = new Map<number, number>();
@@ -319,7 +319,7 @@ class FullListWatch {
                 ),
           above: above === null ? null : this.idOf(above, groupIds),
         };
-        out.push({ kind: 'rows', layerId: layer.tableId, handles, to, before });
+        out.push({ kind: 'rows', layerId: layer.tableId, rows: handles, to, before });
         continue;
       }
       const kinds = new Uint8Array(rows.length);
@@ -332,8 +332,8 @@ class FullListWatch {
       out.push({
         kind: 'rows',
         layerId: layer.tableId,
-        handles,
-        belows: { kinds, handles: belows },
+        rows: handles,
+        belows: { types: kinds, refs: belows },
         before,
       });
     }
@@ -438,10 +438,10 @@ function sourceOf(internals: FeatureTablesInternals): ReferenceSource {
 /** The reference watch of a write, given the rows as the tables give them (`watchOrder`) */
 function referenceWatch(
   internals: FeatureTablesInternals,
-  patch: { handles: Int32Array; fields: Map<RowField, unknown[]>; deleted?: Uint8Array },
+  patch: { rows: Int32Array; fields: Map<RowField, unknown[]>; deleted?: Uint8Array },
 ): FullListWatch | null {
   const watch = new FullListWatch(sourceOf(internals));
-  const { handles, fields, deleted } = patch;
+  const { rows: handles, fields, deleted } = patch;
   const parents = fields.get('parent');
   const keys = fields.get('key');
   const groupOf = (value: unknown): GroupRef =>
@@ -569,7 +569,7 @@ function randomPatch(
   internals: FeatureTablesInternals,
   next: { value: number },
   many: boolean,
-): { handles: Int32Array; fields: Map<RowField, unknown[]>; deleted?: Uint8Array } | null {
+): { rows: Int32Array; fields: Map<RowField, unknown[]>; deleted?: Uint8Array } | null {
   const ids = rowIds(tables);
   if (ids.length < 4) return null;
   const count = many
@@ -589,14 +589,14 @@ function randomPatch(
   if (kind < 0.3 || many) {
     // New keys of their order (a member's among the members of its group)
     return {
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([['key', picked.map(() => randomKey(random))]]),
     };
   }
   if (kind < 0.45) {
     // To a layer, outside a group
     return {
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([
         ['parent', picked.map(() => LAYERS[Math.floor(random() * 2)])],
         ['key', picked.map(() => randomKey(random))],
@@ -606,7 +606,7 @@ function randomPatch(
   if (kind < 0.65) {
     // Into a group of their layer, at a key in it
     return {
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([
         [
           'parent',
@@ -623,17 +623,17 @@ function randomPatch(
   if (kind < 0.75) {
     // Out of their group, into their layer at the key they have
     return {
-      handles,
+      rows: handles,
       fields: new Map<RowField, unknown[]>([['parent', Array.from(handles, layerOfRow)]]),
     };
   }
   if (kind < 0.87) {
-    return { handles, fields: new Map(), deleted: new Uint8Array(handles.length).fill(1) };
+    return { rows: handles, fields: new Map(), deleted: new Uint8Array(handles.length).fill(1) };
   }
   // New rows (sometimes enough to be built into groups of their own, read until they are)
   const length = random() < 0.3 ? 70 : 1 + Math.floor(random() * 4);
   const fresh = Array.from({ length }, () => `n${next.value++}`);
-  const created = writer.allocateHandles({
+  const created = writer.allocateRowRefs({
     offsets: Int32Array.from(
       { length: fresh.length + 1 },
       (_, k) => new TextEncoder().encode(fresh.slice(0, k).join('')).length,
@@ -641,7 +641,7 @@ function randomPatch(
     bytes: new TextEncoder().encode(fresh.join('')),
   });
   return {
-    handles: created,
+    rows: created,
     fields: new Map<RowField, unknown[]>([
       ['type', fresh.map(() => 'Point')],
       ['parent', fresh.map(() => LAYERS[Math.floor(random() * 2)])],
@@ -713,7 +713,7 @@ describe('the changes of the order read from the items next to the ones a write 
         store.transact(
           () =>
             writer.writeGroups({
-              handles: Int32Array.from(groups),
+              groups: Int32Array.from(groups),
               fields: new Map([['key', keys]]),
             }),
           'remote',

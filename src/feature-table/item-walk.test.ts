@@ -218,11 +218,11 @@ describe('ItemWalk', () => {
         } else {
           // New rows, enough to be read before their groups are taken in
           const fresh = Array.from({ length: 70 }, () => `n${next++}`);
-          const created = writer.allocateHandles(idColumn(fresh));
+          const created = writer.allocateRowRefs(idColumn(fresh));
           store.transact(() =>
             writer.writeRows(
               {
-                handles: created,
+                rows: created,
                 fields: new Map<RowField, unknown[]>([
                   ['type', fresh.map(() => 'Point')],
                   ['parent', fresh.map(() => 'rows')],
@@ -236,7 +236,7 @@ describe('ItemWalk', () => {
           expectWalkAsLists(internals);
           continue;
         }
-        store.transact(() => writer.writeRows({ handles, fields, deleted }), 'remote');
+        store.transact(() => writer.writeRows({ rows: handles, fields, deleted }), 'remote');
         expectWalkAsLists(internals);
         // The groups in stacking order, read where each stands
         const groups = store.listGroups();
@@ -291,7 +291,7 @@ describe('an edit of a few items of a layer held as rows', () => {
     store.transact(
       () =>
         writer.writeGroups({
-          handles: Int32Array.of(handle),
+          groups: Int32Array.of(handle),
           fields: new Map([['key', ['0']]]),
         }),
       'remote',

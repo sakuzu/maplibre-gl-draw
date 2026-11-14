@@ -79,7 +79,7 @@ function patchOf(
   deleted?: number[],
 ): RowValues {
   return {
-    handles: Int32Array.from(handles),
+    rows: Int32Array.from(handles),
     fields: new Map(Object.entries(fields) as Array<[RowField, unknown[]]>),
     deleted: deleted ? Uint8Array.from(deleted) : undefined,
   };
@@ -262,7 +262,7 @@ describe('the drawing of the rows of the delta', () => {
     const list = features(40, 2);
     const live = setup(list);
     live.frame();
-    const [fresh, other] = live.writer.allocateHandles(byteColumnFromStrings(['new', 'elsewhere']));
+    const [fresh, other] = live.writer.allocateRowRefs(byteColumnFromStrings(['new', 'elsewhere']));
     const geometry: Geometry = { type: 'Point', coordinates: [1, 1] };
     live.writer.writeRows(
       patchOf([fresh], {
@@ -439,7 +439,7 @@ describe('the drawing of the rows of the delta', () => {
           );
         } else if (pick < 0.5) {
           const id = `n${created++}`;
-          const [fresh] = live.writer.allocateHandles(byteColumnFromStrings([id]));
+          const [fresh] = live.writer.allocateRowRefs(byteColumnFromStrings([id]));
           live.writer.writeRows(
             patchOf([fresh], {
               type: ['Polygon'],
@@ -628,7 +628,7 @@ describe('the drawing of the rows of the delta', () => {
     live.frame();
     live.frame();
     live.writer.writeGroups({
-      handles: Int32Array.of(5),
+      groups: Int32Array.of(5),
       fields: new Map([
         ['id', ['g']],
         ['key', [`${orderKey(20)}g`]],
@@ -649,7 +649,7 @@ describe('the drawing of the rows of the delta', () => {
     expect(live.internals.deltaRowCount()).toBe(0);
     const before = shownIds(live.table, live.tables.getRowId);
     live.writer.writeGroups({
-      handles: Int32Array.of(5),
+      groups: Int32Array.of(5),
       fields: new Map([['key', [`${orderKey(120)}g`]]]),
     });
     let changed = false;
@@ -675,7 +675,7 @@ describe('the drawing of the rows of the delta', () => {
     let drawnBefore = new Set<string>();
     for (let write = 0; write < 6; write++) {
       const ids = Array.from({ length: 1000 }, (_, i) => `import${write * 1000 + i}`);
-      const handles = live.writer.allocateHandles(byteColumnFromStrings(ids));
+      const handles = live.writer.allocateRowRefs(byteColumnFromStrings(ids));
       live.writer.writeRows(
         patchOf(Array.from(handles), {
           type: ids.map(() => 'Point'),

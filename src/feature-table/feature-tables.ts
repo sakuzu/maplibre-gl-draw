@@ -35,7 +35,7 @@ import type { Geometry, Position } from 'geojson';
 import type {
   FeatureTables,
   FeatureTablesOptions,
-  ItemHandles,
+  ItemRefs,
   LayerTableView,
   RowCursor,
   RowField,
@@ -346,15 +346,15 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  listRowHandles(start: number, count: number): Int32Array {
+  listRowRefs(start: number, count: number): Int32Array {
     try {
       this.gate();
-      return this.view.listRowHandles(start, count);
+      return this.view.listRowRefs(start, count);
     } catch (error) {
       throw tablesError(error);
     }
   }
-  listItems(start: number, count: number): ItemHandles {
+  listItems(start: number, count: number): ItemRefs {
     try {
       this.gate();
       return this.view.listItems(start, count);
@@ -584,7 +584,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
 
   /** The values the rows of `rows` have now, for its fields, as a feature holds them */
   readRowValues(rows: RowValues): RowValues {
-    return rowValuesOfTables(this.readValues(rows.handles, fieldsToRead(rows)));
+    return rowValuesOfTables(this.readValues(rows.rows, fieldsToRead(rows)));
   }
 
   override readValues(rows: Int32Array, read: readonly RowField[]): TablesRowValues {
@@ -998,13 +998,13 @@ class LayerTableViewImpl implements LayerTableView {
     return this.view.getVisibleRowsVersion();
   }
 
-  listRowHandles(start: number, count: number): Int32Array {
+  listRowRefs(start: number, count: number): Int32Array {
     return this.view.listRowRefs(start, count);
   }
 
-  listItems(start: number, count: number): ItemHandles {
+  listItems(start: number, count: number): ItemRefs {
     const items = this.view.listItems(start, count);
-    return { kinds: items.types, handles: items.refs };
+    return { types: items.types, refs: items.refs };
   }
 
   countGroupMembers(groupHandle: number): number {

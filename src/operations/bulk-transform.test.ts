@@ -101,7 +101,7 @@ function rowsOf(_store: DrawStore, tables: FeatureTables, ids: readonly string[]
   return ids.map((id) => {
     const handle = tables.getRowRef(id) as number;
     const values = tables.readValues({
-      handles: Int32Array.of(handle),
+      rows: Int32Array.of(handle),
       fields: new Map([
         ['geometry', []],
         ['type', []],
@@ -179,7 +179,7 @@ describe('moving, rotating and resizing features selected in bulk', () => {
     );
     expect(bulk.changes.length).toBe(count + 1);
     const previous = bulk.changes[bulk.changes.length - 1].previousValues as RowValues;
-    expect(previous.handles.length).toBe(30);
+    expect(previous.rows.length).toBe(30);
     bulk.store.restoreRows(previous);
     expect(rowsOf(bulk.store, bulk.tables, ids)).toEqual(before);
   });

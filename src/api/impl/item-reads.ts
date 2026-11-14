@@ -67,9 +67,9 @@ export function layerItemIds(store: Store, layer: Layer, range: Range): string[]
   const count = range.limit ?? Math.max(0, view.itemCount - range.offset);
   const items = view.listItems(range.offset, count);
   const out: string[] = [];
-  for (let i = 0; i < items.kinds.length; i++) {
-    const handle = items.handles[i];
-    const id = items.kinds[i] === ITEM_ROW ? tables.getRowId(handle) : tables.getGroupId(handle);
+  for (let i = 0; i < items.types.length; i++) {
+    const handle = items.refs[i];
+    const id = items.types[i] === ITEM_ROW ? tables.getRowId(handle) : tables.getGroupId(handle);
     if (id !== undefined) out.push(id);
   }
   return out;

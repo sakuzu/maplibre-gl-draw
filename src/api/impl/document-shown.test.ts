@@ -147,7 +147,7 @@ describe('another document shown in place of the document', () => {
     store.transact(() => {
       store.createLayer(layer('more', true));
       writer.writeRows({
-        handles: Int32Array.of(store.tables?.getRowRef('p1') ?? -1),
+        rows: Int32Array.of(store.tables?.getRowRef('p1') ?? -1),
         fields: new Map([['properties:n', [7]]]),
       });
     }, 'remote');
