@@ -25,6 +25,7 @@
 
 import type { FileData, Metadata } from '../../shared/types/model.js';
 import { createId } from '../../shared/utils/id.js';
+import { commitOf, runCommit } from '../../store/commit-scope.js';
 import type { Store } from '../../store/store.js';
 import type {
   ItemOrderChange,
@@ -37,7 +38,7 @@ import type {
 import { DrawError } from '../errors.js';
 import type { TaskOptions, Write } from '../write.js';
 import { withLocksIgnored } from './shared.js';
-import { commitOf, queueCommit, runCommit } from './write.js';
+import { queueCommit } from './write.js';
 
 /** What `draw.undo` and `draw.redo` are made with */
 export interface History {

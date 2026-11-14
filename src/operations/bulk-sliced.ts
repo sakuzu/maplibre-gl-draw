@@ -20,9 +20,13 @@
  *   elsewhere does not
  * - The end is told once, when the last rows are written (`onDone`): the end of the drag is
  *   announced then, so what keeps a drag as one step of the history keeps all the steps
+ * - Every step is made in one commit (`store/commit-scope.ts`): the `change` of each step tells the
+ *   same commit, and a storage receives the steps as one commit
  */
 
 import { TableSelection } from '../feature-table/selection.js';
+import { createId } from '../shared/utils/id.js';
+import { type CommitInfo, withCommit } from '../store/commit-scope.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../store/row-steps.js';
 import type { SlicedWrite, Store } from '../store/store.js';
 import type { BulkKinds } from './bulk-transform.js';
@@ -70,30 +74,33 @@ export function writeKindsInSlices(
   let at = 0;
   let written = false;
   let ended = false;
+  const commit: CommitInfo = { id: createId(), label: undefined, undo: true };
 
   /** Writes rows until the deadline, in one transaction */
   const writeUntil = (deadline: number): void => {
-    store.runSlicedStep(() =>
-      store.transact(() => {
-        while (kind < kinds.length) {
-          const list = kinds[kind].rows;
-          const { op } = kinds[kind];
-          if (at >= list.length) {
-            kind++;
-            at = 0;
-            continue;
+    withCommit(store, commit, () =>
+      store.runSlicedStep(() =>
+        store.transact(() => {
+          while (kind < kinds.length) {
+            const list = kinds[kind].rows;
+            const { op } = kinds[kind];
+            if (at >= list.length) {
+              kind++;
+              at = 0;
+              continue;
+            }
+            const slice = list.slice(at, at + BULK_SLICE_ROWS);
+            at += slice.length;
+            if (at >= list.length) {
+              kind++;
+              at = 0;
+            }
+            if (store.applyBulk(op, TableSelection.of(slice))) written = true;
+            options.onWritten?.(slice);
+            if (now() >= deadline) break;
           }
-          const slice = list.slice(at, at + BULK_SLICE_ROWS);
-          at += slice.length;
-          if (at >= list.length) {
-            kind++;
-            at = 0;
-          }
-          if (store.applyBulk(op, TableSelection.of(slice))) written = true;
-          options.onWritten?.(slice);
-          if (now() >= deadline) break;
-        }
-      }),
+        }),
+      ),
     );
   };
   const end = (): void => {

@@ -26,6 +26,7 @@ import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import type { ItemPlacement, ObjectGroup } from '../../shared/types/model.js';
 import { createId } from '../../shared/utils/id.js';
+import { type CommitInfo, runCommit, withCommit } from '../../store/commit-scope.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -121,62 +122,6 @@ import {
   requireId,
 } from './shared.js';
 import { type OrderWrite, type OverlayState, transactionReads } from './transaction-reads.js';
-
-// ============================================================================
-// What the commit tells
-// ============================================================================
-
-/**
- * The commit of `draw.write` being made in a Store, read by the `change` it makes
- *
- * @internal
- */
-export interface CommitInfo {
-  readonly id: string;
-  readonly label: string | undefined;
-  /** Whether it is a step of undo */
-  readonly undo: boolean;
-}
-
-const COMMITS = new WeakMap<Store, CommitInfo>();
-
-/**
- * The commit being made in the Store, while its transaction runs and its notification goes out
- * (undefined for a write made otherwise: the input of the user, a write from elsewhere)
- *
- * @internal
- */
-export function commitOf(store: Store): CommitInfo | undefined {
-  return COMMITS.get(store);
-}
-
-/**
- * Makes a commit in the Store, with what tells it, in one transaction of the Store
- *
- * @internal
- */
-export function runCommit<T>(store: Store, info: CommitInfo, source: string, fn: () => T): T {
-  const outer = COMMITS.get(store);
-  COMMITS.set(store, info);
-  try {
-    return store.transact(fn, source);
-  } finally {
-    if (outer) COMMITS.set(store, outer);
-    else COMMITS.delete(store);
-  }
-}
-
-/** Runs fn with the commit told as the one being made in the Store */
-function withCommit<T>(store: Store, info: CommitInfo, fn: () => T): T {
-  const outer = COMMITS.get(store);
-  COMMITS.set(store, info);
-  try {
-    return fn();
-  } finally {
-    if (outer) COMMITS.set(store, outer);
-    else COMMITS.delete(store);
-  }
-}
 
 /**
  * Puts a commit in the queue of the writes of this client, after the ones before it, and makes it

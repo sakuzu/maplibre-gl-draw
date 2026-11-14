@@ -52,6 +52,7 @@ import { TableSelection } from '../feature-table/selection.js';
 import type { ItemPosition } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { rowsOfSummary, summaryOf, summaryWithLayers } from './bulk-selection.js';
+import { commitOf, withCommit } from './commit-scope.js';
 import { insertGroup } from './item-lists.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
@@ -389,14 +390,19 @@ export class DrawStore implements Store {
   /**
    * Begins a restore of rows written in steps (in a transaction of this Store): when steps are
    * left, the notification of this Store is held with the one of the contract, and let go of once
-   * the contract wrote the last rows and told them
+   * the contract wrote the last rows and told them, in the commit the restore was made in
    */
   #restoreInSteps(steps: RowSteps, write: RowWrite): boolean {
     const restore: QueuedWrite = { finish: () => steps.finish(), holdsNotification: true };
+    const commit = commitOf(this);
     let ended = false;
     const going = steps.begin(write, () => {
       ended = true;
-      if (this.#queue.remove(restore)) this.#bus.release();
+      const release = (): void => {
+        if (this.#queue.remove(restore)) this.#bus.release();
+      };
+      if (commit) withCommit(this, commit, release);
+      else release();
       this.#settleWritten();
     });
     if (!going || ended) return true;

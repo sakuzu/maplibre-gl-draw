@@ -20,6 +20,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import { createId } from '../../shared/utils/id.js';
+import { commitOf } from '../../store/commit-scope.js';
 import { bulkSelectionValue, valueOfSelection } from '../../store/selection-value.js';
 import type { Store } from '../../store/store.js';
 import type {
@@ -43,7 +44,6 @@ import type { Sketch, SketchEndReason } from '../sketches.js';
 import type { Mode, SnapResult, VertexSelection } from '../state.js';
 import { toFeatureOrUndefined } from './feature-shape.js';
 import { toDatasetRow } from './rows.js';
-import { commitOf } from './write.js';
 
 /**
  * What the parts of the instance tell one another on the hub, besides the events: the changes of
@@ -470,16 +470,29 @@ function changeSourceOf(source: string | undefined): Change['source'] {
   }
 }
 
+/** The change of each notification, made once for whoever reads it while it goes out */
+const CHANGES = new WeakMap<StoreChange, Change | null>();
+
 /**
  * The change a notification carries for `change`: the IDs of what it changed, and what a feature
  * was before; null when the notification changed nothing of the document
  *
  * The IDs of the rows written are read from their handles while the notification goes out (a
- * row deleted from elsewhere is forgotten later on).
+ * row deleted from elsewhere is forgotten later on). It is made once per notification: `change`
+ * and what a storage receives tell the same commit, with the same ID for a commit no `draw.write`
+ * made (the input of the user).
  *
  * @internal
  */
 export function toChange(changes: StoreChange, store: Store): Change | null {
+  const known = CHANGES.get(changes);
+  if (known !== undefined) return known;
+  const change = changeOf(changes, store);
+  CHANGES.set(changes, change);
+  return change;
+}
+
+function changeOf(changes: StoreChange, store: Store): Change | null {
   const reset = changes.reset === true;
   if (!reset && !DOCUMENT_KEYS.some((key) => changes[key] !== undefined)) return null;
   const tables = store.tables;

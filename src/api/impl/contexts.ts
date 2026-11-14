@@ -29,6 +29,7 @@ import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { PixelRatioProvider } from '../../shared/utils/pixel-ratio.js';
 import type { SketchController } from '../../sketches/sketch-controller.js';
 import type { SnapResult as StoredSnapResult } from '../../snapping/types.js';
+import { type CommitInfo, runCommit } from '../../store/commit-scope.js';
 import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
@@ -59,7 +60,7 @@ import { storedInputOf, toFeature } from './feature-shape.js';
 import { prepareFeatureInput } from './features.js';
 import { mergeOptions } from './options.js';
 import { toDatasetRow } from './rows.js';
-import { type CommitInfo, runCommit, WRITE_SOURCE, WRITE_SOURCE_NO_UNDO } from './write.js';
+import { WRITE_SOURCE, WRITE_SOURCE_NO_UNDO } from './write.js';
 
 // ============================================================================
 // Conversions
