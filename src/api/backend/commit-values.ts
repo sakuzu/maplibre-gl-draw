@@ -11,6 +11,11 @@
  * lists, with no keys: the keys of its items, and those of the layers among the layers, are kept
  * here, made when an item is put in a place and kept while it stays there among the others.
  *
+ * The values of many rows (a commit of a hundred thousand rows moved) take longer than a frame to
+ * read: they are read over several tasks (`ChangeReading.step`), from a snapshot of the document
+ * as the notification left it (`Store.openSnapshot`), so that the commits made meanwhile are not
+ * read in them. What is read where the notification goes out is only what tells the places.
+ *
  * Nothing here runs when it is not made: the instance makes it only for a storage.
  *
  * @internal
@@ -18,16 +23,19 @@
 
 import { sameValue, type Value, valueToJSON } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
+import { featureWithFields } from '../../feature-table/feature-fields.js';
 import { longestRisingRun } from '../../shared/utils/item-moves.js';
 import { setOwnProperty } from '../../shared/utils/own-property.js';
 import { featuresInOrder } from '../../store/feature-stream.js';
 import { compareKeys, keysBetween } from '../../store/order-keys.js';
+import type { LastingSnapshot } from '../../store/read-snapshot.js';
 import type { Store } from '../../store/store.js';
 import type {
   FileData,
   Group,
   Layer,
   RowField,
+  RowValues,
   StoreChange,
   Feature as StoredFeature,
 } from '../../store/types.js';
@@ -55,6 +63,38 @@ const LAYERS = '';
 interface Place {
   readonly parent: string;
   readonly key: string;
+}
+
+/** The most rows of a notification read where it goes out: more are read over several tasks */
+const ROWS_READ_AT_ONCE = 2048;
+
+/** The rows read between two looks at the time */
+const ROWS_PER_LOOK = 128;
+
+/**
+ * What reads one notification as operations: at once, or over several tasks for many rows
+ *
+ * @internal
+ */
+export interface ChangeReading {
+  /** Reads until a time (`performance.now`): true once every operation is read */
+  step(deadline: number): boolean;
+  /** The operations, in the order they apply, once `step` said every one is read */
+  operations(): ValueOperation[];
+  /** Lets go of the snapshot it reads from (once read, or when it is dropped) */
+  release(): void;
+}
+
+/** The rows of a notification whose values are still to be read, and how far they are read */
+interface RowsToRead {
+  /** The rows created, with their keys */
+  readonly created: { readonly id: string; readonly key: string }[];
+  /** The rows updated, with their handles */
+  readonly updated: { readonly id: string; readonly handle: number }[];
+  /** The first of `created`, then of `updated`, not read yet */
+  at: number;
+  /** The values before of the rows updated, read from the snapshot (made at the first) */
+  before: ((handle: number, now: StoredFeature) => Feature | undefined) | null;
 }
 
 /** What the groups of a notification moved, for the features */
@@ -88,7 +128,22 @@ export class CommitValues {
   readonly #places = new Map<string, Place>();
 
   constructor(private readonly store: Store) {
-    this.documentOperations();
+    this.#placeDocument();
+  }
+
+  /** Gives the items of the layers of objects, and the layers, their keys from their order */
+  #placeDocument(): void {
+    const store = this.store;
+    this.#places.clear();
+    const layers = this.#layerIds();
+    this.#placeAll(LAYERS, layers);
+    for (const layerId of layers) {
+      const layer = store.getLayer(layerId) as Layer;
+      if (layer.kind !== 'table') this.#placeAll(layerId, layer.items);
+    }
+    for (const group of store.listGroups()) {
+      if (group.kind !== 'table') this.#placeAll(group.id, group.featureIds);
+    }
   }
 
   /**
@@ -136,19 +191,47 @@ export class CommitValues {
    * again with {@link documentOperations})
    */
   changeOperations(changes: StoreChange): ValueOperation[] | null {
+    const reading = this.readChange(changes, Number.POSITIVE_INFINITY);
+    if (!reading) return null;
+    reading.step(Number.POSITIVE_INFINITY);
+    const operations = reading.operations();
+    reading.release();
+    return operations;
+  }
+
+  /**
+   * Reads one notification of the Store once it is applied, in the listener of the notification:
+   * what tells the places at once, and the values of many rows over several tasks (`step`, from a
+   * snapshot of the document as it is now). `null` when it replaced the whole document (read it
+   * again with {@link documentOperations})
+   *
+   * @param atOnce - The most rows read now (more are read by `step`)
+   */
+  readChange(changes: StoreChange, atOnce = ROWS_READ_AT_ONCE): ChangeReading | null {
     if (changes.reset === true) {
-      this.documentOperations();
+      this.#placeDocument();
       return null;
     }
     const change = toChange(changes, this.store);
-    if (!change) return [];
     const out = emptyOperations();
+    if (!change) return readingOf(out, null);
     this.#files(changes, out);
     this.#layers(change, changes, out);
     const groups = this.#groups(change, changes, out);
-    this.#features(change, changes, out, groups);
+    const rows = this.#features(change, changes, out, groups);
     this.#document(changes, out);
-    return listOf(out);
+    const count = rows.created.length + rows.updated.length;
+    if (count === 0) return readingOf(out, null);
+    const lasting = count > atOnce ? this.store.openSnapshot() : undefined;
+    if (!lasting) {
+      // Read now, from the Store as the notification left it
+      this.#readRows(rows, out, change, changes, null, Number.POSITIVE_INFINITY);
+      return readingOf(out, null);
+    }
+    return readingOf(out, {
+      step: (deadline) => this.#readRows(rows, out, change, changes, lasting, deadline),
+      release: () => lasting.release(),
+    });
   }
 
   // ==========================================================================
@@ -265,7 +348,12 @@ export class CommitValues {
     return { moved, relayered };
   }
 
-  #features(change: Change, changes: StoreChange, out: Operations, groups: GroupsMoved): void {
+  #features(
+    change: Change,
+    changes: StoreChange,
+    out: Operations,
+    groups: GroupsMoved,
+  ): RowsToRead {
     const store = this.store;
     const ids = change.features;
     // The lists of the layers and groups of objects features were put in, made in or deleted from
@@ -305,11 +393,17 @@ export class CommitValues {
     }
     const rowPlaces = this.#rowPlaces(unique(rows));
     const created = new Set(ids.created);
+    // The features of objects are read now; the rows are read by `#readRows`
+    const toRead: RowsToRead = { created: [], updated: [], at: 0, before: null };
+    const tables = store.tables;
     for (const id of ids.created) {
-      const feature = store.getFeature(id);
-      if (!feature) continue;
       const key = rowPlaces.get(id)?.key ?? this.#places.get(id)?.key ?? '';
-      out.createdFeatures.push(createFeature(feature, key));
+      if (this.#isRow(id)) {
+        toRead.created.push({ id, key });
+        continue;
+      }
+      const feature = store.getFeature(id);
+      if (feature) out.createdFeatures.push(createFeature(feature, key));
     }
     const placed: string[] = [];
     for (const id of moved) if (!created.has(id) && store.getFeature(id)) placed.push(id);
@@ -321,11 +415,61 @@ export class CommitValues {
       (id) => (rowPlaces.get(id) ?? this.#places.get(id)) as Place,
     );
     for (const id of ids.updated) {
+      const handle = tables?.getRowRef(id);
+      if (handle !== undefined) {
+        toRead.updated.push({ id, handle: handle as number });
+        continue;
+      }
       const now = store.getFeature(id);
       if (!now) continue;
       const set = featureSet(change.previous(id), toFeature(now));
       if (set) out.set.push(set(id));
     }
+    return toRead;
+  }
+
+  /**
+   * Reads the values of rows a notification created and updated, until a time: from the Store as
+   * the notification left it (`lasting` null, in the listener of the notification), or from the
+   * snapshot taken then. A row updated is read with the values it had before for the fields the
+   * notification wrote, the others being the same before and after
+   *
+   * @returns true once every row is read
+   */
+  #readRows(
+    rows: RowsToRead,
+    out: Operations,
+    change: Change,
+    changes: StoreChange,
+    lasting: LastingSnapshot | null,
+    deadline: number,
+  ): boolean {
+    const store = this.store;
+    const read = (id: string): StoredFeature | undefined => {
+      const snapshot = lasting?.snapshot();
+      return snapshot ? snapshot.getFeature(id) : store.getFeature(id);
+    };
+    let looked = 0;
+    const late = (): boolean => ++looked % ROWS_PER_LOOK === 0 && performance.now() >= deadline;
+    const { created, updated } = rows;
+    while (rows.at < created.length) {
+      const { id, key } = created[rows.at++];
+      const feature = read(id);
+      if (feature) out.createdFeatures.push(createFeature(feature, key));
+      if (late()) return false;
+    }
+    if (lasting) rows.before ??= valuesBeforeOf(changes);
+    while (rows.at < created.length + updated.length) {
+      const { id, handle } = updated[rows.at++ - created.length];
+      const now = read(id);
+      if (now) {
+        const was = rows.before ? rows.before(handle, now) : change.previous(id);
+        const set = featureSet(was, toFeature(now));
+        if (set) out.set.push(set(id));
+      }
+      if (late()) return false;
+    }
+    return true;
   }
 
   #document(changes: StoreChange, out: Operations): void {
@@ -510,6 +654,47 @@ export class CommitValues {
 // Records
 // ============================================================================
 
+/** A reading of a notification: done, or read further by `rest` */
+function readingOf(
+  out: Operations,
+  rest: { step(deadline: number): boolean; release(): void } | null,
+): ChangeReading {
+  let done = rest === null;
+  let released = false;
+  return {
+    step(deadline) {
+      if (!done && rest) done = rest.step(deadline);
+      return done;
+    },
+    operations: () => listOf(out),
+    release() {
+      if (released) return;
+      released = true;
+      rest?.release();
+    },
+  };
+}
+
+/**
+ * The feature of a row before a notification, from what it is after it: the values it had for the
+ * fields the notification wrote (`StoreChange.previousValues`), the others being the same
+ */
+function valuesBeforeOf(
+  changes: StoreChange,
+): (handle: number, now: StoredFeature) => Feature | undefined {
+  const values = changes.previousValues as RowValues | undefined;
+  let indexOf: Map<number, number> | null = null;
+  return (handle, now) => {
+    if (!values) return undefined;
+    indexOf ??= new Map(Array.from(values.rows, (row, index) => [row, index]));
+    const index = indexOf.get(handle);
+    if (index === undefined) return undefined;
+    const fields = new Map<RowField, unknown>();
+    for (const [field, list] of values.fields) fields.set(field, list[index]);
+    return toFeature(featureWithFields(now, fields));
+  };
+}
+
 function emptyOperations(): Operations {
   return {
     createdFiles: [],
@@ -601,6 +786,7 @@ function createLayer(layer: Layer, key: string): ValueOperation {
     name: layer.name,
     visible: layer.visible,
     locked: layer.locked,
+    opacity: layer.opacity,
     // A layer has no look of its own yet: its features take the defaults and its rule
     style: {},
     styleRule: (layer.styleRule ?? null) as StyleRule | null,
@@ -645,11 +831,17 @@ function layerSet(
   was: Layer,
   now: Layer,
 ): Extract<ValueOperation, { kind: 'layer'; type: 'set' }>['set'] | null {
-  const set: { name?: string; visible?: boolean; locked?: boolean; styleRule?: StyleRule | null } =
-    {};
+  const set: {
+    name?: string;
+    visible?: boolean;
+    locked?: boolean;
+    opacity?: number;
+    styleRule?: StyleRule | null;
+  } = {};
   if (was.name !== now.name) set.name = now.name;
   if (was.visible !== now.visible) set.visible = now.visible;
   if (was.locked !== now.locked) set.locked = now.locked;
+  if (was.opacity !== now.opacity) set.opacity = now.opacity;
   const rule = (now.styleRule ?? null) as StyleRule | null;
   if (!sameJson(was.styleRule ?? null, rule)) set.styleRule = rule;
   return Object.keys(set).length > 0 ? set : null;

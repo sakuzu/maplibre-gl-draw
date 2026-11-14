@@ -14,13 +14,29 @@ function documentWith(): StoredDocument {
       type: 'create',
       kind: 'layer',
       id: 'a',
-      record: { name: 'A', visible: true, locked: false, style: {}, styleRule: null, key: 'V' },
+      record: {
+        name: 'A',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        style: {},
+        styleRule: null,
+        key: 'V',
+      },
     },
     {
       type: 'create',
       kind: 'layer',
       id: 'b',
-      record: { name: 'B', visible: true, locked: false, style: {}, styleRule: null, key: 'W' },
+      record: {
+        name: 'B',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        style: {},
+        styleRule: null,
+        key: 'W',
+      },
     },
     {
       type: 'create',
@@ -153,7 +169,7 @@ describe('applyOperations', () => {
         type: 'set',
         kind: 'layer',
         ids: ['a'],
-        set: { name: 'A2', locked: true, style: { fillColor: '#000000' } },
+        set: { name: 'A2', locked: true, opacity: 0.5, style: { fillColor: '#000000' } },
       },
       { type: 'set', kind: 'group', ids: ['g'], set: { visible: false } },
       { type: 'set', kind: 'document', set: { title: 'T' } },
@@ -162,6 +178,7 @@ describe('applyOperations', () => {
     expect(document.layers.get('a')).toMatchObject({
       name: 'A2',
       locked: true,
+      opacity: 0.5,
       style: { fillColor: '#000000' },
     });
     expect(document.groups.get('g')?.visible).toBe(false);

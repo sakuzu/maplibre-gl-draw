@@ -73,6 +73,8 @@ export interface LayerRecord {
   readonly name: string;
   readonly visible: boolean;
   readonly locked: boolean;
+  /** The opacity of the whole layer, from 0 to 1 */
+  readonly opacity: number;
   /** The look of the features of the layer */
   readonly style: FeatureStyle;
   /** The rule that colors its features from their attributes */
