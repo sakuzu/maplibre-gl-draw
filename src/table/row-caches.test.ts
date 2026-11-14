@@ -48,10 +48,10 @@ function countingCache(name = 'test:first-point:1'): RowCache & { readonly made:
       const shape = row.shape();
       made.push(String(row.value('id') ?? row.row));
       if (!shape) return [];
-      const { coords, stride } = shape.column;
+      const { flatCoordinates, stride } = shape.column;
       let at = shape.at;
       for (const level of shape.column.offsets) at = level[at];
-      return [coords[at * stride], coords[at * stride + 1], row.type.length];
+      return [flatCoordinates[at * stride], flatCoordinates[at * stride + 1], row.type.length];
     },
     fits: () => true,
   };
@@ -227,7 +227,7 @@ describe('the triangles of the fills of the library', () => {
       shape: () => ({
         column: {
           type: 'Polygon',
-          coords: Float64Array.of(0, 0, 1, 0, 1, 1, 0, 1, 0, 0),
+          flatCoordinates: Float64Array.of(0, 0, 1, 0, 1, 1, 0, 1, 0, 0),
           stride: 2,
           offsets: [Int32Array.of(0, 1), Int32Array.of(0, 5)],
         },

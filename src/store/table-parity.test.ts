@@ -414,7 +414,7 @@ function notificationOf(tables: FeatureTables, change: StoreChange): unknown {
           updated: idsOf(tables, rows.updated),
           deleted: idsOf(tables, rows.deleted),
           fields: [...rows.fields].map(recordedField).sort(),
-          styleKeys: [...rows.styleKeys].sort(),
+          changedKeys: [...rows.changedKeys].sort(),
         },
       ]),
     );

@@ -48,10 +48,10 @@ export const circleRowRings: RowRings = {
     if (row.type !== 'Circle') return null;
     const shape = row.shape();
     if (shape?.column.type !== 'Point') return null;
-    const { coords, stride } = shape.column;
+    const { flatCoordinates, stride } = shape.column;
     const radius = row.value(RADIUS_KEY);
     return circleRingCoords(
-      [coords[shape.at * stride], coords[shape.at * stride + 1]],
+      [flatCoordinates[shape.at * stride], flatCoordinates[shape.at * stride + 1]],
       typeof radius === 'number' ? radius : 0,
     );
   },

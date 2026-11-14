@@ -183,7 +183,7 @@ export function pageDataOfTabane(rowBlock: TabanePage, options: ToPageOptions = 
   const drawsRing = typeNames.map((t) => rings.draws(t));
   const shapeColumns: RowShapeColumn[] = (geometry?.children ?? []).map((child) => ({
     type: child.type,
-    coords: child.coords,
+    flatCoordinates: child.coords,
     stride,
     offsets: child.offsets ?? [],
   }));

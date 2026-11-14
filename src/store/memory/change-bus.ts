@@ -108,7 +108,7 @@ interface RowsSets {
   readonly updated: Set<number>;
   readonly deleted: Set<number>;
   readonly fields: Set<RowField>;
-  readonly styleKeys: Set<string>;
+  readonly changedKeys: Set<string>;
 }
 
 /** Whether a write of the rows of a layer only created rows */
@@ -123,7 +123,7 @@ function emptySets(): RowsSets {
     updated: new Set(),
     deleted: new Set(),
     fields: new Set(),
-    styleKeys: new Set(),
+    changedKeys: new Set(),
   };
 }
 
@@ -139,7 +139,7 @@ function foldIntoSets(
   elsewhere?: (handle: number) => boolean,
 ): void {
   for (const field of next.fields) fold.fields.add(field);
-  for (const key of next.styleKeys) fold.styleKeys.add(key);
+  for (const key of next.changedKeys) fold.changedKeys.add(key);
   for (const handle of next.deleted) {
     fold.updated.delete(handle);
     if (!fold.created.delete(handle)) fold.deleted.add(handle);
@@ -250,17 +250,17 @@ function rowsOfFolds(folds: ReadonlyMap<string, RowsFold>): RowsChange {
   for (const [layerId, fold] of folds) {
     if (fold.parts) {
       const fields = new Set<RowField>();
-      const styleKeys = new Set<string>();
+      const changedKeys = new Set<string>();
       for (const part of fold.parts) {
         for (const field of part.fields) fields.add(field);
-        for (const key of part.styleKeys) styleKeys.add(key);
+        for (const key of part.changedKeys) changedKeys.add(key);
       }
       layers.set(layerId, {
         created: joinRows(fold.parts.map((part) => part.created)),
         updated: new Int32Array(0),
         deleted: new Int32Array(0),
         fields,
-        styleKeys,
+        changedKeys,
       });
       continue;
     }
@@ -270,7 +270,7 @@ function rowsOfFolds(folds: ReadonlyMap<string, RowsFold>): RowsChange {
       updated: Int32Array.from(sets.updated),
       deleted: Int32Array.from(sets.deleted),
       fields: sets.fields,
-      styleKeys: sets.styleKeys,
+      changedKeys: sets.changedKeys,
     });
   }
   return { layers };

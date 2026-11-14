@@ -17,7 +17,7 @@ function rows(
   layerId: string,
   change: Partial<Record<'created' | 'updated' | 'deleted', number[]>> & {
     fields?: RowField[];
-    styleKeys?: string[];
+    changedKeys?: string[];
   },
 ): RowsChange {
   const entry: LayerRowsChange = {
@@ -25,7 +25,7 @@ function rows(
     updated: Int32Array.from(change.updated ?? []),
     deleted: Int32Array.from(change.deleted ?? []),
     fields: new Set(change.fields ?? []),
-    styleKeys: new Set(change.styleKeys ?? []),
+    changedKeys: new Set(change.changedKeys ?? []),
   };
   return { layers: new Map([[layerId, entry]]) };
 }
@@ -38,7 +38,7 @@ describe('the rows in the notifications of a transaction', () => {
     bus.transact(() => {
       bus.merge({ rows: rows('a', { created: [1, 2], fields: ['geometry'] }) });
       bus.merge({
-        rows: rows('a', { updated: [2, 3], fields: ['style'], styleKeys: ['fillColor'] }),
+        rows: rows('a', { updated: [2, 3], fields: ['style'], changedKeys: ['fillColor'] }),
       });
       bus.merge({ rows: rows('a', { deleted: [1, 4] }) });
       bus.merge({ rows: rows('b', { updated: [9] }) });
@@ -49,7 +49,7 @@ describe('the rows in the notifications of a transaction', () => {
     expect(Array.from(a?.updated ?? [])).toEqual([3]);
     expect(Array.from(a?.deleted ?? [])).toEqual([4]);
     expect([...(a?.fields ?? [])]).toEqual(['geometry', 'style']);
-    expect([...(a?.styleKeys ?? [])]).toEqual(['fillColor']);
+    expect([...(a?.changedKeys ?? [])]).toEqual(['fillColor']);
     expect(Array.from(seen[0].rows?.layers.get('b')?.updated ?? [])).toEqual([9]);
   });
 
@@ -70,7 +70,7 @@ describe('the rows in the notifications of a transaction', () => {
           updated: pick(),
           deleted: pick(),
           fields: random(2) ? ['geometry'] : ['style'],
-          styleKeys: random(2) ? ['fillColor'] : [],
+          changedKeys: random(2) ? ['fillColor'] : [],
         }),
       );
     }
@@ -88,7 +88,7 @@ describe('the rows in the notifications of a transaction', () => {
         [...entry.updated],
         [...entry.deleted],
         [...entry.fields],
-        [...entry.styleKeys],
+        [...entry.changedKeys],
       ]);
     expect(plain(seen[0]?.rows)).toEqual(plain(folded));
     // 100,000 rows deleted in writes of 500 (a layer deleted a batch at a time)
@@ -113,7 +113,7 @@ describe('the rows of a transaction whose writes only create rows', () => {
       [...entry.updated],
       [...entry.deleted],
       [...entry.fields],
-      [...entry.styleKeys],
+      [...entry.changedKeys],
     ]);
   const told = (writes: RowsChange[]): StoreChange => {
     const bus = new ChangeBus();
@@ -130,7 +130,7 @@ describe('the rows of a transaction whose writes only create rows', () => {
     const change = told([
       rows('a', { created: [5, 3, 5], fields: ['geometry'] }),
       rows('b', { created: [1] }),
-      rows('a', { created: [3, 7, 2], fields: ['style'], styleKeys: ['fillColor'] }),
+      rows('a', { created: [3, 7, 2], fields: ['style'], changedKeys: ['fillColor'] }),
     ]);
     expect(plain(change.rows)).toEqual([
       ['a', [5, 3, 7, 2], [], [], ['geometry', 'style'], ['fillColor']],
@@ -165,7 +165,7 @@ describe('the rows of a transaction whose writes only create rows', () => {
             updated: pick(),
             deleted: pick(),
             fields: random(2) ? ['style'] : ['geometry'],
-            styleKeys: random(2) ? ['fillColor'] : [],
+            changedKeys: random(2) ? ['fillColor'] : [],
           }),
         );
       }

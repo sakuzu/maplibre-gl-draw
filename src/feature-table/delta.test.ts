@@ -157,8 +157,8 @@ describe('the delta of a layer', () => {
     );
     expect(Array.from(change.layers.get('a')?.updated ?? [])).toEqual([a]);
     expect(Array.from(change.layers.get('b')?.deleted ?? [])).toEqual([b]);
-    expect([...(change.layers.get('a')?.styleKeys ?? [])]).toEqual(['strokeColor']);
-    expect([...(change.layers.get('b')?.styleKeys ?? [])]).toEqual(['fillColor']);
+    expect([...(change.layers.get('a')?.changedKeys ?? [])]).toEqual(['strokeColor']);
+    expect([...(change.layers.get('b')?.changedKeys ?? [])]).toEqual(['fillColor']);
     expect([...(change.layers.get('a')?.fields ?? [])]).toEqual(['style']);
   });
 

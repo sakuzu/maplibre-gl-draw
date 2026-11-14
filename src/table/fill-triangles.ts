@@ -69,7 +69,7 @@ export function fillVerticesOf(row: RowRead, ring: Float64Array | null): number 
   for (const [first, end] of fill.polygons) {
     RUNS.length = 0;
     count += polygonRingRuns(
-      shape.column.coords,
+      shape.column.flatCoordinates,
       shape.column.stride,
       fill.rings,
       first,
@@ -95,7 +95,7 @@ export function fillTrianglesOf(row: RowRead, ring: Float64Array | null): ArrayL
     const shape = row.shape();
     const fill = shape ? polygonsOf(shape) : null;
     if (!shape || !fill) return NO_TRIANGLES;
-    made = triangulateRow(shape.column.coords, fill.rings, fill.polygons, shape.column.stride);
+    made = triangulateRow(shape.column.flatCoordinates, fill.rings, fill.polygons, shape.column.stride);
   }
   return made.vertices >= WIDE_VERTICES ? Uint32Array.from(made.indices) : made.indices;
 }
