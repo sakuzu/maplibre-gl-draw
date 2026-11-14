@@ -7,8 +7,10 @@
  * it can be written now, and the failures nobody waits for
  */
 
+import type { Refusal } from '../shared/refusal.js';
 import type { DrawError } from './errors.js';
-import type { Progress } from './write.js';
+import type { Observable } from './events.js';
+import type { All, Progress, SaveOptions, TaskOptions, Write, WriteOptions } from './write.js';
 
 /** What an application shows of the instance, in one value that changes over time */
 export interface Status {
@@ -126,24 +128,7 @@ export type CloseReason =
   | 'unavailable'
   | 'closedByClient';
 
-/**
- * Why a storage refused a commit. An open union: a storage may give reasons of its own.
- *
- * - `retryLimit`: sent as many times as `Backend.retry` allows, without reaching the storage
- * - `outboxExpired`, `outboxFull`: the place of the device that keeps the commits not sent ran out
- *   of time or of room
- */
-export type RefuseReason =
-  | 'readOnly'
-  | 'invalid'
-  | 'rules'
-  | 'limit'
-  | 'documentDeleted'
-  | 'dependsOnRefused'
-  | 'retryLimit'
-  | 'outboxExpired'
-  | 'outboxFull'
-  | (string & {});
+export type { Refusal, RefuseReason } from '../shared/refusal.js';
 
 /** The steps of undo of this client */
 export interface HistoryState {
@@ -153,4 +138,49 @@ export interface HistoryState {
   readonly undoLabel: string | undefined;
   /** The `label` of the step a redo makes again */
   readonly redoLabel: string | undefined;
+}
+
+/** The refusals a call is about: one by its ID, several, or every one (`{ all: true }`) */
+export type RefusalTarget = string | readonly string[] | All;
+
+/**
+ * The commits the storage refused, the oldest first: each taken out of the document here, and
+ * kept until it is dismissed
+ */
+export interface Refusals extends Observable<readonly Refusal[]> {
+  /**
+   * The edits refused, as GeoJSON: what they meant, made on the document as it is now. A feature
+   * they deleted is not there, and its ID is in `maplibre-gl-draw:deletedIds` of the
+   * FeatureCollection. It can be shown over the document (`draw.view.preview`) and brought back
+   * into another layer (`tx.import`)
+   *
+   * @throws `DrawError` with the code `notFound` for an ID that names no refusal
+   */
+  export(target: RefusalTarget, options?: TaskOptions): Promise<Blob>;
+  /**
+   * Makes what the refusals meant again on the document as it is now, as one new commit of this
+   * client however many are given, and drops their records. What they wrote that is gone now is
+   * left out
+   */
+  retry(target: RefusalTarget, options?: WriteOptions): Write<void>;
+  /** Drops what the refusals meant, and their records */
+  dismiss(target: RefusalTarget, options?: TaskOptions): Promise<void>;
+}
+
+/** The storage of the document, as the application drives it */
+export interface BackendResource {
+  /**
+   * Brings the commits made so far to the storage: settles once each reaches the stage `until`
+   * (`accepted` by default), sending now a batch that waits to be sent again. Fails with
+   * `refused` when one of them is refused, and with `invalidState` with no storage, or for a
+   * stage `status.saving.stages` does not list
+   */
+  save(options?: SaveOptions): Promise<void>;
+  /**
+   * Connects again now: what waits to be sent again is sent now, and a connection closed (by
+   * `credential`, once signed in again) is opened again
+   */
+  reconnect(options?: TaskOptions): Promise<void>;
+  /** The commits the storage refused */
+  readonly refusals: Refusals;
 }

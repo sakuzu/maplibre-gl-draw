@@ -87,9 +87,10 @@ export interface Change {
   readonly commit: string;
   /**
    * Where the commit came from: `local` for a write of this client, `undo` and `redo` for a step
-   * of its undo taken back and made again, `open` for a document opened, `remote` from elsewhere
+   * of its undo taken back and made again, `open` for a document opened, `remote` from elsewhere,
+   * `refused` for the commits the storage refused taken out of the document
    */
-  readonly source: 'local' | 'remote' | 'undo' | 'redo' | 'open';
+  readonly source: 'local' | 'remote' | 'undo' | 'redo' | 'open' | 'refused';
   /** The `label` of the `draw.write` that made it */
   readonly label: string | undefined;
   /** The features */
@@ -104,6 +105,12 @@ export interface Change {
    * of the layers, an entry of the application) put in or out of it, or in another place of it
    */
   readonly document: boolean;
+  /**
+   * The features the storage gave other IDs, from the ID each had to the one it has (empty for
+   * any other commit): the features are listed as updated under their new IDs, and the selection,
+   * the sketches and what is drawn of them go on with them
+   */
+  readonly reassigned: Readonly<Record<string, string>>;
   /**
    * The feature as it was before the commit, before its first write in it: one updated, deleted
    * or put in another layer or group. It is read in the listener, while the change is delivered;

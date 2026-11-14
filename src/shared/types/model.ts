@@ -845,6 +845,12 @@ export interface StoreChange {
    * `DocumentChange.previousValues`): a {@link RowValues}
    */
   previousValues?: FeatureValues;
+  /**
+   * The features given other IDs, from the ID each had to the one it has (a storage that gave
+   * them IDs of its own): the features of objects are told deleted under the old IDs and created
+   * under the new ones, the rows updated with the field `id`
+   */
+  reassigned?: ReadonlyMap<string, string>;
 }
 
 declare const featureValuesBrand: unique symbol;

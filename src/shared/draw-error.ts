@@ -7,6 +7,8 @@
  * A pure module: it depends on nothing, so the parts that run in a Worker throw it as well.
  */
 
+import type { Refusal } from './refusal.js';
+
 /**
  * Why a {@link DrawError} was thrown. An open union: a reader writes a default case, and a code
  * is added in a minor release.
@@ -77,6 +79,8 @@ export class DrawError extends Error {
   readonly retryable: boolean;
   /** The IDs of the features, layers and groups it is about */
   readonly ids: readonly string[];
+  /** The record of the commit refused, when `code` is `refused` and a commit was */
+  readonly refusal: Refusal | undefined;
   /** What failed underneath, when something did */
   declare readonly cause?: unknown;
 
@@ -85,12 +89,17 @@ export class DrawError extends Error {
    *
    * @param code - Why it is thrown
    * @param message - A description in English, for logs
-   * @param options - `cause` is what failed underneath, `ids` the IDs it is about
+   * @param options - `cause` is what failed underneath, `ids` the IDs it is about, `refusal` the
+   *   record of a commit refused
    */
   constructor(
     code: DrawErrorCode,
     message: string,
-    options?: { readonly cause?: unknown; readonly ids?: readonly string[] },
+    options?: {
+      readonly cause?: unknown;
+      readonly ids?: readonly string[];
+      readonly refusal?: Refusal;
+    },
   ) {
     super(message);
     this.name = 'DrawError';
@@ -104,6 +113,7 @@ export class DrawError extends Error {
     this.code = code;
     this.retryable = RETRYABLE.has(code);
     this.ids = Object.freeze([...(options?.ids ?? [])]);
+    this.refusal = options?.refusal;
   }
 }
 

@@ -636,6 +636,12 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   if (changes.mode) target.mode = changes.mode;
   if (changes.uiStateChanged) target.uiStateChanged = true;
   if (changes.reset === true) target.reset = true;
+  // the IDs given other IDs: every pair, the last of an ID kept
+  if (changes.reassigned) {
+    target.reassigned = target.reassigned
+      ? new Map([...target.reassigned, ...changes.reassigned])
+      : changes.reassigned;
+  }
   // metadata: the metadata before the transaction (the first previous) and after it (the last),
   // as the order of the layers
   if (changes.metadata) {

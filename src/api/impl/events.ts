@@ -20,6 +20,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import { createId } from '../../shared/utils/id.js';
+import { setOwnProperty } from '../../shared/utils/own-property.js';
 import { commitOf } from '../../store/commit-scope.js';
 import { bulkSelectionValue, valueOfSelection } from '../../store/selection-value.js';
 import type { Store } from '../../store/store.js';
@@ -464,10 +465,24 @@ function changeSourceOf(source: string | undefined): Change['source'] {
     case 'undo':
     case 'redo':
     case 'open':
+    case 'refused':
       return source;
     default:
       return 'local';
   }
+}
+
+/** No feature given another ID */
+const NONE_REASSIGNED: Readonly<Record<string, string>> = Object.freeze({});
+
+/** The features given other IDs, as a change tells them */
+function reassignedOf(
+  pairs: ReadonlyMap<string, string> | undefined,
+): Readonly<Record<string, string>> {
+  if (!pairs || pairs.size === 0) return NONE_REASSIGNED;
+  const out: Record<string, string> = {};
+  for (const [from, to] of pairs) setOwnProperty(out, from, to);
+  return Object.freeze(out);
 }
 
 /** The change of each notification, made once for whoever reads it while it goes out */
@@ -554,6 +569,20 @@ function changeOf(changes: StoreChange, store: Store): Change | null {
       }
     }
   }
+  // The features given other IDs: under their new IDs, as features updated
+  const reassigned = changes.reassigned;
+  if (reassigned && reassigned.size > 0) {
+    const renamed = new Set(reassigned.values());
+    const gone = new Set(reassigned.keys());
+    const moved = created.filter((id) => renamed.has(id));
+    const kept = created.filter((id) => !renamed.has(id));
+    created.length = 0;
+    created.push(...kept);
+    const left = deleted.filter((id) => !gone.has(id) || renamed.has(id));
+    deleted.length = 0;
+    deleted.push(...left);
+    for (const id of moved) if (!updated.includes(id)) updated.push(id);
+  }
   const featureIds: ChangedIds = {
     created: idsOf(created),
     updated: idsOf(updated),
@@ -600,6 +629,7 @@ function changeOf(changes: StoreChange, store: Store): Change | null {
       changes.metadata !== undefined ||
       changes.files !== undefined ||
       order?.otherEntries === true,
+    reassigned: reassignedOf(reassigned),
     previous(id) {
       if (typeof id !== 'string') return undefined;
       const found = before.get(id);

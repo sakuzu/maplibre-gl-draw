@@ -81,6 +81,12 @@ export interface ChangeReading {
   step(deadline: number): boolean;
   /** The operations, in the order they apply, once `step` said every one is read */
   operations(): ValueOperation[];
+  /**
+   * The operations that take them back, in the order they apply, once `step` said every one is
+   * read: what was created deleted, what was deleted created again where it was, the values
+   * written put back, the items put elsewhere put back (none for a notification from elsewhere)
+   */
+  inverse(): ValueOperation[];
   /** Lets go of the snapshot it reads from (once read, or when it is dropped) */
   release(): void;
 }
@@ -89,10 +95,12 @@ export interface ChangeReading {
 interface RowsToRead {
   /** The rows created, with their keys */
   readonly created: { readonly id: string; readonly key: string }[];
+  /** The rows deleted, and their handles: what makes them again is read for the inverse */
+  readonly deleted: { readonly id: string; readonly handle: number }[];
   /** The rows updated, and their handles where the notification went out */
   updated: readonly string[];
   handles: ArrayLike<number>;
-  /** The first of `created`, then of `updated`, not read yet */
+  /** The first of `created`, then of `updated`, then of `deleted`, not read yet */
   at: number;
   /** Where each row is among the values before of the notification, made a part a step */
   readonly index: Map<number, number>;
@@ -129,6 +137,11 @@ interface Operations {
 export class CommitValues {
   /** The places of the layers, and of the items of the layers of objects */
   readonly #places = new Map<string, Place>();
+  /**
+   * The place each item had before the notification being read changed it (null: it had none),
+   * while one whose inverse is read is
+   */
+  #before: Map<string, Place | null> | null = null;
 
   constructor(private readonly store: Store) {
     this.#placeDocument();
@@ -146,6 +159,8 @@ export class CommitValues {
     }
     for (const group of store.listGroups()) {
       if (group.kind !== 'table') this.#placeAll(group.id, group.featureIds);
+      // The tables keep the key of a group of rows: it is known here once read
+      else this.#places.set(group.id, { parent: group.layerId, key: this.#groupKey(group) });
     }
   }
 
@@ -168,6 +183,7 @@ export class CommitValues {
     }
     for (const group of store.listGroups()) {
       if (group.kind !== 'table') this.#placeAll(group.id, group.featureIds);
+      else this.#places.set(group.id, { parent: group.layerId, key: this.#groupKey(group) });
       out.createdGroups.push(createGroup(group, this.#groupKey(group)));
     }
     const rows: string[] = [];
@@ -223,43 +239,74 @@ export class CommitValues {
     }
     const change = toChange(changes, this.store);
     const out = emptyOperations();
-    if (!change) return readingOf(out, null);
-    this.#files(changes, out);
-    this.#layers(change, changes, out);
-    const groups = this.#groups(change, changes, out);
-    const rows = this.#features(change, changes, out, groups);
-    this.#document(changes, out);
-    const count = rows.created.length + rows.updated.length;
-    if (count === 0 || !values) return readingOf(out, null);
+    if (!change) return readingOf(out, null, null);
+    // The inverse is read of a notification of this client only
+    const inv = values ? emptyOperations() : null;
+    this.#before = inv ? new Map() : null;
+    let rows: RowsToRead;
+    try {
+      this.#files(changes, out, inv);
+      this.#layers(change, changes, out, inv);
+      const groups = this.#groups(change, changes, out, inv);
+      rows = this.#features(change, changes, out, inv, groups);
+      this.#document(changes, out, inv);
+    } finally {
+      this.#before = null;
+    }
+    const count = rows.created.length + rows.updated.length + rows.deleted.length;
+    if (count === 0 || !values) return readingOf(out, inv, null);
     const lasting = count > atOnce ? this.store.openSnapshot() : undefined;
     if (!lasting) {
       // Read now, from the Store as the notification left it
-      this.#readRows(rows, out, change, changes, null, Number.POSITIVE_INFINITY);
-      return readingOf(out, null);
+      this.#readRows(rows, out, inv, change, changes, null, Number.POSITIVE_INFINITY);
+      return readingOf(out, inv, null);
     }
-    return readingOf(out, {
-      step: (deadline) => this.#readRows(rows, out, change, changes, lasting, deadline),
+    return readingOf(out, inv, {
+      step: (deadline) => this.#readRows(rows, out, inv, change, changes, lasting, deadline),
       release: () => lasting.release(),
     });
+  }
+
+  /** Changes the place of an item, noting the one it had before (see `#before`) */
+  #setPlace(id: string, place: Place | undefined): void {
+    const before = this.#before;
+    if (before && !before.has(id)) before.set(id, this.#places.get(id) ?? null);
+    if (place) this.#places.set(id, place);
+    else this.#places.delete(id);
+  }
+
+  /** The place an item had before the notification being read (see `#before`) */
+  #placeBefore(id: string): Place | null {
+    const before = this.#before;
+    if (before?.has(id)) return before.get(id) ?? null;
+    return this.#places.get(id) ?? null;
   }
 
   // ==========================================================================
   // What changed
   // ==========================================================================
 
-  #files(changes: StoreChange, out: Operations): void {
-    for (const file of changes.files?.created ?? []) out.createdFiles.push(createFile(file));
+  #files(changes: StoreChange, out: Operations, inv: Operations | null): void {
+    for (const file of changes.files?.created ?? []) {
+      out.createdFiles.push(createFile(file));
+      inv?.deletedFiles.push(file.id);
+    }
     for (const file of changes.files?.deleted ?? []) {
       // A file deleted and made again in one transaction is there
-      if (!this.store.getFile(file.id)) out.deletedFiles.push(file.id);
+      if (this.store.getFile(file.id)) continue;
+      out.deletedFiles.push(file.id);
+      inv?.createdFiles.push(createFile(file));
     }
   }
 
-  #layers(change: Change, changes: StoreChange, out: Operations): void {
+  #layers(change: Change, changes: StoreChange, out: Operations, inv: Operations | null): void {
     const store = this.store;
     const ids = change.layers;
+    const deleted = new Map((changes.layers?.deleted ?? []).map((layer) => [layer.id, layer]));
     for (const id of ids.deleted) {
-      this.#places.delete(id);
+      const layer = deleted.get(id);
+      if (inv && layer) inv.createdLayers.push(createLayer(layer, this.#keyOf(id)));
+      this.#setPlace(id, undefined);
       out.deletedLayers.push(id);
     }
     if (ids.created.length > 0 || ids.deleted.length > 0 || ids.placed.length > 0) {
@@ -267,10 +314,12 @@ export class CommitValues {
       const created = new Set(ids.created);
       const placed = [...moved].filter((id) => !created.has(id));
       this.#pushPlaces(out, 'layer', placed, (id) => this.#places.get(id) as Place);
+      if (inv) this.#pushPlaces(inv, 'layer', placed, (id) => this.#placeBefore(id));
     }
     for (const id of ids.created) {
       const layer = store.getLayer(id);
       if (layer) out.createdLayers.push(createLayer(layer, this.#keyOf(id)));
+      inv?.deletedLayers.push(id);
     }
     const before = firstPrevious(changes.layers?.updated);
     for (const id of ids.updated) {
@@ -279,6 +328,8 @@ export class CommitValues {
       if (!was || !now) continue;
       const set = layerSet(was, now);
       if (set) out.set.push({ type: 'set', kind: 'layer', ids: [id], set });
+      const back = inv ? layerSet(now, was) : null;
+      if (back) inv?.set.push({ type: 'set', kind: 'layer', ids: [id], set: back });
     }
   }
 
@@ -287,7 +338,12 @@ export class CommitValues {
    *   members of a group made among them), and the groups put in another layer, whose members
    *   are put there with them
    */
-  #groups(change: Change, changes: StoreChange, out: Operations): GroupsMoved {
+  #groups(
+    change: Change,
+    changes: StoreChange,
+    out: Operations,
+    inv: Operations | null,
+  ): GroupsMoved {
     const store = this.store;
     const ids = change.groups;
     // The layer each group put elsewhere was in
@@ -300,10 +356,13 @@ export class CommitValues {
     // The items of the layers of objects where groups were put, made or deleted, and the members
     // of the groups made
     const touched = new Set<string>();
+    const deleted = new Map((changes.groups?.deleted ?? []).map((group) => [group.id, group]));
     for (const id of ids.deleted) {
       const was = this.#places.get(id);
       if (was) touched.add(was.parent);
-      this.#places.delete(id);
+      const group = deleted.get(id);
+      if (inv && group) inv.createdGroups.push(createGroup(group, was?.key ?? ''));
+      this.#setPlace(id, undefined);
       out.deletedGroups.push(id);
     }
     for (const id of [...ids.created, ...ids.placed]) {
@@ -327,18 +386,20 @@ export class CommitValues {
         const now: Place = { parent: group.layerId, key: this.#groupKey(group) };
         const was = this.#places.get(id);
         if (was && was.parent === now.parent && was.key === now.key) continue;
-        this.#places.set(id, now);
+        this.#setPlace(id, now);
         placed.push(id);
       } else if (moved.has(id)) {
         placed.push(id);
       }
     }
     this.#pushPlaces(out, 'group', unique(placed), (id) => this.#places.get(id) as Place);
+    if (inv) this.#pushPlaces(inv, 'group', unique(placed), (id) => this.#placeBefore(id));
     for (const id of ids.created) {
+      inv?.deletedGroups.push(id);
       const group = store.getGroup(id);
       if (!group) continue;
       const key = this.#groupKey(group);
-      if (group.kind === 'table') this.#places.set(id, { parent: group.layerId, key });
+      if (group.kind === 'table') this.#setPlace(id, { parent: group.layerId, key });
       out.createdGroups.push(createGroup(group, key));
     }
     const before = firstPrevious(changes.groups?.updated);
@@ -348,6 +409,8 @@ export class CommitValues {
       if (!was || !now) continue;
       const set = groupSet(was, now);
       if (set) out.set.push({ type: 'set', kind: 'group', ids: [id], set });
+      const back = inv ? groupSet(now, was) : null;
+      if (back) inv?.set.push({ type: 'set', kind: 'group', ids: [id], set: back });
     }
     const relayered: Group[] = [];
     for (const [id, layerId] of layersBefore) {
@@ -361,16 +424,27 @@ export class CommitValues {
     change: Change,
     changes: StoreChange,
     out: Operations,
+    inv: Operations | null,
     groups: GroupsMoved,
   ): RowsToRead {
     const store = this.store;
     const ids = change.features;
+    // The rows deleted, by their IDs: what makes them again is read with the values of the rows
+    const rowsDeleted = inv ? rowsDeletedOf(changes, store) : null;
+    const deletedRows: { id: string; handle: number }[] = [];
     // The lists of the layers and groups of objects features were put in, made in or deleted from
     const touched = new Set<string>();
     for (const id of ids.deleted) {
       const was = this.#places.get(id);
       if (was) touched.add(was.parent);
-      this.#places.delete(id);
+      const handle = rowsDeleted?.get(id);
+      if (handle !== undefined) {
+        deletedRows.push({ id, handle });
+      } else if (inv) {
+        const before = change.previous(id);
+        if (before) inv.createdFeatures.push(createShownFeature(id, before, was?.key ?? ''));
+      }
+      this.#setPlace(id, undefined);
       out.deletedFeatures.push(id);
     }
     const rows: string[] = [];
@@ -405,6 +479,7 @@ export class CommitValues {
     // The features of objects are read now; the rows are read by `#readRows`
     const toRead: RowsToRead = {
       created: [],
+      deleted: deletedRows,
       updated: [],
       handles: [],
       at: 0,
@@ -413,6 +488,7 @@ export class CommitValues {
     };
     const tables = store.tables;
     for (const id of ids.created) {
+      inv?.deletedFeatures.push(id);
       const key = rowPlaces.get(id)?.key ?? this.#places.get(id)?.key ?? '';
       if (this.#isRow(id)) {
         toRead.created.push({ id, key });
@@ -430,6 +506,15 @@ export class CommitValues {
       unique(placed),
       (id) => (rowPlaces.get(id) ?? this.#places.get(id)) as Place,
     );
+    if (inv) {
+      // Where each was: a row by the values of its place before, an item of objects as noted
+      const rowsBefore = rowPlaces.size > 0 ? rowPlacesBefore(changes) : null;
+      this.#pushPlaces(inv, 'feature', unique(placed), (id) => {
+        if (!rowPlaces.has(id)) return this.#placeBefore(id);
+        const handle = tables?.getRowRef(id);
+        return (handle === undefined ? undefined : rowsBefore?.get(handle as number)) ?? null;
+      });
+    }
     // Every feature updated is a row (a write of many rows): the IDs `change` lists are those of
     // the handles the notification lists, in their order
     const rowHandles = rowsUpdatedOf(changes);
@@ -449,8 +534,12 @@ export class CommitValues {
       }
       const now = store.getFeature(id);
       if (!now) continue;
-      const set = featureSet(change.previous(id), toFeature(now));
+      const was = change.previous(id);
+      const shown = toFeature(now);
+      const set = featureSet(was, shown);
       if (set) out.set.push(set(id));
+      const back = inv && was ? featureSet(shown, was) : null;
+      if (back) inv?.set.push(back(id));
     }
     toRead.updated = updated;
     toRead.handles = handles;
@@ -468,6 +557,7 @@ export class CommitValues {
   #readRows(
     rows: RowsToRead,
     out: Operations,
+    inv: Operations | null,
     change: Change,
     changes: StoreChange,
     lasting: LastingSnapshot | null,
@@ -480,7 +570,7 @@ export class CommitValues {
     };
     let looked = 0;
     const late = (): boolean => ++looked % ROWS_PER_LOOK === 0 && performance.now() >= deadline;
-    const { created, updated } = rows;
+    const { created, updated, deleted } = rows;
     while (rows.at < created.length) {
       const { id, key } = created[rows.at++];
       const feature = read(id);
@@ -508,15 +598,31 @@ export class CommitValues {
         const was = lasting
           ? valuesBefore(values, rows.index.get(handle), now)
           : change.previous(id);
-        const set = featureSet(was, toFeature(now));
+        const shown = toFeature(now);
+        const set = featureSet(was, shown);
         if (set) out.set.push(set(id));
+        const back = inv && was ? featureSet(shown, was) : null;
+        if (back) inv?.set.push(back(id));
       }
       if (late()) return false;
+    }
+    if (inv && rows.at < created.length + updated.length + deleted.length) {
+      // The rows deleted, as they were: kept by the tables while their deletion can be undone
+      const from = rows.at - created.length - updated.length;
+      const places = this.#rowPlacesOf(deleted.slice(from).map(({ handle }) => handle));
+      for (let i = from; i < deleted.length; i++) {
+        rows.at++;
+        const { id, handle } = deleted[i];
+        const before = change.previous(id);
+        if (before)
+          inv.createdFeatures.push(createShownFeature(id, before, places.get(handle) ?? ''));
+        if (late()) return false;
+      }
     }
     return true;
   }
 
-  #document(changes: StoreChange, out: Operations): void {
+  #document(changes: StoreChange, out: Operations, inv: Operations | null): void {
     const metadata = changes.metadata;
     if (!metadata) return;
     const now = metadata.metadata as { title?: unknown; description?: unknown };
@@ -526,6 +632,11 @@ export class CommitValues {
     if (text(now.title) !== text(was.title)) set.title = text(now.title);
     if (text(now.description) !== text(was.description)) set.description = text(now.description);
     if (set.title !== undefined || set.description !== undefined) out.document = set;
+    if (!inv) return;
+    const back: { title?: string; description?: string } = {};
+    if (set.title !== undefined) back.title = text(was.title);
+    if (set.description !== undefined) back.description = text(was.description);
+    if (back.title !== undefined || back.description !== undefined) inv.document = back;
   }
 
   // ==========================================================================
@@ -598,6 +709,22 @@ export class CommitValues {
     return out;
   }
 
+  /** The keys of rows by their handles, deleted rows the tables keep included */
+  #rowPlacesOf(handles: readonly number[]): Map<number, string> {
+    const out = new Map<number, string>();
+    const tables = this.store.tables;
+    if (!tables || handles.length === 0) return out;
+    const read = tables.readValues({
+      rows: Int32Array.from(handles),
+      fields: new Map<RowField, unknown[]>([['key', []]]),
+    });
+    const keys = read.fields.get('key') ?? [];
+    handles.forEach((handle, i) => {
+      if (typeof keys[i] === 'string') out.set(handle, keys[i] as string);
+    });
+    return out;
+  }
+
   /** Reads again the lists of the layers and groups of objects given (those still there) */
   #placeContainers(containers: ReadonlySet<string>): Set<string> {
     const moved = new Set<string>();
@@ -654,7 +781,7 @@ export class CommitValues {
       const above = end < items.length ? (places.get(items[end]) as Place).key : null;
       const keys = keysBetween(below, above, end - i);
       for (let k = i; k < end; k++) {
-        places.set(items[k], { parent, key: keys[k - i] });
+        this.#setPlace(items[k], { parent, key: keys[k - i] });
         moved.add(items[k]);
       }
       below = keys[keys.length - 1] ?? below;
@@ -668,7 +795,7 @@ export class CommitValues {
     out: Operations,
     kind: 'feature' | 'layer' | 'group',
     ids: readonly string[],
-    placeOf: (id: string) => Place,
+    placeOf: (id: string) => Place | null | undefined,
   ): void {
     const byParent = new Map<string, { ids: string[]; keys: string[] }>();
     for (const id of ids) {
@@ -701,6 +828,7 @@ export class CommitValues {
 /** A reading of a notification: done, or read further by `rest` */
 function readingOf(
   out: Operations,
+  inv: Operations | null,
   rest: { step(deadline: number): boolean; release(): void } | null,
 ): ChangeReading {
   let done = rest === null;
@@ -711,6 +839,7 @@ function readingOf(
       return done;
     },
     operations: () => listOf(out),
+    inverse: () => (inv ? listOf(inv) : []),
     release() {
       if (released) return;
       released = true;
@@ -842,6 +971,52 @@ function createFeature(feature: StoredFeature, key: string): ValueOperation {
     key,
   };
   return { type: 'create', kind: 'feature', id: feature.id, record };
+}
+
+/** The `create` of a feature from the feature of the public shape it was */
+function createShownFeature(id: string, shown: Feature, key: string): ValueOperation {
+  const record: FeatureRecord = {
+    geometry: orientedGeometry(shown.geometry) as Geometry,
+    properties: jsonProperties(shown.properties),
+    key,
+  };
+  return { type: 'create', kind: 'feature', id, record };
+}
+
+/** The rows a notification deleted, their handles by their IDs */
+function rowsDeletedOf(changes: StoreChange, store: Store): Map<string, number> {
+  const out = new Map<string, number>();
+  const tables = store.tables;
+  if (!tables) return out;
+  for (const rows of changes.rows?.layers.values() ?? []) {
+    for (const handle of rows.deleted) {
+      const id = tables.getRowId(handle);
+      if (id !== undefined) out.set(id, handle);
+    }
+  }
+  return out;
+}
+
+/**
+ * Where rows were before a notification put them elsewhere, by their handles: what the moves of
+ * the notification say they were first, else the values of their place before
+ */
+function rowPlacesBefore(changes: StoreChange): Map<number, Place> {
+  const out = new Map<number, Place>();
+  const take = (before: RowValues | undefined): void => {
+    const parents = before?.fields.get('parent');
+    const keys = before?.fields.get('key');
+    if (!before || !parents || !keys) return;
+    before.rows.forEach((handle, i) => {
+      if (out.has(handle)) return;
+      if (typeof parents[i] === 'string' && typeof keys[i] === 'string') {
+        out.set(handle, { parent: parents[i] as string, key: keys[i] as string });
+      }
+    });
+  };
+  for (const move of changes.order ?? []) take(move.before);
+  take(changes.previousValues as RowValues | undefined);
+  return out;
 }
 
 function createLayer(layer: Layer, key: string): ValueOperation {
