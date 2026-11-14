@@ -75,9 +75,19 @@ describe('createPartCollector', () => {
     expect(answers[answers.length - 1]).toEqual(operations(30));
   });
 
-  it('gives a batch of one part at once', () => {
+  it('gives a batch of one part at once, and not again', () => {
     const [batch] = batchesOf(HEADER, operations(2), 1 << 20);
-    expect(createPartCollector().add(batch)).toEqual(operations(2));
+    const collector = createPartCollector();
+    expect(collector.add(batch)).toEqual(operations(2));
+    expect(collector.add(batch)).toBeNull();
+  });
+
+  it('does not count again a part of a commit it gave', () => {
+    const batches = parts();
+    const collector = createPartCollector();
+    for (const batch of batches.slice(0, -1)) collector.add(batch);
+    expect(collector.add(batches[batches.length - 1])).toEqual(operations(30));
+    for (const batch of batches) expect(collector.add(batch)).toBeNull();
   });
 
   it('does not count a part sent again', () => {

@@ -38,6 +38,20 @@ function jsonOf(properties: object): Record<string, unknown> {
   return out;
 }
 
+/**
+ * A style rule of the document as a storage holds it: told apart by `type`, the colors of the
+ * categories under `colors`
+ */
+function ruleRecordOf(rule: StyleRule | null): Record<string, unknown> | null {
+  if (rule === null) return null;
+  const { kind, ...rest } = rule;
+  if (rest && 'map' in rest) {
+    const { map, ...others } = rest;
+    return { type: kind, ...others, colors: map };
+  }
+  return { type: kind, ...rest };
+}
+
 /** What a document written out holds, in one shape */
 export function writtenOf(document: DrawDocument) {
   const layers = new Map((document.layers ?? []).map((layer) => [layer.id, layer]));
@@ -52,7 +66,7 @@ export function writtenOf(document: DrawDocument) {
           visible: layer.visible,
           locked: layer.locked,
           opacity: layer.opacity ?? 1,
-          styleRule: layer.styleRule ?? null,
+          styleRule: ruleRecordOf(layer.styleRule ?? null),
           items: [...layer.items],
         };
       }),

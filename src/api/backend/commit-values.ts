@@ -852,7 +852,7 @@ function createLayer(layer: Layer, key: string): ValueOperation {
     opacity: layer.opacity,
     // A layer has no look of its own yet: its features take the defaults and its rule
     style: {},
-    styleRule: (layer.styleRule ?? null) as StyleRule | null,
+    styleRule: ruleRecordOf(layer.styleRule),
     key,
   };
   return { type: 'create', kind: 'layer', id: layer.id, record };
@@ -868,6 +868,42 @@ function createGroup(group: Group, key: string): ValueOperation {
     key,
   };
   return { type: 'create', kind: 'group', id: group.id, record };
+}
+
+/**
+ * The style rule of a layer as a record holds it: told apart by `type`, the colors of the
+ * categories under `colors` (the core of this version names them `kind` and `map`)
+ */
+function ruleRecordOf(rule: StyleRule | undefined): LayerRecord['styleRule'] {
+  if (!rule) return null;
+  switch (rule.kind) {
+    case 'single':
+      return { type: 'single', color: rule.color };
+    case 'categorical':
+      return {
+        type: 'categorical',
+        property: rule.property,
+        colors: { ...rule.map },
+        other: rule.other,
+      };
+    case 'graduated':
+      return {
+        type: 'graduated',
+        property: rule.property,
+        breaks: [...rule.breaks],
+        colors: [...rule.colors],
+        other: rule.other,
+      };
+    case 'continuous':
+      return {
+        type: 'continuous',
+        property: rule.property,
+        min: rule.min,
+        max: rule.max,
+        ramp: [rule.ramp[0], rule.ramp[1]],
+        other: rule.other,
+      };
+  }
 }
 
 function createFile(file: FileData): ValueOperation {
@@ -899,14 +935,14 @@ function layerSet(
     visible?: boolean;
     locked?: boolean;
     opacity?: number;
-    styleRule?: StyleRule | null;
+    styleRule?: LayerRecord['styleRule'];
   } = {};
   if (was.name !== now.name) set.name = now.name;
   if (was.visible !== now.visible) set.visible = now.visible;
   if (was.locked !== now.locked) set.locked = now.locked;
   if (was.opacity !== now.opacity) set.opacity = now.opacity;
-  const rule = (now.styleRule ?? null) as StyleRule | null;
-  if (!sameJson(was.styleRule ?? null, rule)) set.styleRule = rule;
+  const rule = ruleRecordOf(now.styleRule);
+  if (!sameJson(ruleRecordOf(was.styleRule), rule)) set.styleRule = rule;
   return Object.keys(set).length > 0 ? set : null;
 }
 

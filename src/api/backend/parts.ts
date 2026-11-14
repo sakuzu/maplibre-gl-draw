@@ -18,7 +18,9 @@ export interface PartCollector {
   /**
    * Takes a batch. A batch of one part gives its operations at once; the part that completes a
    * commit gives every operation of the commit, in the order of its parts; any other part gives
-   * `null`. A batch whose `Batch.id` the commit already has is not counted again (`null`).
+   * `null`. A batch whose `Batch.id` it took is not counted again (`null`): a part sent again, of
+   * a commit being put together or of one it gave (a batch of one part included). The IDs of the
+   * batches of the commits it gave are kept for that.
    *
    * @throws `DrawError` with the code `invalidInput` for a part that is not one of its commit
    *   (an index outside the count, or a count other than the one of the parts before)
@@ -36,9 +38,14 @@ interface Collecting {
   received: number;
 }
 
-/** A collector of the parts of the commits, which holds nothing but the commits not complete */
+/**
+ * A collector of the parts of the commits: it holds the parts of the commits not complete, and
+ * the IDs of the batches of those it gave
+ */
 export function createPartCollector(): PartCollector {
   const commits = new Map<string, Collecting>();
+  // The batches of the commits given
+  const given = new Set<string>();
   return {
     add(batch) {
       const { index, count } = batch.part;
@@ -46,9 +53,13 @@ export function createPartCollector(): PartCollector {
         throw invalidPart(batch, 'its part has no whole index and count');
       }
       if (index < 0 || index >= count) throw invalidPart(batch, 'its index is outside its count');
+      if (given.has(batch.id)) return null;
       let collecting = commits.get(batch.commit);
       if (!collecting) {
-        if (count === 1) return batch.operations;
+        if (count === 1) {
+          given.add(batch.id);
+          return batch.operations;
+        }
         collecting = { count, parts: new Array(count), ids: new Set(), received: 0 };
         commits.set(batch.commit, collecting);
       } else if (collecting.count !== count) {
@@ -60,6 +71,7 @@ export function createPartCollector(): PartCollector {
       collecting.received++;
       if (collecting.received < collecting.count) return null;
       commits.delete(batch.commit);
+      for (const id of collecting.ids) given.add(id);
       return (collecting.parts as (readonly ValueOperation[])[]).flat();
     },
     abandon(commit) {

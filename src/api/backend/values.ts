@@ -13,7 +13,7 @@
 
 import type { Geometry } from 'geojson';
 import { setOwnProperty } from '../../shared/utils/own-property.js';
-import type { FeatureStyle, JsonObject, JsonValue, StyleRule } from '../model.js';
+import type { JsonObject, JsonValue } from '../model.js';
 
 /** The key of the style of a feature among its properties */
 const STYLE_KEY = 'maplibre-gl-draw:style';
@@ -75,10 +75,48 @@ export interface LayerRecord {
   readonly locked: boolean;
   /** The opacity of the whole layer, from 0 to 1 */
   readonly opacity: number;
-  /** The look of the features of the layer */
-  readonly style: FeatureStyle;
-  /** The rule that colors its features from their attributes */
-  readonly styleRule: StyleRule | null;
+  /**
+   * The look of the features of the layer. The keys are those of the library; another owner keeps
+   * a key of its own under its prefix (`app:key`)
+   */
+  readonly style: {
+    readonly fillColor?: string;
+    readonly fillOpacity?: number;
+    readonly strokeColor?: string;
+    readonly strokeWidth?: number;
+    readonly strokeOpacity?: number;
+    readonly strokeDash?: readonly number[];
+    readonly pointColor?: string;
+    readonly pointRadius?: number;
+    readonly pointShape?: 'circle' | 'square' | 'triangle' | 'star';
+    // biome-ignore lint/suspicious/noExplicitAny: the owner of a prefix decides its values
+    readonly [key: `${string}:${string}`]: any;
+  };
+  /** The rule that colors its features from their attributes, told apart by `type` */
+  readonly styleRule:
+    | { readonly type: 'single'; readonly color: string }
+    | {
+        readonly type: 'categorical';
+        readonly property: string;
+        readonly colors: Readonly<Record<string, string>>;
+        readonly other: string;
+      }
+    | {
+        readonly type: 'graduated';
+        readonly property: string;
+        readonly breaks: readonly number[];
+        readonly colors: readonly string[];
+        readonly other: string;
+      }
+    | {
+        readonly type: 'continuous';
+        readonly property: string;
+        readonly min: number;
+        readonly max: number;
+        readonly ramp: readonly [string, string];
+        readonly other: string;
+      }
+    | null;
   /** The key of its order among the layers */
   readonly key: string;
 }
@@ -377,7 +415,7 @@ function setLayer(
           record.style as JsonObject,
           (style ?? {}) as JsonObject,
           unset?.style,
-        ) as FeatureStyle)
+        ) as LayerRecord['style'])
       : record.style;
   return { ...record, ...definedOf(rest), style: merged };
 }

@@ -108,8 +108,20 @@ async function settled(d: Draw): Promise<void> {
 
 describe('the commits sent to a storage', () => {
   for (const [kind, makeStore] of KINDS) {
-    for (const atOnce of kind === 'rows' ? [undefined, 0] : [undefined]) {
-      const how = atOnce === 0 ? ', the rows read over several tasks' : '';
+    for (const [atOnce, waits] of (kind === 'rows'
+      ? [
+          [undefined, false],
+          [0, false],
+          [undefined, true],
+          [0, true],
+        ]
+      : [
+          [undefined, false],
+          [undefined, true],
+        ]) as [number | undefined, boolean][]) {
+      const how = `${atOnce === 0 ? ', the rows read over several tasks' : ''}${
+        waits ? ', the sending going on between the writes' : ''
+      }`;
       it(`leave the storage with the document written out, sends failing (${kind}${how})`, async () => {
         let failures = 0;
         let commits = 0;
@@ -140,6 +152,12 @@ describe('the commits sent to a storage', () => {
           for (let i = 0; i < 60; i++) {
             last = null;
             await step(draw, next, ids);
+            // Tasks pass now and then: the next write comes while a commit is read or sent
+            if (waits) {
+              for (let t = Math.floor(fail() * 4); t > 0; t--) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+              }
+            }
             if (last !== null) made.set(last, structuredClone(writtenOf(draw.document.toJSON())));
             // Now and then the storage catches up, and holds the document written out
             if (i % 20 === 19) {
@@ -290,6 +308,59 @@ describe('the commits sent to a storage', () => {
     expect(storedOf(storage.backend.document)).toEqual(writtenOf(draw.document.toJSON()));
     expect(storage.sent[storage.sent.length - 1]?.commit).toBe(undo.id);
   });
+});
+
+describe('a commit of many rows read over several tasks', () => {
+  it('is sent as it was made, whatever is written while it is read', async () => {
+    const storage = recording();
+    const store = createTableStore().store;
+    const d = drawWith(
+      store,
+      { ...storage.backend, maxBatchBytes: 1 << 20 },
+      { retryDelay: () => 0 },
+    );
+    draw = d;
+    await d.write((tx) => tx.layers.create({ id: 'a', name: 'A' }));
+    await settled(d);
+    let last = '';
+    d.on('change', (change) => {
+      last = change.commit;
+    });
+    const made = new Map<string, unknown>();
+    const note = (): void => {
+      made.set(last, structuredClone(writtenOf(d.document.toJSON())));
+    };
+    const count = 30_000;
+    const inputs = Array.from({ length: count }, (_, i) => ({
+      type: 'Feature' as const,
+      id: `f${i}`,
+      geometry: { type: 'Point' as const, coordinates: [i * 0.0001, 1] },
+      properties: { 'maplibre-gl-draw:layerId': 'a', n: i },
+    }));
+    const created = draw.write((tx) => tx.features.create(inputs));
+    await created;
+    note();
+    // Writes while the rows of the creation are read, a few tasks apart
+    let whileRead = 0;
+    for (let i = 0; i < 12; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (!storage.after.has(created.id)) whileRead++;
+      const ids = Array.from({ length: 50 }, (_, k) => `f${(i * 997 + k * 131) % count}`);
+      await draw.write((tx) => tx.features.update(ids, { properties: { n: -i, [`m${i}`]: i } }));
+      note();
+      if (i % 3 === 0) {
+        await draw.write((tx) => tx.features.delete([`f${i * 7}`]));
+        note();
+      }
+    }
+    expect(whileRead).toBeGreaterThan(3);
+    await settled(draw);
+    expect(storedOf(storage.backend.document)).toEqual(writtenOf(draw.document.toJSON()));
+    expect(made.size).toBe(17);
+    for (const [commit, written] of made) {
+      expect({ commit, stored: storage.after.get(commit) }).toEqual({ commit, stored: written });
+    }
+  }, 60_000);
 });
 
 describe('Write.save', () => {
