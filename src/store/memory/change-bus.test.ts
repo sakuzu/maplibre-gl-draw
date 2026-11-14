@@ -478,3 +478,27 @@ describe('the features, layers and groups of a transaction deleted and created a
     });
   });
 });
+
+describe('the stacking order of the layers changed many times in a transaction', () => {
+  it('is told from the order before the first change to the order after the last one', () => {
+    const change = toldOf((bus) => {
+      bus.merge({ layers: { orderChanged: { order: ['a', 'b', 'c'], previous: ['a', 'b'] } } });
+      bus.merge({
+        layers: { orderChanged: { order: ['c', 'a', 'b'], previous: ['a', 'b', 'c'] } },
+      });
+      bus.merge({
+        layers: { orderChanged: { order: ['c', 'b', 'a'], previous: ['c', 'a', 'b'] } },
+      });
+    });
+    expect(change.layers?.orderChanged).toEqual({
+      order: ['c', 'b', 'a'],
+      previous: ['a', 'b'],
+    });
+  });
+
+  it('is told as it came when it changed once', () => {
+    const once = { order: ['b', 'a'], previous: ['a', 'b'] };
+    const change = toldOf((bus) => bus.merge({ layers: { orderChanged: once } }));
+    expect(change.layers?.orderChanged).toEqual(once);
+  });
+});

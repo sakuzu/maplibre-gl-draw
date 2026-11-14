@@ -16,7 +16,7 @@ import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
-import type { Change } from '../events.js';
+import type { Change, DocumentChange } from '../events.js';
 import type { Feature, FeatureInput } from '../model.js';
 import { readFeature } from '../model.js';
 
@@ -165,6 +165,49 @@ describe.each(['objects', 'rows'] as const)('one commit over a Store of %s', (ki
     for (const id of changes[0].features.placed) expect(ids).toContain(id);
   });
 });
+
+describe.each(['objects', 'rows'] as const)(
+  'the stacking order of the layers changed twice in one commit over a Store of %s',
+  (kind) => {
+    it('is told from the order before the commit to the order after it, and undo puts it back', async () => {
+      const { draw, changes } = open(kind);
+      await draw.write((tx) => tx.layers.create({ id: 'c', name: 'c' }));
+      expect(draw.layers.getOrder()).toEqual(['a', 'b', 'c']);
+      const told: DocumentChange[] = [];
+      draw.getStore().subscribe((change) => told.push(change));
+      changes.length = 0;
+      await draw.write(async (tx) => {
+        await tx.layers.place('a', { below: 'c' });
+        await tx.layers.place('c', { below: 'a' });
+      });
+      expect(draw.layers.getOrder()).toEqual(['b', 'a', 'c']);
+      expect(told).toHaveLength(1);
+      expect(told[0].layers?.orderChanged).toEqual({
+        order: ['b', 'a', 'c'],
+        previous: ['a', 'b', 'c'],
+      });
+      expect(changes).toHaveLength(1);
+      expect(changes[0].layers.placed.length).toBeGreaterThan(0);
+      await draw.undo();
+      expect(draw.layers.getOrder()).toEqual(['a', 'b', 'c']);
+      await draw.redo();
+      expect(draw.layers.getOrder()).toEqual(['b', 'a', 'c']);
+    });
+
+    it('is told with no layer placed when the commit puts the order back as it was', async () => {
+      const { draw, changes } = open(kind);
+      const told: DocumentChange[] = [];
+      draw.getStore().subscribe((change) => told.push(change));
+      await draw.write(async (tx) => {
+        await tx.layers.place('a', { below: 'b' });
+        await tx.layers.place('b', { below: 'a' });
+      });
+      expect(draw.layers.getOrder()).toEqual(['a', 'b']);
+      expect(told[0].layers?.orderChanged).toEqual({ order: ['a', 'b'], previous: ['a', 'b'] });
+      expect(changes[0].layers.placed).toEqual([]);
+    });
+  },
+);
 
 describe('the stacking order of the layers', () => {
   it('lists the layers alone as placed, and tells another entry put in or out of it as a change of the document', () => {

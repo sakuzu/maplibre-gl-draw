@@ -291,12 +291,7 @@ function applyInverse(store: Store, inverse: Inverse): void {
     );
   }
   for (const group of inverse.groupsDeleted) {
-    if (store.getGroup(group.id)) continue;
-    if ('featureIds' in group) {
-      store.createGroup({ ...group, featureIds: [] } as StoredGroup);
-    } else {
-      store.createGroup({ ...group } as StoredGroup);
-    }
+    if (!store.getGroup(group.id)) createGroupAgain(store, group);
   }
   for (const feature of inverse.featuresDeleted) {
     if (store.getFeature(feature.id)) continue;
@@ -334,10 +329,21 @@ function applyInverse(store: Store, inverse: Inverse): void {
   }
 
   // 4. The items put in another place go back, from the last one. A group deleted is created
-  // again with the key it had in a Store that keeps the keys of the order (1.): it is not moved
+  // again with the key it had in a Store that keeps the keys of the order (1.): it is not moved.
+  // A group deleted and created again (updated: there before the commit and after it) that the
+  // items going back left empty, and so deleted, is created again as it was before the commit
+  // where its deletion is taken back (in a Store that keeps the keys of the order, with the key it
+  // had: it is not moved either)
   const groupsBack = new Set(inverse.groupsDeleted.map((group) => group.id));
   for (let i = inverse.moves.length - 1; i >= 0; i--) {
     const move = inverse.moves[i];
+    if (move.kind === 'item' && move.to === null && !store.getGroup(move.itemId)) {
+      const before = inverse.groupsBefore.get(move.itemId);
+      if (before) {
+        createGroupAgain(store, before);
+        if (tables) continue;
+      }
+    }
     if (tables && move.kind === 'item' && move.to === null && groupsBack.has(move.itemId)) {
       continue;
     }
@@ -405,6 +411,18 @@ function applyInverse(store: Store, inverse: Inverse): void {
     for (const key of Object.keys(inverse.metadata.now))
       if (!(key in patch)) patch[key] = undefined;
     store.setMetadata(patch as Partial<Metadata>);
+  }
+}
+
+/**
+ * Creates a group again as it was, with no member (its members go back by the moves and the
+ * values of the rows)
+ */
+function createGroupAgain(store: Store, group: StoredGroup): void {
+  if ('featureIds' in group) {
+    store.createGroup({ ...group, featureIds: [] } as StoredGroup);
+  } else {
+    store.createGroup({ ...group } as StoredGroup);
   }
 }
 

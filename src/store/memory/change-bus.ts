@@ -278,8 +278,9 @@ function rowsOfFolds(folds: ReadonlyMap<string, RowsFold>): RowsChange {
 
 /**
  * Appends changes destructively to target. Array categories (created/updated/deleted, etc.)
- * are concatenated with push, and single-value categories (orderChanged/selection/mode, etc.)
- * are overwritten. The final result matches mergeChanges (the immutable version), but target
+ * are concatenated with push, and single-value categories (selection/mode, etc.) are
+ * overwritten. The change of the order of the layers keeps the order before the transaction
+ * (`previous` of the first) with the order after it (`order` of the last). The final result matches mergeChanges (the immutable version), but target
  * is not recreated every time.
  */
 // If an existing array is given, push into it destructively; otherwise create and return a new
@@ -573,7 +574,13 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
       for (const layer of changes.layers.deleted) index.layers.delete(layer.id);
       t.deleted = appendField(t.deleted, changes.layers.deleted);
     }
-    if (changes.layers.orderChanged) t.orderChanged = changes.layers.orderChanged;
+    if (changes.layers.orderChanged) {
+      // The order before the transaction (the first previous) and the order after it (the last)
+      const { order } = changes.layers.orderChanged;
+      t.orderChanged = t.orderChanged
+        ? { order, previous: t.orderChanged.previous }
+        : changes.layers.orderChanged;
+    }
   }
 
   // groups

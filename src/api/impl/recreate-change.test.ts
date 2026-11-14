@@ -287,6 +287,54 @@ describe.each(['objects', 'rows'] as const)('one write over a Store of %s', (kin
     expect(draw.groups.listMembers(ids.group)).toEqual(ids.features.slice(1));
   });
 
+  it('takes a group deleted and created again with other members back with undo, and makes it again with redo', async () => {
+    const { draw } = open(kind);
+    const ids = await draw.write(async (tx) => {
+      const made: string[] = [];
+      for (const n of [1, 2, 3]) made.push((await tx.features.create(point(`m${n}`, 'a', {}))).id);
+      const group = await tx.groups.create({ name: 'before', members: made.slice(0, 2) });
+      return { features: made, group: group.id };
+    });
+    const [m1, m2, m3] = ids.features;
+    await draw.write(async (tx) => {
+      await tx.groups.delete(ids.group, { members: 'keep' });
+      await tx.groups.create({ id: ids.group, name: 'after', members: [m2, m3] });
+    });
+    expect(draw.layers.listItems('a')).toEqual([m1, ids.group]);
+    for (let round = 0; round < 2; round++) {
+      await draw.undo();
+      expect(draw.groups.get(ids.group)?.name).toBe('before');
+      expect(draw.groups.listMembers(ids.group)).toEqual([m1, m2]);
+      expect(draw.layers.listItems('a')).toEqual([ids.group, m3]);
+      await draw.redo();
+      expect(draw.groups.get(ids.group)?.name).toBe('after');
+      expect(draw.groups.listMembers(ids.group)).toEqual([m2, m3]);
+      expect(draw.layers.listItems('a')).toEqual([m1, ids.group]);
+    }
+  });
+
+  it('takes a group deleted with its members and created again around a new feature back with undo', async () => {
+    const { draw } = open(kind);
+    const ids = await draw.write(async (tx) => {
+      const made: string[] = [];
+      for (const n of [1, 2, 3]) made.push((await tx.features.create(point(`m${n}`, 'a', {}))).id);
+      const group = await tx.groups.create({ name: 'before', members: made.slice(0, 2) });
+      return { features: made, group: group.id };
+    });
+    const [m1, m2, m3] = ids.features;
+    await draw.write(async (tx) => {
+      await tx.groups.delete(ids.group, { members: 'delete' });
+      const made = await tx.features.create(point('new', 'a', {}));
+      await tx.groups.create({ id: ids.group, name: 'after', members: [made.id] });
+    });
+    expect(draw.groups.listMembers(ids.group)).toEqual(['new']);
+    await draw.undo();
+    expect(draw.groups.get(ids.group)?.name).toBe('before');
+    expect(draw.groups.listMembers(ids.group)).toEqual([m1, m2]);
+    expect(draw.layers.listItems('a')).toEqual([ids.group, m3]);
+    expect(draw.features.get('new')).toBeUndefined();
+  });
+
   it('tells a layer and a group created and deleted again not at all', async () => {
     const { draw, told } = open(kind);
     await draw.write(async (tx) => {
