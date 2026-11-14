@@ -72,7 +72,7 @@ async function loaded(store: Store, data: Json): Promise<Json> {
   await doc.load(data as never);
   const saved = doc.toJSON();
   return {
-    layers: saved.layers.map((l) => [l.id, 'items' in l ? l.items : null]),
+    layers: (saved.layers ?? []).map((l) => [l.id, 'items' in l ? l.items : null]),
     layerOrder: saved.layerOrder,
     groups: (saved.groups ?? []).map((g) => [
       g.id,
