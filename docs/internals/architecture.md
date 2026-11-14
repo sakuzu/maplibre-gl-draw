@@ -58,9 +58,10 @@ For using the library rather than changing it, start with the
 
 Some words of core mean another thing in what core works with. In core:
 
-- `created` and `deleted` of `ChangedIds` are the IDs a commit created or
-  deleted, not the fields of a row a document keeps (the write that made it,
-  its deleted mark)
+- `created` names two things in core: in `ChangedIds`, the IDs a commit
+  created (and `deleted` the IDs it deleted); in `DrawDocument.created`, when
+  a document was written (an ISO 8601 timestamp). Neither is a field of a row
+  a synced document keeps (the write that made the row, its deleted mark)
 - `hidden` is the column a feature not visible (`visible: false`) is kept
   as in the document, hidden for every client; what this client alone hides
   is `draw.hidden`
@@ -69,9 +70,10 @@ Some words of core mean another thing in what core works with. In core:
   saved version of a map
 - `part` is one geometry of a Multi geometry (`VertexRef.part`), not a part
   of a file, nor one of the pieces a large commit is sent in
-- `Position` is the coordinates of a vertex, as GeoJSON names them; a sync
-  protocol may call the same value a point, and a `point` of core is a point
-  on the screen
+- `point` is said of two things in core: a `Position`, the coordinates
+  GeoJSON gives (what `getRowPoint` reads, what a feature of the type `Point`
+  holds), and a point on the screen (the `Point` of MapLibre). The point of a
+  sync protocol, the coordinates of a vertex, is a `Position` of core
 
 ## Responsibilities
 
