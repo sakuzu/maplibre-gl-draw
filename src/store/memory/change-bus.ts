@@ -23,6 +23,14 @@
  * reaches the heap limit. A folded entry keeps previous as the first state and layer/group as
  * the last state, so as the diff of a single flush it means the same as before folding.
  *
+ * A notification tells what the transaction did to each feature, layer, group and row as a whole,
+ * by what was there before it and what is there after it. One deleted and created again with the
+ * same ID (the same handle for a row) was there before and is there after: it is told as updated,
+ * from what it was before the transaction to what it is after. One created and deleted again was
+ * there neither before nor after: it is not told. The order of the writes decides which: the
+ * deletions are noted with how far the creations and the updates had gone when they came
+ * (`DeletionMarks`), and the rows are folded write by write.
+ *
  * A transaction whose writes go on over several tasks (a restore of many rows written in steps)
  * holds its notification (`hold`): the outermost transaction ends without it, the steps add to it
  * (`continueHeld`), and it goes out once, with the source of the transaction, when the hold is
@@ -48,10 +56,28 @@ export type StoreListener = (changes: StoreChange) => void;
 type LayerUpdate = NonNullable<NonNullable<StoreChange['layers']>['updated']>[number];
 type GroupUpdate = NonNullable<NonNullable<StoreChange['groups']>['updated']>[number];
 
+/**
+ * The deletions of a kind (features, layers or groups) of a transaction, two numbers for each
+ * entry of its `deleted`, in their order: how many entries `created` and `updated` had when it
+ * came. They tell, for one deleted and created again within the transaction, which came first,
+ * and which updates came before its first deletion and after its last creation.
+ */
+interface DeletionMarks {
+  readonly features: number[];
+  readonly layers: number[];
+  readonly groups: number[];
+  /**
+   * The IDs one change merged both created and deleted, by kind: the order of the two is not
+   * known, so they are told as they came
+   */
+  readonly unordered: { features: Set<string>; layers: Set<string>; groups: Set<string> };
+}
+
 /** Position of the entry for the same ID (for layers / groups respectively) */
 interface UpdateIndex {
   readonly layers: Map<string, number>;
   readonly groups: Map<string, number>;
+  readonly deletions: DeletionMarks;
   /**
    * The rows written by the transaction, by layer, folded as they come (made into the arrays of
    * the notification when it is flushed): folding the arrays at each write would take time in
@@ -72,15 +98,17 @@ interface RowsFold {
   sets: RowsSets | null;
 }
 
-/** The rows of a layer written by a transaction, folded in sets */
+/**
+ * The rows of a layer written by a transaction, folded in sets: each row in one of them at most,
+ * by what the transaction did to it as a whole (created: not there before, there after; updated:
+ * there before and after; deleted: there before, not after)
+ */
 interface RowsSets {
   readonly created: Set<number>;
   readonly updated: Set<number>;
   readonly deleted: Set<number>;
   readonly fields: Set<RowField>;
   readonly styleKeys: Set<string>;
-  /** Whether it holds one write as it came (folded with the next one in full, as two are) */
-  single: boolean;
 }
 
 /** Whether a write of the rows of a layer only created rows */
@@ -88,46 +116,68 @@ function onlyCreates(change: LayerRowsChange): boolean {
   return change.updated.length === 0 && change.deleted.length === 0;
 }
 
-/** The sets of the first write of a layer */
-function setsOf(change: LayerRowsChange): RowsSets {
+/** No rows folded yet */
+function emptySets(): RowsSets {
   return {
-    created: new Set(change.created),
-    updated: new Set(change.updated),
-    deleted: new Set(change.deleted),
-    fields: new Set(change.fields),
-    styleKeys: new Set(change.styleKeys),
-    single: true,
+    created: new Set(),
+    updated: new Set(),
+    deleted: new Set(),
+    fields: new Set(),
+    styleKeys: new Set(),
   };
 }
 
-/** A row created and deleted within the folds dropped, a row created or deleted not updated */
-function settleRow(fold: RowsSets, handle: number): void {
-  if (fold.created.has(handle) && fold.deleted.has(handle)) {
-    fold.created.delete(handle);
-    fold.deleted.delete(handle);
+/**
+ * Folds a write of the rows of a layer into the sets of the writes before it, row by row in the
+ * order of the writes: a row created and deleted again was never there (dropped); a row deleted
+ * and created again was there before and is there after (updated), in this layer, or in another
+ * one it was deleted from (`elsewhere` takes it from the rows deleted there: it moved here)
+ */
+function foldIntoSets(
+  fold: RowsSets,
+  next: LayerRowsChange,
+  elsewhere?: (handle: number) => boolean,
+): void {
+  for (const field of next.fields) fold.fields.add(field);
+  for (const key of next.styleKeys) fold.styleKeys.add(key);
+  for (const handle of next.deleted) {
     fold.updated.delete(handle);
-  } else if (fold.updated.has(handle) && (fold.created.has(handle) || fold.deleted.has(handle))) {
-    fold.updated.delete(handle);
+    if (!fold.created.delete(handle)) fold.deleted.add(handle);
+  }
+  for (const handle of next.created) {
+    if (fold.created.has(handle) || fold.updated.has(handle)) continue;
+    if (fold.deleted.delete(handle) || elsewhere?.(handle)) fold.updated.add(handle);
+    else fold.created.add(handle);
+  }
+  for (const handle of next.updated) {
+    if (!fold.created.has(handle) && !fold.deleted.has(handle)) fold.updated.add(handle);
   }
 }
 
-/** Folds a write of the rows of a layer into the sets of the ones before */
-function foldIntoSets(fold: RowsSets, next: LayerRowsChange): void {
-  for (const handle of next.created) fold.created.add(handle);
-  for (const handle of next.deleted) fold.deleted.add(handle);
-  for (const handle of next.updated) fold.updated.add(handle);
-  for (const field of next.fields) fold.fields.add(field);
-  for (const key of next.styleKeys) fold.styleKeys.add(key);
-  if (fold.single) {
-    // The first write is settled with the second, every row of both
-    fold.single = false;
-    for (const handle of [...fold.deleted]) settleRow(fold, handle);
-    for (const handle of [...fold.updated]) settleRow(fold, handle);
-    return;
+/**
+ * The rows deleted by the folds of the layers other than one, those that deleted any: a row one of
+ * them deleted that a write creates in this layer moved here
+ */
+function deletedElsewhere(folds: ReadonlyMap<string, RowsFold>, layerId: string): Set<number>[] {
+  const out: Set<number>[] = [];
+  for (const [otherId, other] of folds) {
+    const deleted = other.sets?.deleted;
+    if (otherId !== layerId && deleted && deleted.size > 0) out.push(deleted);
   }
-  for (const handle of next.created) settleRow(fold, handle);
-  for (const handle of next.deleted) settleRow(fold, handle);
-  for (const handle of next.updated) settleRow(fold, handle);
+  return out;
+}
+
+/** Takes a row from the rows deleted elsewhere: true when one of them had it */
+function takeFrom(deleted: readonly Set<number>[]): ((handle: number) => boolean) | undefined {
+  if (deleted.length === 0) return undefined;
+  return (handle) => deleted.some((set) => set.delete(handle));
+}
+
+/** Whether a write creates a row deleted elsewhere */
+function revives(next: LayerRowsChange, deleted: readonly Set<number>[]): boolean {
+  if (deleted.length === 0) return false;
+  for (const handle of next.created) if (deleted.some((set) => set.has(handle))) return true;
+  return false;
 }
 
 /**
@@ -137,26 +187,32 @@ function foldIntoSets(fold: RowsSets, next: LayerRowsChange): void {
 function foldRows(folds: Map<string, RowsFold>, change: RowsChange): void {
   for (const [layerId, next] of change.layers) {
     const fold = folds.get(layerId);
+    const others = deletedElsewhere(folds, layerId);
+    // Writes that only create new rows are kept as they came
+    const kept = onlyCreates(next) && !revives(next, others);
+    const elsewhere = takeFrom(others);
     if (!fold) {
-      folds.set(
-        layerId,
-        onlyCreates(next) ? { parts: [next], sets: null } : { parts: null, sets: setsOf(next) },
-      );
+      if (kept) {
+        folds.set(layerId, { parts: [next], sets: null });
+      } else {
+        const sets = emptySets();
+        foldIntoSets(sets, next, elsewhere);
+        folds.set(layerId, { parts: null, sets });
+      }
       continue;
     }
     if (fold.parts) {
-      if (onlyCreates(next)) {
+      if (kept) {
         fold.parts.push(next);
         continue;
       }
       // A write that does more: the writes before are folded in sets as they came, then this one
-      const parts = fold.parts;
-      const sets = setsOf(parts[0]);
-      for (let k = 1; k < parts.length; k++) foldIntoSets(sets, parts[k]);
+      const sets = emptySets();
+      for (const part of fold.parts) foldIntoSets(sets, part);
       fold.parts = null;
       fold.sets = sets;
     }
-    foldIntoSets(fold.sets as RowsSets, next);
+    foldIntoSets(fold.sets as RowsSets, next, elsewhere);
   }
 }
 
@@ -277,38 +333,26 @@ function appendGroupUpdates(
 }
 
 /**
- * Folds the rows written by two changes of a transaction: one entry per row, a row created and
- * deleted within the transaction dropped
+ * Folds the rows written by two changes of a transaction: one entry per row, by what the two did
+ * to it as a whole (see `foldIntoSets`): a row created and deleted within the transaction dropped,
+ * a row deleted and created again updated
  */
 export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
-  const layers = new Map<string, LayerRowsChange>(a.layers);
-  for (const [layerId, next] of b.layers) {
-    const before = layers.get(layerId);
-    if (!before) {
-      layers.set(layerId, next);
-      continue;
-    }
-    const created = new Set([...before.created, ...next.created]);
-    const deleted = new Set([...before.deleted, ...next.deleted]);
-    const updated = new Set([...before.updated, ...next.updated]);
-    for (const handle of [...deleted]) {
-      if (!created.has(handle)) continue;
-      created.delete(handle);
-      deleted.delete(handle);
-      updated.delete(handle);
-    }
-    for (const handle of [...updated]) {
-      if (created.has(handle) || deleted.has(handle)) updated.delete(handle);
-    }
-    layers.set(layerId, {
-      created: Int32Array.from(created),
-      updated: Int32Array.from(updated),
-      deleted: Int32Array.from(deleted),
-      fields: new Set<RowField>([...before.fields, ...next.fields]),
-      styleKeys: new Set([...before.styleKeys, ...next.styleKeys]),
-    });
+  const folds = new Map<string, RowsFold>();
+  for (const [layerId, before] of a.layers) {
+    const sets = emptySets();
+    foldIntoSets(sets, before);
+    folds.set(layerId, { parts: null, sets });
   }
-  return { layers };
+  for (const [layerId, next] of b.layers) {
+    let fold = folds.get(layerId);
+    if (!fold) {
+      fold = { parts: null, sets: emptySets() };
+      folds.set(layerId, fold);
+    }
+    foldIntoSets(fold.sets as RowsSets, next, takeFrom(deletedElsewhere(folds, layerId)));
+  }
+  return rowsOfFolds(folds);
 }
 
 /**
@@ -345,6 +389,159 @@ function mergeSnapshots(a: RowValues, b: RowValues): RowValues {
   return { handles: Int32Array.from(handles), fields, ...(deleted && { deleted }) };
 }
 
+/**
+ * Notes deletions about to be appended to the entries of a kind: for each, how many entries its
+ * `created` and `updated` have (see `DeletionMarks`); an ID the change also creates is noted as
+ * one whose order is not known
+ */
+function markDeletions(
+  marks: number[],
+  unordered: Set<string>,
+  entries: { created?: unknown[]; updated?: unknown[] },
+  deleted: ReadonlyArray<{ readonly id: string }>,
+  created: ReadonlyArray<{ readonly id: string }> | undefined,
+): void {
+  const createdCount = entries.created?.length ?? 0;
+  const updatedCount = entries.updated?.length ?? 0;
+  for (let i = 0; i < deleted.length; i++) marks.push(createdCount, updatedCount);
+  if (created?.length) {
+    const ids = new Set(deleted.map((entry) => entry.id));
+    for (const entry of created) if (ids.has(entry.id)) unordered.add(entry.id);
+  }
+}
+
+/** The positions of the entries of a list by their IDs, of the IDs `only` has (all without it) */
+function positionsById(
+  list: ReadonlyArray<{ readonly id: string }>,
+  only?: ReadonlyMap<string, unknown>,
+): Map<string, number[]> {
+  const positions = new Map<string, number[]>();
+  list.forEach((entry, i) => {
+    if (only && !only.has(entry.id)) return;
+    const known = positions.get(entry.id);
+    if (known) known.push(i);
+    else positions.set(entry.id, [i]);
+  });
+  return positions;
+}
+
+/**
+ * The entries of a kind (features, layers or groups) of a transaction, each told once by what was
+ * there before the transaction and what is there after it, when one was deleted and created again
+ * within it: there before and after, updated (from what it was before the first write of it to
+ * what it is after the last one); there before only, deleted (with the updates before its first
+ * deletion); there after only, created (with the updates after its last creation); neither, not
+ * told. The others are left as they are. Empty lists are taken away.
+ */
+function settleRecreated<T extends { readonly id: string }, U extends { readonly id: string }>(
+  entries: { created?: T[]; updated?: U[]; deleted?: T[] },
+  marks: readonly number[],
+  unordered: ReadonlySet<string>,
+  ends: {
+    previous(update: U): T;
+    value(update: U): T;
+    update(id: string, value: T, previous: T): U;
+  },
+): boolean {
+  const { created, deleted } = entries;
+  if (!created?.length || !deleted?.length) return false;
+  const deletedAt = positionsById(deleted);
+  for (const id of unordered) deletedAt.delete(id);
+  const createdAt = positionsById(created, deletedAt);
+  if (createdAt.size === 0) return false;
+  const updated = entries.updated ?? [];
+  const updatedAt = positionsById(updated, createdAt);
+  const dropCreated = new Set<number>();
+  const dropUpdated = new Set<number>();
+  const dropDeleted = new Set<number>();
+  const added: U[] = [];
+  for (const [id, creations] of createdAt) {
+    const deletions = deletedAt.get(id) as number[];
+    const updates = updatedAt.get(id) ?? [];
+    const firstDeletion = deletions[0];
+    const lastDeletion = deletions[deletions.length - 1];
+    // There before: it was deleted before it was first created
+    const before = creations[0] >= marks[2 * firstDeletion];
+    const after = (before ? 1 : 0) + creations.length - deletions.length === 1;
+    const updatesBefore = updates.filter((i) => i < marks[2 * firstDeletion + 1]);
+    const updatesAfter = updates.filter((i) => i >= marks[2 * lastDeletion + 1]);
+    for (const i of creations) dropCreated.add(i);
+    for (const i of deletions) dropDeleted.add(i);
+    for (const i of updates) dropUpdated.add(i);
+    if (before && after) {
+      const previous =
+        updatesBefore.length > 0
+          ? ends.previous(updated[updatesBefore[0]])
+          : deleted[firstDeletion];
+      const value =
+        updatesAfter.length > 0
+          ? ends.value(updated[updatesAfter[updatesAfter.length - 1]])
+          : created[creations[creations.length - 1]];
+      added.push(ends.update(id, value, previous));
+    } else if (before) {
+      dropDeleted.delete(firstDeletion);
+      for (const i of updatesBefore) dropUpdated.delete(i);
+    } else if (after) {
+      dropCreated.delete(creations[creations.length - 1]);
+      for (const i of updatesAfter) dropUpdated.delete(i);
+    }
+  }
+  const keep = <V>(list: V[], drop: ReadonlySet<number>): V[] =>
+    drop.size === 0 ? list : list.filter((_, i) => !drop.has(i));
+  const nextCreated = keep(created, dropCreated);
+  const nextDeleted = keep(deleted, dropDeleted);
+  const nextUpdated = [...keep(updated, dropUpdated), ...added];
+  if (nextCreated.length > 0) entries.created = nextCreated;
+  else delete entries.created;
+  if (nextDeleted.length > 0) entries.deleted = nextDeleted;
+  else delete entries.deleted;
+  if (nextUpdated.length > 0) entries.updated = nextUpdated;
+  else delete entries.updated;
+  return true;
+}
+
+/**
+ * The features, layers and groups of a notification deleted and created again (or created and
+ * deleted again) within its transaction, each told once (see `settleRecreated`); a kind left with
+ * nothing is taken away
+ */
+function settleKinds(changes: StoreChange, marks: DeletionMarks): void {
+  const { unordered } = marks;
+  if (
+    changes.features &&
+    settleRecreated(changes.features, marks.features, unordered.features, {
+      previous: (update) => update.previous,
+      value: (update) => update.feature,
+      update: (id, feature, previous) => ({ id, feature, previous }),
+    }) &&
+    Object.keys(changes.features).length === 0
+  ) {
+    delete changes.features;
+  }
+  if (
+    changes.layers &&
+    settleRecreated(changes.layers, marks.layers, unordered.layers, {
+      previous: (update) => update.previous,
+      value: (update) => update.layer,
+      update: (id, layer, previous) => ({ id, layer, previous }),
+    }) &&
+    Object.keys(changes.layers).length === 0
+  ) {
+    delete changes.layers;
+  }
+  if (
+    changes.groups &&
+    settleRecreated(changes.groups, marks.groups, unordered.groups, {
+      previous: (update) => update.previous,
+      value: (update) => update.group,
+      update: (id, group, previous) => ({ id, group, previous }),
+    }) &&
+    Object.keys(changes.groups).length === 0
+  ) {
+    delete changes.groups;
+  }
+}
+
 function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateIndex): void {
   // features
   if (changes.features) {
@@ -352,7 +549,12 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
     const t = target.features;
     if (changes.features.created) t.created = appendField(t.created, changes.features.created);
     if (changes.features.updated) t.updated = appendField(t.updated, changes.features.updated);
-    if (changes.features.deleted) t.deleted = appendField(t.deleted, changes.features.deleted);
+    if (changes.features.deleted) {
+      const { deletions } = index;
+      const { created, deleted } = changes.features;
+      markDeletions(deletions.features, deletions.unordered.features, t, deleted, created);
+      t.deleted = appendField(t.deleted, changes.features.deleted);
+    }
   }
 
   // layers
@@ -363,7 +565,14 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
     if (changes.layers.updated) {
       t.updated = appendLayerUpdates(t.updated, changes.layers.updated, index.layers);
     }
-    if (changes.layers.deleted) t.deleted = appendField(t.deleted, changes.layers.deleted);
+    if (changes.layers.deleted) {
+      const { deletions } = index;
+      const { created, deleted } = changes.layers;
+      markDeletions(deletions.layers, deletions.unordered.layers, t, deleted, created);
+      // An update after it (of one created again) is an entry of its own
+      for (const layer of changes.layers.deleted) index.layers.delete(layer.id);
+      t.deleted = appendField(t.deleted, changes.layers.deleted);
+    }
     if (changes.layers.orderChanged) t.orderChanged = changes.layers.orderChanged;
   }
 
@@ -375,7 +584,13 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
     if (changes.groups.updated) {
       t.updated = appendGroupUpdates(t.updated, changes.groups.updated, index.groups);
     }
-    if (changes.groups.deleted) t.deleted = appendField(t.deleted, changes.groups.deleted);
+    if (changes.groups.deleted) {
+      const { deletions } = index;
+      const { created, deleted } = changes.groups;
+      markDeletions(deletions.groups, deletions.unordered.groups, t, deleted, created);
+      for (const group of changes.groups.deleted) index.groups.delete(group.id);
+      t.deleted = appendField(t.deleted, changes.groups.deleted);
+    }
   }
 
   // order: the moves in the order they were made (appended, so that every one is undone)
@@ -440,13 +655,28 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   }
 }
 
+/** No entry of a transaction yet */
+function newUpdateIndex(): UpdateIndex {
+  return {
+    layers: new Map(),
+    groups: new Map(),
+    deletions: {
+      features: [],
+      layers: [],
+      groups: [],
+      unordered: { features: new Set(), layers: new Set(), groups: new Set() },
+    },
+    rows: new Map(),
+  };
+}
+
 export class ChangeBus {
   readonly #listeners = new Set<StoreListener>();
   readonly #beforeFlush: (() => StoreChange | undefined) | undefined;
   #transactionDepth = 0;
   #pendingChanges: StoreChange = {};
   #currentSource: UpdateSource = 'local';
-  #updateIndex: UpdateIndex = { layers: new Map(), groups: new Map(), rows: new Map() };
+  #updateIndex: UpdateIndex = newUpdateIndex();
   /** The notification held for writes over several tasks: what finishes them, and its source */
   #hold: { readonly finish: () => void; readonly source: UpdateSource } | null = null;
   /** Whether the held writes are being finished (what comes meanwhile is part of them) */
@@ -630,6 +860,7 @@ export class ChangeBus {
   #flushChanges(): void {
     const added = this.#beforeFlush?.();
     if (added) appendChanges(this.#pendingChanges, added, this.#updateIndex);
+    settleKinds(this.#pendingChanges, this.#updateIndex.deletions);
     if (this.#updateIndex.rows.size > 0) {
       this.#pendingChanges.rows = rowsOfFolds(this.#updateIndex.rows);
     }
@@ -640,7 +871,7 @@ export class ChangeBus {
     // Swap in a new container for the next accumulation (the flushed object is retained by the
     // listeners, so always recreate it so that appends do not pollute it).
     this.#pendingChanges = {};
-    this.#updateIndex = { layers: new Map(), groups: new Map(), rows: new Map() };
+    this.#updateIndex = newUpdateIndex();
 
     // Every listener gets the notification: one that throws is reported and the others still
     // run, so the Store and its subscribers (rendering, the mode manager, the spatial index, a

@@ -4,12 +4,13 @@
 /**
  * The rows held as columns in the notifications of a transaction: one entry per row, a row
  * created and deleted within the transaction dropped, the fields and the keys of the styles
- * gathered
+ * gathered. The features, layers, groups and rows deleted and created again within a transaction
+ * are told as updated, by what was there before it and what is there after it
  */
 
 import { describe, expect, it } from 'vitest';
 import type { LayerRowsChange, RowField, RowsChange } from '../../api/tables.js';
-import type { StoreChange } from '../types.js';
+import type { Feature, Group, Layer, StoreChange } from '../types.js';
 import { ChangeBus, mergeRowsChanges } from './change-bus.js';
 
 function rows(
@@ -251,5 +252,229 @@ describe('a notification held for writes over several tasks', () => {
     expect(told).toHaveLength(2);
     expect(told[0]?.source).toBe('undo');
     expect(told[1]?.uiStateChanged).toBe(true);
+  });
+});
+
+/** The rows of the layers of a notification, as plain lists */
+function plainRows(change: StoreChange | undefined) {
+  return [...(change?.rows?.layers ?? [])].map(([layerId, entry]) => [
+    layerId,
+    [...entry.created],
+    [...entry.updated],
+    [...entry.deleted],
+  ]);
+}
+
+/** The one notification of a transaction of the writes given */
+function toldOf(write: (bus: ChangeBus) => void): StoreChange {
+  const bus = new ChangeBus();
+  const seen: StoreChange[] = [];
+  bus.subscribe((change) => seen.push(change));
+  bus.transact(() => write(bus));
+  expect(seen).toHaveLength(1);
+  return seen[0];
+}
+
+describe('the rows of a transaction deleted and created again', () => {
+  it('are updated when deleted and created again, in their layer', () => {
+    const change = toldOf((bus) => {
+      bus.merge({ rows: rows('a', { deleted: [1, 2] }) });
+      bus.merge({ rows: rows('a', { created: [1], fields: ['geometry'] }) });
+    });
+    expect(plainRows(change)).toEqual([['a', [], [1], [2]]]);
+    expect([...(change.rows?.layers.get('a')?.fields ?? [])]).toEqual(['geometry']);
+  });
+
+  it('are updated in the layer they are created again in, when deleted from another one', () => {
+    const change = toldOf((bus) => {
+      bus.merge({ rows: rows('a', { deleted: [1, 2] }) });
+      bus.merge({ rows: rows('b', { created: [1, 3], fields: ['geometry'] }) });
+    });
+    expect(plainRows(change)).toEqual([
+      ['a', [], [], [2]],
+      ['b', [3], [1], []],
+    ]);
+  });
+
+  it('are deleted when deleted, created and deleted again, and created when created, deleted and created again', () => {
+    const change = toldOf((bus) => {
+      bus.merge({ rows: rows('a', { deleted: [1], created: [5] }) });
+      bus.merge({ rows: rows('a', { created: [1], deleted: [5] }) });
+      bus.merge({ rows: rows('a', { deleted: [1], created: [5] }) });
+    });
+    expect(plainRows(change)).toEqual([['a', [5], [], [1]]]);
+  });
+
+  it('are updated when updated, deleted, created again and updated, and dropped when created, updated and deleted', () => {
+    const change = toldOf((bus) => {
+      bus.merge({ rows: rows('a', { updated: [1], created: [5] }) });
+      bus.merge({ rows: rows('a', { deleted: [1], updated: [5] }) });
+      bus.merge({ rows: rows('a', { created: [1], deleted: [5] }) });
+      bus.merge({ rows: rows('a', { updated: [1] }) });
+    });
+    expect(plainRows(change)).toEqual([['a', [], [1], []]]);
+  });
+
+  it('fold as the writes fold two by two', () => {
+    const writes = [
+      rows('a', { created: [7], deleted: [1] }),
+      rows('b', { created: [1, 2] }),
+      rows('a', { deleted: [7] }),
+      rows('b', { deleted: [2] }),
+    ];
+    const change = toldOf((bus) => {
+      for (const write of writes) bus.merge({ rows: write });
+    });
+    expect(plainRows(change)).toEqual(plainRows({ rows: writes.reduce(mergeRowsChanges) }));
+    expect(plainRows(change)).toEqual([
+      ['a', [], [], []],
+      ['b', [], [1], []],
+    ]);
+  });
+});
+
+const feature = (id: string, name: string): Feature => ({
+  id,
+  type: 'Point',
+  geometry: { type: 'Point', coordinates: [0, 0] },
+  layerId: 'l',
+  groupId: undefined,
+  properties: { name },
+  style: {},
+  visible: true,
+  locked: false,
+});
+
+const layer = (id: string, name: string): Layer => ({
+  id,
+  name,
+  visible: true,
+  locked: false,
+  opacity: 1,
+  items: [],
+  metadata: undefined,
+  styleRule: undefined,
+});
+
+const group = (id: string, name: string): Group => ({
+  id,
+  layerId: 'l',
+  name,
+  visible: true,
+  locked: false,
+  featureIds: [],
+});
+
+describe('the features, layers and groups of a transaction deleted and created again', () => {
+  it('are told as updated, from what they were before it to what they are after it', () => {
+    const [f1, f2] = [feature('f', 'before'), feature('f', 'after')];
+    const [l1, l2] = [layer('l', 'before'), layer('l', 'after')];
+    const [g1, g2] = [group('g', 'before'), group('g', 'after')];
+    const change = toldOf((bus) => {
+      bus.merge({
+        features: { deleted: [f1] },
+        layers: { deleted: [l1] },
+        groups: { deleted: [g1] },
+      });
+      bus.merge({ layers: { created: [l2] } });
+      bus.merge({ features: { created: [f2] }, groups: { created: [g2] } });
+    });
+    expect(change.features).toEqual({ updated: [{ id: 'f', feature: f2, previous: f1 }] });
+    expect(change.layers).toEqual({ updated: [{ id: 'l', layer: l2, previous: l1 }] });
+    expect(change.groups).toEqual({ updated: [{ id: 'g', group: g2, previous: g1 }] });
+  });
+
+  it('take what they were before the first write of them and what they are after the last one', () => {
+    const f = ['first', 'second', 'third', 'last'].map((name) => feature('f', name));
+    const l = ['first', 'second', 'third', 'last'].map((name) => layer('l', name));
+    const change = toldOf((bus) => {
+      bus.merge({ features: { updated: [{ id: 'f', feature: f[1], previous: f[0] }] } });
+      bus.mergeLayerUpdate(l[1], l[0]);
+      bus.merge({ features: { deleted: [f[1]] }, layers: { deleted: [l[1]] } });
+      bus.merge({ features: { created: [f[2]] }, layers: { created: [l[2]] } });
+      // An update of the layer created again is an entry of its own, from what it was created
+      expect(bus.hasPendingLayerUpdate('l')).toBe(false);
+      bus.merge({ features: { updated: [{ id: 'f', feature: f[3], previous: f[2] }] } });
+      bus.mergeLayerUpdate(l[3], l[2]);
+    });
+    expect(change.features).toEqual({ updated: [{ id: 'f', feature: f[3], previous: f[0] }] });
+    expect(change.layers).toEqual({ updated: [{ id: 'l', layer: l[3], previous: l[0] }] });
+  });
+
+  it('are deleted when deleted, created and deleted again, and created when created, deleted and created again', () => {
+    const [a1, a2] = [feature('a', 'first'), feature('a', 'again')];
+    const [b1, b2] = [feature('b', 'first'), feature('b', 'again')];
+    const other = feature('c', 'other');
+    const change = toldOf((bus) => {
+      bus.merge({ features: { updated: [{ id: 'a', feature: a1, previous: a1 }] } });
+      bus.merge({ features: { deleted: [a1], created: [b1] } });
+      bus.merge({
+        features: { created: [a2], updated: [{ id: 'c', feature: other, previous: other }] },
+      });
+      bus.merge({ features: { deleted: [a2, b1] } });
+      bus.merge({ features: { created: [b2] } });
+      bus.merge({ features: { updated: [{ id: 'b', feature: b2, previous: b2 }] } });
+    });
+    expect(change.features).toEqual({
+      created: [b2],
+      updated: [
+        { id: 'a', feature: a1, previous: a1 },
+        { id: 'c', feature: other, previous: other },
+        { id: 'b', feature: b2, previous: b2 },
+      ],
+      deleted: [a1],
+    });
+  });
+
+  it('are not told when created and deleted again', () => {
+    const change = toldOf((bus) => {
+      bus.merge({ layers: { created: [layer('l', 'l')] }, groups: { created: [group('g', 'g')] } });
+      bus.merge({ features: { created: [feature('f', 'f')] } });
+      bus.merge({ features: { deleted: [feature('f', 'f')] } });
+      bus.merge({ layers: { deleted: [layer('l', 'l')] }, groups: { deleted: [group('g', 'g')] } });
+      bus.merge({ uiStateChanged: true });
+    });
+    expect(change.features).toBeUndefined();
+    expect(change.layers).toBeUndefined();
+    expect(change.groups).toBeUndefined();
+  });
+
+  it('are told as they came when one change merged both their creation and their deletion', () => {
+    // The order of the two is not known: a Store given in the options may tell them so
+    const [f1, f2] = [feature('f', 'one'), feature('f', 'two')];
+    const change = toldOf((bus) => {
+      bus.merge({ features: { created: [f2], deleted: [f1] } });
+    });
+    expect(change.features).toEqual({ created: [f2], deleted: [f1] });
+  });
+
+  it('tell nothing when nothing else is told', () => {
+    const bus = new ChangeBus();
+    const seen: StoreChange[] = [];
+    bus.subscribe((change) => seen.push(change));
+    bus.transact(() => {
+      bus.merge({ features: { created: [feature('f', 'f')] } });
+      bus.merge({ features: { deleted: [feature('f', 'f')] } });
+    });
+    expect(seen).toEqual([]);
+  });
+
+  it('settle 100,000 features deleted and created again in time linear in them', () => {
+    const before = Array.from({ length: 100_000 }, (_, i) => feature(`f${i}`, 'before'));
+    const after = before.map((f) => feature(f.id, 'after'));
+    const started = performance.now();
+    const change = toldOf((bus) => {
+      bus.merge({ features: { deleted: before } });
+      bus.merge({ features: { created: after } });
+    });
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(change.features?.created).toBeUndefined();
+    expect(change.features?.deleted).toBeUndefined();
+    expect(change.features?.updated?.length).toBe(100_000);
+    expect(change.features?.updated?.[99_999]).toEqual({
+      id: 'f99999',
+      feature: after[99_999],
+      previous: before[99_999],
+    });
   });
 });

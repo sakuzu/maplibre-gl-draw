@@ -34,7 +34,7 @@
  */
 
 import type { ItemWalk } from '@sakuzu/kasane/render';
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
+import { ROW_FLAG_DELETED, rowProperties } from '@sakuzu/kasane/render';
 import { byteColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type {
   FeatureTables,
@@ -457,6 +457,14 @@ export class TableContractStore implements StoreContract {
         }
         for (const [key, value] of Object.entries(feature.properties ?? {})) {
           if (value !== undefined) fields.set(`properties:${key}`, value);
+        }
+        if (kept) {
+          // The properties the row deleted and kept had and the feature has not are written away,
+          // so that the write tells them (one deleted and created again in a transaction is told
+          // as updated, its fields written being the ones it changed)
+          for (const key of Object.keys(rowProperties(kept.group, kept.row))) {
+            if (!fields.has(`properties:${key}`)) fields.set(`properties:${key}`, undefined);
+          }
         }
         let rows = writes.get(feature.layerId);
         if (!rows) {
@@ -1736,9 +1744,15 @@ export class TableContractStore implements StoreContract {
   #applyRows(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
     const { before: given, ...rest } = options;
     const before = given ?? (this.#bus.source === 'remote' ? null : this.#readBefore(patch));
-    // Only the rows that were not there are noted (a row not noted was there)
-    for (const handle of patch.handles) {
-      if (!this.#written.has(handle) && !this.#isThere(handle)) this.#written.set(handle, false);
+    // The rows that were not there are noted, and the rows there that the patch deletes (a row
+    // deleted and created again in the transaction was there when it began); a row not noted was
+    // there or is there
+    const { handles, deleted } = patch;
+    for (let i = 0; i < handles.length; i++) {
+      const handle = handles[i];
+      if (this.#written.has(handle)) continue;
+      if (!this.#isThere(handle)) this.#written.set(handle, false);
+      else if (deleted?.[i]) this.#written.set(handle, true);
     }
     const change = this.#writer.writeRows(patch, rest);
     if (before && before.handles.length > 0) this.#before.push(before);
@@ -1754,8 +1768,10 @@ export class TableContractStore implements StoreContract {
     if (fields.length === 0 && !patch.deleted) return null;
     const rows: number[] = [];
     for (const handle of patch.handles) {
-      if (!(this.#written.get(handle) ?? true)) continue;
-      if (this.#isThere(handle)) rows.push(handle);
+      const atStart = this.#written.get(handle);
+      if (atStart === false) continue;
+      // A row deleted in the transaction and created again holds its values while it is kept
+      if (atStart === true || this.#isThere(handle)) rows.push(handle);
     }
     if (rows.length === 0) return null;
     return this.tables.readValues({
