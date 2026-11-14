@@ -8,6 +8,7 @@
  * in-memory Store of objects holding the same features.
  */
 
+import { TablesStore } from '@sakuzu/kasane/render';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { featuresInOrder } from '../../store/feature-stream.js';
@@ -224,6 +225,52 @@ describe('features.list and features.count over a Store of rows', () => {
         .map((f) => f.id)
         .filter((id) => objectsOrder.indexOf(id) > objectsOrder.indexOf('c')),
     );
+  });
+
+  it('reads each row once over the pages: a page reads on from the row it starts after', () => {
+    const store = createTableStore().store;
+    store.createLayer(layerOf('l1', true));
+    store.createLayer(layerOf('l2', true));
+    for (let i = 0; i < 60; i++) {
+      store.createFeature(featureOf(`p${i}`, i, { layerId: i < 30 ? 'l1' : 'l2' }));
+    }
+    const features = createFeatures(createResourceDeps(store));
+    const tables = store.tables;
+    if (!tables) throw new Error('no tables');
+    const scan = TablesStore.prototype.scan;
+    // The first row each scan of the tables reads
+    const firsts: string[] = [];
+    const spy = vi.spyOn(TablesStore.prototype, 'scan').mockImplementation(function (
+      this: TablesStore,
+      options,
+      after,
+    ) {
+      const cursor = scan.call(this, options, after);
+      let first = true;
+      return {
+        next: () => {
+          const batch = cursor.next();
+          if (first && batch) firsts.push(tables.getRowId(batch[0]) as string);
+          first = false;
+          return batch;
+        },
+      };
+    });
+    const ids: string[] = [];
+    let after: string | undefined;
+    try {
+      for (;;) {
+        const page = features.list(undefined, { limit: 7, ...(after !== undefined && { after }) });
+        ids.push(...page.map((feature) => feature.id));
+        if (page.length < 7) break;
+        after = page[page.length - 1].id;
+      }
+    } finally {
+      spy.mockRestore();
+    }
+    expect(ids).toEqual(Array.from({ length: 60 }, (_, i) => `p${i}`));
+    // Each page starts reading at its first row, in the layer of the row before it or the next
+    expect(firsts).toEqual(Array.from({ length: 9 }, (_, i) => `p${i * 7}`));
   });
 
   it('throws notFound for a feature to read after that is not there', () => {

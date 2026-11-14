@@ -12,7 +12,11 @@
  */
 
 import type { FeatureTables, RowRef, RowValues } from '../api/tables.js';
-import { featureTablesInternals, readWithoutKeeping } from '../feature-table/feature-tables.js';
+import {
+  featureTablesInternals,
+  readWithoutKeeping,
+  scanRowsAfter,
+} from '../feature-table/feature-tables.js';
 import { isGroupHidden, ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { listEveryFeatureInOrder } from './ordering.js';
 import type { Feature, FeatureType, Group, Layer, ObjectGroup, ObjectLayer } from './types.js';
@@ -198,30 +202,24 @@ export function forEachMatchingRow(
   const internals = featureTablesInternals(tables);
   const matches = rowMatcher(store, filter);
   if (!tables || !internals || !matches) return;
-  // The layer of the row the visit starts after: the layers before it are not read
-  const afterLayer = after === undefined ? undefined : internals.placeOf(after)?.table.tableId;
-  let started = after === undefined;
   const layerIds =
     filter.layerId !== undefined
       ? store.getLayer(filter.layerId)
         ? [filter.layerId]
         : []
       : layerIdsInOrder(store);
-  for (const layerId of layerIds) {
-    if (!started && layerId !== afterLayer) continue;
-    const cursor = tables.scan({
-      layerIds: [layerId],
-      ...(filter.bbox && { bbox: [...filter.bbox] as [number, number, number, number] }),
-    });
-    for (let batch = cursor.next(); batch; batch = cursor.next()) {
-      for (const handle of batch) {
-        if (!started) {
-          started = handle === after;
-          continue;
-        }
-        if (!matches(handle)) continue;
-        if (!visit(handle)) return;
-      }
+  const options = {
+    layerIds,
+    ...(filter.bbox && { bbox: [...filter.bbox] as [number, number, number, number] }),
+  };
+  // A visit after a row reads on from its place: the rows before it are not read again (a list
+  // read a page at a time reads each row once)
+  const cursor = after === undefined ? tables.scan(options) : scanRowsAfter(tables, options, after);
+  if (!cursor) return;
+  for (let batch = cursor.next(); batch; batch = cursor.next()) {
+    for (const handle of batch) {
+      if (!matches(handle)) continue;
+      if (!visit(handle)) return;
     }
   }
 }

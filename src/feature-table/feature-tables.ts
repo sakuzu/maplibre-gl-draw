@@ -37,6 +37,7 @@ import type {
   FeatureTablesOptions,
   ItemHandles,
   LayerTableView,
+  RowCursor,
   RowField,
   RowRef,
   TableScanOptions,
@@ -121,6 +122,25 @@ export function createTables(options: TablesInternalOptions): {
   // The views and the scans handed out read through the gate at each of their reads (a view kept
   // from before a write is read later); the drawing reads the views of the internals
   const gated = new WeakMap<LayerTableView, LayerTableView>();
+  // A scan, from the row after the one given when given one (`scanRowsAfter`)
+  const scanAfter = (options: TableScanOptions | undefined, after?: RowRef): RowCursor => {
+    try {
+      gate();
+      const cursor = store.scan(tableScanOf(options ?? {}), after);
+      return {
+        next: () => {
+          try {
+            gate();
+            return cursor.next();
+          } catch (error) {
+            throw tablesError(error);
+          }
+        },
+      };
+    } catch (error) {
+      throw tablesError(error);
+    }
+  };
   const tables: FeatureTables = {
     get: (layerId) => {
       try {
@@ -178,24 +198,7 @@ export function createTables(options: TablesInternalOptions): {
         throw tablesError(error);
       }
     },
-    scan: (options) => {
-      try {
-        gate();
-        const cursor = store.scan(tableScanOf(options ?? {}));
-        return {
-          next: () => {
-            try {
-              gate();
-              return cursor.next();
-            } catch (error) {
-              throw tablesError(error);
-            }
-          },
-        };
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
+    scan: (options) => scanAfter(options),
     readValues: (rows) => {
       try {
         gate();
@@ -214,6 +217,7 @@ export function createTables(options: TablesInternalOptions): {
     },
   };
   INTERNALS.set(tables, store);
+  SCANS_AFTER.set(tables, scanAfter);
   return { tables, writer: store };
 }
 
@@ -445,6 +449,30 @@ export function featureTablesInternals(
   tables: FeatureTables | undefined,
 ): FeatureTablesInternals | undefined {
   return tables ? INTERNALS.get(tables) : undefined;
+}
+
+const SCANS_AFTER = new WeakMap<
+  FeatureTables,
+  (options: TableScanOptions | undefined, after: RowRef) => RowCursor
+>();
+
+/**
+ * Reads the handles of the rows of layers a batch at a time, as {@link FeatureTables.scan} reads
+ * them, starting after a row: the layers before its layer are not read, and its layer is read
+ * from the row that follows it in the order (with a box, from the one that follows it in the rows
+ * the box finds, and nothing when the box does not find it). Nothing is read when its layer is
+ * not one of the layers read, or when the row is not there. A page of a list goes on from the
+ * last row of the page before without reading the rows before it again
+ *
+ * @returns The scan (undefined for tables made elsewhere)
+ * @internal
+ */
+export function scanRowsAfter(
+  tables: FeatureTables,
+  options: TableScanOptions,
+  after: RowRef,
+): RowCursor | undefined {
+  return SCANS_AFTER.get(tables)?.(options, after);
 }
 
 /**
