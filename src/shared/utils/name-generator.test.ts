@@ -13,7 +13,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature, FeatureType } from '../../store/types.js';
 import { geometryFromCoordinates } from './coordinates.js';
-import { AutoNameGenerator, normalizeAutoNameConfig } from './name-generator.js';
+import {
+  AutoNameGenerator,
+  extractNumberFromName,
+  normalizeAutoNameConfig,
+} from './name-generator.js';
 
 let store: MemoryStore;
 let idSeq: number;
@@ -59,6 +63,57 @@ describe('normalizeAutoNameConfig', () => {
   it('an object is returned as is', () => {
     const config = { enabled: true, typeNames: { Point: '地点' } };
     expect(normalizeAutoNameConfig(config)).toBe(config);
+  });
+});
+
+describe('extractNumberFromName', () => {
+  /** The number as the regular expression `^<word>\\s*(\\d+)$` reads it */
+  function byRegExp(name: string, typeName: string): number | null {
+    const escaped = typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = name.match(new RegExp(`^${escaped}\\s*(\\d+)$`));
+    return match ? parseInt(match[1], 10) : null;
+  }
+
+  it('reads the number of a name as the regular expression of the word, spaces and digits does', () => {
+    const words = ['Point', 'P1', 'Point ', '', 'a.b*', '(x)', '点', 'Layer\u3000', '$1'];
+    const parts = [
+      '',
+      ' ',
+      '  ',
+      '\t',
+      '\u00a0',
+      '\u3000',
+      '\u2028',
+      '\ufeff',
+      '\u200b',
+      '0',
+      '7',
+      '42',
+      '0012',
+      '9007199254740993',
+      'x',
+      '-',
+      '.',
+      '１',
+      'Point',
+      'P1',
+      '点',
+    ];
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (const word of words) {
+      for (let i = 0; i < 400; i++) {
+        let name = random() < 0.8 ? word : '';
+        const count = Math.floor(random() * 4);
+        for (let k = 0; k < count; k++) name += parts[Math.floor(random() * parts.length)];
+        expect(extractNumberFromName(name, word), JSON.stringify([name, word])).toBe(
+          byRegExp(name, word),
+        );
+      }
+    }
   });
 });
 

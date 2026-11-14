@@ -132,15 +132,31 @@ function defaultFormatter(typeName: string, number: number): string {
   return `${typeName} ${number}`;
 }
 
+/** The white space after the word of a name, read from where it starts (`lastIndex`) */
+const SPACES = /\s*/y;
+
 /**
- * Extracts the number from a name
+ * Extracts the number from a name: the word of the type, white space, and digits to the end
+ * (`^<word>\s*(\d+)$`). Read in place, without a regular expression made per name: every row a
+ * write creates is read here, so a name that is not of this form makes nothing
+ *
+ * @internal
  */
-function extractNumberFromName(name: string, typeName: string): number | null {
-  // Escape the special characters
-  const escapedTypeName = typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`^${escapedTypeName}\\s*(\\d+)$`);
-  const match = name.match(regex);
-  return match ? parseInt(match[1], 10) : null;
+export function extractNumberFromName(name: string, typeName: string): number | null {
+  if (!name.startsWith(typeName)) return null;
+  // The digits at the end, after the word
+  let digits = name.length;
+  while (digits > typeName.length) {
+    const code = name.charCodeAt(digits - 1);
+    if (code < 48 || code > 57) break;
+    digits--;
+  }
+  if (digits === name.length) return null;
+  // Only white space between the word and the digits
+  SPACES.lastIndex = typeName.length;
+  SPACES.test(name);
+  if (SPACES.lastIndex !== digits) return null;
+  return parseInt(name.slice(digits), 10);
 }
 
 /**
