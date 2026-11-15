@@ -27,7 +27,7 @@ import type { RetainedStyleResolver } from '../renderers/retained.js';
 import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
 import { classifyFeature } from './store-retained-classify.js';
 import { RowStyleSlots } from './table-collect.js';
-import { classifyRow, partitionRowGroup } from './table-partition.js';
+import { classifyRow, partitionRowGroup, type RowPictureSource } from './table-partition.js';
 
 const square = [
   [
@@ -406,7 +406,7 @@ describe('the classification and the chunks of the drawing in one draw', () => {
     const { internals, table } = tablesOfFeatures('layer', features);
     const group = table.groupAt(0);
     const slots = new RowStyleSlots(resolver, internals.styles, undefined);
-    const sprites = new Map<number, RowSpriteSource>();
+    const sprites = new Map<number, RowPictureSource>();
     const gpuRows = new Map<number, GpuRowsSource>();
     const context = {
       slots,
@@ -415,7 +415,7 @@ describe('the classification and the chunks of the drawing in one draw', () => {
       featureOf: (g: typeof group, row: number) =>
         rowFeature(internals.readContext, 'layer', g, row),
       oneDraw: true,
-      onSprite: (row: number, s: RowSpriteSource) => sprites.set(row, s),
+      onSprite: (row: number, s: RowPictureSource) => sprites.set(row, s),
       onGpuRows: (row: number, s: GpuRowsSource) => gpuRows.set(row, s),
     };
     return {

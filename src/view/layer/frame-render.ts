@@ -26,6 +26,7 @@ import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
+import type { PointSpriteSheets } from '../renderers/point/point-sprites.js';
 import type { TerrainContext } from '../terrain/context.js';
 import {
   setDrapePaintedDatasets,
@@ -77,6 +78,8 @@ export interface FrameRenderDeps {
   drape: DrapePlanner;
   customRenderers: Map<string, FeatureTypeHandler['renderer']>;
   featureCompanions: FeatureCompanionRegistry;
+  /** The sheets of pictures of the built-in points */
+  pointSprites?: PointSpriteSheets;
   datasets?: RenderedDatasets;
   storeRetainedCache: StoreRetainedCache | null;
   /** The drawing of the layers held as rows of columns */
@@ -345,6 +348,7 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
       deps.tableRetained ?? undefined,
       beforeEntry,
       deps.shapes.drawings(),
+      deps.pointSprites,
     );
     // The rest of the drape of the slot, once (the copies after the first draw over it)
     if (beforeEntry) {

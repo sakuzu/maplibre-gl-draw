@@ -125,6 +125,7 @@ import {
 import { normalizeOrigin, ROW_LINE_STRIDE } from '../renderers/line/line-geometry.js';
 import type { RetainedLineBatch } from '../renderers/line/line-types.js';
 import { type RetainedPointBatch, ROW_POINT_STRIDE } from '../renderers/point/point-instance.js';
+import type { PointSpriteSheets } from '../renderers/point/point-sprites.js';
 import { type RetainedPolygonBatch, ROW_POLYGON_STRIDE } from '../renderers/polygon/sdf-polygon.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import {
@@ -215,6 +216,7 @@ import {
   classifyRow,
   type OrderedChunkRange,
   partitionRowGroup,
+  type RowPictureSource,
   type TableRunKind,
 } from './table-partition.js';
 import { TableSurface } from './table-surface.js';
@@ -516,7 +518,7 @@ interface GroupCache {
   /** The chunks of the drawing in one draw (null until it is used) */
   oneDraw: GroupChunks<OneDrawChunk> | null;
   /** The rows drawn with the pictures of an extension, with their source (the one draw) */
-  sprites: Map<number, RowSpriteSource>;
+  sprites: Map<number, RowPictureSource>;
   texture: RowStateTexture | null;
   /** The version of the state the texture holds (-1 before the first upload) */
   uploadedVersion: number;
@@ -662,7 +664,7 @@ interface FreshDrawing {
     group: RowGroup,
     row: number,
     oneDraw: boolean,
-  ): { kind: TableRunKind | null; source: RowSpriteSource | undefined };
+  ): { kind: TableRunKind | null; source: RowPictureSource | undefined };
 }
 
 /** The runs of rows with points of a chunk, between the rows a drape draws (`pointRunsOf`) */
@@ -1066,13 +1068,20 @@ export class TableLayerRenderer {
     const view = tables.view(layerId);
     return {
       styles: new RowsStyles(slots, new RowsPalette(), pixelRatio, tables.styles),
-      context: { slots, strings: tables.strings, pixelRatio, terrain: this.options.terrain },
+      context: {
+        slots,
+        strings: tables.strings,
+        pixelRatio,
+        terrain: this.options.terrain,
+        view,
+      },
       surface: this.surfaces.surface,
       classify: (group, row, oneDraw) => {
-        let source: RowSpriteSource | undefined;
+        let source: RowPictureSource | undefined;
         const kind = classifyRow(group, row, {
           slots,
           customTypes: deps.customRenderers,
+          pointSprites: deps.pointSprites,
           companions: deps.companions as FeatureCompanionRegistry,
           featureOf: (rows, r) => rowFeatureToRead(tables.readContext, layerId, rows, r),
           view,
@@ -1493,6 +1502,7 @@ export class TableLayerRenderer {
             classifyRow(group, row, {
               slots,
               customTypes: deps.customRenderers,
+              pointSprites: deps.pointSprites,
               companions,
               featureOf: (rows, r) => rowFeatureToRead(tables.readContext, layerId, rows, r),
               view,
@@ -1665,16 +1675,19 @@ export class TableLayerRenderer {
 
     const cache = this.layerCache(tables, table, layer, renderers, deps);
     const slots = cache.slots as RowStyleSlots;
+    const view = tables.view(table.tableId);
     if (
       !cache.context ||
       cache.context.slots !== slots ||
-      cache.context.strings !== tables.strings
+      cache.context.strings !== tables.strings ||
+      cache.context.view !== view
     ) {
       cache.context = {
         slots,
         strings: tables.strings,
         pixelRatio: this.options.pixelRatio,
         terrain: this.options.terrain,
+        view,
       };
     }
     if (rows) this.ensureRowsStyles(cache, rows, tables);
@@ -2157,7 +2170,7 @@ export class TableLayerRenderer {
     write: PendingWrite,
   ): boolean {
     const group = groupCache.group;
-    const drawn = this.writeIsDrawn(cache, write);
+    const drawn = this.writeIsDrawn(cache, group, row, write);
     // What the classification of a row reads (its type, its style, and what an extension reads
     // of its feature) may have changed
     const classified = this.writeClassifies(cache, group, row, write);
@@ -2252,8 +2265,7 @@ export class TableLayerRenderer {
     const styleWritten =
       (write.what & ROW_WRITE_STYLE) !== 0 || this.ruleKeyWritten(cache, write.keys);
     // The rotation of the markers of a point row, held in the texel of its style
-    const angleWritten =
-      held >= 0 && (rowsStyles.layoutOf(held) & 7) === ROWS_LAYOUT.point && rotationWritten(write);
+    const angleWritten = held >= 0 && styleTurns(rowsStyles, held) && rotationWritten(write);
 
     // The positions only: the row keeps its shape and its style, and is not dashed; on a surface
     // that cuts the rows, a point (the cut of a line or a polygon follows its positions)
@@ -2357,6 +2369,8 @@ export class TableLayerRenderer {
     if ((write.what & ROW_WRITE_VALUES) === 0) return false;
     const deps = cache.deps;
     if (!deps) return true;
+    // A sheet of pictures may give a point another picture, or none, by its values
+    if (sheetsAskPoint(deps, group, row)) return true;
     const renderer = deps.customRenderers.get(rowType(group.data, row)) as
       | Pick<FeatureTypeRenderer, 'appliesTo'>
       | undefined;
@@ -2370,9 +2384,20 @@ export class TableLayerRenderer {
    * Whether a write changes what is drawn of a row (its geometry, its style, its rule color, the
    * rotation of its markers)
    */
-  private writeIsDrawn(cache: LayerCache, write: PendingWrite): boolean {
+  private writeIsDrawn(
+    cache: LayerCache,
+    group: RowGroup,
+    row: number,
+    write: PendingWrite,
+  ): boolean {
     if ((write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STYLE)) !== 0) return true;
-    return this.ruleKeyWritten(cache, write.keys) || rotationWritten(write);
+    if (this.ruleKeyWritten(cache, write.keys) || rotationWritten(write)) return true;
+    // A sheet of pictures may give a point another picture by its values
+    return (
+      (write.what & ROW_WRITE_VALUES) !== 0 &&
+      cache.deps !== null &&
+      sheetsAskPoint(cache.deps, group, row)
+    );
   }
 
   /**
@@ -2423,11 +2448,12 @@ export class TableLayerRenderer {
     const deps = cache.deps;
     const layer = cache.layer;
     if (!tables || !deps || !layer || !cache.slots) return false;
-    let source: RowSpriteSource | undefined;
+    let source: RowPictureSource | undefined;
     let gpuRows: GpuRowsSource | undefined;
     const now = classifyRow(groupCache.group, row, {
       slots: cache.slots,
       customTypes: deps.customRenderers,
+      pointSprites: deps.pointSprites,
       companions: deps.companions as FeatureCompanionRegistry,
       featureOf: (rows, r) => rowFeatureToRead(tables.readContext, layer.id, rows, r),
       view: tables.view(layer.id),
@@ -2537,7 +2563,7 @@ export class TableLayerRenderer {
     cache.deps = deps;
     cache.tables = tables;
     const companions = deps.companions;
-    const spriteRevisions = spriteRevisionsOf(deps.customRenderers);
+    const spriteRevisions = spriteRevisionsOf(deps.customRenderers, deps.pointSprites);
     // What the classification reads: the resolution of the styles, the providers of companions,
     // the pictures of the custom types. A new style rule only changes the colors, so the rows
     // keep their classification and only their styles are resolved again
@@ -2646,7 +2672,7 @@ export class TableLayerRenderer {
   ): TableChunk[] {
     const group = groupCache.group;
     const oneDraw = drawing === 'one-draw';
-    const sprites = new Map<number, RowSpriteSource>();
+    const sprites = new Map<number, RowPictureSource>();
     const gpuRows = new Map<number, GpuRowsSource>();
     const view = tables.view(table.tableId);
     const transformFields = this.options.transformFields?.() ?? null;
@@ -2656,6 +2682,7 @@ export class TableLayerRenderer {
         classifyRow(group, row, {
           slots: cache.slots as RowStyleSlots,
           customTypes: deps.customRenderers,
+          pointSprites: deps.pointSprites,
           companions: deps.companions as FeatureCompanionRegistry,
           featureOf: (rows, r) => rowFeatureToRead(tables.readContext, table.tableId, rows, r),
           view,
@@ -4391,7 +4418,7 @@ export class TableLayerRenderer {
     if (!rows || !tables || !slots || !layer || !deps || !cache.context || !cache.rowsStyles) {
       return;
     }
-    const sprites = new Map<number, RowSpriteSource>();
+    const sprites = new Map<number, RowPictureSource>();
     const gpuRows = new Map<number, GpuRowsSource>();
     const view = tables.view(layerId);
     const transformFields = this.options.transformFields?.() ?? null;
@@ -4401,6 +4428,7 @@ export class TableLayerRenderer {
         classifyRow(group, row, {
           slots,
           customTypes: deps.customRenderers,
+          pointSprites: deps.pointSprites,
           companions: deps.companions as FeatureCompanionRegistry,
           featureOf: (r, k) => rowFeatureToRead(tables.readContext, layerId, r, k),
           view,
@@ -4509,7 +4537,23 @@ function styleCreatedZoom(
  * row for a point, 0 for any other layout
  */
 function styleAngleSteps(group: RowGroup, row: number, styles: RowsStyles, style: number): number {
-  return (styles.layoutOf(style) & 7) === ROWS_LAYOUT.point ? rowAngleSteps(group, row) : 0;
+  return styleTurns(styles, style) ? rowAngleSteps(group, row) : 0;
+}
+
+/**
+ * Whether the instances of a style turn by the rotation of their row: the markers of a point, and
+ * the pictures of a sheet that say so
+ */
+function styleTurns(styles: RowsStyles, style: number): boolean {
+  const layout = styles.layoutOf(style);
+  return (layout & 7) === ROWS_LAYOUT.point || (layout & ROWS_LAYOUT.turns) !== 0;
+}
+
+/** Whether the sheets of pictures of the points are asked a row (a built-in point, a sheet added) */
+function sheetsAskPoint(deps: StoreRetainedDrawDeps, group: RowGroup, row: number): boolean {
+  if (!deps.pointSprites?.any()) return false;
+  const type = rowType(group.data, row);
+  return type === 'Point' || type === 'MultiPoint';
 }
 
 /** Whether a write wrote the rotation of a row (which the markers of a point row turn by) */
@@ -4583,11 +4627,14 @@ function rendererOfGpuRows(
 }
 
 /**
- * The revisions of the sources of pictures of the custom types (the rows are classified again
- * when one changes)
+ * The revisions of the sources of pictures of the custom types, and the generation of the answers
+ * of the sheets of pictures of the points (the rows are classified again when one changes)
  */
-function spriteRevisionsOf(customTypes: ReadonlyMap<string, unknown>): string {
-  let out = '';
+function spriteRevisionsOf(
+  customTypes: ReadonlyMap<string, unknown>,
+  pointSprites: PointSpriteSheets | undefined,
+): string {
+  let out = pointSprites?.any() ? `${pointSprites.generation()}\u0000` : '';
   for (const [type, renderer] of customTypes) {
     const source = (renderer as { rowSprites?: RowSpriteSource }).rowSprites;
     if (source) out += `${type}\u0000${source.revision}\u0000`;
@@ -4615,7 +4662,7 @@ function oneDrawJob(
   const keys = new Int32Array(count);
   const surface = context.surface ?? null;
   // The pictures of the chunk come from one source (`partitionRowGroup`)
-  let sprites: RowSpriteSource | null = null;
+  let sprites: RowPictureSource | null = null;
   for (let row = range.from; row < range.to && !sprites; row++) {
     sprites = context.spriteSourceOf(row) ?? null;
   }
@@ -4685,7 +4732,7 @@ function packRowsChunk(
   const palette = context.rowsStyles.palette;
   const draft = new RowsDraft(count, range.from, range.vertices, palette);
   // The pictures of the chunk come from one source (`partitionRowGroup`)
-  let sprites: RowSpriteSource | null = null;
+  let sprites: RowPictureSource | null = null;
   for (let row = range.from; row < range.to && !sprites; row++) {
     sprites = context.spriteSourceOf(row) ?? null;
   }

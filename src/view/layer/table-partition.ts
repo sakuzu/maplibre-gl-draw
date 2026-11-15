@@ -29,6 +29,10 @@ import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
+import type {
+  PointSpriteSheetSource,
+  PointSpriteSheets,
+} from '../renderers/point/point-sprites.js';
 import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
 import type { RunKind } from './store-retained-classify.js';
 import type { RowStyleSlots } from './table-collect.js';
@@ -47,6 +51,14 @@ const CIRCLE_VERTICES = 65;
  * @internal
  */
 export type TableRunKind = RunKind | 'rows' | 'extension';
+
+/**
+ * The source of the pictures a row is drawn with among the rows in one draw: the pictures of a
+ * type (asked by style) or a sheet of pictures of the points (asked by row)
+ *
+ * @internal
+ */
+export type RowPictureSource = RowSpriteSource | PointSpriteSheetSource;
 
 /**
  * What the classification of a row reads besides the row
@@ -78,12 +90,21 @@ export interface RowClassifyContext {
    * the rows an extension holds on the GPU (`gpuRows`, without a companion) are `extension`, and
    * only the rows it cannot draw are `immediate`. Besides the rows the runs retain, it draws
    * the dashed and dotted lines, the polygons with a dashed outline, and the points an extension
-   * draws with pictures it gives (`rowSprites`, unless its type declares a scale field); these
-   * are the only rows whose answer is not the one of `classifyFeature`
+   * draws with pictures it gives (`rowSprites`, unless its type declares a scale field), and the
+   * built-in points a sheet of pictures gives a picture; these are the only rows whose answer is
+   * not the one of `classifyFeature`
    */
   readonly oneDraw?: boolean;
-  /** Receives each row drawn with the pictures of an extension, with their source */
-  readonly onSprite?: (row: number, source: RowSpriteSource) => void;
+  /**
+   * The sheets of pictures of the built-in points: a point a sheet gives a picture is drawn with
+   * it among the rows in one draw, and at once otherwise (none: every point keeps its marker)
+   */
+  readonly pointSprites?: PointSpriteSheets;
+  /**
+   * Receives each row drawn with pictures, with their source (the pictures of an extension, or
+   * the sheet that gives the point its picture)
+   */
+  readonly onSprite?: (row: number, source: RowPictureSource) => void;
   /** Receives each row an extension holds on the GPU, with what makes what holds it */
   readonly onGpuRows?: (row: number, source: GpuRowsSource) => void;
   /**
@@ -198,10 +219,21 @@ export function classifyRow(
   const color = (): string | null => slots.ruleColorOf(group, row);
   switch (type) {
     case 'Point':
-    case 'MultiPoint':
+    case 'MultiPoint': {
+      // A point a sheet gives a picture is drawn with it in the place of its marker
+      const sheets = context.pointSprites;
+      if (sheets?.any() && view) {
+        const match = sheets.ofRow(view, data.rows[row]);
+        if (match) {
+          if (!oneDraw) return 'immediate';
+          context.onSprite?.(row, match.sheet);
+          return 'rows';
+        }
+      }
       if (!slots.point((data.wholes[STYLE] as PageDictionary).indexes[row], type, color()).shape)
         return 'immediate';
       return oneDraw ? 'rows' : 'point';
+    }
     case 'LineString':
     case 'Freehand':
     case 'MultiLineString':
@@ -259,7 +291,7 @@ export function partitionRowGroup(
   group: RowGroup,
   classify: (row: number) => TableRunKind | null,
   targetVertices = CHUNK_TARGET_VERTICES,
-  sourceOf?: (row: number) => RowSpriteSource | GpuRowsSource | undefined,
+  sourceOf?: (row: number) => RowPictureSource | GpuRowsSource | undefined,
 ): OrderedChunkRange[] {
   const out: OrderedChunkRange[] = [];
   const b = new Float64Array(4);
@@ -267,7 +299,7 @@ export function partitionRowGroup(
   let from = 0;
   let vertices = 0;
   let box: [number, number, number, number] | null = null;
-  let source: RowSpriteSource | GpuRowsSource | undefined;
+  let source: RowPictureSource | GpuRowsSource | undefined;
 
   const close = (to: number): void => {
     if (to > from && kind !== null) {

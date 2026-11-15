@@ -27,6 +27,7 @@
 import type { PageDictionary, RowGroup, ShapeFormReader, StyleTable } from '@sakuzu/kasane/render';
 import { geometryAt, pageRowBox, type RowGeometryAt } from '@sakuzu/kasane/render';
 import type { ValueStringCache } from '@sakuzu/tabane';
+import type { LayerTableView } from '../../api/tables.js';
 import {
   rowHasGeometry,
   rowNumber,
@@ -61,6 +62,7 @@ import {
   writePointInstance,
 } from '../renderers/point/point-instance.js';
 import { pointAngleSteps, pointMarkerCode } from '../renderers/point/point-sdf.js';
+import type { PointSprite, PointSpriteSheetSource } from '../renderers/point/point-sprites.js';
 import {
   ROW_POLYGON_STRIDE,
   writePolygonFillVertex,
@@ -98,6 +100,7 @@ import {
   type TessellationStep,
 } from '../terrain/tessellation.js';
 import { tilingSignature } from '../terrain/tiling.js';
+import type { RowPictureSource } from './table-partition.js';
 
 /** The box of a row read for its key of the cut (`pageRowBox`) */
 const ROW_BOX = new Float64Array(4);
@@ -351,6 +354,18 @@ export interface RowPackContext {
   readonly strings: ValueStringCache;
   readonly pixelRatio: PixelRatioInput | undefined;
   readonly terrain: TerrainContext;
+  /** The rows of the layer, which a sheet of pictures of the points is asked a row from */
+  readonly view?: LayerTableView;
+}
+
+/**
+ * Whether the pictures a row is drawn with are a sheet of pictures of the points (asked by row)
+ * rather than the pictures of a type (asked by style)
+ *
+ * @internal
+ */
+export function isPointSpriteSheet(source: RowPictureSource): source is PointSpriteSheetSource {
+  return 'spriteOfRow' in source;
 }
 
 /**
@@ -1059,6 +1074,8 @@ export const ROWS_LAYOUT = {
   fill: 16,
   /** A polygon with an outline */
   stroke: 32,
+  /** A picture that turns by the rotation of its row, as a marker does */
+  turns: 64,
 } as const;
 
 /** What a resolved style was made from, to make its values again */
@@ -1222,6 +1239,28 @@ export class RowsStyles {
     });
   }
 
+  /**
+   * The number of the style of a picture a sheet gives a point: its rectangle in the texture,
+   * then its half size in CSS px, no bearing, and whether it turns by the rotation of its row
+   * (the texel of the style of the row holds the rotation then)
+   */
+  sheetSprite(sprite: PointSprite, style: number): number {
+    const key = `S${sprite.uv.join(',')}\u0000${sprite.halfWidth}\u0000${sprite.halfHeight}\u0000${
+      sprite.rotates ? 1 : 0
+    }`;
+    const known = this.known(style, key);
+    if (known !== undefined) return known;
+    const layout = ROWS_LAYOUT.sprite | (sprite.rotates ? ROWS_LAYOUT.turns : 0);
+    return this.add(style, key, layout, () => {
+      const v = this.values;
+      for (let i = 0; i < 4; i++) v[i] = sprite.uv[i];
+      v[4] = sprite.halfWidth;
+      v[5] = sprite.halfHeight;
+      v[6] = -1;
+      v[7] = sprite.rotates ? 1 : 0;
+    });
+  }
+
   private sourceNumber(source: RowSpriteSource): number {
     let number = this.sources.get(source);
     if (number === undefined) {
@@ -1301,7 +1340,7 @@ export interface RowsPackContext extends RowPackContext {
    * The source of the pictures a row of the group packed is drawn with (undefined for a row
    * drawn as its built-in kind)
    */
-  spriteSourceOf(row: number): RowSpriteSource | undefined;
+  spriteSourceOf(row: number): RowPictureSource | undefined;
 }
 
 /**
@@ -1604,10 +1643,11 @@ function collectPointRow(
   const resolved = pointStyleOf(group, row, context);
   // A shape that is not instanced makes the row a run drawn at once; it is not packed
   if (!resolved) return;
-  const { kind, style } = resolved;
+  const { kind, style, turns } = resolved;
   writeRowStyle(draft, styleAt, style, undefined);
-  // The markers turn by the rotation of the row (a picture of an extension does not read it)
-  if (kind === ROWS_KIND.point) draft.rowStyles[styleAt + 3] = rowAngleSteps(group, row);
+  // The markers turn by the rotation of the row, and so do the pictures of a sheet that say so
+  // (a picture of a type does not read it)
+  if (turns) draft.rowStyles[styleAt + 3] = rowAngleSteps(group, row);
   const coords = reader.coords;
   const stride = reader.stride;
   const first = reader.vertexStart(at);
@@ -1622,17 +1662,31 @@ function collectPointRow(
 }
 
 /**
- * The kind of the instances of a point row and its resolved style: a picture of the source of
- * pictures of the row, or the built-in point (null for a row that is not packed: a picture the
- * source does not give, a shape that is not instanced)
+ * The kind of the instances of a point row, its resolved style, and whether it turns by the
+ * rotation of the row: a picture of the source of pictures of the row, or the built-in point
+ * (null for a row that is not packed: a picture the source does not give, a shape that is not
+ * instanced)
  */
 function pointStyleOf(
   group: RowGroup,
   row: number,
   context: RowsPackContext,
-): { kind: RowsKind; style: number } | null {
+): { kind: RowsKind; style: number; turns: boolean } | null {
   const data = group.data;
   const source = context.spriteSourceOf(row);
+  if (source && isPointSpriteSheet(source)) {
+    const view = context.view;
+    const sprite = view ? source.spriteOfRow(view, data.rows[row]) : null;
+    if (!sprite) return null;
+    return {
+      kind: ROWS_KIND.sprite,
+      style: context.rowsStyles.sheetSprite(
+        sprite,
+        (data.wholes[STYLE] as PageDictionary).indexes[row],
+      ),
+      turns: sprite.rotates,
+    };
+  }
   if (source) {
     const sprite = context.slots.sprite(
       source,
@@ -1646,6 +1700,7 @@ function pointStyleOf(
         sprite,
         (data.wholes[STYLE] as PageDictionary).indexes[row],
       ),
+      turns: false,
     };
   }
   const style = context.rowsStyles.point(
@@ -1653,7 +1708,7 @@ function pointStyleOf(
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );
-  return style === null ? null : { kind: ROWS_KIND.point, style };
+  return style === null ? null : { kind: ROWS_KIND.point, style, turns: true };
 }
 
 /**

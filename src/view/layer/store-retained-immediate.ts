@@ -16,6 +16,7 @@ import {
   drawFeatureCompanionsInFrame,
   type FeatureCompanionRegistry,
 } from '../feature-companion.js';
+import type { PointSpriteSheets } from '../renderers/point/point-sprites.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import type { DrawnShapes } from './shown-store.js';
 import { customRendererOf } from './store-retained-classify.js';
@@ -43,6 +44,11 @@ export interface StoreRetainedDrawDeps {
   customRendererContext: FrameDrawContext;
   /** Providers of companion drawing and companion hits (those of this draw instance) */
   companions: FeatureCompanionRegistry;
+  /**
+   * The sheets of pictures of the built-in points (those of this draw instance; none when
+   * omitted): a point a sheet gives a picture is drawn with it in the place of its marker
+   */
+  pointSprites?: PointSpriteSheets;
   /**
    * Returns the set of feature ids inside the expanded viewport (a spatial index query)
    *

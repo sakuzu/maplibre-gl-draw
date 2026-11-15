@@ -22,6 +22,7 @@ import type { Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { drawFeatureCompanionsInFrame } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
+import type { PointSpriteSheets } from '../renderers/point/point-sprites.js';
 import type { DrawnTentative } from '../ui/tentative.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
@@ -80,6 +81,7 @@ import type { TableLayerRenderer } from './table-retained.js';
  *   of the other entries is painted up to it where the layers held as rows are draped)
  * @param drawings The shapes being drawn, each drawn with its layer and its look (none when
  *   omitted)
+ * @param pointSprites The sheets of pictures of the built-in points (none when omitted)
  */
 export function renderLayers(
   r: Renderers,
@@ -100,6 +102,7 @@ export function renderLayers(
   tableRetained?: TableLayerRenderer,
   beforeEntry?: (layerId: string) => void,
   drawings: readonly DrawnTentative[] = [],
+  pointSprites?: PointSpriteSheets,
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets
@@ -213,6 +216,7 @@ export function renderLayers(
             customRenderers,
             customRendererContext: layerContext,
             companions,
+            pointSprites,
             getVisibleIds,
             restoreBlendState,
           },
@@ -230,6 +234,7 @@ export function renderLayers(
           customRenderers,
           customRendererContext: layerContext,
           companions,
+          pointSprites,
           getVisibleIds,
           restoreBlendState,
         },

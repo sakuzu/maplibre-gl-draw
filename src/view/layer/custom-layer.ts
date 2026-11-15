@@ -963,6 +963,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       drape,
       customRenderers,
       featureCompanions,
+      pointSprites,
       datasets,
       storeRetainedCache: engine.storeRetainedCache,
       // The rows of the document shown in place of the document, by a drawing of their own

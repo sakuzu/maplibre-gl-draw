@@ -398,7 +398,9 @@ float spriteDistanceScale(float distanceRatio) {
     return u_sprite_scale_stops[u_sprite_scale_count - 1].y;
 }
 
-void drawSprite(int style) {
+// A sprite; \`angleSteps\` is the rotation of its row (pointAngleSteps), which turns a picture of a
+// sheet that says so (the w of its style) as it turns a marker
+void drawSprite(int style, int angleSteps) {
     vec2 offset = rowsCoord(a_head.x);
     emitShadeOffset(offset);
     float elevation = rowsAnchorElevation(a_head.x, offset);
@@ -434,6 +436,13 @@ void drawSprite(int style) {
             pixelOffset.x * cosA - pixelOffset.y * sinA,
             pixelOffset.x * sinA + pixelOffset.y * cosA
         );
+    } else if (shape.w > 0.5 && angleSteps > 0) {
+        // A picture that turns keeps its direction on the map as a marker does: counterclockwise
+        // by the rotation of its row and the bearing (and the angle of a drag that turns its row).
+        // The marker turns the place it reads its shape at the other way, on pixels with y up;
+        // on these pixels, with y down, the corner turns by the same call
+        float degrees = pointAngleDegrees(angleSteps) + u_bearing + rowStateRotation(g_row_state);
+        pixelOffset = pointTurnOffset(pixelOffset, degrees);
     }
     vec2 offsetNdc = pixelOffset * u_screen_ratio * u_pixel_to_clip * vec2(1.0, -1.0);
     gl_Position = vec4(centerNdc.xy + offsetNdc, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
@@ -1024,7 +1033,7 @@ void main() {
     } else if (kind == ${ROWS_KIND.fill}) {
         drawFill(style);
     } else {
-        drawSprite(style);
+        drawSprite(style, int(rowStyle.w + 0.5));
     }
 }`;
 }
