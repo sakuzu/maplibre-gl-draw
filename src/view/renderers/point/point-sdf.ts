@@ -21,6 +21,8 @@
  * with a tip pointing up. +y is up on the screen for both renderers.
  */
 
+import { rotationTurnedFrom } from '../../../geometry/enu-transforms.js';
+
 /** The shapes the built-in renderers draw */
 export type SdfPointShape = 'circle' | 'square' | 'triangle' | 'star';
 
@@ -163,15 +165,25 @@ const POINT_ANGLE_STEPS_PER_DEGREE = POINT_ANGLE_STEPS / 360;
 const POINT_SHAPE_BITS = 8;
 
 /**
- * The rotation of a marker as it is drawn: 0 for a marker upright on screen (no rotation, or one
- * that is not a finite number), else 1 plus the rotation in steps of 0.01 degree within one turn
- * (1 to {@link POINT_ANGLE_STEPS})
+ * The rotation of a marker as it is drawn: 0 for a marker upright on screen, else 1 plus the
+ * rotation in steps of 0.01 degree within one turn (1 to {@link POINT_ANGLE_STEPS})
  *
- * @param rotation The rotation in degrees counterclockwise seen from above, 0 with the north up
+ * The key is read as an edit that turns the point reads it (`rotationTurnedFrom`), so the marker
+ * is drawn at the angle the edit writes while a drag turns it and once it is written:
+ *
+ * - no value: upright (the point has no rotation, and an edit does not turn its marker)
+ * - a finite number: that rotation
+ * - a value that is no number (null, a string): a rotation of 0, which an edit turns from
+ * - a number that is not finite (NaN, an infinity): upright, as an edit leaves it as it is
+ *
+ * @param value The value of `maplibre-gl-draw:rotation` as the feature holds it: degrees
+ *   counterclockwise seen from above, 0 with the north up
  * @internal
  */
-export function pointAngleSteps(rotation: number | undefined): number {
-  if (rotation === undefined || !Number.isFinite(rotation)) return 0;
+export function pointAngleSteps(value: unknown): number {
+  if (value === undefined) return 0;
+  const rotation = rotationTurnedFrom(value);
+  if (rotation === undefined) return 0;
   const turn = ((rotation % 360) + 360) % 360;
   return (Math.round(turn * POINT_ANGLE_STEPS_PER_DEGREE) % POINT_ANGLE_STEPS) + 1;
 }

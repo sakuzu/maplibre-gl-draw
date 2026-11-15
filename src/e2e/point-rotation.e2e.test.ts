@@ -17,6 +17,9 @@
  *   the features of the Store on the CPU) against the markers once the sketch is written
  * - the markers once their rotation alone, then their color alone, is written in place against the
  *   markers drawn with those values from the start
+ * - a square turned by 45 degrees drawn whole, its corners beyond the billboard of the upright one
+ * - a rotation that is no number (a string, null) drawn as a rotation of 0, at rest and while a
+ *   sketch turns it, as the turn written gives it 0 plus its angle
  */
 
 import type { Browser, Page } from 'playwright-core';
@@ -57,13 +60,7 @@ interface ScenePoint {
 /** A position at an offset from the center, in degrees */
 const at = (dx: number, dy: number): [number, number] => [CENTER[0] + dx, CENTER[1] + dy];
 
-function point(
-  id: string,
-  x: number,
-  y: number,
-  shape: string,
-  rotation: number | undefined,
-): ScenePoint {
+function point(id: string, x: number, y: number, shape: string, rotation: unknown): ScenePoint {
   return {
     id,
     type: 'Point',
@@ -342,6 +339,16 @@ async function reach(page: Page, key: string): Promise<{ left: number; right: nu
   }, key);
 }
 
+/** The ink of a picture: the sum of the alpha of its pixels, a pixel of full alpha 1 */
+async function ink(page: Page, key: string): Promise<number> {
+  return page.evaluate((key) => {
+    const pixels = (window as unknown as { captured: Record<string, Uint8Array> }).captured[key];
+    let sum = 0;
+    for (let i = 3; i < pixels.length; i += 4) sum += pixels[i] / 255;
+    return sum;
+  }, key);
+}
+
 describe('the markers of the points with a rotation', () => {
   let page: Page;
 
@@ -394,16 +401,18 @@ describe('the markers of the points with a rotation', () => {
       // Half its side is its outer radius, 16 pixels: turned by 45 degrees, its corners reach
       // 16√2 (22.6) pixels to the left and to the right, beyond the 17 of the billboard upright
       const square = (rotation: number) => [point('p', 0, 0, 'square', rotation)];
-      const upright = await drawScene(page, `${name}-0`, square(0), options);
-      const turned = await drawScene(page, `${name}-45`, square(45), options);
+      await drawScene(page, `${name}-0`, square(0), options);
+      await drawScene(page, `${name}-45`, square(45), options);
+      const upright = await ink(page, `${name}-0`);
+      const turned = await ink(page, `${name}-45`);
       const corners = await reach(page, `${name}-45`);
       console.log(
-        `[point rotation] a square turned by 45 degrees: ${turned} pixels drawn against ${upright}, reaching ${JSON.stringify(corners)}`,
+        `[point rotation] a square turned by 45 degrees: ink ${turned.toFixed(1)} against ${upright.toFixed(1)}, reaching ${JSON.stringify(corners)}`,
       );
       expect(corners.left).toBeGreaterThanOrEqual(21);
       expect(corners.right).toBeGreaterThanOrEqual(21);
-      // The same area, but for the band of its edge
-      expect(Math.abs(turned - upright)).toBeLessThanOrEqual(upright * 0.03);
+      // The same area (the corners cut by the billboard upright were an eighth of it)
+      expect(Math.abs(turned - upright)).toBeLessThanOrEqual(upright * 0.02);
     });
   }
 
@@ -436,6 +445,31 @@ describe('the markers of the points with a rotation', () => {
       // The sketch turned them: the markers before it are drawn elsewhere and at other angles
       await drawScene(page, `${name}-before`, MARKERS, { ...options, turn: undefined });
       expect(await differing(page, `${name}-before`, name, 8)).toBeGreaterThan(drawn * 0.05);
+    });
+  }
+
+  for (const way of ['one-draw', 'by-kind', 'store'] as const) {
+    it(`reads a rotation that is no number as 0, at rest and while a sketch turns it, drawn ${way}`, {
+      timeout: browserTimeout(90_000),
+    }, async () => {
+      const name = `no-number-${way}`;
+      const options: SceneOptions = {
+        form: way === 'store' ? 'store' : 'made',
+        byKind: way === 'by-kind',
+        bearing: 25,
+      };
+      // A turn writes 0 plus its angle for a rotation that is no number
+      const odd = [
+        point('string', -0.003, 0, 'triangle', '30'),
+        point('null', 0.003, 0, 'square', null),
+      ];
+      const zero = odd.map((p) => ({ ...p, properties: { [ROTATION]: 0 } }));
+      const drawn = await drawScene(page, `${name}-rest`, odd, options);
+      await drawScene(page, `${name}-zero`, zero, options);
+      await expectSame(page, `${name}-rest`, `${name}-zero`, drawn);
+      const turned = await drawScene(page, name, odd, { ...options, turn: 50 });
+      await expectSame(page, name, `${name}-written`, turned);
+      expect(await differing(page, `${name}-rest`, name, 8)).toBeGreaterThan(drawn * 0.05);
     });
   }
 

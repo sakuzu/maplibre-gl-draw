@@ -122,7 +122,8 @@ export const ROTATION_KEY = drawPropertyKey('rotation');
  * @internal
  */
 export function rowAngleSteps(group: RowGroup, row: number): number {
-  return pointAngleSteps(rowNumber(group, row, ROTATION_KEY));
+  // A value that is no number is read only for a row without a number (pointAngleSteps)
+  return pointAngleSteps(rowNumber(group, row, ROTATION_KEY) ?? rowValue(group, row, ROTATION_KEY));
 }
 
 /** The created zoom of a row whose width is fixed on screen (the shader ignores it) */

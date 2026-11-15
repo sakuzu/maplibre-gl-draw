@@ -5,7 +5,18 @@
  * Tests the distance functions of the built-in point shapes and the outlines sampled from them.
  */
 
+import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
+import {
+  applyEnuEdit,
+  type EnuEdit,
+  rotationTurnedFrom,
+} from '../../../geometry/enu-transforms.js';
+import {
+  roleFieldsOf,
+  transformRolesOf,
+  transformValuesOf,
+} from '../../../store/transform-roles.js';
 import { POINT_AA_PADDING_PX } from './point-instance.js';
 import {
   POINT_ANGLE_STEPS,
@@ -120,6 +131,11 @@ describe('the rotation of a marker (pointAngleSteps, pointMarkerCode)', () => {
     expect(pointAngleSteps(Number.POSITIVE_INFINITY)).toBe(0);
   });
 
+  it('reads a value that is no number as a rotation of 0, and a number not finite as none', () => {
+    for (const value of ['30', null, true, { degrees: 30 }]) expect(pointAngleSteps(value)).toBe(1);
+    expect(pointAngleSteps(Number.NEGATIVE_INFINITY)).toBe(0);
+  });
+
   it('tells a rotation of 0 from none', () => {
     expect(pointAngleSteps(0)).toBe(1);
     expect(pointAngleSteps(-0)).toBe(1);
@@ -205,5 +221,63 @@ describe('the billboard of a turned marker (pointTurnReach)', () => {
 
   it('is in the GLSL with the same value', () => {
     expect(POINT_TURN_GLSL).toContain(`? ${Math.SQRT2} : 1.0`);
+  });
+});
+
+describe('the rotation of a marker as a turn of its point writes it', () => {
+  const KEY = 'maplibre-gl-draw:rotation';
+  const TURN: EnuEdit = { kind: 'rotate', center: [139.7, 35.6], angleDegrees: 50 };
+  const GEOMETRY: Geometry = { type: 'Point', coordinates: [139.71, 35.6] };
+  const VALUES: unknown[] = [
+    undefined,
+    30,
+    -0,
+    359.5,
+    '30',
+    null,
+    true,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ];
+
+  /** The roles of a point holding a value of its rotation (none for undefined) */
+  const rolesOf = (type: string, value: unknown) =>
+    transformRolesOf(type, (key) => key === KEY && value !== undefined);
+
+  /**
+   * The value of the rotation of a point once a turn is written, as the library writes it (the
+   * value it held when the write leaves it)
+   */
+  function written(type: string, value: unknown): unknown {
+    const read = (key: string): unknown => (key === KEY ? value : undefined);
+    const roles = rolesOf(type, value);
+    const before = transformValuesOf(GEOMETRY, roles, read);
+    const fields = new Map(roleFieldsOf(roles, before, applyEnuEdit(TURN, before)));
+    return fields.has(KEY) ? fields.get(KEY) : value;
+  }
+
+  it('draws a marker turned by a drag at the angle written once it is let go, whatever the value', () => {
+    for (const type of ['Point', 'MultiPoint']) {
+      for (const value of VALUES) {
+        const held = pointAngleSteps(value);
+        // The GPU turns a marker with a rotation by the angle of the drag
+        const during = held > 0 ? pointAngleSteps((rotationTurnedFrom(value) as number) + 50) : 0;
+        expect(pointAngleSteps(written(type, value)), `${type} ${String(value)}`).toBe(during);
+      }
+    }
+  });
+
+  it('turns by a drag only the markers the drag turns by their values (the points with the role of a rotation)', () => {
+    // The core draws its markers for the built-in types Point and MultiPoint only (a custom type
+    // is drawn by its extension, and an override of Point cannot declare fields): their roles are
+    // the built-in ones, so a marker the GPU turns is one the CPU turns by its values
+    for (const type of ['Point', 'MultiPoint']) {
+      for (const value of VALUES) {
+        if (pointAngleSteps(value) === 0) continue;
+        expect(rolesOf(type, value).angleDegrees, `${type} ${String(value)}`).toBe(KEY);
+      }
+      expect(rolesOf(type, undefined).angleDegrees).toBeUndefined();
+    }
   });
 });

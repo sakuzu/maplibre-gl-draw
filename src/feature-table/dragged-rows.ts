@@ -13,7 +13,12 @@
 
 import type { Position } from 'geojson';
 import type { FeatureTables, RowRef } from '../api/tables.js';
-import { type EnuEdit, moveEnuPosition, withinTurn } from '../geometry/enu-transforms.js';
+import {
+  type EnuEdit,
+  moveEnuPosition,
+  rotationTurnedFrom,
+  withinTurn,
+} from '../geometry/enu-transforms.js';
 import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import {
@@ -202,8 +207,9 @@ export function draggedFeatureOf(
   const values: Record<string, number> = {};
   const rotation = dragged.rotation(handle);
   if (rotation !== 0) {
-    const had = numberOf(feature, DRAW_PROPERTY_KEYS.rotation) ?? 0;
-    values[DRAW_PROPERTY_KEYS.rotation] = withinTurn(had + rotation);
+    // Read as the write reads it: it leaves a number that is not finite as it is
+    const had = rotationTurnedFrom(feature.properties?.[DRAW_PROPERTY_KEYS.rotation]);
+    if (had !== undefined) values[DRAW_PROPERTY_KEYS.rotation] = withinTurn(had + rotation);
   }
   const scale = dragged.scale(handle);
   if (scale !== 1) {

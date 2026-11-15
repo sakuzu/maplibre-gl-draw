@@ -10,7 +10,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { generateCirclePolygon } from '../../shared/math/index.js';
-import { getDrawProperty } from '../../shared/properties.js';
+import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
@@ -440,7 +440,7 @@ export class BatchManager {
       // A marker with a rotation turns with the map.
       batch.points.push({
         ...toPointInstanceData(coord, style),
-        rotation: getDrawProperty(feature, 'rotation'),
+        rotation: feature.properties?.[DRAW_PROPERTY_KEYS.rotation],
         ghost: anchorGhostOpacity(this.terrain, coord[0], coord[1]),
       });
       this.currentPointBatchKey = batchKey;

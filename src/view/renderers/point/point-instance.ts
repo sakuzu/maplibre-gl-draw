@@ -113,11 +113,11 @@ export interface PointInstanceDataFull {
    */
   shape?: PointShape;
   /**
-   * The rotation of the marker in degrees counterclockwise seen from above (the value of
-   * `maplibre-gl-draw:rotation`): the marker keeps this direction on the map and turns with it.
-   * Omitted, the marker stays upright on screen
+   * The value of `maplibre-gl-draw:rotation` of the feature as it holds it, in degrees
+   * counterclockwise seen from above: a marker with a rotation keeps this direction on the map
+   * and turns with it (read by `pointAngleSteps`). Omitted, the marker stays upright on screen
    */
-  rotation?: number;
+  rotation?: unknown;
   /**
    * Opacity factor used when the point is occluded by the terrain (omitted or 1 is normal
    * display)

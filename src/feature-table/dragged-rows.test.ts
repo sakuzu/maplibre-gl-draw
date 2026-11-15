@@ -17,7 +17,7 @@ import { TableContractStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
 import { referenceRotate, referenceScale } from '../test-support/enu-reference.js';
 import { internalsOf } from '../test-utils.js';
-import { draggedRowsOf } from './dragged-rows.js';
+import { draggedFeatureOf, draggedRowsOf } from './dragged-rows.js';
 import { BULK_MOVE_SET } from './feature-row-states.js';
 import type { TableSelection } from './selection.js';
 
@@ -94,6 +94,28 @@ describe('the rows dragged', () => {
     expect(dragged?.rotation(handleOf('b'))).toBe(0);
     expect(dragged?.rotation(handleOf('c'))).toBe(0);
     expect(dragged?.scale(handleOf('b'))).toBe(1);
+  });
+
+  it('give a feature turned by its values the rotation the write gives it, read as the write reads it', () => {
+    const { tables, handleOf } = setup();
+    const states = internalsOf(tables).states;
+    states.setMoving(Int32Array.of(handleOf('a')), BULK_MOVE_SET);
+    states.setByValues(Int32Array.of(handleOf('a')), true);
+    states.setTransform(BULK_MOVE_SET, { kind: 'rotate', center: [139, 35], angleDegrees: 15 });
+    const dragged = draggedRowsOf(tables);
+    if (!dragged) throw new Error('no row dragged');
+    const rotationOf = (value: unknown): unknown =>
+      draggedFeatureOf(
+        { ...point('a', 139), properties: { 'maplibre-gl-draw:rotation': value } },
+        tables,
+        dragged,
+      ).properties['maplibre-gl-draw:rotation'];
+    expect(rotationOf(350)).toBe(5);
+    // A value that is no number is turned from 0; a number that is not finite is left
+    expect(rotationOf('30')).toBe(15);
+    expect(rotationOf(null)).toBe(15);
+    expect(rotationOf(Number.NaN)).toBeNaN();
+    expect(rotationOf(Number.POSITIVE_INFINITY)).toBe(Number.POSITIVE_INFINITY);
   });
 
   it('keep the shape of a Circle and of a row scaled by its values when they are resized, and give their factor', () => {

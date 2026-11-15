@@ -171,6 +171,21 @@ describe('BatchManager Point batches', () => {
     expect(calls[0].points.map((p) => p.rotation)).toEqual([undefined, 30]);
   });
 
+  it('gives the markers the value of the rotation as the feature holds it, and none to a type it does not know', () => {
+    const { manager, calls } = createManager();
+    const at = (id: string, x: number, rotation: unknown): Feature => ({
+      ...makePoint(id, [x, x]),
+      properties: { 'maplibre-gl-draw:rotation': rotation },
+    });
+    manager.processFeature(at('a', 0, '30'), false);
+    manager.processFeature(at('b', 1, null), false);
+    // A feature of a custom type has no marker of the core (its extension draws it)
+    manager.processFeature({ ...at('c', 2, 30), type: 'board' }, false);
+    manager.endFrame();
+
+    expect(calls[0].points.map((p) => p.rotation)).toEqual(['30', null]);
+  });
+
   it('folds the opacity into the color alpha and carries over the stroke attributes', () => {
     const { manager, calls } = createManager();
 
