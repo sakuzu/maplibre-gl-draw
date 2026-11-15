@@ -113,9 +113,7 @@ describe('the document of a storage, read by the rules', () => {
       layerId: 'a',
       groupId: 'g',
     });
-    applyOperations(document, [
-      { type: 'create', kind: 'group', id: 'g', record: deleted },
-    ]);
+    applyOperations(document, [{ type: 'create', kind: 'group', id: 'g', record: deleted }]);
     expect(readOf(document).features.f1).toEqual(['a', 'g']);
   });
 

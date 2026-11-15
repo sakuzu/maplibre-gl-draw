@@ -201,6 +201,11 @@ export class DrawStore implements Store {
   #remoteDepth = 0;
   /** How deep the transactions that take out commits the storage refused are (see `transact`) */
   #refusedDepth = 0;
+  /**
+   * The IDs of the features deleted in the take-out under way (see `transact`): what this client
+   * holds of them goes at its end, for those it leaves deleted only
+   */
+  #deletedInTakeOut: string[] = [];
   /** Whether features are given the IDs a storage gave them (see `reassign`): no gate stops it */
   #reassigning = false;
   readonly selectionIdsLimit: number;
@@ -332,8 +337,11 @@ export class DrawStore implements Store {
   deleteFeature(id: string): boolean {
     return this.#write(() => {
       const deleted = this.#contract.deleteFeature(id);
-      // At once, so that the rest of a transaction already sees the selection without it
-      if (deleted) this.#forget(id);
+      if (!deleted) return deleted;
+      // At once, so that the rest of a transaction already sees the selection without it; in a
+      // take-out, at its end (see `transact`)
+      if (this.#refusedDepth > 0) this.#deletedInTakeOut.push(id);
+      else this.#forget(id);
       return deleted;
     });
   }
@@ -905,12 +913,21 @@ export class DrawStore implements Store {
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     this.#revision++;
     // The take-out of the commits the storage refused settles the document as the storage has
-    // it: it is no write of the user, and read-only does not stop it
+    // it: it is no write of the user, and read-only does not stop it. It takes commits back and
+    // writes them again: a feature it deletes and makes again stays selected, edited and hidden
+    // here, and only one it leaves deleted goes from them, at its end
     if (source === 'refused') {
+      const outermost = this.#refusedDepth === 0;
       this.#refusedDepth++;
       try {
         if (this.#remoteDepth === 0) this.#queue.finish();
-        return this.#bus.transact(() => this.#contract.transact(fn, source), source);
+        return this.#bus.transact(() => {
+          try {
+            return this.#contract.transact(fn, source);
+          } finally {
+            if (outermost) this.#forgetTakenOut();
+          }
+        }, source);
       } finally {
         this.#refusedDepth--;
       }
@@ -1466,6 +1483,19 @@ export class DrawStore implements Store {
       contract.setLocallyHidden(id, false);
       this.#bus.merge({ uiStateChanged: true });
     }
+  }
+
+  /**
+   * Removes from the state of this client the features a take-out deleted and left deleted; the
+   * rows kept for the selection follow those made again
+   */
+  #forgetTakenOut(): void {
+    const ids = this.#deletedInTakeOut;
+    if (ids.length === 0) return;
+    this.#deletedInTakeOut = [];
+    this.#forgetAll(ids);
+    const selected = new Set(this.#contract.getSelection().ids);
+    if (ids.some((id) => selected.has(id))) this.#keepSelectedRows();
   }
 
   /**

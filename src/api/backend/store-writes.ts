@@ -142,20 +142,23 @@ class StoreWrites {
       case 'set':
         this.#set(operation);
         return;
-      case 'place':
+      case 'place': {
+        const parentId = operation.parentId;
+        if (operation.kind === 'feature') {
+          if (parentId !== null) this.#placeFeatures(operation.ids, parentId, operation.keys);
+          return;
+        }
         operation.ids.forEach((id, i) => {
           const key = operation.keys[i];
-          if (key === undefined || operation.parentId === null) {
-            if (operation.kind === 'layer' && key !== undefined && this.store.getLayer(id)) {
-              this.#placeLayer(id, key);
-            }
-            return;
+          if (key === undefined) return;
+          if (operation.kind === 'layer') {
+            if (parentId === null && this.store.getLayer(id)) this.#placeLayer(id, key);
+          } else if (parentId !== null) {
+            this.#placeGroup(id, parentId, key);
           }
-          if (operation.kind === 'layer') return;
-          if (operation.kind === 'group') this.#placeGroup(id, operation.parentId, key);
-          else this.#placeFeature(id, operation.parentId, key);
         });
         return;
+      }
       case 'delete':
         for (const id of operation.ids) this.#delete(operation.kind, id);
         return;
@@ -333,10 +336,43 @@ class StoreWrites {
     return () => {
       if (!record || this.kept.groups.has(groupId)) return;
       const group = store.getGroup(groupId);
-      if (group && this.#membersOf(groupId).length > 0) return;
+      if (group && this.#hasMember(groupId)) return;
       if (group) store.deleteGroup(groupId);
       this.kept.groups.set(groupId, record);
     };
+  }
+
+  /** What keeps the groups features leave once the Store no longer shows them (see `#leaving`) */
+  #leavingAll(ids: readonly string[]): () => void {
+    const store = this.store;
+    const left = new Map<string, GroupRecord | undefined>();
+    for (const id of ids) {
+      const groupId = store.getFeature(id)?.groupId;
+      if (groupId !== undefined && !left.has(groupId)) {
+        left.set(groupId, this.values.recordOf('group', groupId));
+      }
+    }
+    if (left.size === 0) return () => {};
+    return () => {
+      for (const [groupId, record] of left) {
+        if (!record || this.kept.groups.has(groupId)) continue;
+        const group = store.getGroup(groupId);
+        if (group && this.#hasMember(groupId)) continue;
+        if (group) store.deleteGroup(groupId);
+        this.kept.groups.set(groupId, record);
+      }
+    };
+  }
+
+  /** Whether a group the Store holds has a member */
+  #hasMember(groupId: string): boolean {
+    const group = this.store.getGroup(groupId);
+    if (!group) return false;
+    if (group.kind !== 'table') return group.featureIds.length > 0;
+    const tables = this.store.tables;
+    const view = tables?.get(group.layerId);
+    const ref = tables?.getGroupRef(groupId);
+    return !!view && ref !== undefined && view.countGroupMembers(ref) > 0;
   }
 
   /**
@@ -393,22 +429,61 @@ class StoreWrites {
     }
   }
 
-  #placeFeature(id: string, parentId: string, key: string): void {
+  /**
+   * Where a parent puts what goes into it, when it is live: a layer the Store holds, or a group
+   * (shown or kept) whose layer the Store holds. Null for any other (a move under it is skipped)
+   */
+  #liveParentOf(parentId: string): PlacementKeys | null {
     const store = this.store;
-    let keys: PlacementKeys;
-    if (store.getLayer(parentId)) keys = { layerId: parentId, groupId: undefined };
-    else {
-      const group = this.#groupOf(parentId);
-      if (!group) return;
-      keys = { layerId: group.layerId, groupId: parentId };
-    }
-    if (store.getFeature(id)) {
+    if (store.getLayer(parentId)) return { layerId: parentId, groupId: undefined };
+    const group = this.#groupOf(parentId);
+    return group && store.getLayer(group.layerId)
+      ? { layerId: group.layerId, groupId: parentId }
+      : null;
+  }
+
+  /**
+   * Puts features under a parent at their keys, as the storage does: a feature that is not live
+   * (kept, its layer not there) and a parent that is not live are skipped. The features the Store
+   * shows are put there in one write (the rows in one write of their places, the items of objects
+   * a run between two items there at a time), the others one at a time
+   */
+  #placeFeatures(ids: readonly string[], parentId: string, keys: readonly string[]): void {
+    const store = this.store;
+    const at = this.#liveParentOf(parentId);
+    if (!at) return;
+    const parent = at.groupId ?? at.layerId;
+    const moving: string[] = [];
+    const movingKeys: string[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      const key = keys[i];
+      // What the Store does not show is not live, or not there
+      const stored = key === undefined ? undefined : store.getFeature(id);
+      if (!stored) continue;
       this.kept.placements.delete(id);
-      this.#settle(id, keys, key);
-      return;
+      if (at.groupId !== undefined && !store.getGroup(at.groupId)) {
+        // The group comes with its first member
+        this.#settle(id, at, key);
+        continue;
+      }
+      const place = this.values.placeOf('feature', id);
+      if (
+        stored.layerId === at.layerId &&
+        stored.groupId === at.groupId &&
+        place?.parentId === parent &&
+        place.key === key
+      ) {
+        continue;
+      }
+      moving.push(id);
+      movingKeys.push(key);
     }
-    const record = this.kept.features.get(id);
-    if (record) this.#settle(id, keys, key, record);
+    if (moving.length === 0) return;
+    const settle = this.#leavingAll(moving);
+    if (this.#rows) this.#writeRowPlaces(moving, parent, movingKeys);
+    else this.#putObjects(moving, at.layerId, at.groupId, movingKeys);
+    settle();
   }
 
   #set(operation: Extract<ValueOperation, { type: 'set' }>): void {
@@ -514,14 +589,20 @@ class StoreWrites {
     }
   }
 
+  /**
+   * Puts a group under a parent at its key, as the storage does: a group that is not live (its
+   * layer is not there) and a parent that is not live are skipped
+   */
   #placeGroup(id: string, parentId: string, key: string): void {
     const store = this.store;
-    const layerId = store.getLayer(parentId) ? parentId : this.#groupOf(parentId)?.layerId;
+    const layerId = this.#liveParentOf(parentId)?.layerId;
     if (layerId === undefined) return;
     const kept = this.kept.groups.get(id);
     if (kept) {
+      // A group kept with no member is live when its layer is there
+      if (!store.getLayer(kept.layerId)) return;
       this.kept.groups.set(id, { ...kept, layerId, key });
-      if (store.getLayer(layerId)) this.#settleMembersOf(id);
+      this.#settleMembersOf(id);
       return;
     }
     const group = store.getGroup(id);
@@ -535,20 +616,6 @@ class StoreWrites {
         this.kept.placements.get(member) ?? { layerId: from, groupId: id },
       ]),
     );
-    if (!store.getLayer(layerId)) {
-      // Kept with its members until its layer is there
-      const record = this.values.recordOf('group', id);
-      for (const member of members) {
-        const whole = this.#recordOf(member);
-        const memberKeys = keys.get(member) as PlacementKeys;
-        if (whole) this.kept.features.set(member, withPlacement(whole, memberKeys));
-        this.kept.placements.delete(member);
-      }
-      for (const member of members) store.deleteFeature(member);
-      if (store.getGroup(id)) store.deleteGroup(id);
-      if (record) this.kept.groups.set(id, { ...record, layerId, key });
-      return;
-    }
     if (this.#rows) this.#writeGroupPlace(id, layerId, key);
     else this.#putObject(id, layerId, undefined, key);
     if (layerId === from) return;
@@ -599,6 +666,72 @@ class StoreWrites {
       ...(groupId !== undefined && { groupId }),
       below: below?.id ?? null,
     });
+  }
+
+  /**
+   * Puts items of a layer of objects where their keys say among the items of their parent, a run
+   * of those that go between the same two items there in one move
+   */
+  #putObjects(
+    ids: readonly string[],
+    layerId: string,
+    groupId: string | undefined,
+    keys: readonly string[],
+  ): void {
+    if (ids.length === 1) {
+      this.#putObject(ids[0], layerId, groupId, keys[0]);
+      return;
+    }
+    const store = this.store;
+    const parentId = groupId ?? layerId;
+    const moving = new Set(ids);
+    // The groups the items leave empty are not among the items there: they are deleted with the
+    // move
+    const leaving = new Map<string, number>();
+    for (const id of ids) {
+      const from = store.getFeature(id)?.groupId;
+      if (from !== undefined) leaving.set(from, (leaving.get(from) ?? 0) + 1);
+    }
+    const there: { id: string; key: string }[] = [];
+    for (const entry of this.values.keysUnder(parentId)) {
+      if (moving.has(entry.id)) continue;
+      const group = leaving.has(entry.id) ? store.getGroup(entry.id) : undefined;
+      if (
+        group &&
+        group.kind !== 'table' &&
+        group.featureIds.length <= (leaving.get(entry.id) ?? 0)
+      ) {
+        continue;
+      }
+      there.push(entry);
+    }
+    there.sort(compareItems);
+    const items = ids.map((id, i) => ({ id, key: keys[i] }));
+    items.sort(compareItems);
+    if (this.keepKeys) for (const item of items) this.values.keepPlace(item.id, parentId, item.key);
+    // The runs, each above the item there of the greatest key below it
+    let k = 0;
+    let run: string[] = [];
+    let below: string | null = null;
+    const flush = (): void => {
+      if (run.length === 0) return;
+      store.moveItems(run, {
+        layerId,
+        ...(groupId !== undefined && { groupId }),
+        below,
+      });
+      run = [];
+    };
+    for (const item of items) {
+      let next: string | null = below;
+      while (k < there.length && compareItems(there[k], item) < 0) next = there[k++].id;
+      if (next !== below) {
+        flush();
+        below = next;
+      }
+      run.push(item.id);
+    }
+    flush();
   }
 
   /** Writes the parent and the key of rows */

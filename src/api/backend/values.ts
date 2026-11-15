@@ -258,8 +258,12 @@ export function createStoredDocument(): StoredDocument {
  *
  * - `create` makes a record when there is none of its ID (one there is left as it is, and its ID
  *   is returned as skipped)
- * - `set` and `place` skip an ID there is no record of, and `place` an ID whose parent there is
- *   none of
+ * - `set` and `place` skip an ID there is no record of. A `place` also skips what is not live
+ *   and a parent that is not live: a feature whose layer is not there (the layer of its group,
+ *   when its group is there), a group whose layer is not there, or a parent that is none of a
+ *   layer and a group whose layer is there. What is not live stays where it was, and comes back
+ *   there with its layer; a move never brings it back
+ * - A write (`set`) of what is not live is kept, and shown with it when it comes back
  * - `delete` does not mind an ID there is no record of. It removes the records named only: the
  *   commit that deletes a layer or a group names what it held as well
  *
@@ -456,6 +460,8 @@ function place(
   skip: (id: string) => void,
 ): void {
   const { ids, keys, parentId } = operation;
+  // A move under a parent that is not live is skipped, as a move of what is not live
+  const parent = operation.kind === 'layer' ? null : liveParentOf(document, parentId);
   for (let i = 0; i < ids.length; i++) {
     const id = ids[i];
     const key = keys[i];
@@ -472,15 +478,13 @@ function place(
       }
       case 'group': {
         const record = document.groups.get(id);
-        const parent = parentOf(document, parentId);
-        if (!record || !parent) skip(id);
+        if (!record || !parent || !document.layers.has(record.layerId)) skip(id);
         else document.groups.set(id, { ...record, ...parent, key });
         break;
       }
       case 'feature': {
         const record = document.features.get(id);
-        const parent = parentOf(document, parentId);
-        if (!record || !parent) {
+        if (!record || !parent || !isLiveFeature(document, record)) {
           skip(id);
           break;
         }
@@ -495,13 +499,27 @@ function place(
   }
 }
 
-/** The layer and the group of a parent: a layer, or a group and its layer */
-function parentOf(
+/**
+ * The layer and the group of a parent that is live: a layer, or a group whose layer is there.
+ * Null for any other
+ */
+function liveParentOf(
   document: StoredDocument,
   parentId: string | null,
 ): { readonly layerId: string; readonly parentId: string | null } | null {
   if (parentId === null) return null;
   if (document.layers.has(parentId)) return { layerId: parentId, parentId: null };
   const group = document.groups.get(parentId);
-  return group ? { layerId: group.layerId, parentId } : null;
+  return group && document.layers.has(group.layerId) ? { layerId: group.layerId, parentId } : null;
+}
+
+/**
+ * Whether a feature is live: the layer it is in is there (the layer of its group when its group is
+ * there, else its own layer)
+ */
+function isLiveFeature(document: StoredDocument, record: FeatureRecord): boolean {
+  const group = record.properties[GROUP_KEY];
+  const there = typeof group === 'string' ? document.groups.get(group) : undefined;
+  const layer = there ? there.layerId : record.properties[LAYER_KEY];
+  return typeof layer === 'string' && document.layers.has(layer);
 }
