@@ -66,23 +66,6 @@ function documentOf(document: StoredDocument): DrawDocument {
   };
 }
 
-/**
- * A document with the items of its layers and groups sorted by their IDs: the order of the items a
- * document read without keys gets here is not the storage's (see `opened`)
- */
-function unordered<T extends { layers: { items: string[] }[]; groups: { featureIds: string[] }[] }>(
-  document: T,
-): T {
-  return {
-    ...document,
-    layers: document.layers.map((layer) => ({ ...layer, items: [...layer.items].sort() })),
-    groups: document.groups.map((group) => ({
-      ...group,
-      featureIds: [...group.featureIds].sort(),
-    })),
-  };
-}
-
 /** An outbox in memory */
 function memoryOutbox(): Outbox & {
   readonly batches: Map<string, Batch>;
@@ -124,6 +107,11 @@ function storage(
     readonly connect?: boolean;
     /** What the storage answers a batch it accepted, given the answer of the reference */
     readonly answer?: (batch: ValueBatch, answer: Answer) => Answer;
+    /**
+     * Whether the reference storage itself is connected too: it gives the keys of its order
+     * right after it is connected, and the result of each commit it applies
+     */
+    readonly reference?: boolean;
   } = {},
 ) {
   const reference = createReferenceBackend();
@@ -137,17 +125,19 @@ function storage(
     maxBatchBytes: 700,
     ...(options.stages && { stages: options.stages }),
     ...(options.outbox && { outbox: options.outbox }),
-    async load() {
+    async load(task) {
       counts.loads++;
-      return documentOf(reference.document);
+      return options.reference ? reference.load(task) : documentOf(reference.document);
     },
     ...(options.connect !== false && {
-      async connect(given: BackendContext) {
+      async connect(given: BackendContext, task) {
         counts.connects++;
         context = given;
+        const cut = options.reference ? await reference.connect?.(given, task) : undefined;
         return () => {
           counts.cuts++;
           context = null;
+          cut?.();
         };
       },
     }),
@@ -226,8 +216,8 @@ function seeded(options: Parameters<typeof storage>[0] = {}) {
 
 /**
  * An instance opened from a storage holding a layer `a`, then given its three points from
- * elsewhere: the keys of their order are the storage's (a document read from a string or GeoJSON
- * carries none, so the keys here are made from the order)
+ * elsewhere: the keys of their order are the storage's (a document read without keys has the keys
+ * here made from its order, unless the storage gives its keys once it is connected)
  */
 async function opened(
   makeStore: () => import('../../store/store.js').Store,
@@ -502,6 +492,103 @@ describe('what the storage writes', () => {
   }
 
   for (const [kind, makeStore] of STORE_KINDS) {
+    it(`opens from the reference storage with its layers, groups and order, its keys given once it is connected (${kind})`, async () => {
+      const s = storage({ reference: true });
+      const member = (id: string, key: string): ValueOperation => ({
+        type: 'create',
+        kind: 'feature',
+        id,
+        record: {
+          geometry: { type: 'Point', coordinates: [3, 4] },
+          properties: { [LAYER]: 'a', 'maplibre-gl-draw:groupId': 'g' },
+          key,
+        },
+      });
+      applyOperations(s.document, [
+        layerOperation('b', 'Y'),
+        layerOperation('a', 'Z'),
+        {
+          type: 'set',
+          kind: 'layer',
+          ids: ['a'],
+          set: { styleRule: { type: 'single', color: '#ff0000' } },
+        },
+        { type: 'create', kind: 'feature', id: 'f1', record: featureRecord('a', 'Z3') },
+        { type: 'create', kind: 'feature', id: 'f2', record: featureRecord('a', 'Z1') },
+        { type: 'create', kind: 'feature', id: 'f3', record: featureRecord('a', 'Z2') },
+        {
+          type: 'create',
+          kind: 'group',
+          id: 'g',
+          record: {
+            name: 'g',
+            layerId: 'a',
+            parentId: null,
+            visible: true,
+            locked: false,
+            key: 'Z25',
+          },
+        },
+        member('m2', 'B'),
+        member('m1', 'A'),
+      ]);
+      const d = make(makeStore, s.backend);
+      await d.open();
+      const stored = () => storedOf(readStoredDocument(s.document).shown);
+      expect(writtenOf(d.document.toJSON())).toEqual(stored());
+      expect(['b', 'a', 'f2', 'g', 'm1'].map((id) => s.context.key(id))).toEqual([
+        'Y',
+        'Z',
+        'Z1',
+        'Z25',
+        'A',
+      ]);
+      // Made elsewhere between f2 and f3, then a layer at the back, then made here at the end
+      await s.push([
+        { type: 'create', kind: 'feature', id: 'f4', record: featureRecord('a', 'Z15') },
+        layerOperation('c', 'X'),
+      ]);
+      await d.write((tx) => tx.features.create(point('x', 'a')));
+      await settled(d);
+      expect(writtenOf(d.document.toJSON())).toEqual(stored());
+      const shown = writtenOf(d.document.toJSON()).layers;
+      expect(shown.map((layer) => layer.id)).toEqual(['c', 'b', 'a']);
+      expect(shown[2].items).toEqual(['f2', 'f4', 'f3', 'g', 'f1', 'x']);
+    });
+
+    it(`settles on the storage when a commit of this client and one from elsewhere write the same key (${kind})`, async () => {
+      const { s, d } = await opened(makeStore, { reference: true });
+      const changes: Change[] = [];
+      d.on('change', (change) => changes.push(change));
+      s.hold();
+      const mine = d.write((tx) => tx.features.update('f1', { properties: { n: 1 } }), {
+        label: 'mine',
+      });
+      await mine;
+      await tasks();
+      // Applied by the storage first (it arrived first)
+      await s.push([{ type: 'set', kind: 'feature', ids: ['f1'], set: { properties: { n: 7 } } }]);
+      expect(n(d, 'f1')).toBe(7);
+      s.release();
+      await mine.save({ until: 'accepted' });
+      await settled(d);
+      // The storage gave the result of the commit of this client, in its order
+      expect([n(d, 'f1'), s.document.features.get('f1')?.properties.n]).toEqual([1, 1]);
+      expect(changes.map((change) => [change.source, change.commit === mine.id])).toEqual([
+        ['local', true],
+        ['remote', false],
+        ['remote', true],
+      ]);
+      // Nothing more was sent, and its step of undo stays
+      expect([...new Set(s.sent.map((batch) => batch.commit))]).toEqual([mine.id]);
+      expect(d.status.value.history.canUndo).toBe(true);
+      await d.undo();
+      await settled(d);
+      expect(writtenOf(d.document.toJSON())).toEqual(
+        storedOf(readStoredDocument(s.document).shown),
+      );
+    });
+
     it(`refuses the writes as read-only while the storage does not let this client write, or it opens (${kind})`, async () => {
       const { s, d } = await opened(makeStore);
       const told: boolean[] = [];
@@ -577,6 +664,7 @@ describe('the document closed', () => {
       const { s, d } = await opened(makeStore, {
         outbox,
         refuse: (batch) => refuse && batch.label === 'no',
+        reference: true,
       });
       expect(d.status.value.saving.stages).toEqual(['local', 'stored', 'accepted']);
       refuse = true;
@@ -613,8 +701,9 @@ describe('the document closed', () => {
       await d.open();
       expect([n(d, 'f1'), n(d, 'g'), n(d, 'f3')]).toEqual([11, 12, 0]);
       await settled(d);
-      expect(unordered(writtenOf(d.document.toJSON()))).toEqual(
-        unordered(storedOf(readStoredDocument(s.document).shown)),
+      // In the order of the storage: its keys given once it is connected
+      expect(writtenOf(d.document.toJSON())).toEqual(
+        storedOf(readStoredDocument(s.document).shown),
       );
       expect(outbox.batches.size).toBe(1);
       // The refusal is given back with what its commit did
