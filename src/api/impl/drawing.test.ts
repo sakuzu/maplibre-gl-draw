@@ -687,6 +687,61 @@ describe('mode.drawing', () => {
     );
   });
 
+  it('keeps the map from zooming on a double click while the pointer is held, in any mode, and lets it pan', () => {
+    const stub = createMapStub();
+    const listeners = new Map<string, ((event: unknown) => void)[]>();
+    const on = stub.map.on.bind(stub.map) as (type: string, fn: (event: unknown) => void) => void;
+    Object.assign(stub.map, {
+      on(type: string, fn: (event: unknown) => void) {
+        listeners.set(type, [...(listeners.get(type) ?? []), fn]);
+        on(type, fn);
+        return stub.map;
+      },
+    });
+    /** Fires an event of the map: whether the map was told not to act on it (its own flag) */
+    const fire = (type: string, [lng, lat]: [number, number]): boolean => {
+      const point = stub.map.project([lng, lat]);
+      const originalEvent = {
+        type,
+        button: 0,
+        buttons: type === 'mouseup' ? 0 : 1,
+        target: stub.map.getCanvas(),
+        clientX: point.x,
+        clientY: point.y,
+        defaultPrevented: false,
+        preventDefault() {
+          originalEvent.defaultPrevented = true;
+        },
+        stopPropagation() {},
+      };
+      let prevented = false;
+      const mapEvent = {
+        point,
+        lngLat: { lng, lat },
+        originalEvent,
+        preventDefault() {
+          prevented = true;
+        },
+      };
+      for (const fn of listeners.get(type) ?? []) fn(mapEvent);
+      return prevented;
+    };
+    draw = createDraw(stub.map);
+    expect(draw.mode.value).toBe('select');
+    // Not held, a double click in select zooms the map
+    expect(fire('dblclick', [0, 0])).toBe(false);
+    draw.mode.drawing.holdPointer(true);
+    expect(fire('dblclick', [0, 0])).toBe(true);
+    // A press still pans the map: the map is not told not to act on it
+    expect(fire('mousedown', [0, 0])).toBe(false);
+    fire('mouseup', [0, 0]);
+    draw.mode.set('drawPolygon');
+    expect(fire('dblclick', [0, 0])).toBe(true);
+    draw.mode.set('select');
+    draw.mode.drawing.holdPointer(false);
+    expect(fire('dblclick', [0, 0])).toBe(false);
+  });
+
   it('throws invalidState once the instance is destroyed, and commit rejects with it', async () => {
     draw = createDraw(createMapStub().map);
     const { mode } = draw;

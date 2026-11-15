@@ -145,10 +145,10 @@ export interface Drawing<P extends object = Properties> {
   /** Drops the shape being drawn; the mode stays the current one. Nothing when there is none */
   cancel(): void;
   /**
-   * Holds the pointer: while held, the clicks, the double clicks and the moves of the pointer do
-   * not reach the mode (nor the `input` receivers of the plugins), and the pan and the zoom of the
-   * map go on, since its presses and drags still pass. The input of `add`, `move` and `commit` is
-   * not held. For a panel where the coordinates of the next vertex are typed: open, a click on the
+   * Holds the pointer: while held, the presses, the clicks, the double clicks, the moves and the
+   * drags of the pointer do not reach the mode (nor the `input` receivers of the plugins). The map
+   * still pans, and the wheel still zooms it; a double click does not zoom it, whatever the mode.
+   * The input of `add`, `move` and `commit` is not held. For a panel where the coordinates of the next vertex are typed: open, a click on the
    * map does not place a vertex. It holds until it is released with `false`, whatever the mode;
    * the mode does not release it.
    *

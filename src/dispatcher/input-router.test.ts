@@ -747,23 +747,33 @@ describe('holding input that originates from the pointer', () => {
     expect(mode.dragEnds).toHaveLength(0);
   });
 
-  it('a double click held in a drawing mode does not zoom the map, and in select it does', () => {
+  it('a double click held does not zoom the map in any mode, and a press goes no further', () => {
     const router = startRouter();
     router.setPointerHold(true);
-    const prevented: string[] = [];
+    const stopped: string[] = [];
+    const original = (type: string) =>
+      ({
+        stopPropagation: () => stopped.push(`${type} stop ${mode.modeName}`),
+        preventDefault: () => stopped.push(`${type} prevent ${mode.modeName}`),
+      }) as unknown as MouseEvent;
     const dblclick = () =>
-      makeMouseEvent('dblclick', TARGET[0], TARGET[1], {
-        originalEvent: {
-          stopPropagation: () => {},
-          preventDefault: () => prevented.push(mode.modeName),
-        } as unknown as MouseEvent,
-      });
+      makeMouseEvent('dblclick', TARGET[0], TARGET[1], { originalEvent: original('dblclick') });
 
+    expect(mode.modeName).toBe('select');
     emit(dblclick());
     Object.assign(mode, { modeName: 'drawPolygon', writesFeatures: true });
     emit(dblclick());
+    // A press is stopped as one a plugin consumes: its default prevented, its propagation stopped
+    // (the map still pans: it reads only its own event)
+    emit(makeMouseEvent('mousedown', TARGET[0], TARGET[1], { originalEvent: original('down') }));
 
-    expect(prevented).toEqual(['drawPolygon']);
+    expect(stopped).toEqual([
+      'dblclick prevent select',
+      'dblclick prevent drawPolygon',
+      'down stop drawPolygon',
+      'down prevent drawPolygon',
+    ]);
+    expect(mode.downs).toHaveLength(0);
   });
 
   it('is not held by default', () => {
