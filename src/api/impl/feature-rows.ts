@@ -14,11 +14,12 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
+import { builtInGeometryKind } from '../../shared/utils/coordinates.js';
 import { ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
 import { DrawError } from '../errors.js';
 import type { Feature, FeatureRow, FeatureType } from '../model.js';
 import type { FeatureTables, LayerTableView, RowRef } from '../tables.js';
-import { readFeatureFields } from './feature-shape.js';
+import { FIELD_KEYS, readFeatureFields } from './feature-shape.js';
 
 /**
  * A row read from a feature: its fields read from the feature itself
@@ -119,7 +120,32 @@ export function createRowReader(
     get bbox() {
       return view().getRowBBox(handle) as [number, number, number, number] | null;
     },
-    property: (key) => view().getRowValue(handle, String(key)) as never,
+    property(key) {
+      // A key of the library that holds a field of the row is read from the field, as the feature
+      // of the row holds it (no key for a value that is the default); every other key from the
+      // values of the row
+      switch (key) {
+        case FIELD_KEYS.layerId:
+          return reader.layerId as never;
+        case FIELD_KEYS.groupId:
+          return (reader.groupId ?? undefined) as never;
+        case FIELD_KEYS.featureType: {
+          const type = reader.featureType;
+          // A built-in type of a GeoJSON geometry is the type of the geometry
+          return (builtInGeometryKind(type) === type ? undefined : type) as never;
+        }
+        case FIELD_KEYS.style: {
+          const style = view().getRowStyle(handle);
+          return (style && Object.keys(style).length > 0 ? style : undefined) as never;
+        }
+        case FIELD_KEYS.visible:
+          return (reader.visible ? undefined : false) as never;
+        case FIELD_KEYS.locked:
+          return (reader.locked ? true : undefined) as never;
+        default:
+          return view().getRowValue(handle, String(key)) as never;
+      }
+    },
     toFeature() {
       const id = tables.getRowId(handle);
       const feature = id === undefined ? undefined : toFeature(handle, view(), id);

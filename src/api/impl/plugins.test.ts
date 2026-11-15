@@ -1765,6 +1765,58 @@ describe('what a plugin is given', () => {
     expect(answers).toEqual([true]);
     expect(getRow).not.toHaveBeenCalled();
   });
+
+  it('reads a key of the library of a row as its feature holds it, without making it', () => {
+    const seen: unknown[] = [];
+    const view = open({
+      rows: true,
+      plugins: [
+        {
+          name: 'acme-keys',
+          setup(ctx) {
+            ctx.addCompanion({
+              name: 'acme-keys',
+              has: (row) => {
+                seen.push([
+                  row.property('maplibre-gl-draw:layerId' as never),
+                  row.property('maplibre-gl-draw:style' as never),
+                  row.property('maplibre-gl-draw:locked' as never),
+                  row.property('maplibre-gl-draw:visible' as never),
+                ]);
+                return row.property('maplibre-gl-draw:locked' as never) === true;
+              },
+            });
+          },
+        },
+      ],
+    });
+    const feature = writesOf(view.draw).features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      layerId: 'l',
+      style: { pointColor: '#ff0000' },
+      locked: true,
+      properties: {},
+    });
+    const provider = view.draw.extensions.companionProviders.get('acme-keys');
+    const table = view.store.tables?.get('l');
+    if (!table || !feature) throw new Error('no rows');
+    const getRow = vi.spyOn(table, 'getRow');
+    seen.length = 0;
+    const answers = [...table.listDrawnRows([-10, -10, 10, 10])].map((row) =>
+      provider?.rows?.has(table, row),
+    );
+    expect(getRow).not.toHaveBeenCalled();
+    expect(answers).toEqual([true]);
+    expect(seen).toEqual([['l', { pointColor: '#ff0000' }, true, undefined]]);
+    const properties = view.draw.features.get(feature.id)?.properties as Record<string, unknown>;
+    expect(seen[0]).toEqual([
+      properties['maplibre-gl-draw:layerId'],
+      properties['maplibre-gl-draw:style'],
+      properties['maplibre-gl-draw:locked'],
+      properties['maplibre-gl-draw:visible'],
+    ]);
+  });
 });
 
 describe('the examples through the input', () => {

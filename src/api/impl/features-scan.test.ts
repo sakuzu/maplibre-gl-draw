@@ -133,6 +133,96 @@ describe('features.scan', () => {
     });
   }
 
+  for (const rows of [false, true]) {
+    const kind = rows ? 'a Store of rows' : 'a Store of objects';
+
+    it(`reads a key of the library as the feature holds it, making no feature (${kind})`, async () => {
+      const { store, tables } = rows
+        ? (() => {
+            const made = createTableStore();
+            return { store: made.store as Store, tables: made.store.tables };
+          })()
+        : { store: new MemoryStore() as Store, tables: undefined };
+      const draw = open(store, rows);
+      const writes = writesOf(draw);
+      writes.features.create({
+        id: 'a',
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [1, 2] },
+        layerId: 'l',
+        style: { pointColor: '#ff0000' },
+        locked: true,
+        properties: { name: 'first', 'maplibre-gl-draw:rotation': 30 },
+      });
+      writes.features.create({
+        id: 'b',
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [2, 1],
+          ],
+        },
+        layerId: 'm',
+        visible: false,
+      });
+      writes.features.create({
+        id: 'c',
+        type: 'Circle',
+        geometry: { type: 'Point', coordinates: [3, 3] },
+        layerId: 'l',
+        properties: { 'maplibre-gl-draw:radiusMeters': 500 },
+      });
+      writes.groups.create({ name: 'g', layerId: 'l', members: ['c'] });
+      const keys = [
+        'maplibre-gl-draw:layerId',
+        'maplibre-gl-draw:groupId',
+        'maplibre-gl-draw:featureType',
+        'maplibre-gl-draw:style',
+        'maplibre-gl-draw:visible',
+        'maplibre-gl-draw:locked',
+        'maplibre-gl-draw:rotation',
+        'maplibre-gl-draw:radiusMeters',
+        'name',
+      ] as const;
+      const readKeys = (row: FeatureRow) =>
+        Object.fromEntries(keys.map((key) => [key, row.property(key as never)]));
+      const made = tables
+        ? vi.spyOn(internalsOf(tables as FeatureTables).featureCache, 'featureOf')
+        : undefined;
+      const getFeature = vi.spyOn(store, 'getFeature');
+      const read: Record<string, Record<string, unknown>> = {};
+      await draw.features.scan((row) => {
+        read[row.id] = readKeys(row);
+      });
+      // A Store of rows reads them where they are
+      if (rows) {
+        expect(made).not.toHaveBeenCalled();
+        expect(getFeature).not.toHaveBeenCalled();
+      }
+      const asFeatures = Object.fromEntries(
+        ['a', 'b', 'c'].map((id) => {
+          const properties = (draw.features.get(id)?.properties ?? {}) as Record<string, unknown>;
+          return [id, Object.fromEntries(keys.map((key) => [key, properties[key]]))];
+        }),
+      );
+      expect(read).toEqual(asFeatures);
+      expect(read.a).toMatchObject({
+        'maplibre-gl-draw:layerId': 'l',
+        'maplibre-gl-draw:style': { pointColor: '#ff0000' },
+        'maplibre-gl-draw:locked': true,
+        'maplibre-gl-draw:rotation': 30,
+      });
+      expect(read.b).toMatchObject({ 'maplibre-gl-draw:visible': false });
+      expect(read.c).toMatchObject({
+        'maplibre-gl-draw:featureType': 'Circle',
+        'maplibre-gl-draw:radiusMeters': 500,
+      });
+      expect(read.c?.['maplibre-gl-draw:groupId']).toEqual(expect.any(String));
+    });
+  }
+
   it('reads 100,000 rows where they are, making no feature', async () => {
     const { store } = createTableStore();
     const draw = open(store, true);
