@@ -108,14 +108,20 @@ const STYLE = STYLE_COLUMN;
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
-/** The key of the rotation in the attributes of a row (the markers of a point row turn by it) */
-const ROTATION_KEY = drawPropertyKey('rotation');
+/**
+ * The key of the rotation in the attributes of a row (the markers of a point row turn by it)
+ *
+ * @internal
+ */
+export const ROTATION_KEY = drawPropertyKey('rotation');
 
 /**
  * The rotation of the markers of a point row as they are drawn (`pointAngleSteps`): 0 for a row
  * without one, whose markers stay upright on screen
+ *
+ * @internal
  */
-function rowAngleSteps(group: RowGroup, row: number): number {
+export function rowAngleSteps(group: RowGroup, row: number): number {
   return pointAngleSteps(rowNumber(group, row, ROTATION_KEY));
 }
 

@@ -181,6 +181,7 @@ import {
   type PolygonRowPlan,
   planPolygonRow,
   pointInstancesOf,
+  ROTATION_KEY,
   ROWS_LAYOUT,
   RowCoordsDraft,
   type RowPackContext,
@@ -190,6 +191,7 @@ import {
   RowsStyles,
   type RowsSurface,
   resolveRowStyle,
+  rowAngleSteps,
   rowCreatedZoom,
   rowSurfaceKey,
   writeLineRow,
@@ -2055,7 +2057,13 @@ export class TableLayerRenderer {
         if (style === held) continue;
         if (style >= 0 && held >= 0 && rowsStyles.layoutOf(style) === rowsStyles.layoutOf(held)) {
           rowsStyles.palette.retain(style);
-          rows.patchRowStyle(gpu, local, style, styleCreatedZoom(group, row, rowsStyles, style));
+          rows.patchRowStyle(
+            gpu,
+            local,
+            style,
+            styleCreatedZoom(group, row, rowsStyles, style),
+            styleAngleSteps(group, row, rowsStyles, style),
+          );
           continue;
         }
         const draft = new RowsDraft(1, row, undefined, rowsStyles.palette);
@@ -2243,6 +2251,9 @@ export class TableLayerRenderer {
     const held = gpu.data.rowStyle[local];
     const styleWritten =
       (write.what & ROW_WRITE_STYLE) !== 0 || this.ruleKeyWritten(cache, write.keys);
+    // The rotation of the markers of a point row, held in the texel of its style
+    const angleWritten =
+      held >= 0 && (rowsStyles.layoutOf(held) & 7) === ROWS_LAYOUT.point && rotationWritten(write);
 
     // The positions only: the row keeps its shape and its style, and is not dashed; on a surface
     // that cuts the rows, a point (the cut of a line or a polygon follows its positions)
@@ -2268,6 +2279,8 @@ export class TableLayerRenderer {
         // The points stand where the hit testing finds them
         this.writeRowHeights(group, gpu, local);
       }
+      // The markers turn by the rotation written with the positions
+      if (angleWritten) this.patchRowAngle(group, row, gpu, local, rowsStyles);
       stats.inPlace++;
       stats.coordsOnly++;
       return true;
@@ -2276,10 +2289,20 @@ export class TableLayerRenderer {
     // The style only: a style of the same layout of instances
     if ((write.what & ROW_WRITE_GEOMETRY) === 0) {
       const style = resolveRowStyle(group, row, context);
-      if (style === held) return true;
+      if (style === held) {
+        // The rotation of the markers alone
+        if (angleWritten) this.patchRowAngle(group, row, gpu, local, rowsStyles);
+        return true;
+      }
       if (style >= 0 && held >= 0 && rowsStyles.layoutOf(style) === rowsStyles.layoutOf(held)) {
         rowsStyles.palette.retain(style);
-        rows.patchRowStyle(gpu, local, style, styleCreatedZoom(group, row, rowsStyles, style));
+        rows.patchRowStyle(
+          gpu,
+          local,
+          style,
+          styleCreatedZoom(group, row, rowsStyles, style),
+          styleAngleSteps(group, row, rowsStyles, style),
+        );
         stats.inPlace++;
         stats.styleOnly++;
         return true;
@@ -2343,10 +2366,38 @@ export class TableLayerRenderer {
     return write.keys === null || companions.readsKeys(write.keys);
   }
 
-  /** Whether a write changes what is drawn of a row (its geometry, its style, its rule color) */
+  /**
+   * Whether a write changes what is drawn of a row (its geometry, its style, its rule color, the
+   * rotation of its markers)
+   */
   private writeIsDrawn(cache: LayerCache, write: PendingWrite): boolean {
     if ((write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STYLE)) !== 0) return true;
-    return this.ruleKeyWritten(cache, write.keys);
+    return this.ruleKeyWritten(cache, write.keys) || rotationWritten(write);
+  }
+
+  /**
+   * Writes the rotation of the markers of a point row drawn in one draw in place: the texel of
+   * its style with the style it holds
+   */
+  private patchRowAngle(
+    group: RowGroup,
+    row: number,
+    gpu: RowsGpuChunk,
+    local: number,
+    rowsStyles: RowsStyles,
+  ): void {
+    const rows = this.renderers?.rows;
+    const held = gpu.data.rowStyle[local];
+    if (!rows || held < 0) return;
+    // The chunk takes over the counting of the style given, and stops counting the one it had
+    rowsStyles.palette.retain(held);
+    rows.patchRowStyle(
+      gpu,
+      local,
+      held,
+      styleCreatedZoom(group, row, rowsStyles, held),
+      styleAngleSteps(group, row, rowsStyles, held),
+    );
   }
 
   /** Whether an attribute the style rule of the layer reads is among the keys written */
@@ -4451,6 +4502,19 @@ function styleCreatedZoom(
   const kind = styles.layoutOf(style) & 7;
   if (kind === ROWS_LAYOUT.point || kind === ROWS_LAYOUT.sprite) return undefined;
   return rowCreatedZoom(group, row);
+}
+
+/**
+ * The rotation of the markers of a row of a style as the texel of its style holds it: that of the
+ * row for a point, 0 for any other layout
+ */
+function styleAngleSteps(group: RowGroup, row: number, styles: RowsStyles, style: number): number {
+  return (styles.layoutOf(style) & 7) === ROWS_LAYOUT.point ? rowAngleSteps(group, row) : 0;
+}
+
+/** Whether a write wrote the rotation of a row (which the markers of a point row turn by) */
+function rotationWritten(write: PendingWrite): boolean {
+  return write.keys?.has(ROTATION_KEY) ?? false;
 }
 
 /** The key of a range of rows (its kind and its rows) */
