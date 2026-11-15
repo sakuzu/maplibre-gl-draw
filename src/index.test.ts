@@ -395,6 +395,60 @@ const EXTEND = [
   'UnsetKeys',
   'ValueBatch',
   'ValueOperation',
+  // Plugins
+  'CompanionSource',
+  'CustomHandle',
+  'FeatureTypeDefinition',
+  'FillRenderer',
+  'Footprint',
+  'GroundFootprint',
+  'Handle',
+  'HandleContext',
+  'HandleSource',
+  'KeyInput',
+  'LineRenderer',
+  'ModeDefinition',
+  'ModeInput',
+  'NameGenerator',
+  'OverlayShape',
+  'Plugin',
+  'PluginContext',
+  'PointerInput',
+  'PointRenderer',
+  'RenderContext',
+  'Rendered',
+  'ResizeHandle',
+  'ScreenFootprint',
+  'ScreenPointContext',
+  'ScreenProjection',
+  'SnapCandidate',
+  'TerrainSurface',
+  'TransformFields',
+];
+
+/**
+ * The names the plugins of /extend share with the extensions of the main entry, which they take
+ * the place of: the two are there together until the extensions of the main entry go
+ */
+const PLUGIN_NAMES_OF_MAIN = [
+  'CustomHandle',
+  'FeatureTypeDefinition',
+  'FillRenderer',
+  'Footprint',
+  'GroundFootprint',
+  'Handle',
+  'HandleContext',
+  'LineRenderer',
+  'NameGenerator',
+  'Plugin',
+  'PluginContext',
+  'PointRenderer',
+  'RenderContext',
+  'ResizeHandle',
+  'ScreenFootprint',
+  'SnapCandidate',
+  'TerrainSurface',
+  'TransformFields',
 ];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
@@ -528,9 +582,11 @@ describeEntry('src/kasane/index.ts', KASANE, () => import('./kasane/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
 describe('the six entries', () => {
-  it('share no name, but the box of /geometry, which the main entry gives too', () => {
+  it('share no name, but the box of /geometry, which the main entry gives too, and the names of the plugins', () => {
     const all = [...MAIN, ...GEOMETRY, ...TABLE, ...EXTEND, ...KASANE, ...WEBGL];
-    expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual(['BBox']);
+    expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual(
+      ['BBox', ...PLUGIN_NAMES_OF_MAIN].sort(),
+    );
   });
 });
 

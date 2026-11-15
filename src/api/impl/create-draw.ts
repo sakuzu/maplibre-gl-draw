@@ -43,6 +43,7 @@ import { createLayers } from './layers.js';
 import { createMemory } from './memory.js';
 import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
+import { createPluginUse } from './plugin-host.js';
 import { publishedStore } from './published-store.js';
 import { createRendered } from './rendered.js';
 import { setCommitSaver } from './saving.js';
@@ -316,6 +317,19 @@ export function createDrawOnEngine(
     gpu: () => engine.customLayer.getGpuMemory(),
   });
 
+  // The plugins of `/extend`, put into the extensions of the engine
+  const usePlugin = createPluginUse({
+    collections: engine.extensions.collections,
+    map,
+    modeManager,
+    hitTestService: {
+      registerCandidateReach: (type, reach) =>
+        context.hitTestService.registerCandidateReach?.(type, reach) ?? (() => {}),
+    },
+    appliedStyle: engine.extensions.appliedStyle,
+    getDraw: () => draw,
+    report: (problem, key) => status.problem(problem, key),
+  });
   const optionsObservable = observe(events, ['options.changed'], drawOptions.get, { kept: true });
   const drawingResource = createDrawingResource(engine);
   const modeObservable = observe(events, ['mode.changed'], () => modeManager.getMode());
@@ -367,6 +381,7 @@ export function createDrawOnEngine(
       isDestroyed: () => destroyed,
     }),
     extensions: engine.extensions.collections,
+    use: (plugin, useOptions) => usePlugin(plugin, useOptions),
     memory: memory.memory,
     status: status.status,
     backend: createBackendResource({ store, sender: () => sender }),
@@ -461,6 +476,13 @@ export function createDrawOnEngine(
     selection: selectionResource,
   });
   engine.extensions.attach(draw, drawOptions.getStyle, options.store);
+  // The plugins of the options, in their order: one that cannot be added leaves no instance
+  try {
+    for (const plugin of options.plugins ?? []) draw.use(plugin);
+  } catch (error) {
+    draw.destroy();
+    throw error;
+  }
   return draw;
 }
 

@@ -13,6 +13,7 @@ import type { Backend } from './backend/backend.js';
 import type { Observable } from './events.js';
 import type { Store } from './extension/store.js';
 import type { FeatureStyle, FeatureType, LineStyle } from './model.js';
+import type { Plugin as UsedPlugin } from './plugin/types.js';
 import type { Mode } from './state.js';
 
 export type {
@@ -492,6 +493,11 @@ export interface DrawOptions extends RuntimeOptions {
   backend?: Backend;
   /** Whether a layer is created when there is none; only at creation */
   initDefaultLayer?: boolean;
+  /**
+   * The plugins, added in their order when the instance is created, as `draw.use` adds them; only
+   * at creation. When one of them cannot be added, the instance is not created
+   */
+  plugins?: readonly UsedPlugin<unknown>[];
   /**
    * Makes the ID of everything the library creates, instead of the built-in generator; only
    * at creation. It is called for every new feature, group, layer and file: drawing, grouping

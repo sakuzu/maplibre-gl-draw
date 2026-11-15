@@ -170,7 +170,8 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const appliedStyles = createAppliedStyles({
     getLayer: (id) => store.getLayer(id),
     getStyleOptions: () => styleOptions(),
-    styleRuleChannelOf: (type) => styleRuleChannelOfType(registries.featureTypes, type),
+    styleRuleChannelOf: (type, geometry) =>
+      styleRuleChannelOfType(registries.featureTypes, type, geometry),
   });
   const appliedStyle = (feature: StoredFeature): FeatureStyleResolved => appliedStyles.of(feature);
 

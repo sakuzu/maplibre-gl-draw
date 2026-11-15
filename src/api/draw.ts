@@ -19,6 +19,7 @@ import { createDraw as createDrawInstance } from './impl/create-draw.js';
 import type { LayersCollection } from './layers.js';
 import type { MemoryResource } from './memory.js';
 import type { DrawOptions, OptionsResource } from './options.js';
+import type { Plugin as UsedPlugin } from './plugin/types.js';
 import type { RenderedResource } from './rendered.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { SketchesCollection } from './sketches.js';
@@ -112,6 +113,15 @@ export interface Draw extends DrawReader {
   readonly view: View;
   /** The plugins, modes, feature types, overlays and providers */
   readonly extensions: ExtensionsCollections;
+  /**
+   * Adds a plugin and returns what its `setup` returns, as it is. `setup` runs once, at once.
+   * Aborting `signal` removes the plugin with everything it added.
+   *
+   * @throws `DrawError` with the code `alreadyExists` for the name of a plugin there is, and
+   *   `invalidInput` for what is not a plugin; what `setup` throws, once what it added is taken
+   *   back
+   */
+  use<Api>(plugin: UsedPlugin<Api>, options?: { readonly signal?: AbortSignal }): Api;
   /** The memory the documents drawn on the page take, against the limit of the device */
   readonly memory: MemoryResource;
   /**

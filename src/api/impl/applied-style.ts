@@ -36,8 +36,11 @@ export interface AppliedStyleSource {
   getLayer(id: string): Layer | undefined;
   /** The `style` option as it was given: the defaults of each geometry */
   getStyleOptions(): RuntimeOptions['style'];
-  /** The channel the rule colors for a type: the one judgment of the instance */
-  styleRuleChannelOf(type: string): StyleRuleChannel;
+  /**
+   * The channel the rule colors for a type: the one judgment of the instance. `geometry` is the
+   * kind of the geometry of the feature, which decides for a type of a plugin that declares none
+   */
+  styleRuleChannelOf(type: string, geometry?: string): StyleRuleChannel;
 }
 
 /**
@@ -119,7 +122,7 @@ export function createAppliedStyles(source: AppliedStyleSource): AppliedStyles {
       const rule = source.getLayer(feature.layerId)?.styleRule;
       const options = source.getStyleOptions();
       const declared = declaredByType.get(feature.type);
-      const channel = source.styleRuleChannelOf(feature.type);
+      const channel = source.styleRuleChannelOf(feature.type, feature.geometry?.type);
       const kept = looks.get(feature);
       if (
         kept &&

@@ -44,8 +44,11 @@ export type ProblemInput = Omit<Problem, 'id' | 'atMilliseconds'>;
  */
 export interface StatusResource {
   readonly status: Observable<Status>;
-  /** Keeps a problem, the newest first */
-  problem(problem: ProblemInput): void;
+  /**
+   * Keeps a problem, the newest first. A problem of the same `key` as one kept is the same
+   * failure again: it takes the place of the one kept, newest, its `count` added to it
+   */
+  problem(problem: ProblemInput, key?: string): void;
   /** Makes the state again: something it is made of changed */
   changed(): void;
   /** Stops following what it is made of */
@@ -94,9 +97,21 @@ export function createStatus(deps: {
   };
   const value = createObservable<Status>(make(null));
   const changed = (): void => value.set(make(value.value));
-  const problem = (input: ProblemInput): void => {
-    const kept: Problem = Object.freeze({ ...input, id: nextId++, atMilliseconds: Date.now() });
-    problems = Object.freeze([kept, ...problems].slice(0, MAX_PROBLEMS));
+  // The problems kept under a key, which the same failure again adds its count to
+  const keyed = new Map<string, Problem>();
+  const problem = (input: ProblemInput, key?: string): void => {
+    const before = key === undefined ? undefined : keyed.get(key);
+    const same = before !== undefined && problems.includes(before) ? before : undefined;
+    const kept: Problem = Object.freeze({
+      ...input,
+      count: input.count + (same?.count ?? 0),
+      id: nextId++,
+      atMilliseconds: Date.now(),
+    });
+    const others = same === undefined ? problems : problems.filter((each) => each !== same);
+    problems = Object.freeze([kept, ...others].slice(0, MAX_PROBLEMS));
+    if (key !== undefined) keyed.set(key, kept);
+    for (const [name, each] of keyed) if (!problems.includes(each)) keyed.delete(name);
     changed();
   };
   const stops = [

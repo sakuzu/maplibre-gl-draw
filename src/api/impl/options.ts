@@ -316,6 +316,9 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
     defaultMode: string,
     initDefaultLayer: bool,
     generateId: func,
+    plugins(value, what) {
+      if (!Array.isArray(value)) throw invalidInput(`${what} must be an array of plugins`);
+    },
     history(value, what) {
       if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
       checkFields(value, what, {

@@ -12,7 +12,9 @@
  * the one way they apply ({@link applyOperations}, which runs on a server as it is) and the
  * collector of the parts of a large commit ({@link createPartCollector}); a value that changes
  * over time of the shape of the library ({@link createObservable}); and the pictures an extension
- * draws points with, among the rows of their layer ({@link RowSprite}, {@link RowSpriteSource}).
+ * draws points with, among the rows of their layer ({@link RowSprite}, {@link RowSpriteSource});
+ * and what a plugin is ({@link Plugin}, which `draw.use` adds) and adds through its context
+ * ({@link PluginContext}): types of features, modes, companions of every type, an overlay.
  *
  * A storage applies the operations it is sent as they name things: a commit that moves a group, or
  * deletes a layer or a group, names what it held where it was made. Commits made at the same time,
@@ -62,3 +64,35 @@ export { createPartCollector } from '../api/backend/parts.js';
 
 // A value that changes over time
 export { createObservable } from '../api/backend/observable.js';
+
+// Plugins: what `draw.use` takes, and what a plugin adds through its context
+export type {
+  CompanionSource,
+  CustomHandle,
+  FeatureTypeDefinition,
+  FillRenderer,
+  Footprint,
+  GroundFootprint,
+  Handle,
+  HandleContext,
+  HandleSource,
+  KeyInput,
+  LineRenderer,
+  ModeDefinition,
+  ModeInput,
+  NameGenerator,
+  OverlayShape,
+  Plugin,
+  PluginContext,
+  PointerInput,
+  PointRenderer,
+  RenderContext,
+  Rendered,
+  ResizeHandle,
+  ScreenFootprint,
+  ScreenPointContext,
+  ScreenProjection,
+  SnapCandidate,
+  TerrainSurface,
+  TransformFields,
+} from '../api/plugin/types.js';

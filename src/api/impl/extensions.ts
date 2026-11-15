@@ -334,13 +334,27 @@ export const BUILT_IN_TYPES: ReadonlySet<string> = new Set([
 export function styleRuleChannelOfType(
   featureTypes: Registry<FeatureTypeDefinition>,
   type: string,
+  geometry?: string,
 ): StyleRuleChannel {
   const definition = BUILT_IN_TYPES.has(type) ? undefined : featureTypes.get(type);
+  const byFeature =
+    definition !== undefined && geometry !== undefined && GEOMETRY_OF_FEATURE.has(definition);
   return getStyleRuleChannel(
     type,
-    definition && { channel: definition.styleRuleChannel, geometry: definition.geometry },
+    definition && {
+      channel: definition.styleRuleChannel,
+      geometry: byFeature ? geometry : definition.geometry,
+    },
   );
 }
+
+/**
+ * The types added by plugins (`ctx.addFeatureType`), which declare no kind of geometry: the
+ * geometry of each feature decides the channel of a type of them that declares none
+ *
+ * @internal
+ */
+export const GEOMETRY_OF_FEATURE = new WeakSet<FeatureTypeDefinition>();
 
 /**
  * The built-in feature types a definition can override, with the kind of geometry their

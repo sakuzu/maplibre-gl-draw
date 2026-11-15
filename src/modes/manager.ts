@@ -48,6 +48,9 @@ export interface ModeManager {
   /** Notes that the current mode has created something: a feature, or the image it asked for */
   markCreated(): void;
 
+  /** Whether the current mode was set with `repeat` (read while it is entered too) */
+  isRepeating(): boolean;
+
   /**
    * Registers a mode
    *
@@ -159,6 +162,10 @@ export class ModeManagerImpl implements ModeManager {
 
   getMode(): Mode {
     return this.store.getMode();
+  }
+
+  isRepeating(): boolean {
+    return this.repeat;
   }
 
   setMode(mode: Mode, repeat = false): boolean {
