@@ -854,6 +854,12 @@ export interface StoreChange {
    */
   placesBefore?: RowValues;
   /**
+   * The IDs of the groups of rows a write gave another key or another layer, those the order does
+   * not tell as moved included (a group given another key where it stands). A Store that holds its
+   * features as rows sets it
+   */
+  groupsPlaced?: readonly string[];
+  /**
    * The features given other IDs, from the ID each had to the one it has (a storage that gave
    * them IDs of its own): the features of objects are told deleted under the old IDs and created
    * under the new ones, the rows updated with the field `id`

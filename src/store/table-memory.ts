@@ -173,10 +173,34 @@ export function createTableStore(options: TableStoreOptions = {}): {
 } {
   const { selectionIdsLimit, transforms, ...tableOptions } = options;
   const contract = new TableContractStore(tableOptions, transforms);
-  return {
-    store: new DrawStore(contract, selectionIdsLimit === undefined ? {} : { selectionIdsLimit }),
-    writer: contract.writer,
-  };
+  const store = new DrawStore(
+    contract,
+    selectionIdsLimit === undefined ? {} : { selectionIdsLimit },
+  );
+  WRITERS.set(store, contract.writer);
+  return { store, writer: contract.writer };
+}
+
+/** The writer of the rows of each Store of rows `createTableStore` made */
+const WRITERS = new WeakMap<Store, FeatureTablesWriter>();
+
+/**
+ * The writer of the rows of a Store of rows `createTableStore` made (undefined for any other):
+ * what writes values given from the storage, the keys of the order included
+ *
+ * @internal
+ */
+export function tablesWriterOf(store: Store): FeatureTablesWriter | undefined {
+  return WRITERS.get(store);
+}
+
+/**
+ * Whether a transaction writes what this client did not write itself: values from elsewhere, or
+ * the take-out of commits the storage refused. Nothing undoes them here, so nothing is kept for
+ * that, and nothing reads the values they write over
+ */
+function fromElsewhere(source: string | undefined): boolean {
+  return source === 'remote' || source === 'refused';
 }
 
 /**
@@ -1669,7 +1693,7 @@ export class TableContractStore implements StoreContract {
    * transaction (none for a deletion from elsewhere, which nothing undoes here)
    */
   #keeping(): { restoreToken?: RestoreToken } {
-    if (this.#bus.source === 'remote') return {};
+    if (fromElsewhere(this.#bus.source)) return {};
     this.#retain ??= this.writer.createRestoreToken();
     return { restoreToken: this.#retain };
   }
@@ -1935,7 +1959,7 @@ export class TableContractStore implements StoreContract {
    */
   #applyRows(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
     const { before: given, ...rest } = options;
-    const before = given ?? (this.#bus.source === 'remote' ? null : this.#readBefore(patch));
+    const before = given ?? (fromElsewhere(this.#bus.source) ? null : this.#readBefore(patch));
     // The rows that were not there are noted, and the rows there that the patch deletes (a row
     // deleted and created again in the transaction was there when it began); a row not noted was
     // there or is there
@@ -2157,7 +2181,7 @@ export class TableContractStore implements StoreContract {
     this.#before = [];
     this.#written = new Map();
     this.#retain = null;
-    if (changes.source === 'remote') this.#forgetRemote(changes);
+    if (fromElsewhere(changes.source)) this.#forgetRemote(changes);
     const out = reconcile(changes, this.tables, before);
     for (const listener of [...this.#listeners]) {
       try {

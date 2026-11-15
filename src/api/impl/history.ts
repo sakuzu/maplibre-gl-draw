@@ -48,6 +48,13 @@ export interface History {
   redo(options?: TaskOptions): Write<void>;
   /** Drops every step */
   clear(): void;
+  /**
+   * Drops the steps of commits the storage refused (those of the commits that took them back or
+   * made them again included): they are taken out of the document
+   */
+  drop(commits: ReadonlySet<string>): void;
+  /** Gives the features of the steps the IDs the storage gave them, from the old to the new */
+  rename(ids: ReadonlyMap<string, string>): void;
   /** Stops following the Store */
   stop(): void;
   /** The steps there are to take back and to make again */
@@ -103,6 +110,8 @@ interface Inverse {
 /** A step: the inverses of its notifications, in the order they came */
 interface Step {
   readonly label: string | undefined;
+  /** The ID of the commit it takes back (or makes again) */
+  readonly commit: string | undefined;
   readonly parts: Inverse[];
 }
 
@@ -168,7 +177,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
       return;
     }
     const source = change.source ?? 'local';
-    if (source === 'remote' || source === 'silent') return;
+    if (source === 'remote' || source === 'silent' || source === 'refused') return;
     if (source === 'undo' || source === 'redo') {
       const inverse = taken?.direction === source ? inverseOf(change) : null;
       if (taken && inverse) taken.step.parts.push(inverse);
@@ -190,7 +199,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     if (open) {
       open.parts.push(inverse);
     } else {
-      open = { label: commit?.label, parts: [inverse] };
+      open = { label: commit?.label, commit: commit?.id, parts: [inverse] };
       undoSteps.push(open);
       while (undoSteps.length > maxSteps) {
         const dropped = undoSteps.shift();
@@ -234,7 +243,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         }
         release(step);
         // Its parts in the order they were told: taken back from the last one, as a step is
-        const reversed: Step = { label: step.label, parts };
+        const reversed: Step = { label: step.label, commit: id, parts };
         (direction === 'undo' ? redoSteps : undoSteps).push(reversed);
         taken = { direction, step: reversed };
         changed();
@@ -256,6 +265,30 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
       dropAll(undoSteps);
       dropAll(redoSteps);
       changed();
+    },
+    drop(commits) {
+      let dropped = false;
+      for (const steps of [undoSteps, redoSteps]) {
+        for (let i = steps.length - 1; i >= 0; i--) {
+          const step = steps[i];
+          if (step.commit === undefined || !commits.has(step.commit)) continue;
+          steps.splice(i, 1);
+          release(step);
+          if (open === step) open = null;
+          if (taken?.step === step) taken = null;
+          dropped = true;
+        }
+      }
+      if (dropped) changed();
+    },
+    rename(ids) {
+      if (ids.size === 0) return;
+      for (const steps of [undoSteps, redoSteps]) {
+        for (const step of steps) {
+          for (let i = 0; i < step.parts.length; i++)
+            step.parts[i] = renamedInverse(step.parts[i], ids);
+        }
+      }
     },
     stop() {
       stopListening();
@@ -502,4 +535,41 @@ function createGroupAgain(store: Store, group: StoredGroup): void {
 function neighbor(store: Store, id: string | null): string | null {
   if (id === null) return null;
   return store.getFeature(id) !== undefined || store.getGroup(id) !== undefined ? id : null;
+}
+
+// ============================================================================
+// The IDs the storage gave
+// ============================================================================
+
+/** A part of a step with the features named by the IDs the storage gave them */
+function renamedInverse(part: Inverse, ids: ReadonlyMap<string, string>): Inverse {
+  const id = (one: string): string => ids.get(one) ?? one;
+  const idOrNull = (one: string | null): string | null => (one === null ? null : id(one));
+  const feature = (one: StoredFeature): StoredFeature =>
+    ids.has(one.id) ? { ...one, id: id(one.id) } : one;
+  const group = (one: StoredGroup): StoredGroup =>
+    one.kind === 'table' ? one : { ...one, featureIds: one.featureIds.map(id) };
+  const layer = (one: StoredLayer): StoredLayer =>
+    one.kind === 'table' ? one : { ...one, items: one.items.map(id) };
+  const position = <T extends { below: string | null; above: string | null } | null>(at: T): T =>
+    at === null ? at : { ...at, below: idOrNull(at.below), above: idOrNull(at.above) };
+  const moves = part.moves.map((move) => {
+    if (move.kind !== 'item') return move;
+    return { ...move, itemId: id(move.itemId), from: position(move.from), to: position(move.to) };
+  });
+  const groupsBefore = new Map([...part.groupsBefore].map(([key, value]) => [key, group(value)]));
+  const layersBefore = new Map([...part.layersBefore].map(([key, value]) => [key, layer(value)]));
+  return {
+    ...part,
+    layersDeleted: part.layersDeleted.map(layer),
+    layersBefore,
+    groupsDeleted: part.groupsDeleted.map(group),
+    groupsBefore,
+    featuresCreated: part.featuresCreated.map(id),
+    featuresDeleted: part.featuresDeleted.map(feature),
+    featuresBefore: new Map(
+      [...part.featuresBefore].map(([key, value]) => [id(key), feature(value)]),
+    ),
+    moves,
+  };
 }

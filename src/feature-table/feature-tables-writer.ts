@@ -305,6 +305,30 @@ export function createFeatureTablesWriter(
   };
 
   /**
+   * The IDs of the groups there a write of groups gives another key or another layer, read before
+   * it (`StoreChange.groupsPlaced`): the order tells only those it puts elsewhere among the items
+   */
+  const groupsPlacedOf = (patch: TableGroupPatch): string[] => {
+    const { groups: handles, fields, deleted } = patch;
+    const keys = fields.get('key');
+    const parents = fields.get('parent');
+    if (!keys && !parents) return [];
+    const groups = internals.groups;
+    const out: string[] = [];
+    for (let i = 0; i < handles.length; i++) {
+      const group = handles[i];
+      if (deleted?.[i] || !groups.has(group)) continue;
+      const key = keys?.[i];
+      const parent = parents?.[i];
+      const keyed = typeof key === 'string' && key !== groups.orderOf(group);
+      const moved = typeof parent === 'string' && parent !== groups.tableOf(group);
+      const id = groups.idOf(group);
+      if ((keyed || moved) && id !== undefined) out.push(id);
+    }
+    return out;
+  };
+
+  /**
    * Refuses a write whose parent of a row is neither a layer of the Store nor a group, before
    * anything is written: the tables would hold the row in a table of that id
    *
@@ -414,6 +438,7 @@ export function createFeatureTablesWriter(
       try {
         const followers = notify ? watchFollowers(patch) : null;
         const moves = notify ? groupMovesOf(patch) : [];
+        const placed = notify ? groupsPlacedOf(patch) : [];
         const written = tables.writeGroups(withoutNames(patch), options);
         const rows = rowsChangeOf(written.rows);
         const kept = written.kept;
@@ -425,6 +450,7 @@ export function createFeatureTablesWriter(
         const extra: StoreChange = {
           ...(order.length > 0 && { order }),
           ...(places && { placesBefore: places }),
+          ...(placed.length > 0 && { groupsPlaced: placed }),
         };
         if (rows.layers.size > 0) notify?.({ rows, ...extra });
         else if (Object.keys(extra).length > 0) notify?.(extra);

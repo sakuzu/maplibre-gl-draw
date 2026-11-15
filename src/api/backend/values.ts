@@ -368,8 +368,12 @@ function definedOf<T extends object>(values: T): Partial<T> {
   return out;
 }
 
-/** A feature with the values of a `set` merged into it, then the keys of `unset` removed */
-function setFeature(
+/**
+ * A feature with the values of a `set` merged into it, then the keys of `unset` removed
+ *
+ * @internal
+ */
+export function setFeature(
   record: FeatureRecord,
   values: Partial<Omit<FeatureRecord, 'key'>>,
   unset: UnsetKeys | undefined,
@@ -402,8 +406,12 @@ function setFeature(
   };
 }
 
-/** A layer with the values of a `set` merged into it, then the keys of the style removed */
-function setLayer(
+/**
+ * A layer with the values of a `set` merged into it, then the keys of the style removed
+ *
+ * @internal
+ */
+export function setLayer(
   record: LayerRecord,
   values: Partial<Omit<LayerRecord, 'key'>>,
   unset: Pick<UnsetKeys, 'style'> | undefined,

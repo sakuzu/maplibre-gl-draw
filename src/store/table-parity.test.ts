@@ -401,8 +401,11 @@ function valuesOf(
 
 /** A notification, the rows by their ids */
 function notificationOf(tables: FeatureTables, change: StoreChange): unknown {
-  // Where the rows put elsewhere were (`placesBefore`) is told since: the record has none
-  const keys = Object.keys(change).filter((key) => key !== 'placesBefore');
+  // Where the rows put elsewhere were and the groups given another key are told since: the
+  // record has neither
+  const keys = Object.keys(change).filter(
+    (key) => key !== 'placesBefore' && key !== 'groupsPlaced',
+  );
   const out: Record<string, unknown> = { keys: keys.sort() };
   if (change.source) out.source = change.source;
   if (change.reset) out.reset = true;

@@ -199,6 +199,8 @@ export class DrawStore implements Store {
   #documentWritable = true;
   /** The transactions from elsewhere (`remote`) under way */
   #remoteDepth = 0;
+  /** How deep the transactions that take out commits the storage refused are (see `transact`) */
+  #refusedDepth = 0;
   readonly selectionIdsLimit: number;
   /** What waits for the writes over several tasks under way (`whenWritten`) */
   readonly #writtenWaiters: Array<() => void> = [];
@@ -861,6 +863,17 @@ export class DrawStore implements Store {
 
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     this.#revision++;
+    // The take-out of the commits the storage refused settles the document as the storage has
+    // it: it is no write of the user, and read-only does not stop it
+    if (source === 'refused') {
+      this.#refusedDepth++;
+      try {
+        if (this.#remoteDepth === 0) this.#queue.finish();
+        return this.#bus.transact(() => this.#contract.transact(fn, source), source);
+      } finally {
+        this.#refusedDepth--;
+      }
+    }
     // A write of this client comes after the writes over several tasks queued. A write made
     // inside a write from elsewhere (a Store applying what it received) finishes none of them:
     // they stay writes of this client, told after it
@@ -882,6 +895,7 @@ export class DrawStore implements Store {
 
   /** Runs one document write unless read-only; what the contract returned */
   #write(fn: () => boolean): boolean {
+    if (this.#refusedDepth > 0) return this.transact(fn, 'refused');
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return false;
     return this.transact(fn);
   }

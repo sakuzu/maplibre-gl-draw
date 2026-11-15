@@ -65,6 +65,17 @@ interface Place {
   readonly key: string;
 }
 
+/**
+ * Where an item is, as the operations say it: its parent (`null` for a layer among the layers)
+ * and its key there
+ *
+ * @internal
+ */
+export interface ItemPlace {
+  readonly parentId: string | null;
+  readonly key: string;
+}
+
 /** The most rows of a notification read where it goes out: more are read over several tasks */
 const ROWS_READ_AT_ONCE = 2048;
 
@@ -269,6 +280,78 @@ export class CommitValues {
     });
   }
 
+  // ==========================================================================
+  // The document as it is now, for what writes to it and compares with it
+  // ==========================================================================
+
+  /**
+   * Where an item is now: its parent (`null` for a layer among the layers) and its key there.
+   * Undefined for what is not there
+   */
+  placeOf(kind: 'feature' | 'layer' | 'group', id: string): ItemPlace | undefined {
+    const store = this.store;
+    if (kind === 'feature' && this.#isRow(id)) {
+      const place = this.#rowPlaces([id]).get(id);
+      return place && { parentId: place.parent, key: place.key };
+    }
+    if (kind === 'group') {
+      const group = store.getGroup(id);
+      if (!group) return undefined;
+      if (group.kind === 'table') return { parentId: group.layerId, key: this.#groupKey(group) };
+    }
+    const place = this.#places.get(id);
+    if (!place) return undefined;
+    return { parentId: place.parent === LAYERS ? null : place.parent, key: place.key };
+  }
+
+  /**
+   * Keeps the key of an item of a layer of objects, or of a layer, that is written in a place now:
+   * the notification of the write, read after, keeps it while the order says it is there
+   */
+  keepPlace(id: string, parentId: string | null, key: string): void {
+    this.#places.set(id, { parent: parentId ?? LAYERS, key });
+  }
+
+  /** The items of a parent of objects (`null`: the layers) by their keys here, with their keys */
+  keysUnder(parentId: string | null): ReadonlyArray<{ readonly id: string; readonly key: string }> {
+    const parent = parentId ?? LAYERS;
+    const items = this.#itemsOf(parent) ?? [];
+    const out: { id: string; key: string }[] = [];
+    for (const id of items) {
+      const place = this.#places.get(id);
+      if (place?.parent === parent) out.push({ id, key: place.key });
+    }
+    return out;
+  }
+
+  /** The record of a feature, a layer or a group as it is now (undefined when it is not there) */
+  recordOf(kind: 'feature', id: string): FeatureRecord | undefined;
+  recordOf(kind: 'layer', id: string): LayerRecord | undefined;
+  recordOf(kind: 'group', id: string): GroupRecord | undefined;
+  recordOf(
+    kind: 'feature' | 'layer' | 'group',
+    id: string,
+  ): FeatureRecord | LayerRecord | GroupRecord | undefined {
+    const store = this.store;
+    const key = this.placeOf(kind, id)?.key ?? '';
+    const made = (operation: ValueOperation) =>
+      operation.type === 'create' ? operation.record : undefined;
+    switch (kind) {
+      case 'feature': {
+        const feature = store.getFeature(id);
+        return feature && (made(createFeature(feature, key)) as FeatureRecord);
+      }
+      case 'layer': {
+        const layer = store.getLayer(id);
+        return layer && (made(createLayer(layer, key)) as LayerRecord);
+      }
+      case 'group': {
+        const group = store.getGroup(id);
+        return group && (made(createGroup(group, key)) as GroupRecord);
+      }
+    }
+  }
+
   /** Changes the place of an item, noting the one it had before (see `#before`) */
   #setPlace(id: string, place: Place | undefined): void {
     const before = this.#before;
@@ -380,7 +463,8 @@ export class CommitValues {
     const moved = this.#placeContainers(touched);
     const created = new Set(ids.created);
     const placed: string[] = [];
-    for (const id of [...ids.placed, ...ids.updated]) {
+    // The groups of rows given another key where they stand are told apart from the order
+    for (const id of unique([...ids.placed, ...ids.updated, ...(changes.groupsPlaced ?? [])])) {
       const group = store.getGroup(id);
       if (!group || created.has(id)) continue;
       if (group.kind === 'table') {

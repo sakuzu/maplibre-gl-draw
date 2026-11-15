@@ -672,6 +672,12 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
       : changes.placesBefore;
   }
 
+  if (changes.groupsPlaced) {
+    target.groupsPlaced = target.groupsPlaced
+      ? [...new Set([...target.groupsPlaced, ...changes.groupsPlaced])]
+      : changes.groupsPlaced;
+  }
+
   // files
   if (changes.files) {
     if (!target.files) target.files = {};

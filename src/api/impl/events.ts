@@ -392,6 +392,7 @@ const DOCUMENT_KEYS = [
   'layers',
   'groups',
   'order',
+  'groupsPlaced',
   'metadata',
   'files',
 ] as const satisfies ReadonlyArray<keyof StoreChange>;
@@ -568,6 +569,10 @@ function changeOf(changes: StoreChange, store: Store): Change | null {
         if (id !== undefined) add(id, placedFeatures);
       }
     }
+  }
+  // The groups of rows given another key where they stand: placed, as the order would tell them
+  for (const id of changes.groupsPlaced ?? []) {
+    if (!placedGroups.includes(id) && store.getGroup(id)) placedGroups.push(id);
   }
   // The features given other IDs: under their new IDs, as features updated
   const reassigned = changes.reassigned;
