@@ -25,6 +25,10 @@
  *     selection, and the vertex selection ends when its feature is deleted or its coordinates
  *     change other than by a drag. This is the only place that keeps these invariants; the
  *     modes and the public API rely on it.
+ *   - A write of this client (`local`, `batch`) leaves the geometry of a feature of a type the
+ *     instance does not know as it is (`feature-types.ts`): an edit of it is left out and counted
+ *     as dropped, a row of it is not written. Undo, redo and the writes from elsewhere are not
+ *     stopped (they give back a geometry it had).
  */
 
 import type { VertexId } from '../api/state.js';
@@ -53,6 +57,7 @@ import type { ItemPosition } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { rowsOfSummary, summaryOf, summaryWithLayers } from './bulk-selection.js';
 import { commitOf, withCommit } from './commit-scope.js';
+import { isKnownFeatureType, knownTypeJudge, rowTypeKnown } from './feature-types.js';
 import { insertGroup } from './item-lists.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
@@ -287,11 +292,24 @@ export class DrawStore implements Store {
     });
   }
   updateFeature(id: string, updates: Partial<Feature>): boolean {
-    return this.#write(() => this.#contract.updateFeature(id, updates));
+    return this.#write(() => {
+      // A geometry this client writes to a feature of a type the instance does not know
+      if (updates?.geometry !== undefined && this.#keepsUnknownGeometry() && !this.#knowsTypeOf(id))
+        return false;
+      return this.#contract.updateFeature(id, updates);
+    });
   }
   applyEdits(edits: readonly FeatureEdit[]): EditResult | null {
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
-    return this.transact(() => this.#contract.applyEdits(this.#withSelectionResolved(edits)));
+    return this.transact(() => {
+      const resolved = this.#withSelectionResolved(edits);
+      if (!this.#keepsUnknownGeometry()) return this.#contract.applyEdits(resolved);
+      const { kept, left } = this.#withoutUnknownTypes(resolved);
+      if (left === 0) return this.#contract.applyEdits(kept);
+      if (kept.length === 0) return { dropped: left };
+      const result = this.#contract.applyEdits(kept);
+      return result && { ...result, dropped: result.dropped + left };
+    });
   }
   /** The computation of the edits that move, rotate and scale features of the contract */
   get transforms(): GeometryTransforms | undefined {
@@ -747,7 +765,7 @@ export class DrawStore implements Store {
     const internals = featureTablesInternals(contract.tables);
     if (!target || !internals || !contract.applyRows) return false;
     if (contract.isReadOnly() || contract.isInteractionLocked()) return false;
-    const write = planBulk(internals, op, target, this.#containers());
+    const write = planBulk(internals, this.#withUnknownRowsLeft(op), target, this.#containers());
     if (!write) return false;
     return this.applyRows(write);
   }
@@ -933,6 +951,84 @@ export class DrawStore implements Store {
   // ============================================================================
   // Private
   // ============================================================================
+
+  // ============================================================================
+  // The features of a type the instance does not know (`feature-types.ts`)
+  // ============================================================================
+
+  /**
+   * Whether the write being made keeps the geometry of the features of a type the instance does
+   * not know: a write of this client (`local`, `batch`), not undo, redo nor a write from elsewhere
+   */
+  #keepsUnknownGeometry(): boolean {
+    const source = this.#bus.source;
+    return (source === 'local' || source === 'batch') && this.#remoteDepth === 0;
+  }
+
+  /** Whether the instance knows the type of a feature (true for one that is not there) */
+  #knowsTypeOf(id: string): boolean {
+    const contract = this.#contract;
+    const tables = contract.tables;
+    const handle = tables?.getRowRef(id);
+    const internals = featureTablesInternals(tables);
+    if (internals && handle !== undefined) {
+      const place = livePlaceOf(internals, handle);
+      return !place || rowTypeKnown(place.group.data, place.row, this.transformFields);
+    }
+    const feature = contract.getFeature(id);
+    return !feature || isKnownFeatureType(feature.type, this.transformFields);
+  }
+
+  /**
+   * The edits without what changes the geometry of a feature of a type the instance does not
+   * know: an edit of one feature left out, a feature left out of an edit of many (`left` counts
+   * the features left out)
+   */
+  #withoutUnknownTypes(edits: readonly FeatureEdit[]): {
+    kept: readonly FeatureEdit[];
+    left: number;
+  } {
+    if (!Array.isArray(edits)) return { kept: edits, left: 0 };
+    let kept: FeatureEdit[] | null = null;
+    let left = 0;
+    for (let i = 0; i < edits.length; i++) {
+      const edit = edits[i] as FeatureEdit;
+      let out: FeatureEdit | null = edit;
+      if (edit?.kind === 'translate' || edit?.kind === 'rotate' || edit?.kind === 'scale') {
+        const ids = (edit.target as { featureIds?: unknown } | undefined)?.featureIds;
+        if (Array.isArray(ids)) {
+          const known = ids.filter((id) => typeof id !== 'string' || this.#knowsTypeOf(id));
+          if (known.length !== ids.length) {
+            left += ids.length - known.length;
+            out = known.length > 0 ? { ...edit, target: { featureIds: known } } : null;
+          }
+        }
+      } else if (
+        typeof edit?.featureId === 'string' &&
+        (edit.kind !== 'set' || edit.patch?.geometry !== undefined) &&
+        !this.#knowsTypeOf(edit.featureId)
+      ) {
+        left++;
+        out = null;
+      }
+      if (out === edit && kept === null) continue;
+      kept ??= edits.slice(0, i);
+      if (out) kept.push(out);
+    }
+    return { kept: kept ?? edits, left };
+  }
+
+  /**
+   * A write of the rows that leaves out the rows of a type the instance does not know, when it
+   * writes their geometry for this client
+   */
+  #withUnknownRowsLeft(op: BulkOperation): BulkOperation {
+    if (op.kind !== 'rows' || !op.fields.includes('geometry') || !this.#keepsUnknownGeometry()) {
+      return op;
+    }
+    const known = knownTypeJudge(this.transformFields);
+    return { ...op, write: (handle, read) => (known(read.type()) ? op.write(handle, read) : null) };
+  }
 
   /** Runs one document write unless read-only; what the contract returned */
   #write(fn: () => boolean): boolean {

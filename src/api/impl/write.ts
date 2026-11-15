@@ -28,12 +28,14 @@ import type { ItemPlacement, ObjectGroup } from '../../shared/types/model.js';
 import { createId } from '../../shared/utils/id.js';
 import { type CommitInfo, runCommit, withCommit } from '../../store/commit-scope.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
+import { isKnownFeatureType } from '../../store/feature-types.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import { type LastingSnapshot, readThroughSnapshot } from '../../store/read-snapshot.js';
 import { BULK_SLICE_ROWS, sliceRowValues } from '../../store/row-steps.js';
 import { selectedRowsOfTarget, selectionOfTarget } from '../../store/selection-value.js';
 import type { FeatureEdit, SlicedWrite, Store } from '../../store/store.js';
+import { transformFieldsOfStore } from '../../store/transform-roles.js';
 import type {
   FeatureCoordinates,
   FeatureType,
@@ -365,6 +367,18 @@ function notEditable(): DrawError {
 
 function lockedError(ids: readonly string[]): DrawError {
   return new DrawError('locked', `${ids.join(', ')} is locked`, { ids });
+}
+
+/**
+ * The error of a write that changes the geometry of features of a type the instance does not know
+ * (`feature-types.ts`): their type decides how their geometry goes with their values
+ */
+function unknownTypeError(ids: readonly string[]): DrawError {
+  return new DrawError(
+    'invalidState',
+    `${ids.join(', ')} is of a type this instance does not know, so its geometry is not changed`,
+    { ids },
+  );
 }
 
 /** Whether a write made at the commit failed because what it named is gone, or locked meanwhile */
@@ -1190,18 +1204,38 @@ class TransactionImpl implements Transaction {
 
   /**
    * The IDs a target names now that are written. The features it names by their IDs are written
-   * all or none: a locked one fails the write with `locked`. A filter, every feature and the
-   * selection leave the locked ones out, and do not count them
+   * all or none: a locked one fails the write with `locked`, and, for a write of their geometry,
+   * one of a type the instance does not know with `invalidState`. A filter, every feature and the
+   * selection leave them out, and do not count them
+   *
+   * @param geometry Whether the write changes the geometry of the features
    */
-  #writableIds(resolved: ResolvedTargetOf): string[] {
+  #writableIds(resolved: ResolvedTargetOf, geometry = false): string[] {
     const ids = this.#idsNow(resolved) ?? [];
     const locked = (id: string) => featureLocked(this.#overlay.view, this.#feature(id));
+    const unknown = (id: string) => geometry && !this.#knowsType(this.#feature(id));
     if (namesIds(resolved)) {
       const named = ids.filter(locked);
       if (named.length > 0) throw lockedError(named);
+      const untyped = ids.filter(unknown);
+      if (untyped.length > 0) throw unknownTypeError(untyped);
       return ids;
     }
-    return ids.filter((id) => !locked(id));
+    return ids.filter((id) => !locked(id) && !unknown(id));
+  }
+
+  /** Whether the instance knows the type of a feature (`feature-types.ts`) */
+  #knowsType(feature: StoredFeature): boolean {
+    return isKnownFeatureType(feature.type, transformFieldsOfStore(this.#store));
+  }
+
+  /**
+   * Fails a write that changes the geometry of features of a type the instance does not know
+   * (`invalidState`)
+   */
+  #requireKnownTypes(features: readonly StoredFeature[]): void {
+    const unknown = features.filter((feature) => !this.#knowsType(feature));
+    if (unknown.length > 0) throw unknownTypeError(unknown.map((feature) => feature.id));
   }
 
   // ==========================================================================
@@ -1287,6 +1321,7 @@ class TransactionImpl implements Transaction {
           if (featureLocked(overlay.view, feature) && !onlyLockOrVisibility(op)) {
             throw lockedError([target]);
           }
+          if (op.geometry !== undefined) self.#requireKnownTypes([feature]);
           overlay.features.set(target, next);
           // Checked when called: the commit writes it, or leaves it out when the feature is gone
           keep(() => {
@@ -1325,6 +1360,9 @@ class TransactionImpl implements Transaction {
         )
         .map(({ id }) => id);
       if (locked.length > 0) throw lockedError(locked);
+      self.#requireKnownTypes(
+        prepared.filter(({ op }) => op.geometry !== undefined).map(({ feature }) => feature),
+      );
       for (const { id, next } of prepared) overlay.features.set(id, next);
       keep(
         featureWrite(prepared.length, () => {
@@ -1366,6 +1404,7 @@ class TransactionImpl implements Transaction {
       // Checked now, on the features it names now: a wrong patch fails it
       const named = namesIds(resolved);
       const lockedNamed: string[] = [];
+      const unknownNamed: string[] = [];
       let written = 0;
       for (const id of ids) {
         const feature = self.#feature(id);
@@ -1375,9 +1414,15 @@ class TransactionImpl implements Transaction {
           if (named) lockedNamed.push(id);
           continue;
         }
+        // The geometry of a feature of a type the instance does not know is not changed
+        if (made.geometry !== undefined && !self.#knowsType(feature)) {
+          if (named) unknownNamed.push(id);
+          continue;
+        }
         written++;
       }
       if (lockedNamed.length > 0) throw lockedError(lockedNamed);
+      if (unknownNamed.length > 0) throw unknownTypeError(unknownNamed);
       keep(
         featureWrite(written, () => {
           const entries: FeatureEdit[] = [];
@@ -1387,6 +1432,7 @@ class TransactionImpl implements Transaction {
             const made = make(sampleOf(feature), feature);
             if (made === null) continue;
             if (featureLocked(self.#store, feature) && !onlyLockOrVisibility(made)) continue;
+            if (made.geometry !== undefined && !self.#knowsType(feature)) continue;
             entries.push({ kind: 'set', featureId: id, patch: made });
           }
           if (entries.length === 0) return true;
@@ -1533,12 +1579,16 @@ class TransactionImpl implements Transaction {
           const resolved = self.#resolve(target, 'The target');
           self.#requireEditable();
           const values = transformValues(kind, input);
-          const ids = self.#writableIds(resolved);
+          const ids = self.#writableIds(resolved, true);
           keep(
             featureWrite(ids.length, () => {
               const now = self.#idsAtCommit(resolved, ids).filter((id) => {
                 const feature = self.#store.getFeature(id);
-                return feature !== undefined && !featureLocked(self.#store, feature);
+                return (
+                  feature !== undefined &&
+                  !featureLocked(self.#store, feature) &&
+                  self.#knowsType(feature)
+                );
               });
               if (now.length === 0) return true;
               return listInParts(now, (part) => {
@@ -1637,6 +1687,8 @@ class TransactionImpl implements Transaction {
       compute: (areas: AreaCoordinates[]) => MultiPolygonCoordinates,
       keep: (op: Op) => void,
     ): Feature => {
+      // What the result replaces has its geometry changed: not of a type the instance does not know
+      self.#requireKnownTypes(removed);
       for (const input of inputs) {
         if (!isAreaFeature(input)) throw invalidInput(`The feature ${input.id} is not an area`);
       }
@@ -1779,6 +1831,8 @@ class TransactionImpl implements Transaction {
         self.#run((keep) => {
           const area = self.#feature(id);
           const line = self.#feature(lineId);
+          // The area is replaced by its parts (the line stays as it is)
+          self.#requireKnownTypes([area]);
           if (!isAreaFeature(area)) throw invalidInput(`The feature ${area.id} is not an area`);
           if (!isSplitLineFeature(line)) throw invalidInput(`The feature ${line.id} is not a line`);
           self.#requireEditable();

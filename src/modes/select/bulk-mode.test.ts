@@ -31,6 +31,7 @@ import {
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';
+import { createTransformFieldsRegistry } from '../../store/transform-roles.js';
 import type { Feature, StoreChange } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
 import { createSketches, planeMetersPerPixel, planeScaleFrame } from '../../test-utils.js';
@@ -395,6 +396,14 @@ describe('the select mode over features selected in bulk', () => {
       geometry: { type: 'Point', coordinates: [x, 0.5] },
       properties,
     });
+    // The type of the extension, as the instance defines it
+    const types = createTransformFieldsRegistry();
+    types.register('Board', {
+      angleDegreesKey: 'maplibre-gl-draw:rotation',
+      scaleKey: 'maplibre-gl-draw:scale',
+      uniformScale: true,
+    });
+    store.setTransformFields(types);
     store.transact(() => {
       store.createFeature(point('img', 'Image', 13, { 'maplibre-gl-draw:imageFileId': 'i' }));
       store.createFeature(
