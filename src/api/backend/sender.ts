@@ -16,13 +16,15 @@
  *   refused with `retryLimit`). An answer `refused` refuses the commit, the commits after it are
  *   sent on; `closed` stops the sending
  *
- * A commit refused stays in the document here; taking it out of the document is the work of
- * the refusals.
+ * - A commit refused is taken out of the document here (`take-out.ts`), with the later commits
+ *   not sent that name what it created (`dependsOnRefused`), in one transaction of the source
+ *   `refused`. Each is kept as a refusal until it is dismissed or made again
  *
  * @internal
  */
 
 import { DrawError } from '../../shared/draw-error.js';
+import type { Refusal } from '../../shared/refusal.js';
 import type { Store } from '../../store/store.js';
 import type { StoreChange } from '../../store/types.js';
 import { toChange } from '../impl/events.js';
@@ -37,7 +39,9 @@ import type {
 import type { Progress, SaveOptions } from '../write.js';
 import type { Answer, Backend, Task } from './backend.js';
 import { type ChangeReading, CommitValues } from './commit-values.js';
+import { createObservable } from './observable.js';
 import { batchesInSteps } from './parts.js';
+import { type CommitOperations, dependentsOf, takeOut } from './take-out.js';
 import type { ValueBatch, ValueOperation } from './values.js';
 
 /** The bytes of one `send` when the storage gives no limit */
@@ -76,7 +80,22 @@ export interface SenderOptions {
   readonly rowsReadAtOnce?: number;
   /** The wait before the try `attempt` (from 1) of a batch sent again (ms) */
   readonly retryDelay?: (attempt: number) => number;
+  /** Called once commits are taken out of the document, refused (their steps of undo go) */
+  readonly onTakenOut?: (commits: ReadonlySet<string>) => void;
 }
+
+/**
+ * A commit refused, kept until it is dismissed: its record, and what it did
+ *
+ * @internal
+ */
+export interface RefusedCommit {
+  readonly refusal: Refusal;
+  readonly operations: readonly ValueOperation[];
+}
+
+/** The most IDs a refusal lists */
+const REFUSAL_IDS = 1000;
 
 /** A save waiting for a commit to reach a stage */
 interface Waiter {
@@ -96,6 +115,10 @@ interface Entry {
   open: boolean;
   stage: SaveStage;
   readonly waiters: Waiter[];
+  /** Its operations, once read to their end */
+  operations: ValueOperation[] | null;
+  /** What takes it back, once read to its end (see `CommitOperations`) */
+  inverse: ValueOperation[];
 }
 
 /**
@@ -127,6 +150,10 @@ export class Sender {
   #sending: Progress | null = null;
   /** Ends the wait before a batch is sent again */
   #wake: (() => void) | null = null;
+  /** The commits refused, the oldest first, until they are dismissed */
+  #refusals: RefusedCommit[] = [];
+  readonly #refusalsValue = createObservable<readonly Refusal[]>(Object.freeze([]));
+  #nextRefusal = 1;
 
   constructor(store: Store, backend: Backend, options: SenderOptions) {
     this.#store = store;
@@ -152,6 +179,80 @@ export class Sender {
   /** The stages a commit goes through */
   get stages(): readonly SaveStage[] {
     return this.#stages;
+  }
+
+  /** What reads the commits of the Store as operations, and the document as it is now */
+  get values(): CommitValues {
+    return this.#values;
+  }
+
+  /** The records of the commits refused, the oldest first */
+  get refusals(): {
+    readonly value: readonly Refusal[];
+    subscribe(listener: (value: readonly Refusal[]) => void): () => void;
+  } {
+    return this.#refusalsValue;
+  }
+
+  /** The commits refused a target names, the oldest first (`notFound` for an unknown ID) */
+  refused(target: string | readonly string[] | { readonly all: true }): RefusedCommit[] {
+    if (typeof target === 'object' && target !== null && !Array.isArray(target)) {
+      if ((target as { all?: unknown }).all !== true) {
+        throw new DrawError('invalidInput', 'A target of refusals is an ID, IDs or { all: true }');
+      }
+      return [...this.#refusals];
+    }
+    const ids = typeof target === 'string' ? [target] : (target as readonly string[]);
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) {
+      throw new DrawError('invalidInput', 'A target of refusals is an ID, IDs or { all: true }');
+    }
+    const byId = new Map(this.#refusals.map((one) => [one.refusal.id, one]));
+    const missing = ids.filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      throw new DrawError('notFound', `No refusal has the ID ${missing[0]}`, { ids: missing });
+    }
+    const wanted = new Set(ids);
+    return this.#refusals.filter((one) => wanted.has(one.refusal.id));
+  }
+
+  /** Drops the records of refusals */
+  dismiss(refusals: readonly RefusedCommit[]): void {
+    if (refusals.length === 0) return;
+    const gone = new Set(refusals);
+    this.#refusals = this.#refusals.filter((one) => !gone.has(one));
+    this.#refusalsValue.set(Object.freeze(this.#refusals.map((one) => one.refusal)));
+    this.#changed();
+  }
+
+  /**
+   * Settles once every commit made so far reaches a stage (see `BackendResource.save`): fails with
+   * `refused` while a refusal is kept, or when one of them is refused
+   */
+  saveAll(options: SaveOptions | undefined): Promise<void> {
+    const kept = this.#refusals[this.#refusals.length - 1];
+    if (kept) {
+      const error = this.#refused.get(kept.refusal.commit);
+      if (error) return Promise.reject(error);
+    }
+    const commits = this.#entries.map((entry) => entry.commit);
+    if (commits.length === 0) return this.save('', options);
+    return Promise.all(commits.map((commit) => this.save(commit, options))).then(() => undefined);
+  }
+
+  /**
+   * Sends now what waits to be sent again, and opens again a connection the storage closed (for
+   * `credential`, once signed in again): the commits not sent are sent on
+   */
+  reconnect(): void {
+    if (this.#stopped) return;
+    if (this.#closed) {
+      this.#closed = null;
+      this.#connection = { state: 'online', sinceMilliseconds: Date.now() };
+      this.#changed();
+      if (!this.#running) setTimeout(() => void this.#run(), 0);
+      return;
+    }
+    this.#wake?.();
   }
 
   /** Settles once a commit reaches a stage (see `Write.save`) */
@@ -218,8 +319,9 @@ export class Sender {
   /** Reads a notification of the Store, as part of the commit it tells */
   #follow(changes: StoreChange): void {
     if (this.#stopped) return;
-    const remote = changes.source === 'remote';
-    // A notification from elsewhere is read for the places only: it is not sent back
+    // A notification from elsewhere, or of the take-out of refused commits, is read for the places
+    // only: it is not sent
+    const remote = changes.source === 'remote' || changes.source === 'refused';
     const reading = this.#values.readChange(changes, this.#options.rowsReadAtOnce, !remote);
     if (reading === null) {
       // The whole document replaced: nothing of it is sent
@@ -250,6 +352,8 @@ export class Sender {
         open: true,
         stage: 'local',
         waiters: [],
+        operations: null,
+        inverse: [],
       };
       this.#entries.push(entry);
       this.#open = entry;
@@ -297,7 +401,7 @@ export class Sender {
         if (this.#stopped || this.#closed) return;
         const entry = this.#entries.find((one) => one.stage === 'local');
         if (!entry || entry.open) return;
-        const operations = await this.#read(entry);
+        const operations = entry.operations ?? (await this.#read(entry));
         if (this.#stopped) return;
         if (operations.length === 0) {
           // Nothing of the document to save
@@ -313,18 +417,25 @@ export class Sender {
     }
   }
 
-  /** The operations of a commit, its notifications read to their end, a step a task */
+  /**
+   * The operations of a commit, its notifications read to their end, a step a task; what takes it
+   * back is read with them (the inverse of its last notification first)
+   */
   async #read(entry: Entry): Promise<ValueOperation[]> {
     const operations: ValueOperation[] = [];
+    const inverses: ValueOperation[][] = [];
     for (const reading of entry.readings) {
       while (!reading.step(performance.now() + STEP_MS)) {
         await nextTask();
         if (this.#stopped) return [];
       }
       for (const operation of reading.operations()) operations.push(operation);
+      inverses.push(reading.inverse());
       reading.release();
     }
     entry.readings.length = 0;
+    entry.operations = operations;
+    entry.inverse = inverses.reverse().flat();
     return operations;
   }
 
@@ -376,7 +487,7 @@ export class Sender {
           retry?.maxAgeMilliseconds !== undefined &&
           Date.now() - entry.writtenAtMilliseconds >= retry.maxAgeMilliseconds;
         if ((retry?.maxAttempts !== undefined && attempt >= retry.maxAttempts) || aged) {
-          await this.#refuse(entry, index > 0, 'retryLimit', error.message);
+          await this.#refuse(entry, index > 0, 'retryLimit', error.message, true);
           return;
         }
         const delay = (this.#options.retryDelay ?? defaultRetryDelay)(attempt);
@@ -421,7 +532,7 @@ export class Sender {
           );
           return;
         case 'refused':
-          await this.#refuse(entry, index > 0, answer.reason, answer.message);
+          await this.#refuse(entry, index > 0, answer.reason, answer.message, answer.retryable);
           return;
         case 'closed':
           this.#close(answer.reason, answer.message);
@@ -468,12 +579,16 @@ export class Sender {
     this.#changed();
   }
 
-  /** A commit refused: the saves waiting for it fail, and the commits after it are sent on */
+  /**
+   * A commit refused: it is taken out of the document with the later commits that depend on it,
+   * the saves waiting for them fail, and the commits after it are sent on
+   */
   async #refuse(
     entry: Entry,
     partly: boolean,
     reason: RefuseReason,
     message: string | undefined,
+    retryable: boolean | undefined,
   ): Promise<void> {
     if (partly && this.#backend.abandon) {
       try {
@@ -482,14 +597,98 @@ export class Sender {
         // Nothing of the commit is applied before its last part: the parts kept do no harm
       }
     }
-    const error = new DrawError(
-      'refused',
-      message ?? `The storage refused the commit ${entry.commit}: ${reason}`,
+    if (this.#stopped) return;
+    // The later commits, read to their end: those that name what it created go with it
+    this.#store.finishSlicedWrite();
+    for (;;) {
+      this.#closeOpen();
+      const unread = this.#entries.find((one) => one !== entry && one.operations === null);
+      if (!unread) break;
+      await this.#read(unread);
+      if (this.#stopped) return;
+    }
+    const later = this.#entries.filter((one) => one !== entry && one.stage === 'local');
+    const dependents = dependentsOf(entry as CommitOperations, later as CommitOperations[]).map(
+      (i) => later[i],
     );
-    this.#refused.set(entry.commit, error);
-    this.#forget(entry);
-    for (const waiter of entry.waiters.splice(0)) waiter.reject(error);
+    const refused = [entry, ...dependents];
+    const failed = this.#store.transact(
+      () =>
+        takeOut(
+          this.#store,
+          this.#values,
+          [entry, ...later] as CommitOperations[],
+          new Set<CommitOperations>(refused as CommitOperations[]),
+        ),
+      'refused',
+    );
+    if (failed.length > 0) {
+      this.#options.onSkipped({
+        error: new DrawError(
+          'invalidState',
+          `The take-out of the refused commit left out ${failed.length} writes the Store refused`,
+          { cause: failed[0] },
+        ),
+        label: entry.label,
+        commit: entry.commit,
+        count: failed.length,
+      });
+    }
+    const now = Date.now();
+    for (const one of refused) {
+      const first = one === entry;
+      const refusal = this.#record(
+        one,
+        first ? reason : 'dependsOnRefused',
+        first ? message : undefined,
+        first && retryable === true,
+        now,
+      );
+      const error = new DrawError(
+        'refused',
+        (first ? message : undefined) ??
+          `The storage refused the commit ${one.commit}: ${refusal.reason}`,
+        { refusal },
+      );
+      this.#refused.set(one.commit, error);
+      this.#forget(one);
+      for (const waiter of one.waiters.splice(0)) waiter.reject(error);
+      this.#refusals.push({ refusal, operations: one.operations ?? [] });
+      one.inverse = [];
+    }
+    this.#refusalsValue.set(Object.freeze(this.#refusals.map((one) => one.refusal)));
+    this.#options.onTakenOut?.(new Set(refused.map((one) => one.commit)));
     this.#changed();
+  }
+
+  /** The record of a commit refused */
+  #record(
+    entry: Entry,
+    reason: RefuseReason,
+    message: string | undefined,
+    retryable: boolean,
+    refusedAt: number,
+  ): Refusal {
+    const ids = new Set<string>();
+    for (const operation of entry.operations ?? []) {
+      if (operation.type === 'create') ids.add(operation.id);
+      else if (operation.kind !== 'document' && operation.kind !== 'file') {
+        for (const id of operation.ids) ids.add(id);
+      }
+    }
+    const list = [...ids];
+    return Object.freeze({
+      id: `refusal-${this.#nextRefusal++}`,
+      commit: entry.commit,
+      ids: Object.freeze(list.slice(0, REFUSAL_IDS)),
+      count: list.length,
+      label: entry.label,
+      reason,
+      message,
+      retryable,
+      writtenAtMilliseconds: entry.writtenAtMilliseconds,
+      refusedAtMilliseconds: refusedAt,
+    });
   }
 
   /** The connection closed by the storage: nothing more is sent, the saves waiting fail */
@@ -545,7 +744,7 @@ export class Sender {
       stage,
       stages: this.#stages,
       unsaved,
-      refused: this.#refused.size,
+      refused: this.#refusals.length,
       savedAtMilliseconds: this.#savedAt,
       sending: this.#sending,
     };

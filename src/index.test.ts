@@ -28,12 +28,16 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
+  'BackendResource',
   'CloseReason',
   'Connection',
   'DocumentState',
   'DrawReader',
   'HistoryState',
   'Problem',
+  'Refusal',
+  'RefusalTarget',
+  'Refusals',
   'RefuseReason',
   'SaveGoal',
   'SaveOptions',

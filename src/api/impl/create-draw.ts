@@ -9,6 +9,7 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import { ConsistencyChecks } from '../../debug/consistency.js';
 import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
+import { createBackendResource } from '../backend/refusals.js';
 import { Sender, type SenderOptions } from '../backend/sender.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -223,6 +224,7 @@ export function createDrawOnEngine(
     sender = new Sender(store, options.backend, {
       ...senderOptions,
       onChange: () => status.changed(),
+      onTakenOut: (commits) => history.drop(commits),
       onSkipped: (skipped) => status.problem({ type: 'skipped', ...skipped }),
     });
     setCommitSaver(store, sender);
@@ -366,6 +368,7 @@ export function createDrawOnEngine(
     extensions: engine.extensions.collections,
     memory: memory.memory,
     status: status.status,
+    backend: createBackendResource({ store, sender: () => sender }),
 
     getMap: () => map,
     getStore: () => view,

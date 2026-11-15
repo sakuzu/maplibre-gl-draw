@@ -23,7 +23,7 @@ import type { RenderedResource } from './rendered.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { SketchesCollection } from './sketches.js';
 import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
-import type { Status } from './status.js';
+import type { BackendResource, Status } from './status.js';
 import type { View } from './view.js';
 import type {
   OpenResult,
@@ -120,6 +120,8 @@ export interface Draw extends DrawReader {
    * written now, and the failures nobody waits for
    */
   readonly status: Observable<Status>;
+  /** The storage: to save every commit, to connect again, and the commits it refused */
+  readonly backend: BackendResource;
 
   // The map and the Store
 

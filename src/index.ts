@@ -72,11 +72,15 @@
 // Entry and options
 export type { CaptureImageOptions, Draw, DrawReader } from './api/draw.js';
 export type {
+  BackendResource,
   CloseReason,
   Connection,
   DocumentState,
   HistoryState,
   Problem,
+  Refusal,
+  RefusalTarget,
+  Refusals,
   RefuseReason,
   SaveGoal,
   SaveStage,

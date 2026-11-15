@@ -39,14 +39,26 @@ const FIELD_PREFIX = 'maplibre-gl-draw:';
  * Writes operations to a Store, in their order, inside a transaction the caller opened
  *
  * @param values - What keeps the keys of the items of the layers of objects, and of the layers
+ * @param keepKeys - False for a commit of this client made of them (a refusal made again): the
+ *   items of objects and the layers are put where their keys say, and take keys of their own
  */
 export function writeOperations(
   store: Store,
   values: CommitValues,
   operations: readonly ValueOperation[],
-): void {
-  const writes = new StoreWrites(store, values);
-  for (const operation of operations) writes.write(operation);
+  keepKeys = true,
+): { readonly failed: readonly unknown[] } {
+  const writes = new StoreWrites(store, values, keepKeys);
+  // One that the Store refuses is left out: the others are written
+  const failed: unknown[] = [];
+  for (const operation of operations) {
+    try {
+      writes.write(operation);
+    } catch (error) {
+      failed.push(error);
+    }
+  }
+  return { failed };
 }
 
 /** The writes of operations to one Store */
@@ -54,7 +66,14 @@ class StoreWrites {
   constructor(
     private readonly store: Store,
     private readonly values: CommitValues,
+    private readonly keepKeys: boolean,
   ) {}
+
+  /**
+   * The groups of objects to create, until their first member comes: a layer of objects holds no
+   * group without a member
+   */
+  readonly #groupsToCome = new Map<string, GroupRecord>();
 
   /** Whether the Store holds its features as rows */
   get #rows(): boolean {
@@ -103,12 +122,37 @@ class StoreWrites {
   // ==========================================================================
 
   #createFeature(id: string, record: FeatureRecord): void {
-    if (this.store.getFeature(id)) return;
+    const store = this.store;
+    if (store.getFeature(id)) return;
     const stored = storedOfRecord(id, record);
-    this.store.createFeature(stored);
-    const parentId = stored.groupId ?? stored.layerId;
+    if (!store.getLayer(stored.layerId)) return;
+    const groupId = stored.groupId;
+    const toCome = groupId === undefined ? undefined : this.#groupsToCome.get(groupId);
+    if (toCome || (groupId !== undefined && !store.getGroup(groupId))) {
+      // Created in its layer, then the group comes with it
+      store.createFeature({ ...stored, groupId: undefined });
+      if (toCome && groupId !== undefined) this.#joinGroupToCome(groupId, toCome, id, record.key);
+      return;
+    }
+    store.createFeature(stored);
+    const parentId = groupId ?? stored.layerId;
     if (this.#rows) this.#writeRowPlaces([id], parentId, [record.key]);
-    else this.#putObject(id, stored.layerId, stored.groupId, record.key);
+    else this.#putObject(id, stored.layerId, groupId, record.key);
+  }
+
+  /** Creates a group of objects with its first member, each where its key says */
+  #joinGroupToCome(groupId: string, record: GroupRecord, member: string, key: string): void {
+    this.#groupsToCome.delete(groupId);
+    this.store.createGroup({
+      id: groupId,
+      layerId: record.layerId,
+      name: record.name,
+      visible: record.visible,
+      locked: record.locked,
+      featureIds: [member],
+    });
+    this.#putObject(groupId, record.layerId, undefined, record.key);
+    if (this.keepKeys) this.values.keepPlace(member, groupId, key);
   }
 
   #set(operation: Extract<ValueOperation, { type: 'set' }>): void {
@@ -194,10 +238,14 @@ class StoreWrites {
       visible: record.visible,
       locked: record.locked,
     };
-    const group: Group = this.#rows ? { ...fields, kind: 'table' } : { ...fields, featureIds: [] };
+    if (!this.#rows) {
+      // Created with its first member
+      this.#groupsToCome.set(id, record);
+      return;
+    }
+    const group: Group = { ...fields, kind: 'table' };
     store.createGroup(group);
-    if (this.#rows) this.#writeGroupPlace(id, record.layerId, record.key);
-    else this.#putObject(id, record.layerId, undefined, record.key);
+    this.#writeGroupPlace(id, record.layerId, record.key);
   }
 
   #placeLayer(id: string, key: string): void {
@@ -214,7 +262,7 @@ class StoreWrites {
     const order = store.getLayerOrder().filter((entry) => entry !== id);
     const at = below === null ? firstLayerAt(order, store) : order.indexOf(below) + 1;
     order.splice(at, 0, id);
-    this.values.keepPlace(id, null, key);
+    if (this.keepKeys) this.values.keepPlace(id, null, key);
     store.setLayerOrder(order);
   }
 
@@ -235,6 +283,15 @@ class StoreWrites {
       return;
     }
     if (parentId === null) return;
+    const toCome = this.#groupsToCome.get(parentId);
+    if (toCome) {
+      if (kind === 'feature' && store.getFeature(id) && store.getLayer(toCome.layerId)) {
+        // Into its layer first, where the group comes
+        this.#putObject(id, toCome.layerId, undefined, toCome.key);
+        this.#joinGroupToCome(parentId, toCome, id, key);
+      }
+      return;
+    }
     const group = store.getGroup(parentId);
     const layerId = group ? group.layerId : parentId;
     if (!store.getLayer(layerId)) return;
@@ -262,7 +319,7 @@ class StoreWrites {
       if (entry.id === id || entry.id === leaves || compareKeys(entry.key, key) >= 0) continue;
       if (!below || compareKeys(entry.key, below.key) >= 0) below = entry;
     }
-    this.values.keepPlace(id, parentId, key);
+    if (this.keepKeys) this.values.keepPlace(id, parentId, key);
     this.store.moveItems([id], {
       layerId,
       ...(groupId !== undefined && { groupId }),
