@@ -846,14 +846,16 @@ export class CommitValues {
     for (let i = 0; i < items.length; i++) {
       if (places.get(items[i])?.parent === parent) there.push(i);
     }
-    const sorted = there
-      .map((i) => (places.get(items[i]) as Place).key)
-      .sort(compareKeys)
-      .filter((key, i, all) => i === 0 || all[i - 1] !== key);
-    const ranks = new Map(sorted.map((key, rank) => [key, rank]));
-    const run = longestRisingRun(
-      there.map((i) => ranks.get((places.get(items[i]) as Place).key) as number),
-    );
+    // By key, and by ID among the same keys (as a storage orders them)
+    const sorted = [...there].sort((a, b) => {
+      const order = compareKeys(
+        (places.get(items[a]) as Place).key,
+        (places.get(items[b]) as Place).key,
+      );
+      return order !== 0 ? order : items[a] < items[b] ? -1 : items[a] > items[b] ? 1 : 0;
+    });
+    const ranks = new Map(sorted.map((i, rank) => [i, rank]));
+    const run = longestRisingRun(there.map((i) => ranks.get(i) as number));
     const kept = new Set(run.map((k) => there[k]));
     const moved = new Set<string>();
     let below: string | null = null;

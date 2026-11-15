@@ -104,11 +104,16 @@ export function storedOf(document: StoredDocument) {
   const features = [...document.features];
   const layerOf = (id: string) => document.features.get(id)?.properties[KEY('layerId')];
   const groupOf = (id: string) => document.features.get(id)?.properties[KEY('groupId')];
+  const members = new Set(features.map(([fid]) => groupOf(fid)).filter((g) => g !== undefined));
   return {
     layers: byKey(document.layers).map((id) => {
       const layer = document.layers.get(id) as NonNullable<ReturnType<typeof document.layers.get>>;
+      // A group with no member stands nowhere in the order (a Store of rows keeps one a refusal
+      // took its members out of, as the storage does)
       const items: [string, { key: string }][] = [
-        ...[...document.groups].filter(([, g]) => g.layerId === id && g.parentId === null),
+        ...[...document.groups].filter(
+          ([gid, g]) => g.layerId === id && g.parentId === null && members.has(gid),
+        ),
         ...features.filter(([fid]) => layerOf(fid) === id && groupOf(fid) === undefined),
       ];
       return {

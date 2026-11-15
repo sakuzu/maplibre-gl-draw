@@ -25,6 +25,7 @@
 
 import { DrawError } from '../../shared/draw-error.js';
 import type { Refusal } from '../../shared/refusal.js';
+import { createId } from '../../shared/utils/id.js';
 import type { Store } from '../../store/store.js';
 import type { StoreChange } from '../../store/types.js';
 import { toChange } from '../impl/events.js';
@@ -154,6 +155,8 @@ export class Sender {
   #refusals: RefusedCommit[] = [];
   readonly #refusalsValue = createObservable<readonly Refusal[]>(Object.freeze([]));
   #nextRefusal = 1;
+  /** The groups the Store deleted in the take-out under way, left empty by it */
+  #emptied: string[] | null = null;
 
   constructor(store: Store, backend: Backend, options: SenderOptions) {
     this.#store = store;
@@ -322,6 +325,9 @@ export class Sender {
     // A notification from elsewhere, or of the take-out of refused commits, is read for the places
     // only: it is not sent
     const remote = changes.source === 'remote' || changes.source === 'refused';
+    if (changes.source === 'refused' && this.#emptied) {
+      for (const group of changes.groups?.deleted ?? []) this.#emptied.push(group.id);
+    }
     const reading = this.#values.readChange(changes, this.#options.rowsReadAtOnce, !remote);
     if (reading === null) {
       // The whole document replaced: nothing of it is sent
@@ -612,7 +618,8 @@ export class Sender {
       (i) => later[i],
     );
     const refused = [entry, ...dependents];
-    const failed = this.#store.transact(
+    this.#emptied = [];
+    const { failed, unplaced, uncreated } = this.#store.transact(
       () =>
         takeOut(
           this.#store,
@@ -622,6 +629,7 @@ export class Sender {
         ),
       'refused',
     );
+    this.#sendSettled(refused, unplaced, uncreated);
     if (failed.length > 0) {
       this.#options.onSkipped({
         error: new DrawError(
@@ -659,6 +667,75 @@ export class Sender {
     this.#refusalsValue.set(Object.freeze(this.#refusals.map((one) => one.refusal)));
     this.#options.onTakenOut?.(new Set(refused.map((one) => one.commit)));
     this.#changed();
+  }
+
+  /**
+   * Sends what a take-out settled the Store on that the storage does not have, after the commits
+   * not sent, as a commit of the sender's own that has no step of undo: where the items stay that
+   * it did not put back under a parent a later commit deleted, and the deletion of the groups the
+   * Store deleted because the take-out left them empty (a Store holds no group without a member)
+   */
+  #sendSettled(
+    refused: readonly Entry[],
+    unplaced: ReadonlyArray<{ readonly kind: 'feature' | 'group'; readonly id: string }>,
+    uncreated: ReadonlyArray<{ readonly kind: 'feature' | 'group'; readonly id: string }>,
+  ): void {
+    const emptied = this.#emptied ?? [];
+    this.#emptied = null;
+    // What the refused commits created goes with them: the storage never had it
+    const made = new Set<string>();
+    for (const one of refused) {
+      for (const operation of one.operations ?? []) {
+        if (operation.type === 'create') made.add(operation.id);
+      }
+    }
+    // And the groups a take-out created again that the Store did not keep
+    for (const one of refused) {
+      for (const operation of one.inverse) {
+        if (operation.type === 'create' && operation.kind === 'group') emptied.push(operation.id);
+      }
+    }
+    const ids = [...new Set(emptied)].filter((id) => !made.has(id) && !this.#store.getGroup(id));
+    const operations: ValueOperation[] = [];
+    const places = new Map<string, { kind: 'feature' | 'group'; ids: string[]; keys: string[] }>();
+    for (const { kind, id } of unplaced) {
+      const place = this.#values.placeOf(kind, id);
+      if (!place || place.parentId === null) continue;
+      const at = `${kind}\u0000${place.parentId}`;
+      const list = places.get(at) ?? { kind, ids: [], keys: [] };
+      places.set(at, list);
+      if (list.ids.includes(id)) continue;
+      list.ids.push(id);
+      list.keys.push(place.key);
+    }
+    for (const kind of ['group', 'feature'] as const) {
+      for (const [at, list] of places) {
+        if (list.kind !== kind) continue;
+        const parentId = at.slice(at.indexOf('\u0000') + 1);
+        operations.push({ type: 'place', kind, ids: list.ids, parentId, keys: list.keys });
+      }
+    }
+    // What it did not create again under a layer gone: the storage still has it there
+    const gone = (kind: 'feature' | 'group') =>
+      uncreated.filter((one) => one.kind === kind && !made.has(one.id)).map((one) => one.id);
+    const features = [...new Set(gone('feature'))].filter((id) => !this.#store.getFeature(id));
+    if (features.length > 0) operations.push({ type: 'delete', kind: 'feature', ids: features });
+    const groups = [...new Set([...ids, ...gone('group')])].filter(
+      (id) => !this.#store.getGroup(id),
+    );
+    if (groups.length > 0) operations.push({ type: 'delete', kind: 'group', ids: groups });
+    if (operations.length === 0) return;
+    this.#entries.push({
+      commit: createId(),
+      label: undefined,
+      writtenAtMilliseconds: Date.now(),
+      readings: [],
+      open: false,
+      stage: 'local',
+      waiters: [],
+      operations,
+      inverse: [],
+    });
   }
 
   /** The record of a commit refused */

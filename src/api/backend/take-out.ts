@@ -89,15 +89,34 @@ export function takeOut(
   values: CommitValues,
   commits: readonly CommitOperations[],
   refused: ReadonlySet<CommitOperations>,
-): unknown[] {
+): TakeOutResult {
   const failed: unknown[] = [];
+  const unplaced: Array<{ kind: 'feature' | 'group'; id: string }> = [];
+  const uncreated: Array<{ kind: 'feature' | 'group'; id: string }> = [];
   for (let i = commits.length - 1; i >= 0; i--) {
     if (!refused.has(commits[i])) continue;
     // The commits after it that stay: their inverse is rewritten
     const later = commits.slice(i + 1).filter((commit) => !refused.has(commit));
-    failed.push(...takeOutOne(store, values, commits[i], later));
+    const result = takeOutOne(store, values, commits[i], later);
+    failed.push(...result.failed);
+    unplaced.push(...result.unplaced);
+    uncreated.push(...result.uncreated);
   }
-  return failed;
+  return { failed, unplaced, uncreated };
+}
+
+/**
+ * What a take-out could not write: what the Store refused, and the items the storage is told
+ * where they are: those it did not put back because a later commit deleted their parent (they
+ * stay where they are), and those it put back in a group a later commit put in another layer
+ *
+ * @internal
+ */
+export interface TakeOutResult {
+  readonly failed: readonly unknown[];
+  readonly unplaced: ReadonlyArray<{ readonly kind: 'feature' | 'group'; readonly id: string }>;
+  /** What it did not create again because a later commit deleted its layer: the storage deletes it */
+  readonly uncreated: ReadonlyArray<{ readonly kind: 'feature' | 'group'; readonly id: string }>;
 }
 
 function takeOutOne(
@@ -105,7 +124,7 @@ function takeOutOne(
   values: CommitValues,
   commit: CommitOperations,
   later: readonly CommitOperations[],
-): readonly unknown[] {
+): TakeOutResult {
   const made = new Set<string>();
   createdIds(commit.operations, made);
   const back = slotsOf(commit.inverse);
@@ -116,6 +135,7 @@ function takeOutOne(
   const inverses: Array<Slots | null> = later.map(() => null);
   const records: Array<Map<string, Map<string, SlotValue>> | null> = later.map(() => null);
   const kept: Slots = new Map();
+  const told: Array<{ kind: 'feature' | 'group'; id: string }> = [];
   for (const [thing, slots] of slotsOf(commit.operations)) {
     const { kind, id } = thingOf(thing);
     // What it created is deleted with it
@@ -140,6 +160,15 @@ function takeOutOne(
             kept.set(thing, entry);
           }
           entry.set(key, before);
+          // A feature put back in a group a later commit put in another layer: the storage, which
+          // moved the group with the members that commit named, is told where it is
+          const parent = key === 'place' ? (before as ItemPlace).parentId : null;
+          if (kind === 'feature' && parent !== null) {
+            const group = thingKey('group', parent);
+            if (written.some((slots) => slots.get(group)?.has('place'))) {
+              told.push({ kind: 'feature', id });
+            }
+          }
         }
         continue;
       }
@@ -164,17 +193,47 @@ function takeOutOne(
     const remade = records[i];
     if (remade) other.inverse = withRecords(store, other.inverse, remade);
   });
+  // What it deleted comes back, unless a later commit created it again (or deleted it once more):
+  // the later one stays, and taking that one back no longer deletes it
+  const creates = commit.inverse.filter((operation) => {
+    if (operation.type !== 'create') return false;
+    if (operation.kind === 'file') return true;
+    const thing = thingKey(operation.kind, operation.id);
+    const at = later.findIndex((_, i) => created[i].has(thing) || deleted[i].has(thing));
+    if (at < 0) return true;
+    if (created[at].has(thing)) {
+      const other = later[at];
+      other.inverse = withoutDeletion(other.inverse, operation.kind, operation.id);
+    }
+    return false;
+  });
   const operations = [
-    ...commit.inverse.filter((operation) => operation.type === 'create'),
+    ...creates,
     ...operationsOf(kept),
     ...commit.inverse.filter((operation) => operation.type === 'delete'),
   ];
-  return writeOperations(store, values, operations).failed;
+  const result = writeOperations(store, values, operations);
+  return { ...result, unplaced: [...result.unplaced, ...told] };
 }
 
 // ============================================================================
 // What a commit names
 // ============================================================================
+
+/** Operations without the deletion of one thing */
+function withoutDeletion(
+  operations: readonly ValueOperation[],
+  kind: string,
+  id: string,
+): ValueOperation[] {
+  return operations.flatMap((operation) => {
+    if (operation.type !== 'delete' || operation.kind !== kind || !operation.ids.includes(id)) {
+      return [operation];
+    }
+    const ids = operation.ids.filter((one) => one !== id);
+    return ids.length > 0 ? [{ ...operation, ids }] : [];
+  });
+}
 
 /** The things operations create */
 function createdThings(operations: readonly ValueOperation[]): Set<string> {

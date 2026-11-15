@@ -132,9 +132,15 @@ describe('the commits a storage refuses', () => {
         for (const seed of [41, 42, 43, 44, 45, 46]) {
           const next = random(seed);
           const pick = random(seed + 100);
-          const storage = refusing(() => pick() < 0.15);
+          // The commits of the user are refused now and then; those the sender makes to settle a
+          // take-out (no change of the user tells them) are not
+          const made = new Set<string>();
+          const storage = refusing((batch) => made.has(batch.commit) && pick() < 0.15);
           draw = drawWith(makeStore(), storage.backend, atOnce);
           const d = draw;
+          d.on('change', (change) => {
+            if (change.source !== 'refused' && change.source !== 'remote') made.add(change.commit);
+          });
           await d.write(async (tx) => {
             await tx.layers.create({ id: 'a', name: 'A' });
             await tx.layers.create({ id: 'b', name: 'B' });
