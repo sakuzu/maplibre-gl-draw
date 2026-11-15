@@ -4,7 +4,7 @@
 /**
  * Operations from elsewhere, written to a Store (`writeOperations`) and applied to the document of
  * a storage (`applyOperations`, read by the rules of `kept.ts`), give the same document, and keep
- * the same aside: random runs of what other clients send that name part of what they touch (a
+ * the same aside: random runs of what is sent from elsewhere that names part of what it touches (a
  * group moved with some of its members, a layer deleted with some of what it holds, a feature
  * made in a container gone, a move under a container gone, an undo that makes a record again)
  */
@@ -51,7 +51,7 @@ function layerRecord(id: string, key: string): LayerRecord {
   return { name: id, visible: true, locked: false, opacity: 1, style: {}, styleRule: null, key };
 }
 
-/** The operations of one random commit of another client, from what the storage holds */
+/** The operations of one random commit from elsewhere, from what the storage holds */
 function commitOf(
   next: () => number,
   document: StoredDocument,
