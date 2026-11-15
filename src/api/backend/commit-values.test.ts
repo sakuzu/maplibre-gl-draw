@@ -200,6 +200,37 @@ describe('CommitValues', () => {
     });
   }
 
+  it('reads a row deleted over several tasks as it was, when an undo makes it again and a write changes it before it is read', async () => {
+    const store = createTableStore().store;
+    draw = createDraw(createMapStub().map, { store, initDefaultLayer: false });
+    const d = draw;
+    await d.write(async (tx) => {
+      await tx.layers.create({ id: 'a', name: 'A' });
+      await tx.features.create({
+        type: 'Feature',
+        id: 'f1',
+        geometry: { type: 'Point', coordinates: [1, 2] },
+        properties: { 'maplibre-gl-draw:layerId': 'a', n: 1 },
+      });
+    });
+    const values = new CommitValues(store);
+    const readings: Array<NonNullable<ReturnType<CommitValues['readChange']>>> = [];
+    const stop = store.subscribe((changes) => {
+      // Every row read over several tasks, none read yet
+      const reading = values.readChange(changes, 0);
+      if (reading) readings.push(reading);
+    });
+    await d.write((tx) => tx.features.delete(['f1']));
+    await d.undo();
+    await d.write((tx) => tx.features.update('f1', { properties: { n: 2 } }));
+    stop();
+    const [deleted] = readings;
+    deleted.step(Number.POSITIVE_INFINITY);
+    const made = deleted.inverse().find((operation) => operation.type === 'create');
+    expect(made?.type === 'create' && made.kind === 'feature' && made.record.properties.n).toBe(1);
+    for (const reading of readings) reading.release();
+  });
+
   it('gives a file its bytes in base64', () => {
     expect(
       fileRecordOf({ id: 'i', mimeType: 'image/png', dataURL: 'data:image/png;base64,AAEC' }),

@@ -191,26 +191,28 @@ export interface ChangeReading {
   release(): void;
 }
 
+/** The notification rows deleted by it come from */
+interface DeletedBy {
+  readonly change: Change;
+  readonly changes: StoreChange;
+  /** Where the rows were before it, read once */
+  placesBefore?: Map<number, Place>;
+}
+
 /** A row a notification deleted, whose record before it is read for the inverse */
 interface DeletedRow {
   readonly id: string;
   readonly handle: number;
-  /** Its key before the notification */
-  key: string;
-  /** Its feature before the notification, once read (undefined: not read yet) */
-  before: Feature | null | undefined;
-  /** Reads its feature before the notification (while it is the one the tables keep) */
-  read(): Feature | undefined;
+  readonly by: DeletedBy;
+  /** Its feature before the notification and its key then, once read (undefined: not yet) */
+  before?: { readonly feature: Feature | undefined; readonly key: string };
 }
 
 /** The rows of a notification whose values are still to be read, and how far they are read */
 interface RowsToRead {
   /** The rows created, with their keys */
   readonly created: { readonly id: string; readonly key: string }[];
-  /**
-   * The rows deleted, their handles and their keys before the notification: what makes them again
-   * is read for the inverse
-   */
+  /** The rows deleted, and their handles: what makes them again is read for the inverse */
   readonly deleted: DeletedRow[];
   /** The rows updated, and their handles where the notification went out */
   updated: readonly string[];
@@ -373,8 +375,11 @@ export class CommitValues {
         const row = this.#unreadDeleted.get(id);
         if (!row) continue;
         this.#unreadDeleted.delete(id);
-        // As it was before it was deleted: what it is made again with
-        row.before = row.read() ?? null;
+        // As it was before it was deleted, where it was: what it is made again with
+        row.before = {
+          feature: row.by.change.previous(id),
+          key: this.#deletedKeys([row]).get(id) ?? '',
+        };
       }
     }
     const out = emptyOperations();
@@ -913,6 +918,7 @@ export class CommitValues {
     // The rows deleted, by their IDs: what makes them again is read with the values of the rows
     const rowsDeleted = inv ? rowsDeletedOf(changes, store) : null;
     const deletedRows: DeletedRow[] = [];
+    const by: DeletedBy = { change, changes };
     // The lists of the layers and groups of objects features were put in, made in or deleted from
     const touched = new Set<string>();
     for (const id of ids.deleted) {
@@ -920,28 +926,13 @@ export class CommitValues {
       if (was) touched.add(was.parent);
       const handle = rowsDeleted?.get(id);
       if (handle !== undefined) {
-        deletedRows.push({
-          id,
-          handle,
-          key: '',
-          before: undefined,
-          read: () => change.previous(id),
-        });
+        deletedRows.push({ id, handle, by });
       } else if (inv) {
         const before = change.previous(id);
         if (before) inv.createdFeatures.push(createShownFeature(id, before, was?.key ?? ''));
       }
       this.#setPlace(id, undefined);
       out.deletedFeatures.push(id);
-    }
-    if (deletedRows.length > 0) {
-      // The keys of the rows deleted, read now: a row made again later and put elsewhere has
-      // another key after
-      const keys = this.#rowPlacesOf(deletedRows.map(({ handle }) => handle));
-      const before = rowPlacesBefore(changes);
-      for (const row of deletedRows) {
-        row.key = before.get(row.handle)?.key ?? keys.get(row.handle) ?? '';
-      }
     }
     const rows: string[] = [];
     for (const id of [...ids.created, ...ids.placed]) {
@@ -1117,12 +1108,18 @@ export class CommitValues {
       // the key they had before the notification (a row put elsewhere before it was deleted), or
       // as read when they were made again (see `#unreadDeleted`)
       const from = rows.at - created.length - updated.length;
+      const keys = this.#deletedKeys(deleted.slice(from).filter((row) => !row.before));
       for (let i = from; i < deleted.length; i++) {
         rows.at++;
         const row = deleted[i];
-        const before = row.before !== undefined ? row.before : change.previous(row.id);
+        const before = row.before ?? {
+          feature: change.previous(row.id),
+          key: keys.get(row.id) ?? '',
+        };
         if (this.#unreadDeleted.get(row.id) === row) this.#unreadDeleted.delete(row.id);
-        if (before) inv.createdFeatures.push(createShownFeature(row.id, before, row.key));
+        if (before.feature) {
+          inv.createdFeatures.push(createShownFeature(row.id, before.feature, before.key));
+        }
         if (late()) return false;
       }
     }
@@ -1262,6 +1259,21 @@ export class CommitValues {
     handles.forEach((handle, i) => {
       if (typeof keys[i] === 'string') out.set(handle, keys[i] as string);
     });
+    return out;
+  }
+
+  /**
+   * The keys rows deleted had before the notification that deleted them: where the notification
+   * says they were, else the key the tables keep for them
+   */
+  #deletedKeys(rows: readonly DeletedRow[]): Map<string, string> {
+    const out = new Map<string, string>();
+    if (rows.length === 0) return out;
+    const kept = this.#rowPlacesOf(rows.map(({ handle }) => handle));
+    for (const row of rows) {
+      row.by.placesBefore ??= rowPlacesBefore(row.by.changes);
+      out.set(row.id, row.by.placesBefore.get(row.handle)?.key ?? kept.get(row.handle) ?? '');
+    }
     return out;
   }
 
