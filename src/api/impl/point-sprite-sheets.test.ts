@@ -96,6 +96,8 @@ interface Opened {
   detach(): void;
   /** Lets a frame begin: what waits for it is done */
   frame(): void;
+  /** Tells the map drew a frame (`render`) */
+  rendered(): void;
   /** A point feature, as the drawing reads it */
   point(properties: Record<string, unknown>): StoredFeature;
 }
@@ -110,8 +112,9 @@ afterEach(() => {
 /** An instance whose limit of the GPU is `limitBytes` */
 function open(limitBytes = 1_000_000): Opened {
   const store = new MemoryStore();
+  const stub = createMapStub();
   const engine = createEngine(
-    createMapStub().map,
+    stub.map,
     { store, initDefaultLayer: false, gpuLimitBytes: limitBytes },
     { deferDefaultMode: true },
   );
@@ -141,6 +144,7 @@ function open(limitBytes = 1_000_000): Opened {
       for (const sheet of sheets) sheet.onRemove();
     },
     frame: () => engine.context.pointSprites.beginFrame(),
+    rendered: () => stub.fireMap('render'),
     point: (properties) =>
       ({
         id: `p${Math.random()}`,
@@ -426,5 +430,233 @@ describe('a sheet of pictures', () => {
     expect(sprites.ofFeature(view.point({}))).toBeNull();
     const problems = view.draw.status.value.problems.filter((p) => p.label === 'acme');
     expect(problems).toHaveLength(2);
+  });
+});
+
+type Uv = readonly [number, number, number, number];
+
+/**
+ * The example of flags: a sheet of every flag, the picture of a point chosen by an attribute. The
+ * whole image is replaced by the function the plugin gives; a lost context comes back with
+ * another, empty texture, which the plugin sees after a frame and writes the image into again
+ */
+const flags = (
+  first: ImageBitmap,
+  places: ReadonlyMap<string, Uv>,
+): Plugin<(next: ImageBitmap) => void> => ({
+  name: 'acme-flags',
+  setup(ctx) {
+    let current = first;
+    const sheet = ctx.addPointSprites({
+      gpuShare: 0.05,
+      image: first,
+      sprite(row) {
+        const country = row.property('acme:country');
+        const uv = typeof country === 'string' ? places.get(country) : undefined;
+        return uv ? { uv, halfWidthPixels: 12, halfHeightPixels: 8 } : null;
+      },
+    });
+    // The texture the image was written into: another one is empty
+    let seen: WebGLTexture | null = null;
+    const check = (): void => {
+      const texture = ctx.webgl.spriteTexture(sheet);
+      if (texture && seen && texture !== seen) sheet.update(current);
+      if (texture) seen = texture;
+    };
+    ctx.map.on('render', check);
+    ctx.signal.addEventListener('abort', () => ctx.map.off('render', check));
+    return (next) => {
+      current = next;
+      // The image of another size makes another texture, written already
+      seen = null;
+      sheet.update(next);
+    };
+  },
+});
+
+/**
+ * The example of pictures put as they arrive: a point names the URL of its picture, each picture
+ * is put into the next cell of the sheet once it is loaded, and the sheet is made twice as large,
+ * every picture put again, when it is full. The plugin keeps the pictures it loaded (its own
+ * choice) and puts them again when the context comes back
+ */
+const pictures = (
+  empty: ImageBitmap,
+  load: (url: string) => Promise<ImageBitmap>,
+  cell = 32,
+): Plugin<void> => ({
+  name: 'acme-pictures',
+  setup(ctx) {
+    let size = empty.width;
+    const placed = new Map<string, { readonly at: number; readonly image: ImageBitmap }>();
+    const loading = new Set<string>();
+    const place = (at: number): readonly [number, number] => {
+      const per = size / cell;
+      return [(at % per) * cell, Math.floor(at / per) * cell];
+    };
+    const sheet = ctx.addPointSprites({
+      gpuShare: 0.5,
+      image: empty,
+      sprite(row) {
+        const url = row.property('acme:picture');
+        if (typeof url !== 'string') return null;
+        const known = placed.get(url);
+        if (!known) {
+          if (!loading.has(url)) {
+            loading.add(url);
+            void load(url).then((image) => arrive(url, image));
+          }
+          return null;
+        }
+        const [x, y] = place(known.at);
+        return {
+          uv: [x / size, y / size, (x + cell) / size, (y + cell) / size],
+          halfWidthPixels: cell / 2,
+          halfHeightPixels: cell / 2,
+        };
+      },
+    });
+    const putAll = (): void => {
+      for (const { at, image: picture } of placed.values()) sheet.update(picture, ...place(at));
+    };
+    const arrive = (url: string, picture: ImageBitmap): void => {
+      if (ctx.signal.aborted) return;
+      const at = placed.size;
+      placed.set(url, { at, image: picture });
+      if (at < (size / cell) ** 2) {
+        sheet.update(picture, ...place(at));
+        return;
+      }
+      // Full: twice as large, every picture put again
+      size *= 2;
+      sheet.resize(size, size);
+      seen = null;
+      putAll();
+    };
+    let seen: WebGLTexture | null = null;
+    const check = (): void => {
+      const texture = ctx.webgl.spriteTexture(sheet);
+      if (texture && seen && texture !== seen) putAll();
+      if (texture) seen = texture;
+    };
+    ctx.map.on('render', check);
+    ctx.signal.addEventListener('abort', () => ctx.map.off('render', check));
+  },
+});
+
+describe('the examples of the sheets of pictures', () => {
+  it('gives a point the flag of its country, and the marker to a country without one', () => {
+    const view = open();
+    const { gl, writes } = context();
+    const first = image(64, 32);
+    const replace = view.draw.use(
+      flags(
+        first,
+        new Map<string, Uv>([
+          ['jp', [0, 0, 0.5, 1]],
+          ['fr', [0.5, 0, 1, 1]],
+        ]),
+      ),
+    );
+    view.attach(gl);
+    view.frame();
+    view.rendered();
+    const sheets = view.engine.context.pointSprites;
+    expect(sheets.ofFeature(view.point({ 'acme:country': 'fr' }))?.sprite).toEqual({
+      uv: [0.5, 0, 1, 1],
+      halfWidth: 12,
+      halfHeight: 8,
+      rotates: false,
+    });
+    expect(sheets.ofFeature(view.point({ 'acme:country': 'xx' }))).toBeNull();
+    expect(writes.map((write) => write.image)).toEqual([first]);
+    // The whole image replaced
+    const next = image(64, 32);
+    replace(next);
+    view.frame();
+    view.rendered();
+    expect(writes.map((write) => write.image)).toEqual([first, next]);
+  });
+
+  it('writes the flags again when the context comes back', () => {
+    const view = open();
+    const { gl, lost, writes } = context();
+    const first = image(64, 32);
+    view.draw.use(flags(first, new Map<string, Uv>([['jp', [0, 0, 1, 1]]])));
+    view.attach(gl);
+    view.frame();
+    view.rendered();
+    lost.value = true;
+    view.detach();
+    lost.value = false;
+    view.attach(gl);
+    // The new texture is empty until the plugin sees it after a frame
+    view.frame();
+    view.rendered();
+    expect(writes).toHaveLength(1);
+    view.frame();
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toEqual({ texture: writes[1].texture, x: 0, y: 0, image: first });
+    expect(writes[1].texture).not.toBe(writes[0].texture);
+    // Nothing more once it is written
+    view.rendered();
+    view.frame();
+    expect(writes).toHaveLength(2);
+  });
+
+  it('puts the pictures as they arrive, and makes the sheet larger when it is full', async () => {
+    const view = open();
+    const { gl, lost, writes } = context();
+    const loaded = new Map<string, ImageBitmap>();
+    const load = vi.fn(async (url: string) => {
+      const picture = image(32, 32);
+      loaded.set(url, picture);
+      return picture;
+    });
+    view.draw.use(pictures(image(64, 64), load));
+    view.attach(gl);
+    view.frame();
+    view.rendered();
+    const sheets = view.engine.context.pointSprites;
+    const points = ['a', 'b', 'c', 'd', 'e'].map((url) => view.point({ 'acme:picture': url }));
+    // Not loaded yet: the markers, each picture loaded once
+    for (const p of points) expect(sheets.ofFeature(p)).toBeNull();
+    for (const p of points) sheets.ofFeature(view.point({ ...p.properties }));
+    expect(load).toHaveBeenCalledTimes(5);
+    await Promise.resolve();
+    await Promise.resolve();
+    view.frame();
+    view.rendered();
+    // The fifth did not fit the 2 × 2 cells: twice as large, every picture put again in its cell
+    expect(view.bytesOf('acme-pictures')).toBe(128 * 128 * 4);
+    const last = writes.slice(-5);
+    expect(last.map((write) => [write.x, write.y])).toEqual([
+      [0, 0],
+      [32, 0],
+      [64, 0],
+      [96, 0],
+      [0, 32],
+    ]);
+    expect(last.map((write) => write.image)).toEqual(
+      ['a', 'b', 'c', 'd', 'e'].map((u) => loaded.get(u)),
+    );
+    expect(new Set(last.map((write) => write.texture)).size).toBe(1);
+    expect(sheets.ofFeature(view.point({ 'acme:picture': 'e' }))?.sprite.uv).toEqual([
+      0, 0.25, 0.25, 0.5,
+    ]);
+    // The pictures put again once the context comes back
+    const count = writes.length;
+    lost.value = true;
+    view.detach();
+    lost.value = false;
+    view.attach(gl);
+    view.frame();
+    view.rendered();
+    view.frame();
+    expect(writes).toHaveLength(count + 5);
+    expect(writes.slice(-5).map((write) => [write.x, write.y])).toEqual(
+      last.map((write) => [write.x, write.y]),
+    );
+    expect(writes[writes.length - 1].texture).not.toBe(last[0].texture);
   });
 });

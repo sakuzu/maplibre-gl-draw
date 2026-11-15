@@ -294,6 +294,10 @@ export function createMapStub(options: { boxZoomEnabled?: boolean } = {}) {
     fireCanvas: (type: string, event: unknown) => {
       for (const fn of [...(canvasListeners.get(type) ?? [])]) fn(event);
     },
+    /** Hands an event to the listeners of the map, as maplibre would (`render` after a frame) */
+    fireMap: (type: string, event: unknown = {}) => {
+      for (const fn of [...(mapListeners.get(type) ?? [])]) fn(event);
+    },
     mapListenerCount: () => count(mapListeners),
     canvasListenerCount: () => count(canvasListeners),
     isBoxZoomEnabled: () => boxZoomEnabled,
