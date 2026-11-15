@@ -125,8 +125,9 @@ export function diffItemOrder<T>(
     ...containers.filter((c) => c.groupId === undefined),
     ...containers.filter((c) => c.groupId !== undefined),
   ];
+  const indexOf = new Map(containers.map((container, c) => [container, c] as const));
   for (const container of ordered) {
-    const c = containers.indexOf(container);
+    const c = indexOf.get(container) as number;
     const after = container.after;
     const stays = stayingItems(container, options.moved);
     for (let i = 0; i < after.length; i++) {
@@ -223,6 +224,8 @@ class LinkedItems<T> {
   private readonly added = new Map<number, T>();
   /** The node of an item put somewhere else than where it was, or -1 once it is taken out */
   private readonly moved = new Map<T, number>();
+  /** The node of each item before, in the first container that has it (made when first asked) */
+  private beforeNodes: Map<T, number> | null = null;
   private readonly heads: number[] = [];
   private readonly tails: number[] = [];
   private count = 0;
@@ -253,11 +256,22 @@ class LinkedItems<T> {
   private nodeOf(item: T): number {
     const moved = this.moved.get(item);
     if (moved !== undefined) return moved;
-    for (let k = 0; k < this.containers.length; k++) {
-      const at = this.containers[k].beforeIndex(item);
-      if (at >= 0) return this.offsets[k] + at;
+    if (this.containers.length === 1) {
+      const at = this.containers[0].beforeIndex(item);
+      return at >= 0 ? this.offsets[0] + at : -1;
     }
-    return -1;
+    // Many containers: each item before is found in one look, not one look a container
+    if (!this.beforeNodes) {
+      const nodes = new Map<T, number>();
+      this.containers.forEach((c, k) => {
+        for (let i = 0; i < c.before.length; i++) {
+          const item = c.before[i];
+          if (!nodes.has(item) && c.beforeIndex(item) === i) nodes.set(item, this.offsets[k] + i);
+        }
+      });
+      this.beforeNodes = nodes;
+    }
+    return this.beforeNodes.get(item) ?? -1;
   }
 
   /** The item of a node */

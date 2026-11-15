@@ -74,6 +74,64 @@ export function withPlacement(record: FeatureRecord, keys: PlacementKeys): Featu
 }
 
 /**
+ * A map of what is kept of features by their IDs, with the IDs of those that name each group: what
+ * a group that comes or goes puts again is found without going through all that is kept
+ *
+ * @internal
+ */
+export class GroupedMap<V> extends Map<string, V> {
+  /** The IDs whose values name each group */
+  readonly #byGroup = new Map<string, Set<string>>();
+
+  constructor(private readonly groupOf: (value: V) => string | undefined) {
+    super();
+  }
+
+  /** The IDs whose values name a group, as they are now (a copy) */
+  idsOfGroup(groupId: string): string[] {
+    const ids = this.#byGroup.get(groupId);
+    return ids ? [...ids] : [];
+  }
+
+  override set(id: string, value: V): this {
+    const before = super.get(id);
+    if (before !== undefined) this.#unlist(id, before);
+    super.set(id, value);
+    const groupId = this.groupOf(value);
+    if (groupId !== undefined) {
+      let ids = this.#byGroup.get(groupId);
+      if (!ids) {
+        ids = new Set();
+        this.#byGroup.set(groupId, ids);
+      }
+      ids.add(id);
+    }
+    return this;
+  }
+
+  override delete(id: string): boolean {
+    const before = super.get(id);
+    if (before === undefined) return false;
+    this.#unlist(id, before);
+    return super.delete(id);
+  }
+
+  override clear(): void {
+    this.#byGroup.clear();
+    super.clear();
+  }
+
+  #unlist(id: string, value: V): void {
+    const groupId = this.groupOf(value);
+    if (groupId === undefined) return;
+    const ids = this.#byGroup.get(groupId);
+    if (!ids) return;
+    ids.delete(id);
+    if (ids.size === 0) this.#byGroup.delete(groupId);
+  }
+}
+
+/**
  * What a storage has that the Store does not show, and where the storage has the features shown
  * elsewhere than their keys say
  *
@@ -81,14 +139,14 @@ export function withPlacement(record: FeatureRecord, keys: PlacementKeys): Featu
  */
 export class KeptRecords {
   /** The features not shown (their layer is not there), as the storage has them */
-  readonly features = new Map<string, FeatureRecord>();
+  readonly features = new GroupedMap<FeatureRecord>((record) => placementOf(record).groupId);
   /** The groups not shown (their layer is not there, or they have no member) */
   readonly groups = new Map<string, GroupRecord>();
   /**
    * The keys of the place of features shown elsewhere than they say: a member of a group whose
    * layer key is another layer, a feature whose group is not there
    */
-  readonly placements = new Map<string, PlacementKeys>();
+  readonly placements = new GroupedMap<PlacementKeys>((keys) => keys.groupId);
 
   /** Whether nothing is kept */
   get empty(): boolean {

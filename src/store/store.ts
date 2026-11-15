@@ -504,6 +504,11 @@ export interface Store extends StoreView, UiState {
   selectedFeatureIds(): readonly string[];
   /** Deletes a feature (see {@link DocumentStore.deleteFeature}) */
   deleteFeature(id: string): boolean;
+  /**
+   * Deletes features, each as `deleteFeature` does: the rows of a Store of rows in one write, the
+   * others one at a time. Every one named must be there
+   */
+  deleteFeatures(ids: readonly string[]): boolean;
 
   /** Creates a layer (see {@link DocumentStore.createLayer}) */
   createLayer(layer: Layer): boolean;

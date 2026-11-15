@@ -334,6 +334,38 @@ export class DrawStore implements Store {
   selectedFeatureIds(): readonly string[] {
     return this.#selectedFeatureIds();
   }
+  deleteFeatures(ids: readonly string[]): boolean {
+    const contract = this.#contract;
+    const tables = contract.tables;
+    // A write of this client reads the values before it (for its undo): one at a time
+    const fromElsewhere = this.#remoteDepth > 0 || this.#refusedDepth > 0;
+    if (ids.length <= 1 || !tables || !contract.applyRows || !fromElsewhere) {
+      let deleted = false;
+      for (const id of ids) deleted = this.deleteFeature(id) || deleted;
+      return deleted;
+    }
+    return this.#write(() => {
+      const rows = ids.map((id) => {
+        const row = tables.getRowRef(id);
+        if (row === undefined) throw new Error(`Feature with id "${id}" not found`);
+        return row as number;
+      });
+      // The rows deleted in one write of the rows; nothing reads the values a write from
+      // elsewhere writes over
+      const deleted = (contract.applyRows as (write: RowWrite) => boolean)({
+        patch: {
+          rows: Int32Array.from(rows),
+          fields: new Map(),
+          deleted: new Uint8Array(rows.length).fill(1),
+        },
+        before: { rows: new Int32Array(0), fields: new Map() },
+      });
+      if (!deleted) return deleted;
+      if (this.#refusedDepth > 0) this.#deletedInTakeOut.push(...ids);
+      else this.#forgetAll(ids);
+      return deleted;
+    });
+  }
   deleteFeature(id: string): boolean {
     return this.#write(() => {
       const deleted = this.#contract.deleteFeature(id);

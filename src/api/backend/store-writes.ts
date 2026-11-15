@@ -56,14 +56,42 @@ export function writeOperations(
   const writes = new StoreWrites(store, values, keepKeys, kept);
   // One that the Store refuses is left out: the others are written
   const failed: unknown[] = [];
-  for (const operation of operations) {
+  for (let i = 0; i < operations.length; ) {
+    // A run of creations of features and groups is written at once
+    let end = i;
+    while (end < operations.length && isCreationOfMany(operations[end])) end++;
+    if (end - i > 1) {
+      failed.push(...writes.createMany(operations.slice(i, end) as CreationOfMany[]));
+      i = end;
+      continue;
+    }
     try {
-      writes.write(operation);
+      writes.write(operations[i]);
     } catch (error) {
       failed.push(error);
     }
+    i++;
   }
   return { failed };
+}
+
+/** The creation of a feature or of a group */
+type CreationOfMany = Extract<ValueOperation, { type: 'create'; kind: 'feature' | 'group' }>;
+
+function isCreationOfMany(operation: ValueOperation): boolean {
+  return (
+    operation.type === 'create' && (operation.kind === 'feature' || operation.kind === 'group')
+  );
+}
+
+/** A feature created where it is shown, in a run of creations */
+interface Shown {
+  readonly id: string;
+  readonly record: FeatureRecord;
+  /** Where its record says it is */
+  readonly keys: PlacementKeys;
+  /** Where it is shown */
+  readonly at: PlacementKeys;
 }
 
 /**
@@ -160,11 +188,190 @@ class StoreWrites {
         return;
       }
       case 'delete':
-        for (const id of operation.ids) this.#delete(operation.kind, id);
+        if (operation.ids.length > 1 && operation.kind === 'feature') {
+          this.#deleteFeatures(operation.ids);
+        } else if (operation.ids.length > 1 && operation.kind === 'group') {
+          this.#deleteGroups(operation.ids);
+        } else {
+          for (const id of operation.ids) this.#delete(operation.kind, id);
+        }
         return;
     }
   }
 
+  /**
+   * Writes a run of creations of features and groups at once, as writing each in its order does:
+   * creations of other things give the same document in any order, as where each is shown is read
+   * once all of them are made. The groups come first, the features each where it is shown, with
+   * one write of the Store for many (the rows in one write of their places)
+   *
+   * @returns What the Store refused (the rest is written)
+   */
+  createMany(operations: readonly CreationOfMany[]): unknown[] {
+    const store = this.store;
+    const kept = this.kept;
+    const made: string[] = [];
+    for (const operation of operations) {
+      if (operation.kind !== 'group') continue;
+      if (store.getGroup(operation.id) || kept.groups.has(operation.id)) continue;
+      // Shown once a member comes
+      kept.groups.set(operation.id, operation.record);
+      made.push(operation.id);
+    }
+    const shown: Shown[] = [];
+    const seen = new Set<string>();
+    for (const operation of operations) {
+      if (operation.kind !== 'feature' || seen.has(operation.id)) continue;
+      seen.add(operation.id);
+      if (this.#hasFeature(operation.id)) continue;
+      const { id, record } = operation;
+      const keys = placementOf(record);
+      const at = this.#shownAt(keys);
+      if (at) {
+        shown.push({ id, record, keys, at });
+        continue;
+      }
+      kept.placements.delete(id);
+      kept.features.set(id, record);
+    }
+    const failed = shown.length > 0 ? this.#createShownMany(shown) : [];
+    // What was kept that names a group made now goes into it
+    for (const id of made) this.#settleMembersOf(id);
+    return failed;
+  }
+
+  /**
+   * Creates features where they are shown, the groups that come with their first members made
+   * first (see `#showGroupWith`)
+   */
+  #createShownMany(shown: readonly Shown[]): unknown[] {
+    const store = this.store;
+    const kept = this.kept;
+    const failed: unknown[] = [];
+    // The groups kept that come with their first members
+    const coming = new Map<string, { readonly layerId: string; readonly record: GroupRecord }>();
+    for (const one of shown) {
+      const groupId = one.at.groupId;
+      if (groupId === undefined || coming.has(groupId) || store.getGroup(groupId)) continue;
+      const record = kept.groups.get(groupId);
+      if (record) coming.set(groupId, { layerId: one.at.layerId, record });
+    }
+    const made = new Set<string>();
+    for (const [groupId, { layerId, record }] of coming) {
+      const fields = {
+        id: groupId,
+        layerId,
+        name: record.name,
+        visible: record.visible,
+        locked: record.locked,
+      };
+      try {
+        // A group of objects with no member yet: listed in its layer below, its members after
+        store.createGroup(
+          this.#rows ? { ...fields, kind: 'table' } : { ...fields, featureIds: [] },
+        );
+      } catch (error) {
+        failed.push(error);
+        continue;
+      }
+      kept.groups.delete(groupId);
+      made.add(groupId);
+    }
+    if (this.#rows) {
+      this.#writeGroupPlaces(
+        [...made].map((id) => {
+          const { layerId, record } = coming.get(id) as { layerId: string; record: GroupRecord };
+          return { id, layerId, key: record.key };
+        }),
+      );
+    }
+    // What is created: not the members of a group that could not be made
+    const creating = shown.filter(
+      (one) =>
+        one.at.groupId === undefined || !coming.has(one.at.groupId) || made.has(one.at.groupId),
+    );
+    // The members of a group of objects made now, in their order: listed by being created
+    if (!this.#rows) creating.sort((a, b) => compareItems(itemOf(a), itemOf(b)));
+    const storedOf = (one: Shown): StoredFeature => ({
+      ...storedOfRecord(one.id, one.record),
+      layerId: one.at.layerId,
+      groupId: one.at.groupId,
+    });
+    let created: readonly Shown[] = creating;
+    try {
+      store.createFeatures(creating.map(storedOf));
+    } catch {
+      // One at a time: the one refused is left out
+      const one: Shown[] = [];
+      for (const feature of creating) {
+        try {
+          store.createFeature(storedOf(feature));
+          one.push(feature);
+        } catch (error) {
+          failed.push(error);
+        }
+      }
+      created = one;
+    }
+    if (this.#rows) {
+      this.#writeRowPlaces(
+        created.map((one) => one.id),
+        created.map((one) => one.at.groupId ?? one.at.layerId),
+        created.map((one) => one.record.key),
+      );
+    } else {
+      this.#putObjectsMany(created, made, coming);
+    }
+    for (const one of created) {
+      if (one.keys.layerId === one.at.layerId && one.keys.groupId === one.at.groupId) {
+        kept.placements.delete(one.id);
+      } else {
+        kept.placements.set(one.id, one.keys);
+      }
+    }
+    return failed;
+  }
+
+  /**
+   * Puts the items of objects created in a run where their keys say: in a group made now, they
+   * stand in their order once created; elsewhere, those of one parent in one put, with the groups
+   * made now among the items of their layers
+   */
+  #putObjectsMany(
+    created: readonly Shown[],
+    made: ReadonlySet<string>,
+    coming: ReadonlyMap<string, { readonly layerId: string; readonly record: GroupRecord }>,
+  ): void {
+    const parents = new Map<
+      string,
+      { layerId: string; groupId: string | undefined; ids: string[]; keys: string[] }
+    >();
+    const add = (layerId: string, groupId: string | undefined, id: string, key: string): void => {
+      const parentId = groupId ?? layerId;
+      let parent = parents.get(parentId);
+      if (!parent) {
+        parent = { layerId, groupId, ids: [], keys: [] };
+        parents.set(parentId, parent);
+      }
+      parent.ids.push(id);
+      parent.keys.push(key);
+    };
+    for (const id of made) {
+      const { layerId, record } = coming.get(id) as { layerId: string; record: GroupRecord };
+      add(layerId, undefined, id, record.key);
+    }
+    for (const one of created) {
+      const groupId = one.at.groupId;
+      if (groupId !== undefined && made.has(groupId)) {
+        if (this.keepKeys) this.values.keepPlace(one.id, groupId, one.record.key);
+        continue;
+      }
+      add(one.at.layerId, groupId, one.id, one.record.key);
+    }
+    for (const { layerId, groupId, ids, keys } of parents.values()) {
+      this.#putObjects(ids, layerId, groupId, keys);
+    }
+  }
   /**
    * Follows an operation of a commit of this client the Store holds (see `followCommit`)
    *
@@ -420,12 +627,15 @@ class StoreWrites {
   /** Puts again the features kept that name a group as theirs, now that it is there or gone */
   #settleMembersOf(groupId: string): void {
     const kept = this.kept;
-    for (const [id, record] of [...kept.features]) {
+    for (const id of kept.features.idsOfGroup(groupId)) {
+      const record = kept.features.get(id);
+      if (!record) continue;
       const keys = placementOf(record);
       if (keys.groupId === groupId) this.#settle(id, keys, record.key, record);
     }
-    for (const [id, keys] of [...kept.placements]) {
-      if (keys.groupId === groupId) this.#settle(id, keys, this.#keyOf(id));
+    for (const id of kept.placements.idsOfGroup(groupId)) {
+      const keys = kept.placements.get(id);
+      if (keys?.groupId === groupId) this.#settle(id, keys, this.#keyOf(id));
     }
   }
 
@@ -734,24 +944,30 @@ class StoreWrites {
     flush();
   }
 
-  /** Writes the parent and the key of rows */
-  #writeRowPlaces(ids: readonly string[], parentId: string, keys: readonly string[]): void {
+  /** Writes the parent (one for all, or one each) and the key of rows, in one write */
+  #writeRowPlaces(
+    ids: readonly string[],
+    parentId: string | readonly string[],
+    keys: readonly string[],
+  ): void {
     const writer = tablesWriterOf(this.store);
     const tables = this.store.tables;
     if (!writer || !tables) return;
     const rows: number[] = [];
+    const parents: string[] = [];
     const kept: string[] = [];
     ids.forEach((id, i) => {
       const row = tables.getRowRef(id);
       if (row === undefined) return;
       rows.push(row as number);
+      parents.push(typeof parentId === 'string' ? parentId : parentId[i]);
       kept.push(keys[i]);
     });
     if (rows.length === 0) return;
     writer.writeRows({
       rows: Int32Array.from(rows),
       fields: new Map<RowField, unknown[]>([
-        ['parent', rows.map(() => parentId)],
+        ['parent', parents],
         ['key', kept],
       ]),
     });
@@ -759,14 +975,32 @@ class StoreWrites {
 
   /** Writes the layer and the key of a group of rows */
   #writeGroupPlace(id: string, layerId: string, key: string): void {
+    this.#writeGroupPlaces([{ id, layerId, key }]);
+  }
+
+  /** Writes the layers and the keys of groups of rows, in one write */
+  #writeGroupPlaces(
+    groups: ReadonlyArray<{ readonly id: string; readonly layerId: string; readonly key: string }>,
+  ): void {
     const writer = tablesWriterOf(this.store);
-    const ref = this.store.tables?.getGroupRef(id);
-    if (!writer || ref === undefined) return;
+    const tables = this.store.tables;
+    if (!writer || !tables) return;
+    const refs: number[] = [];
+    const parents: string[] = [];
+    const keys: string[] = [];
+    for (const group of groups) {
+      const ref = tables.getGroupRef(group.id);
+      if (ref === undefined) continue;
+      refs.push(ref as number);
+      parents.push(group.layerId);
+      keys.push(group.key);
+    }
+    if (refs.length === 0) return;
     writer.writeGroups({
-      groups: Int32Array.of(ref as number),
+      groups: Int32Array.from(refs),
       fields: new Map<'parent' | 'key', unknown[]>([
-        ['parent', [layerId]],
-        ['key', [key]],
+        ['parent', parents],
+        ['key', keys],
       ]),
     });
   }
@@ -793,6 +1027,93 @@ class StoreWrites {
       case 'file':
         if (store.getFile(id)) store.deleteFile(id);
         return;
+    }
+  }
+
+  /**
+   * Deletes features, those the Store shows in one write (see `#deleteShown`): what is kept of the
+   * others is dropped
+   */
+  #deleteFeatures(ids: readonly string[]): void {
+    const store = this.store;
+    const kept = this.kept;
+    const shown = ids.filter((id) => store.getFeature(id) !== undefined);
+    if (shown.length > 0) {
+      const settle = this.#leavingAll(shown);
+      store.deleteFeatures(shown);
+      settle();
+    }
+    for (const id of ids) {
+      kept.features.delete(id);
+      kept.placements.delete(id);
+    }
+  }
+
+  /**
+   * Deletes groups, as deleting each in its order does (see `#deleteGroup`): those the Store shows
+   * in one write, and their members each where its keys say, those of one parent in one write
+   */
+  #deleteGroups(ids: readonly string[]): void {
+    const store = this.store;
+    const kept = this.kept;
+    const shown: string[] = [];
+    const members: { member: string; keys: PlacementKeys; key: string }[] = [];
+    for (const id of new Set(ids)) {
+      const group = store.getGroup(id);
+      if (this.kept.groups.delete(id) || !group) {
+        this.#settleMembersOf(id);
+        continue;
+      }
+      shown.push(id);
+      const from = group.layerId;
+      for (const member of this.#membersOf(id)) {
+        members.push({
+          member,
+          keys: kept.placements.get(member) ?? { layerId: from, groupId: id },
+          key: this.#keyOf(member),
+        });
+      }
+    }
+    if (shown.length === 0) return;
+    store.deleteGroups(shown);
+    // The members shown in a group or a layer there are put in one write a parent; the others
+    // (their layer is not there, or their group is kept) one at a time
+    const parents = new Map<
+      string,
+      { at: PlacementKeys; ids: string[]; keys: string[]; settled: PlacementKeys[] }
+    >();
+    for (const { member, keys, key } of members) {
+      const at = this.#shownAt(keys);
+      if (
+        !at ||
+        !store.getFeature(member) ||
+        (at.groupId !== undefined && !store.getGroup(at.groupId))
+      ) {
+        this.#settle(member, keys, key);
+        continue;
+      }
+      const parentId = at.groupId ?? at.layerId;
+      let parent = parents.get(parentId);
+      if (!parent) {
+        parent = { at, ids: [], keys: [], settled: [] };
+        parents.set(parentId, parent);
+      }
+      parent.ids.push(member);
+      parent.keys.push(key);
+      parent.settled.push(keys);
+    }
+    for (const [parentId, { at, ids: moving, keys, settled }] of parents) {
+      if (this.#rows) this.#writeRowPlaces(moving, parentId, keys);
+      else this.#putObjects(moving, at.layerId, at.groupId, keys);
+      moving.forEach((member, i) => {
+        kept.features.delete(member);
+        const memberKeys = settled[i];
+        if (memberKeys.layerId === at.layerId && memberKeys.groupId === at.groupId) {
+          kept.placements.delete(member);
+        } else {
+          kept.placements.set(member, memberKeys);
+        }
+      });
     }
   }
 
@@ -867,6 +1188,11 @@ function compareItems(
   const order = compareKeys(a.key, b.key);
   if (order !== 0) return order;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/** A feature created in a run as an item with its key */
+function itemOf(one: Shown): { readonly id: string; readonly key: string } {
+  return { id: one.id, key: one.record.key };
 }
 
 /** Where the first layer goes among the entries of the order of the layers (its back) */
