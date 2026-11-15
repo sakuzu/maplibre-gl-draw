@@ -60,6 +60,7 @@ import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js'
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
+import { transformFieldsOfStore } from '../../store/transform-roles.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import { createPageBuilder } from '../../table/index.js';
 import { writesOf } from '../../test-support/writes.js';
@@ -577,6 +578,9 @@ function tableDrawing(store: Store, drawer: FeatureDrawer, repaint: Repaint) {
     requestRepaint: () => repaint.request(),
     buildBudgetMs: Number.POSITIVE_INFINITY,
     pixelRatio: 1,
+    // The custom types of the instance, as an instance gives them (a row of a type it does not
+    // know draws nothing)
+    transformFields: () => transformFieldsOfStore(store),
   });
   // What the drawing is drawing (the layer and the group, or the delta of the layer)
   const pass = (renderer as unknown as { pass: PassView }).pass;
