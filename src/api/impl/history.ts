@@ -616,10 +616,12 @@ function groupsComing(store: Store, parts: readonly Inverse[]): Set<string> | nu
       // Rows brought back without their place written come back where they were: their group is
       // the one a token keeps them in, read now
       if (!values.deleted?.some((value) => value === 0)) return;
-      parents = tables.readValues({
-        rows: values.rows,
-        fields: new Map([['parent', []]]),
-      }).fields.get('parent');
+      parents = tables
+        .readValues({
+          rows: values.rows,
+          fields: new Map([['parent', []]]),
+        })
+        .fields.get('parent');
       if (!parents) {
         for (const id of candidates) coming.add(id);
         return;
