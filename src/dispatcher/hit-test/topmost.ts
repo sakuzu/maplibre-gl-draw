@@ -53,7 +53,9 @@ import { STATE_UNHIT_MASK } from '../../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
   hitTestLayerTable,
+  isScreenHitType,
   rowHitShape,
+  rowScreenDistancePx,
   type TableRowHit,
   type TableScreenHit,
 } from '../../feature-table/hit-test.js';
@@ -331,34 +333,6 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   };
 
   /**
-   * How the points of the rows are hit on the screen at a click (undefined where they are hit at
-   * the coordinate: without the anchor projection, or without terrain)
-   */
-  const screenHitOf = (
-    tables: FeatureTablesInternals,
-    point: ScreenPoint,
-    near: LngLat,
-  ): TableScreenHit | undefined => {
-    const anchors = deps.anchors;
-    if (!anchors) return undefined;
-    const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;
-    const markerReach = deps.pointMarkerReachPx;
-    // As far as at the coordinate: the tolerance of the click, or the marker where it is larger
-    const reachPx = (style: FeatureStyle): number =>
-      markerReach ? Math.max(clickPx, markerReach(style)) : clickPx;
-    const boxes = anchors.searchBoxes(point, Math.max(clickPx, maxMarkerReach(tables, deps)), near);
-    if (!boxes) return undefined;
-    return {
-      boxes: storedCopiesOfBoxes(boxes),
-      distancePx: (lng, lat) => {
-        const at = anchors.project(lng, lat);
-        return at ? Math.hypot(at.x - point.x, at.y - point.y) : null;
-      },
-      reachPx,
-    };
-  };
-
-  /**
    * What a row hit is: a row, or the feature the Store makes of it (when `asFeature`)
    */
   const rowHitOf = (
@@ -509,7 +483,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       // A layer held as rows is tested on its rows: each row itself, then its companions
       const table = tables?.rowTable(entryId);
       if (tables && table) {
-        if (onScreen === null) onScreen = screenHitOf(tables, point, lngLat);
+        if (onScreen === null) onScreen = screenHitOf(deps, tables, point, lngLat);
         const hit = rowsOf(
           tables,
           table,
@@ -583,8 +557,8 @@ const MOVING_SETS = [1, 2, 3] as const;
  * Unlike the hit of a click, which reads the features as they are written, a feature a sketch
  * edits is read as the sketch leaves it (`RenderedShapes.get`), and a row moved by its state where
  * its state moves it: the rows of a moving set are looked for where the click is before they are
- * moved. A point on the terrain is hit at the coordinate of the click, not where its anchor is
- * drawn on the screen.
+ * moved. On the terrain a point is hit where its anchor is drawn on the screen, as a click hits it
+ * (a point drawn behind a ridge is under the click, not at the coordinate of the click).
  *
  * @internal
  */
@@ -602,11 +576,43 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
     const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;
     const degreesPerPixel =
       clickPx > 0 ? tolerance / clickPx : 360 / (512 * 2 ** (deps.getZoom?.() ?? 0));
+    const tables = shapes.hitRows();
+    // On the terrain the points of the rows are hit where their anchors are drawn, as a click
+    // hits them
+    const onScreen = tables ? screenHitOf(deps, tables, point, lngLat) : undefined;
+    const anchors = deps.anchors;
+
+    /**
+     * The distance on the screen from the click to where the nearest anchor of a point as it is
+     * seen is drawn: null where the anchor projection is not usable (no terrain), and for a type
+     * hit at the coordinate
+     */
+    const seenScreenDistancePx = (feature: Feature): number | null => {
+      if (!anchors || !isScreenHitType(feature.type)) return null;
+      const geometry = feature.geometry;
+      const parts =
+        geometry.type === 'MultiPoint'
+          ? geometry.coordinates
+          : geometry.type === 'Point'
+            ? [geometry.coordinates]
+            : [];
+      let nearest: number | null = null;
+      for (const [lng, lat] of parts) {
+        const at = anchors.project(lng as number, lat as number);
+        if (!at) continue;
+        const distance = Math.hypot(at.x - point.x, at.y - point.y);
+        if (nearest === null || distance < nearest) nearest = distance;
+      }
+      return nearest;
+    };
 
     /** Whether a feature as it is seen is hit: on any copy of the click, its marker included */
     const seenHit = (feature: Feature): boolean => {
       if (!visible(feature) || isLocallyHidden(feature, store)) return false;
       const reachPx = hitTestService.getStrategy?.(feature.type)?.reachPx?.(feature) ?? 0;
+      // A point on the terrain is hit where its anchor is drawn
+      const onScreenPx = seenScreenDistancePx(feature);
+      if (onScreenPx !== null) return onScreenPx <= clickPx + reachPx;
       const within = tolerance + reachPx * degreesPerPixel;
       return copies.some((copy) => hitTestService.hitTestFeature(feature, copy, within));
     };
@@ -625,7 +631,6 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
     );
     const objectsByLayer = groupByLayer(objects);
 
-    const tables = shapes.hitRows();
     const picked: Feature[] = [];
     const layerOrder = store.getLayerOrder();
     for (let i = layerOrder.length - 1; i >= 0; i--) {
@@ -664,6 +669,8 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
         boxes.push(x - by, y - by, x + by, y + by);
       };
       for (const [x, y] of copies) around(x as number, y as number, reach);
+      // On the terrain, the points whose anchors may be drawn under the click
+      if (onScreen) boxes.push(...onScreen.boxes);
       // A row a sketch edits is seen elsewhere than it is: it is looked for where it is, to be
       // read in its place in the order and tested as it is seen
       const view = tables.view(layerId);
@@ -682,10 +689,35 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
           // A scale makes the rows smaller: the click reaches farther on them before
           const factor = edit?.kind === 'scale' ? Math.min(edit.eastFactor, edit.northFactor) : 1;
           const by = factor > 0 ? reach / Math.min(factor, 1) : reach;
+          const backOf = (x: number, y: number): number[] => {
+            const back: number[] = [x - dx, y - dy];
+            return edit ? moveEnuPosition(inverseEnuEdit(edit), back, false) : back;
+          };
           for (const [x, y] of copies) {
-            const back: number[] = [(x as number) - dx, (y as number) - dy];
-            const [bx, by2] = edit ? moveEnuPosition(inverseEnuEdit(edit), back, false) : back;
+            const [bx, by2] = backOf(x as number, y as number);
             around(bx as number, by2 as number, by);
+          }
+          // The boxes of the anchors drawn under the click, brought back as well (the box of
+          // their corners moved back)
+          const screenBoxes = onScreen?.boxes ?? [];
+          for (let at = 0; at + 3 < screenBoxes.length; at += 4) {
+            let minX = Number.POSITIVE_INFINITY;
+            let minY = Number.POSITIVE_INFINITY;
+            let maxX = Number.NEGATIVE_INFINITY;
+            let maxY = Number.NEGATIVE_INFINITY;
+            for (const [cx, cy] of [
+              [screenBoxes[at], screenBoxes[at + 1]],
+              [screenBoxes[at + 2], screenBoxes[at + 1]],
+              [screenBoxes[at], screenBoxes[at + 3]],
+              [screenBoxes[at + 2], screenBoxes[at + 3]],
+            ] as const) {
+              const [bx, by2] = backOf(cx, cy) as [number, number];
+              minX = Math.min(minX, bx);
+              minY = Math.min(minY, by2);
+              maxX = Math.max(maxX, bx);
+              maxY = Math.max(maxY, by2);
+            }
+            boxes.push(minX, minY, maxX, maxY);
           }
         }
       }
@@ -710,6 +742,14 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
         }
         const type = rowType(data, row);
         const style = tables.styles.get((data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row]);
+        if (onScreen && isScreenHitType(type)) {
+          // A point is hit where its anchor is drawn, never at the coordinate (as a click)
+          const distance = rowScreenDistancePx(group, row, onScreen);
+          if (distance !== null && distance <= onScreen.reachPx(style)) {
+            picked.push(tables.featureCache.featureOf(table.tableId, group, row));
+          }
+          continue;
+        }
         const within =
           getStyleRuleChannel(type) === 'point' && deps.pointMarkerReachPx
             ? Math.max(tolerance, deps.pointMarkerReachPx(style) * degreesPerPixel)
@@ -725,6 +765,35 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
         if (hit) picked.push(feature ?? tables.featureCache.featureOf(table.tableId, group, row));
       }
     }
+  };
+}
+
+/**
+ * How the points of the rows are hit on the screen at a click (undefined where they are hit at
+ * the coordinate: without the anchor projection, or without terrain)
+ */
+function screenHitOf(
+  deps: TopmostHitTestDeps,
+  tables: FeatureTablesInternals,
+  point: ScreenPoint,
+  near: LngLat,
+): TableScreenHit | undefined {
+  const anchors = deps.anchors;
+  if (!anchors) return undefined;
+  const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;
+  const markerReach = deps.pointMarkerReachPx;
+  // As far as at the coordinate: the tolerance of the click, or the marker where it is larger
+  const reachPx = (style: FeatureStyle): number =>
+    markerReach ? Math.max(clickPx, markerReach(style)) : clickPx;
+  const boxes = anchors.searchBoxes(point, Math.max(clickPx, maxMarkerReach(tables, deps)), near);
+  if (!boxes) return undefined;
+  return {
+    boxes: storedCopiesOfBoxes(boxes),
+    distancePx: (lng, lat) => {
+      const at = anchors.project(lng, lat);
+      return at ? Math.hypot(at.x - point.x, at.y - point.y) : null;
+    },
+    reachPx,
   };
 }
 

@@ -89,6 +89,16 @@ export interface TableScreenHit {
 const SCREEN_TYPES: ReadonlySet<FeatureType> = new Set<FeatureType>(['Point', 'MultiPoint']);
 
 /**
+ * Whether the rows of a type are hit on the screen when {@link TableHitInput.onScreen} is given
+ * (the points, drawn without a depth test)
+ *
+ * @internal
+ */
+export function isScreenHitType(type: FeatureType): boolean {
+  return SCREEN_TYPES.has(type);
+}
+
+/**
  * A row hit
  *
  * @internal
@@ -147,7 +157,7 @@ export function hitTestLayerTable(
     const tolerance = input.toleranceOf(type, style);
     if (onScreen && SCREEN_TYPES.has(type)) {
       // A point is hit where its anchor is drawn, never at the coordinate
-      const distance = screenDistanceOf(group, row, onScreen);
+      const distance = rowScreenDistancePx(group, row, onScreen);
       if (distance !== null && distance <= onScreen.reachPx(style)) {
         const shape = rowHitShape(group, row);
         return { group, row, type, tolerance, shape, feature: null, screenDistancePx: distance };
@@ -171,8 +181,14 @@ export function hitTestLayerTable(
 /**
  * The distance on the screen from the click to the nearest point of a row, as its anchors are
  * drawn (null when none is drawn)
+ *
+ * @internal
  */
-function screenDistanceOf(group: RowGroup, row: number, onScreen: TableScreenHit): number | null {
+export function rowScreenDistancePx(
+  group: RowGroup,
+  row: number,
+  onScreen: TableScreenHit,
+): number | null {
   const at = geometryAt(group, row);
   if (!at) return null;
   const { reader } = at;

@@ -47,7 +47,12 @@ import {
 import { TerrainContext } from '../../view/terrain/context.js';
 import type { TerrainLike } from '../../view/terrain/detect.js';
 import { HitTestServiceImpl } from './service.js';
-import { createTopmostHitTester, type TopHit, type TopmostAnchorProjector } from './topmost.js';
+import {
+  createFeaturePicker,
+  createTopmostHitTester,
+  type TopHit,
+  type TopmostAnchorProjector,
+} from './topmost.js';
 
 const square = (x: number, y: number) => [
   [
@@ -495,6 +500,33 @@ describe('the hit testing of the points of the rows on the terrain', () => {
     expect(hit.distancePx()).toBeCloseTo(Math.hypot(2, 1), 6);
     // At the coordinate of the click it is not found: the test would protect nothing otherwise
     expect(tester()({ x: 100, y: 0 })).toBeNull();
+  });
+
+  it('picks a point drawn behind a ridge where a click hits it, not the point at the coordinate', () => {
+    // The point at longitude 40 is drawn beside the click (100, 0); the one at longitude 10, where
+    // the click unprojects to, is drawn far from it
+    layer('l');
+    adopt('l', [feature('ghost', 'Point', [40, 0]), feature('front', 'Point', [10, 0])]);
+    const anchors: TopmostAnchorProjector = {
+      project: (lng, lat) =>
+        lng === 40 ? { x: 102, y: 1 } : lng === 10 ? { x: 600, y: 600 } : at(lng, lat),
+      searchBoxes: () => [39, -1, 41, 1],
+    };
+    const deps = {
+      store,
+      hitTestService: new HitTestServiceImpl(store, new RBushSpatialIndex()),
+      unproject,
+      toleranceLngLat: () => 0.5,
+      getZoom: () => 3,
+      clickTolerancePx: 5,
+    };
+    const click = createTopmostHitTester({ ...deps, anchors })({ x: 100, y: 0 });
+    const picked = createFeaturePicker({ ...deps, anchors })({ x: 100, y: 0 });
+    expect(rowId(click)).toBe('ghost');
+    expect(picked.map((f) => f.id)).toEqual(['ghost']);
+    // Without the projection both are hit at the coordinate: the test would protect nothing
+    // otherwise
+    expect(createFeaturePicker(deps)({ x: 100, y: 0 }).map((f) => f.id)).toEqual(['front']);
   });
 
   it('does not hit a point drawn away from the click, near it in degrees, and lets the rows behind be hit', () => {

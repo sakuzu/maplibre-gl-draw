@@ -11,10 +11,13 @@
  * - Rows moved as a whole by their state (a drag of many) are where they are drawn
  * - The tolerance is the click tolerance unless one is given; a wrong point is refused
  * - A transaction picks as the instance does
+ * - On the terrain a point is where its anchor is drawn, as a click hits it, a sketch and a drag
+ *   of many applied
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { BULK_MOVE_SET } from '../../feature-table/feature-row-states.js';
+import { setAnchorProjector } from '../../shared/math/index.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
@@ -175,5 +178,54 @@ describe('features.pick', () => {
     const { x, y } = engine.map.project([0, 0]);
     const ids = await draw.write((tx) => tx.features.pick([x, y]).map((hit) => hit.feature.id));
     expect(ids).toEqual(['p']);
+  });
+});
+
+describe('features.pick on the terrain', () => {
+  /**
+   * The anchors drawn 2 degrees west of where they stand on the screen (as the ground lifts them),
+   * the projection the click hits the points with
+   */
+  function lift(engine: Engine): void {
+    const map = engine.map;
+    setAnchorProjector(map, {
+      project: (lng, lat) => map.project([lng - 2, lat]),
+      searchBoxes: (x, y, reachPx) => {
+        const { lng, lat } = map.unproject([x, y]);
+        const by = reachPx / 100 + 0.01;
+        return [lng + 2 - by, lat - by, lng + 2 + by, lat + by];
+      },
+    });
+  }
+
+  for (const rows of [false, true]) {
+    const store = rows ? 'a Store of rows' : 'a Store of objects';
+
+    it(`gives a point where its anchor is drawn, a sketch applied (${store})`, () => {
+      const { draw, engine } = open(rows);
+      create(draw, 'drawn', { type: 'Point', coordinates: [2, 0] });
+      create(draw, 'standing', { type: 'Point', coordinates: [0, 0] });
+      lift(engine);
+      // Not the point standing at the coordinate of the click, drawn elsewhere
+      expect(pickedAt(draw, engine, [0, 0])).toEqual(['drawn']);
+      draw.sketches.add({
+        edits: [{ kind: 'translate', target: { featureIds: ['drawn'] }, from: [2, 0], to: [3, 0] }],
+      });
+      expect(pickedAt(draw, engine, [0, 0])).toEqual([]);
+      expect(pickedAt(draw, engine, [1, 0])).toEqual(['drawn']);
+    });
+  }
+
+  it('gives the points of rows moved as a whole where their anchors are drawn', () => {
+    const { draw, engine, store } = open(true);
+    create(draw, 'drawn', { type: 'Point', coordinates: [2, 0] });
+    create(draw, 'standing', { type: 'Point', coordinates: [0, 0] });
+    lift(engine);
+    const tables = store.tables as FeatureTables;
+    const states = internalsOf(tables).states;
+    states.setMoving(Int32Array.of(tables.getRowRef('drawn') as number), BULK_MOVE_SET);
+    states.setTranslation(BULK_MOVE_SET, 1, 0);
+    expect(pickedAt(draw, engine, [0, 0])).toEqual([]);
+    expect(pickedAt(draw, engine, [1, 0])).toEqual(['drawn']);
   });
 });
