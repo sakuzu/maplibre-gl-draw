@@ -68,6 +68,11 @@ try {
   are drawn, so a read-only viewer sees the edits made elsewhere
 - Datasets are not in the document, and can still be added and removed
   ([Showing large data](large-data.md))
+- While the document opens from its storage, and while the storage tells
+  that this client may not write (`editable: false`), the instance is
+  read-only too, as `isReadOnly()` and `readOnly.changed` tell:
+  `setReadOnly(false)` does not lift it. What the storage writes still
+  arrives ([A storage](save-load.md#a-storage))
 
 ## Interaction lock
 

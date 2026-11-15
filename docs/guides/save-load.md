@@ -455,14 +455,21 @@ await mapped.open();
 ```
 
 - While it opens, `status.document` is `opening`, the reads give the
-  document before it, `status.editable` is false, and `draw.write` waits.
+  document before it, `status.editable` is false, `draw.write` waits, and
+  the instance is read-only, so no drawing starts.
   The document `load` gives is any source `draw.open(source)` takes; it is
   written as it is, even while the instance is read-only, and not sent
   back. Then the storage is connected (`connect`), and the promise
   resolves. A load that fails leaves the document as it was, and
   `status.document` is `failed`
 - A document read from a string, a file or GeoJSON carries no keys of the
-  order of its items: the keys here are made from its order
+  order of its items: the keys here are made from its order, and what is
+  made here and what is received later may then stand in another order
+  here than in the storage. Such a `load` is for small documents and
+  tests. A storage that holds the keys gives them right after it is
+  connected, with `place` operations through `context.receive`: one for
+  the layers (`parentId: null`), and one for the items of each kind under
+  each parent
 - `context.receive(result)` writes what the storage decided (the commits
   made elsewhere) in their order, as values (`ValueOperation`). A large one
   is written over several tasks: the reads give the document before it
@@ -470,9 +477,20 @@ await mapped.open();
   `'remote'`. It is written even while the instance is read-only, and not
   sent back. A value received after a commit of this client that the
   storage then refuses stays
+- A commit of this client and a commit made elsewhere that write the same
+  value at about the same time (a key of `properties`, a geometry, a
+  place) are applied here in the order they were made here, and by the
+  storage in the order they arrived. Once the storage applies a commit of
+  this client after one made elsewhere that wrote one of its values, it
+  gives the result of that commit, in its order, with
+  `context.receive({ commit: batch.commit, operations })`: nothing is sent
+  again, and its step of undo stays. A storage that gives back every
+  commit it applies this way needs nothing more
 - `context.replace(source)` replaces the whole document as the storage
   holds it. `context.report({ connection, editable, transfer })` tells
   `status.connection`, `status.editable` and `status.saving.sending`.
+  While `editable` is false, the instance is read-only: a write fails with
+  `notEditable`, and what the storage writes still arrives.
   `context.advance(commit, stage)` brings a commit to a stage told later
   (`durable`), and `context.key(id)` gives the key of the order of an item
   here
@@ -486,7 +504,8 @@ if (unsent + refused > 0 && !kept) console.warn('edits lost');
 
 - `draw.close(options)` disconnects the storage and empties the document;
   `draw.write` fails with `invalidState` until `draw.open()` opens it
-  again. `unsent` says what becomes of the commits not accepted yet:
+  again, and a write that comes while it closes waits until it is closed,
+  then fails. `unsent` says what becomes of the commits not accepted yet:
   `wait` (the default) waits until they are, `keep` keeps them on the
   device, `discard` drops them. A signal that stops the wait does not
   close. The result tells how many commits were not accepted, how many
@@ -495,10 +514,13 @@ if (unsent + refused > 0 && !kept) console.warn('edits lost');
   once it is read (the stage `stored`), until it is accepted, and each
   refusal with what it did, until it is dismissed. `keep` needs it. The
   next `draw.open()` writes the commits kept again over the document it
-  reads, sends them on, and gives the refusals back
+  reads, sends them on, and gives the refusals back. Every `draw.open()`
+  reads the outbox: what the instance holds already is left out, and the
+  commits of the outbox are sent after the ones it holds
 - `draw.open(source)` with commits not sent or refusals not dismissed fails
   with `unsentWrites` and changes nothing, unless `unsent` says what becomes
-  of them (`keep` needs an outbox too)
+  of them (`keep` needs an outbox too). Once the document is closed, it
+  needs no `unsent`, and its commits are sent as before
 - `draw.remove()` destroys the instance without waiting: the commits not
   sent that the outbox does not hold are lost, which `kept` tells
 

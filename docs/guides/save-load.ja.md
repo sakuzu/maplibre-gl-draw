@@ -441,20 +441,34 @@ await mapped.open();
 
 - 開く間は `status.document` が `opening` で、読みは前の文書を返し、
   `status.editable` は false になり、`draw.write` は開き終わるまで待ちます。
+  インスタンスは読み取り専用になり、描く操作は始まりません。
   `load` が返す文書は `draw.open(source)` が受ける物なら何でもよく、
   読み取り専用の間もそのまま書き込まれ、送り返されません。その後に保存先を
   つなぎ (`connect`)、Promise が解けます。`load` が失敗すると文書は前のままで、
   `status.document` は `failed` になります
 - 文字列、ファイル、GeoJSON から読んだ文書は、物の並びの鍵を持ちません。
-  この端末の鍵は、その並びから作ります
+  この端末の鍵は、その並びから作ります。そのため、この端末で作った物と後で
+  受けた物の並びが、この端末と保存先で違ってしまうことがあります。この形の
+  `load` は小さな文書と試しのための物です。鍵を持つ保存先は、つないだ直後に
+  `context.receive` の `place` の操作で鍵を渡します。レイヤーの鍵を 1 つの
+  操作 (`parentId: null`) で、各親の下の物の鍵を種類ごとに 1 つの操作で渡します
 - `context.receive(result)` は、保存先が決めた物 (よそで行った確定) を
   順に値 (`ValueOperation`) で書き込みます。大きな物は何回かのタスクに
   分けて書き、書き終えるまで読みは前の文書を返し、`change` は 1 回だけ
   `'remote'` の出どころで届きます。読み取り専用の間も書き込まれ、
   送り返されません。この端末の確定が後で断られても、その後に受けた値は残ります
+- この端末の確定と、よそで行った確定が同じ頃に同じ値 (`properties` の同じ
+  鍵、形、置き場) を書くと、この端末は作った順に、保存先は着いた順に当てます。
+  よその確定の後に、同じ値を書いたこの端末の確定を当てた時は、保存先が自分の
+  順で、その確定の結果を
+  `context.receive({ commit: batch.commit, operations })` で渡します。
+  何も送り直されず、undo の段も残ります。当てた確定の全部をこの形で返す
+  保存先は、ほかに何もしなくて構いません
 - `context.replace(source)` は、文書の全部を保存先が持つ形に置き換えます。
   `context.report({ connection, editable, transfer })` は
   `status.connection`、`status.editable`、`status.saving.sending` に伝わります。
+  `editable` が false の間は読み取り専用になり、書き込みは `notEditable` で
+  失敗し、保存先が書く物は届きます。
   `context.advance(commit, stage)` は後で知らされた段階 (`durable`) へ確定を
   進め、`context.key(id)` はこの端末での物の並びの鍵を返します
 
@@ -467,6 +481,7 @@ if (unsent + refused > 0 && !kept) console.warn('編集が失われました');
 
 - `draw.close(options)` は保存先との接続を切り、文書を空にします。
   `draw.open()` で開き直すまで、`draw.write` は `invalidState` で失敗します。
+  閉じる間に来た書き込みは、閉じ終わるまで待ってから失敗します。
   まだ受け取られていない確定の扱いは `unsent` で決めます。`wait` (既定) は
   受け取られるまで待ち、`keep` は端末に残し、`discard` は捨てます。待つ間に
   `signal` で止めると閉じません。結果は、受け取られていなかった確定の数、
@@ -474,10 +489,13 @@ if (unsent + refused > 0 && !kept) console.warn('編集が失われました');
 - `outbox` (`Outbox`) を持つ保存先は、読み終えた確定を受け取られるまで
   (段階は `stored`)、断りをその中身と一緒に片付けられるまで端末に残します。
   `keep` にはこれが要ります。次の `draw.open()` は、残した確定を読んだ文書に
-  書き直してから続きを送り、断りを戻します
+  書き直してから続きを送り、断りを戻します。`draw.open()` は毎回 `outbox` を
+  読みます。インスタンスが持っている物は飛ばし、`outbox` の確定は持っている
+  確定の後に送ります
 - 未送信の確定か片付いていない断りがある時に `draw.open(source)` を呼ぶと、
   `unsent` で扱いを決めない限り `unsentWrites` で失敗し、何も変わりません
-  (`keep` には `outbox` が要ります)
+  (`keep` には `outbox` が要ります)。閉じた後は `unsent` が要らず、
+  確定は今までどおり送られます
 - `draw.remove()` は待たずにインスタンスを外します。`outbox` に残って
   いない未送信の確定は失われ、`kept` でそれが分かります
 

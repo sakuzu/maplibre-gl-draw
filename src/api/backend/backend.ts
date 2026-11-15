@@ -14,11 +14,22 @@ import type { Batch, ValueBatch, ValueOperation } from './values.js';
 
 /** What a storage of either shape has */
 export interface BackendBase {
-  /** Reads the document: `draw.open()` calls it. A failure is thrown as a `DrawError` */
+  /**
+   * Reads the document: `draw.open()` calls it. A failure is thrown as a `DrawError`.
+   *
+   * A document of the library, a string, a file or GeoJSON carries no keys of the order of its
+   * items: the keys here are made from its order, and what is made here and what is received later
+   * may then stand in another order here than in the storage. Such a `load` is for small documents
+   * and tests; a storage that holds the keys gives them once it is connected (`connect`)
+   */
   load(task: Task): Promise<ImportSource>;
   /**
    * Given by a storage that receives the edits made elsewhere, or tells later that a commit is
-   * kept: called once the document it read is open, with what it writes to the instance through
+   * kept: called once the document it read is open, with what it writes to the instance through.
+   *
+   * A storage that holds the keys of the order gives right after it is connected the keys the
+   * document of `load` does not carry, with `place` operations through `context.receive`: one for
+   * the layers (`parentId: null`), and one for the items of each kind under each parent
    *
    * @returns What cuts the connection: called when the document is closed
    */
@@ -115,7 +126,14 @@ export interface BackendContext {
    * Writes to the document here what the storage decided: the commits made elsewhere, and what
    * makes a commit of this client as the storage made it. It is written in their order, as they
    * are: what decides between writes is the storage's. However large, it does not stop the page:
-   * until it is written, the reads give the document before it, and `change` is told once
+   * until it is written, the reads give the document before it, and `change` is told once.
+   *
+   * A commit of this client and one made elsewhere that write the same value at about the same
+   * time are applied here in the order they were made here, and by the storage in the order they
+   * arrived. Once the storage applies a commit of this client after one made elsewhere that wrote
+   * one of its values, it gives the result of that commit, in its order, with `commit` set to the
+   * ID of the commit: nothing is sent again, and its step of undo stays. A storage that gives back
+   * every commit it applies this way needs nothing more
    */
   receive(result: Received, options?: TaskOptions): Promise<void>;
   /** Replaces the whole document with what the storage holds (the steps of undo are dropped) */
@@ -131,7 +149,10 @@ export interface BackendContext {
 /** What a storage tells of the connection and of what this client may do */
 export interface BackendReport {
   readonly connection?: Exclude<Connection, { readonly state: 'none' }>;
-  /** False while this client may not write the document */
+  /**
+   * False while this client may not write the document: the instance is read-only meanwhile (a
+   * write fails with `notEditable`, no drawing starts); what the storage writes still arrives
+   */
   readonly editable?: boolean;
   /** How far what is sent or received is (null once it is done) */
   readonly transfer?: Progress | null;
