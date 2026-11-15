@@ -19,7 +19,7 @@
  *   follows a feature
  */
 
-import type { Position } from 'geojson';
+import type { Point, Position } from 'geojson';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
 import type { OverlayShape, Plugin, PluginContext } from '../../extend/index.js';
@@ -1669,7 +1669,7 @@ describe('what a plugin is given', () => {
   it('draws the overlays in the order the plugins were added', () => {
     const view = open();
     let showA: () => void = () => {};
-    const point = { type: 'Point', coordinates: [0, 0] } as const;
+    const point: Point = { type: 'Point', coordinates: [0, 0] };
     view.draw.use({
       name: 'acme-a',
       setup(ctx) {
@@ -1713,7 +1713,7 @@ describe('what a plugin is given', () => {
     pointerDrag(view.engine, [east, 0], [east * 2, 0]);
     vi.runAllTimers();
     expect(types.length).toBeGreaterThan(1);
-    expect(types.at(-1)).toBe('pointerup');
+    expect(types[types.length - 1]).toBe('pointerup');
     expect(types.slice(0, -1).every((type) => type === 'pointermove')).toBe(true);
   });
 
@@ -1736,7 +1736,7 @@ describe('what a plugin is given', () => {
     pointerDrag(view.engine, [0, 0], [1, 0]);
     expect(types[0]).toBe('pointermove');
     expect(types).toContain('pointerdown');
-    expect(types.at(-1)).toBe('pointerup');
+    expect(types[types.length - 1]).toBe('pointerup');
   });
 
   it('asks a companion of the rows without making their features, its fields included', () => {

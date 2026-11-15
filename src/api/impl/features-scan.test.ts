@@ -101,7 +101,7 @@ describe('features.scan', () => {
         locked: true,
         visible: false,
       });
-      const group = writes.groups.create({ name: 'g', layerId: 'l', featureIds: ['a'] } as never);
+      const group = writes.groups.create({ name: 'g', layerId: 'l', members: ['a'] });
       expect(await scanned(draw)).toEqual([
         {
           id: 'a',
@@ -146,7 +146,7 @@ describe('features.scan', () => {
         },
         layerId: 'l',
         properties: { n: i },
-      })) as never,
+      })),
     );
     const cache = internalsOf(store.tables as FeatureTables).featureCache;
     const made = vi.spyOn(cache, 'featureOf');
@@ -176,7 +176,7 @@ describe('features.scan', () => {
         geometry: { type: 'Point', coordinates: [i * 0.001, 1] },
         layerId: 'l',
         properties: {},
-      })) as never,
+      })),
     );
     draw.selection.setAll();
     // Every part of the write spends the time of a step
@@ -225,8 +225,8 @@ describe('features.scan', () => {
         id: 'b',
         geometry: { type: 'Point', coordinates: [1, 1] },
         properties: { 'maplibre-gl-draw:layerId': 'l' },
-      } as never);
-      await tx.features.update('a', { properties: { name: 'changed' } } as never);
+      });
+      await tx.features.update('a', { properties: { name: 'changed' } });
       const read: string[] = [];
       await tx.features.scan((row) => read.push(`${row.id}:${String(row.property('name'))}`));
       return read;

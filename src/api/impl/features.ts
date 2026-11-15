@@ -693,7 +693,7 @@ function storedFeatureRow(stored: StoredFeature): FeatureRow {
       return bbox;
     },
     property: (key) =>
-      (Object.hasOwn(properties, key)
+      (Object.getOwnPropertyDescriptor(properties, key) !== undefined
         ? properties[key]
         : (feature().properties as Record<PropertyKey, unknown>)[key]) as never,
     toFeature: feature,
