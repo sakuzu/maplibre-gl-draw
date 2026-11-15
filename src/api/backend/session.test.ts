@@ -449,15 +449,18 @@ describe('what the storage writes', () => {
 
     it(`settles on the document of the storage in random runs of writes, receipts and refusals (${kind})`, async () => {
       let refusedCount = 0;
+      let sameKeys = 0;
       for (let seed = 1; seed <= 12; seed++) {
         const next = random(seed);
         // The commits refused, decided as they are made
         const refused = new Set<string>();
-        const { s, d } = await opened(makeStore, { refuse: (batch) => refused.has(batch.commit) });
-        // The features a commit not answered yet writes that the storage will accept: what others
-        // write of them meanwhile would be applied in another order here and there (this client
-        // holds its document; the first shape of a storage tells it nothing of the order)
-        const accepting = new Set<string>();
+        // The storage gives the result of each commit it applies, in its order: what elsewhere
+        // writes of a key a commit not answered writes too is settled by it
+        const { s, d } = await opened(makeStore, {
+          refuse: (batch) => refused.has(batch.commit),
+          reference: true,
+        });
+        const unanswered = new Set<string>();
         for (let i = 0; i < 25; i++) {
           const choice = next();
           const id = `f${1 + Math.floor(next() * 3)}`;
@@ -465,17 +468,17 @@ describe('what the storage writes', () => {
             s.hold();
             const write = d.write((tx) => tx.features.update(id, { properties: { n: i } }));
             if (next() < 0.35) refused.add(write.id);
-            else accepting.add(id);
+            unanswered.add(id);
             await tasks(1);
           } else if (choice < 0.7) {
-            if (accepting.has(id)) continue;
+            if (unanswered.has(id)) sameKeys++;
             await s.push([
               { type: 'set', kind: 'feature', ids: [id], set: { properties: { n: 100 + i } } },
             ]);
           } else {
             s.release();
             await settled(d);
-            accepting.clear();
+            unanswered.clear();
           }
         }
         s.release();
@@ -488,6 +491,8 @@ describe('what the storage writes', () => {
         });
       }
       expect(refusedCount).toBeGreaterThan(3);
+      // Elsewhere wrote a key a commit not answered wrote, many times
+      expect(sameKeys).toBeGreaterThan(10);
     });
   }
 
