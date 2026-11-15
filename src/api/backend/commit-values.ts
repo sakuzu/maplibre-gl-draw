@@ -206,6 +206,8 @@ interface DeletedRow {
   readonly by: DeletedBy;
   /** Its feature before the notification and its key then, once read (undefined: not yet) */
   before?: { readonly feature: Feature | undefined; readonly key: string };
+  /** The IDs the storage gave it after it was deleted, by which it is made again too */
+  names?: string[];
 }
 
 /** The rows of a notification whose values are still to be read, and how far they are read */
@@ -269,8 +271,9 @@ export class CommitValues {
    */
   #before: Map<string, Place | null> | null = null;
   /**
-   * The rows deleted by notifications read over several tasks, not read yet, by their IDs: one
-   * made again (an undo) is read when it comes back, before it can be written again
+   * The rows deleted by notifications read over several tasks, not read yet, by their IDs (and by
+   * the IDs the storage gave them since): one made again (an undo) is read when it comes back,
+   * before it can be written again
    */
   readonly #unreadDeleted = new Map<string, DeletedRow>();
 
@@ -374,11 +377,11 @@ export class CommitValues {
       for (const id of change.features.created) {
         const row = this.#unreadDeleted.get(id);
         if (!row) continue;
-        this.#unreadDeleted.delete(id);
+        this.#forgetUnread(row);
         // As it was before it was deleted, where it was: what it is made again with
         row.before = {
-          feature: row.by.change.previous(id),
-          key: this.#deletedKeys([row]).get(id) ?? '',
+          feature: row.by.change.previous(row.id) ?? row.by.change.previous(id),
+          key: this.#deletedKeys([row]).get(row.id) ?? '',
         };
       }
     }
@@ -411,11 +414,30 @@ export class CommitValues {
       step: (deadline) => this.#readRows(rows, out, inv, change, changes, lasting, deadline),
       release: () => {
         lasting.release();
-        for (const row of rows.deleted) {
-          if (this.#unreadDeleted.get(row.id) === row) this.#unreadDeleted.delete(row.id);
-        }
+        for (const row of rows.deleted) this.#forgetUnread(row);
       },
     });
+  }
+
+  /**
+   * Follows the IDs the storage gave features (from the old to the new): a row deleted and not
+   * read yet is found by the new ID too, should it be made again under it
+   */
+  followIds(ids: ReadonlyMap<string, string>): void {
+    if (this.#unreadDeleted.size === 0) return;
+    for (const [from, to] of ids) {
+      const row = this.#unreadDeleted.get(from);
+      if (!row || this.#unreadDeleted.has(to)) continue;
+      this.#unreadDeleted.set(to, row);
+      (row.names ??= []).push(to);
+    }
+  }
+
+  /** A row deleted no longer waits to be read under its IDs */
+  #forgetUnread(row: DeletedRow): void {
+    for (const id of [row.id, ...(row.names ?? [])]) {
+      if (this.#unreadDeleted.get(id) === row) this.#unreadDeleted.delete(id);
+    }
   }
 
   // ==========================================================================
@@ -1116,7 +1138,7 @@ export class CommitValues {
           feature: change.previous(row.id),
           key: keys.get(row.id) ?? '',
         };
-        if (this.#unreadDeleted.get(row.id) === row) this.#unreadDeleted.delete(row.id);
+        this.#forgetUnread(row);
         if (before.feature) {
           inv.createdFeatures.push(createShownFeature(row.id, before.feature, before.key));
         }

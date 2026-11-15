@@ -15,7 +15,10 @@
  *   refused with it (`dependsOnRefused`); one that only wrote the same values does not depend on it
  * - Only the commits that touch what a refused commit touched, or what one of those touched, are
  *   taken back and written again: the others name other things, and give the same document
- *   whatever comes before them
+ *   whatever comes before them. Unless one of those makes or deletes a layer or a group, or puts
+ *   a group elsewhere: a move of what is not live is skipped, and whether a feature is live hangs
+ *   on its layer and its group, which a commit that moves it need not name. Then every commit from
+ *   the first refused one is taken back and written again
  * - A refused commit is as if it was never made: an undo or a redo of a commit written again
  *   writes what takes that commit back now (or nothing, when that commit is refused), and the
  *   steps of undo of the commits written again take them back as they are written now (the
@@ -95,7 +98,11 @@ export function takeOut(
     readonly originOf?: (commit: string) => string | undefined;
   } = {},
 ): { readonly failed: readonly unknown[]; readonly written: readonly CommitOperations[] } {
-  const again = options.every ? commits.map((_, i) => i) : touching(commits, refused);
+  const touched = options.every ? null : touching(commits, refused);
+  const again =
+    touched === null || touched.some((i) => movesContainers(commits[i]))
+      ? commits.map((_, i) => i)
+      : touched;
   const failed: unknown[] = [];
   for (let k = again.length - 1; k >= 0; k--) {
     failed.push(...writeOperations(store, values, commits[again[k]].inverse).failed);
@@ -185,6 +192,21 @@ function touchedBy(commit: CommitOperations): Set<string> {
     }
   }
   return out;
+}
+
+/**
+ * Whether a commit makes or deletes a layer or a group, or puts a group elsewhere (taking it back
+ * included): what is live under them changes
+ */
+function movesContainers(commit: CommitOperations): boolean {
+  for (const list of [commit.operations, commit.inverse]) {
+    for (const operation of list) {
+      if (operation.kind !== 'layer' && operation.kind !== 'group') continue;
+      if (operation.type === 'create' || operation.type === 'delete') return true;
+      if (operation.type === 'place' && operation.kind === 'group') return true;
+    }
+  }
+  return false;
 }
 
 /** Adds the IDs of what operations create */

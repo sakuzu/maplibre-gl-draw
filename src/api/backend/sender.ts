@@ -770,6 +770,7 @@ export class Sender {
     }
     kept.rename(pairs);
     for (const [to, keys] of placements) if (keys) kept.placements.set(to, keys);
+    this.#values.followIds(pairs);
     for (const entry of this.#entries) {
       if (entry.operations === null) entry.renames = [...(entry.renames ?? []), pairs];
       else this.#renameEntry(entry, pairs);
