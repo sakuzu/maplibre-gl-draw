@@ -187,7 +187,7 @@ describe('features.scan', () => {
         'name',
       ] as const;
       const readKeys = (row: FeatureRow) =>
-        Object.fromEntries(keys.map((key) => [key, row.property(key as never)]));
+        Object.fromEntries(keys.map((key) => [key, row.property(key)]));
       const made = tables
         ? vi.spyOn(internalsOf(tables as FeatureTables).featureCache, 'featureOf')
         : undefined;

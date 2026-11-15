@@ -1778,12 +1778,12 @@ describe('what a plugin is given', () => {
               name: 'acme-keys',
               has: (row) => {
                 seen.push([
-                  row.property('maplibre-gl-draw:layerId' as never),
-                  row.property('maplibre-gl-draw:style' as never),
-                  row.property('maplibre-gl-draw:locked' as never),
-                  row.property('maplibre-gl-draw:visible' as never),
+                  row.property('maplibre-gl-draw:layerId'),
+                  row.property('maplibre-gl-draw:style'),
+                  row.property('maplibre-gl-draw:locked'),
+                  row.property('maplibre-gl-draw:visible'),
                 ]);
-                return row.property('maplibre-gl-draw:locked' as never) === true;
+                return row.property('maplibre-gl-draw:locked') === true;
               },
             });
           },
