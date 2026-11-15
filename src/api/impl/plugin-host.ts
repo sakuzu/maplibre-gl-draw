@@ -104,6 +104,8 @@ export interface PluginUseDeps {
   /** The look a feature of the Store is drawn with */
   appliedStyle(feature: StoredFeature): FeatureStyleResolved;
   getDraw(): Draw;
+  /** Whether an image of the map is being made, which leaves the overlays out */
+  isCapturing(): boolean;
   /** Keeps a failure in `status.problems`, the same failure (`key`) once */
   report(problem: ProblemInput, key: string): void;
 }
@@ -388,6 +390,25 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         return fallback;
       }
     };
+    /**
+     * A renderer of the plugin that stops once it throws: it is not called again until the plugin
+     * is added again, and the library draws on
+     */
+    const stoppedOnFailure = (
+      part: string,
+      run: (feature: Feature, context: EngineRenderContext) => void,
+    ): ((feature: Feature, context: EngineRenderContext) => void) => {
+      let stopped = false;
+      return (feature, context) => {
+        if (stopped) return;
+        try {
+          run(feature, context);
+        } catch (error) {
+          stopped = true;
+          failed(part, error);
+        }
+      };
+    };
     const takeBack = (): void => {
       for (const take of extras.splice(0).reverse()) take();
     };
@@ -594,6 +615,9 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
           tolerancePixels: context.tolerancePx,
         });
         const { render, hitTest, snapCandidates, handles } = definition;
+        const renders = stoppedOnFailure(`render of ${label}`, (feature, context) =>
+          render?.call(definition, feature, renderContextOf(context)),
+        );
 
         const installed: EngineTypeDefinition = {
           type,
@@ -607,12 +631,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
             styleRuleChannel: definition.styleRuleChannel,
           }),
           render: render
-            ? (feature, context) =>
-                call(
-                  `render of ${label}`,
-                  () => render.call(definition, feature, renderContextOf(context)),
-                  undefined,
-                )
+            ? (feature, context) => renders(feature, context)
             : (feature, context) => {
                 // Without a renderer, its footprint is drawn
                 const shape = shapeOf(feature);
@@ -795,15 +814,9 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
             has: (view, row) => asks(() => rowOfView(view, row)),
             ...(keys !== undefined && { classifyKeys: [...keys] }),
           },
-          draw(feature, context) {
-            if (render) {
-              call(
-                `render of ${label}`,
-                () => render.call(source, feature, renderContextOf(context)),
-                undefined,
-              );
-            }
-          },
+          draw: stoppedOnFailure(`render of ${label}`, (feature, context) =>
+            render?.call(source, feature, renderContextOf(context)),
+          ),
           hitTest(feature, context) {
             if (!hitTest) return null;
             const hit = call(
@@ -865,6 +878,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
       const overlayRenderer: OverlayRenderer = {
         name: `\u0000plugin:${name}`,
         draw(context) {
+          if (deps.isCapturing()) return;
           for (const given of overlay) {
             const kept = looks.get(given);
             if (kept) drawShape(kept.shape, kept.look, context);

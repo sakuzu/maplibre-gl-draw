@@ -317,8 +317,11 @@ export function createDrawOnEngine(
     gpu: () => engine.customLayer.getGpuMemory(),
   });
 
-  // The plugins of `/extend`, put into the extensions of the engine
+  // The plugins of `/extend`, put into the extensions of the engine. Their overlays are not in an
+  // image of the map
+  let capturing = false;
   const usePlugin = createPluginUse({
+    isCapturing: () => capturing,
     collections: engine.extensions.collections,
     map,
     modeManager,
@@ -438,7 +441,14 @@ export function createDrawOnEngine(
 
     ...createDrawing(engine),
     captureImage: (captureOptions) =>
-      captureImage(map, (hidden) => engine.customLayer.setEditingHidden(hidden), captureOptions),
+      captureImage(
+        map,
+        (hidden) => {
+          capturing = hidden;
+          engine.customLayer.setEditingHidden(hidden);
+        },
+        captureOptions,
+      ),
 
     destroy() {
       if (destroyed) return;

@@ -855,6 +855,24 @@ describe('the failures of a plugin', () => {
     expect(problem?.count).toBeGreaterThanOrEqual(2);
   });
 
+  it('of the drawing of a type stop that drawing, told once', () => {
+    const view = open();
+    const render = vi.fn(() => {
+      throw new Error('cannot draw');
+    });
+    view.draw.use({
+      name: 'acme-unseen',
+      setup: (ctx) =>
+        ctx.addFeatureType({ name: 'acme:unseen', footprint: (f) => f.geometry, render }),
+    });
+    const feature = create(view, { type: 'Point', coordinates: [0, 0] }, {}, 'acme:unseen');
+    drawn(view, feature.id);
+    drawn(view, feature.id);
+    expect(render).toHaveBeenCalledTimes(1);
+    const problems = view.draw.status.value.problems.filter((p) => p.label === 'acme-unseen');
+    expect(problems.map((p) => p.count)).toEqual([1]);
+  });
+
   it('of the input of a mode, and of the promise it returns, are told', async () => {
     const view = open();
     view.draw.use({
@@ -989,6 +1007,23 @@ describe('a mode that measures (no feature)', () => {
     view.draw.extensions.overlays.get(overlay)?.draw(cleared.context);
     expect(cleared.line).not.toHaveBeenCalled();
     expect(told[0]).toBeNull();
+  });
+
+  it('is left out of an image of the map', () => {
+    const view = open();
+    view.draw.use({
+      name: 'acme-shown',
+      setup: (ctx) => ctx.setOverlay([{ geometry: { type: 'Point', coordinates: [0, 0] } }]),
+    });
+    const overlay = view.draw.extensions.overlays.list()[0] as string;
+    const shown = recordingContext(view.draw);
+    view.draw.extensions.overlays.get(overlay)?.draw(shown.context);
+    expect(shown.point).toHaveBeenCalledTimes(1);
+    // The image waits for the next frame of the map, which the stub does not draw
+    void view.draw.captureImage().catch(() => {});
+    const captured = recordingContext(view.draw);
+    view.draw.extensions.overlays.get(overlay)?.draw(captured.context);
+    expect(captured.point).not.toHaveBeenCalled();
   });
 
   it('refuses an overlay past its bounds', () => {
