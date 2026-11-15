@@ -43,6 +43,7 @@ import { createLayers } from './layers.js';
 import { createMemory } from './memory.js';
 import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
+import { createPick } from './pick.js';
 import { createPluginUse } from './plugin-host.js';
 import { publishedStore } from './published-store.js';
 import { createRendered } from './rendered.js';
@@ -115,7 +116,10 @@ function pick<T extends object, K extends keyof T>(from: T, keys: readonly K[]):
 }
 
 /** The reads of the features in the public shape */
-function publicFeatures(features: FeatureResource): FeaturesCollection {
+function publicFeatures(
+  features: FeatureResource,
+  pick: FeaturesCollection['pick'],
+): FeaturesCollection {
   return {
     get: (id) => toFeatureOrUndefined(features.get(id)),
     getMany: (ids) => features.getMany(ids).map(toFeatureOrUndefined),
@@ -125,6 +129,9 @@ function publicFeatures(features: FeatureResource): FeaturesCollection {
     has: (id) => features.has(id),
     isEditable: (id) => features.isEditable(id),
     getAppliedStyle: (id) => features.getAppliedStyle(id),
+    appliedStyle: (id) => features.getAppliedStyle(id),
+    pick,
+    scan: (visit, options) => features.scan(visit, options),
   };
 }
 
@@ -167,7 +174,7 @@ export function createDrawOnEngine(
   // The reads of the instance read the document committed: the one before a commit over several
   // tasks until its last step, without finishing it
   const readDeps: ResourceDeps = { ...deps, store: publishedStore(store) };
-  const features = publicFeatures(createFeatures(readDeps));
+  const features = publicFeatures(createFeatures(readDeps), createPick(engine));
   const groups = pick(createGroups(readDeps), [
     'get',
     'getMany',

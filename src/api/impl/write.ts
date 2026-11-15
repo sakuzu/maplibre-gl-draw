@@ -1734,6 +1734,10 @@ class TransactionImpl implements Transaction {
       bbox: (filter) => read(() => self.#whole.features.bbox(filter)),
       isEditable: (id) => read(() => self.#whole.features.isEditable(id)),
       getAppliedStyle: (id) => read(() => self.#whole.features.getAppliedStyle(id)),
+      appliedStyle: (id) => read(() => self.#whole.features.getAppliedStyle(id)),
+      // What the frame drawn last shows: the same for the transaction
+      pick: (point, options) => read(() => self.#reads.features.pick(point, options)),
+      scan: (visit, options) => read(() => self.#whole.features.scan(visit, options)),
       create,
       update,
       delete: remove,

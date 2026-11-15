@@ -115,7 +115,8 @@ export interface Draw extends DrawReader {
   readonly extensions: ExtensionsCollections;
   /**
    * Adds a plugin and returns what its `setup` returns, as it is. `setup` runs once, at once.
-   * Aborting `signal` removes the plugin with everything it added.
+   * Aborting `signal` removes the plugin with everything it added. The plugin is the `Plugin` of
+   * `@sakuzu/maplibre-gl-draw/extend`, not the `Plugin` of this entry.
    *
    * @throws `DrawError` with the code `alreadyExists` for the name of a plugin there is, and
    *   `invalidInput` for what is not a plugin; what `setup` throws, once what it added is taken

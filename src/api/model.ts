@@ -135,6 +135,26 @@ export type FeatureStyleResolved = FeatureStyle &
     >
   >;
 
+/**
+ * The look a feature is drawn with, as `features.appliedStyle` reads it: the default, the layer
+ * rule and the style of the feature put on top of each other. Its colors, widths, radius and
+ * shape are always there; what is drawn with more keys has them too ({@link FeatureStyleResolved}).
+ */
+export type AppliedStyle = FeatureStyle &
+  Required<
+    Pick<
+      FeatureStyle,
+      | 'fillColor'
+      | 'fillOpacity'
+      | 'strokeColor'
+      | 'strokeWidth'
+      | 'strokeOpacity'
+      | 'pointColor'
+      | 'pointRadius'
+      | 'pointShape'
+    >
+  >;
+
 export { DRAW_PROPERTY_PREFIX } from '../shared/properties.js';
 
 /**

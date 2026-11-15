@@ -40,6 +40,11 @@ export class AuxiliaryDrag {
     this.featureId = state.hit.global ? null : state.hit.featureId;
   }
 
+  /** Whether the handle dragged is one of this provider */
+  isOf(provider: AuxiliaryHandleProvider): boolean {
+    return this.state?.provider === provider;
+  }
+
   /** Forwards a move of the pointer: the patch it gives, if any */
   update(event: DragNormalizedEvent): FeaturePatch | null {
     if (!this.state) return null;

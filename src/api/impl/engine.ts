@@ -18,7 +18,7 @@ import { createDatasetManager } from '../../dataset/manager.js';
 import { effectiveZoomForCamera } from '../../dataset/thinning.js';
 import { TriangulationScheduler } from '../../dataset/triangulation.js';
 import { toleranceDegrees } from '../../dispatcher/hit-test/local-frame.js';
-import { createTopmostHitTester } from '../../dispatcher/hit-test/topmost.js';
+import { createFeaturePicker, createTopmostHitTester } from '../../dispatcher/hit-test/topmost.js';
 import type { InputRouter } from '../../dispatcher/input-router.js';
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import { createInputNormalizer } from '../../dispatcher/normalizer.js';
@@ -37,7 +37,7 @@ import { createCoordinateTransform, getAnchorProjector } from '../../shared/math
 import { SketchController } from '../../sketches/sketch-controller.js';
 import { SnapIndicatorRenderer } from '../../snapping/indicator.js';
 import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
-import type { Mode } from '../../store/types.js';
+import type { Mode, Feature as StoredFeature } from '../../store/types.js';
 import { createRenderCoordinator } from '../../view/coordinator.js';
 import { createFeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { attachSlotLayers } from '../../view/layer/attach.js';
@@ -124,6 +124,14 @@ export interface Engine {
     /** Turns the time slicing of the triangulation and of the drape on or off */
     setTimeSlicing(enabled: boolean): void;
   };
+  /**
+   * Every feature of the document at a point of the screen, from the front, as the frame drawn
+   * last shows them (the sketches applied, the rows moved by their state where they are drawn)
+   *
+   * @param tolerancePx - How far from a feature the point still hits it (the click tolerance of
+   *   the options when left out)
+   */
+  pickFeatures(point: { x: number; y: number }, tolerancePx?: number): StoredFeature[];
   /** Whether destroy has run */
   isDestroyed(): boolean;
   /**
@@ -263,6 +271,26 @@ export function createEngine(
     },
   };
   const hitTestTopmost = createTopmostHitTester(topmostDeps);
+  const pickAtClickTolerance = createFeaturePicker(topmostDeps);
+  const pickFeatures = (point: { x: number; y: number }, tolerancePx?: number) => {
+    const clickTolerance = context.options.clickTolerance;
+    if (tolerancePx === undefined || tolerancePx === clickTolerance) {
+      return pickAtClickTolerance(point);
+    }
+    const pick = createFeaturePicker({
+      ...topmostDeps,
+      toleranceLngLat: (at) => toleranceDegrees(unproject, at, tolerancePx),
+      clickTolerancePx: tolerancePx,
+    });
+    // The features of the layers of objects are hit by the service, at its tolerance: given this
+    // one for the time of the read
+    hitTestService.setClickTolerance(tolerancePx);
+    try {
+      return pick(point);
+    } finally {
+      hitTestService.setClickTolerance(clickTolerance);
+    }
+  };
 
   // 2.7 Snapping to data (datasets).
   // Adds the vertices, edges and intersections of the displayed datasets as
@@ -536,6 +564,7 @@ export function createEngine(
         triangulationScheduler.setSlicing(enabled);
       },
     },
+    pickFeatures,
     isDestroyed: () => teardown.done,
     enterDefaultMode,
     destroy: () => teardown.run(),

@@ -31,6 +31,7 @@ import { isSelectionEdit } from '../../sketches/sketch-edits.js';
 import { editableFeatures } from '../../store/lock.js';
 import type { FeaturePatch, TransformEdit } from '../../store/store.js';
 import type { Feature, SelectionBulk } from '../../store/types.js';
+import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/index.js';
@@ -552,6 +553,11 @@ export class SelectModeDragHandler {
    */
   isActive(): boolean {
     return this.operation !== null || this.shown !== null;
+  }
+
+  /** Whether the drag running is one of a handle of this provider */
+  isDragOf(provider: AuxiliaryHandleProvider): boolean {
+    return this.operation?.isOf(provider) === true;
   }
 }
 

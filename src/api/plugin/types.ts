@@ -19,12 +19,12 @@ import type { Draw } from '../draw.js';
 import type { Observable } from '../events.js';
 import type { Webgl } from '../extension/webgl.js';
 import type {
+  AppliedStyle,
   Feature,
   FeatureGeometry,
   FeaturePatch,
   FeatureRow,
   FeatureStyle,
-  FeatureStyleResolved,
   LineStyle,
   PointShape,
   Properties,
@@ -180,6 +180,12 @@ export interface FeatureTypeDefinition<P extends object = Properties> extends Ha
   /**
    * The distance of a point to a feature, in pixels, or `null` when it misses. Without it, the
    * footprint is hit.
+   *
+   * It is asked only of the features whose footprint is near the point: the candidates of a hit,
+   * the reads of a range (`features.list({ bbox })`) and the selection box are of the footprint
+   * the feature has, with or without it. A type drawn after other features (a line to where they
+   * are drawn) is so hit by the footprint of its stored geometry: once they move far from it, it
+   * is not hit where it is drawn.
    */
   hitTest?(feature: Feature<P>, pointer: ScreenPointContext): number | null;
   /** The candidates a feature offers to snap to. Without them, those of its footprint */
@@ -305,7 +311,7 @@ export interface RenderContext {
   readonly fill: FillRenderer;
   readonly point: PointRenderer;
   /** The look the feature is drawn with: the default of its type, the rule, its style */
-  appliedStyle(feature: Feature): FeatureStyleResolved;
+  appliedStyle(feature: Feature): AppliedStyle;
 }
 
 /** In the frame drawn last; while a frame is drawn, in that frame */

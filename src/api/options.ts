@@ -495,7 +495,8 @@ export interface DrawOptions extends RuntimeOptions {
   initDefaultLayer?: boolean;
   /**
    * The plugins, added in their order when the instance is created, as `draw.use` adds them; only
-   * at creation. When one of them cannot be added, the instance is not created
+   * at creation. When one of them cannot be added, the instance is not created. Each is the
+   * `Plugin` of `@sakuzu/maplibre-gl-draw/extend`, not the `Plugin` of this entry
    */
   plugins?: readonly UsedPlugin<unknown>[];
   /**

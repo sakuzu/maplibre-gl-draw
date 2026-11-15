@@ -143,6 +143,8 @@ export class SelectMode implements EngineModeHandler {
   #boxMarked: TableSelection = TableSelection.empty;
   /** The moves of the arrow keys, waiting to be written */
   readonly #nudge = new Nudge();
+  /** Stops listening for the providers of handles taken away */
+  #stopRemovals: (() => void) | null = null;
 
   // ============================================================================
   // Lifecycle
@@ -151,6 +153,11 @@ export class SelectMode implements EngineModeHandler {
   onStart(context: EngineModeContext): void {
     this.#context = context;
     context.map.getCanvas().style.cursor = 'default';
+    // The drag of a handle whose provider is taken away (its extension removed) is cancelled:
+    // nothing it showed is written
+    this.#stopRemovals = context.selectionScope.auxiliaryHandles.onRemoved((provider) => {
+      if (this.#dragHandler.isDragOf(provider)) this.onDragCancel();
+    });
 
     // If there are features awaiting editing, notify plugins and clear the editing state
     const editingIds = context.store.getEditingIds();
@@ -167,6 +174,8 @@ export class SelectMode implements EngineModeHandler {
 
   onStop(): void {
     const { store, map, plugins } = this.#context;
+    this.#stopRemovals?.();
+    this.#stopRemovals = null;
 
     plugins?.finishPluginInteraction();
     this.#dragHandler.reset(store);

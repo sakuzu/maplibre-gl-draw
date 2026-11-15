@@ -115,6 +115,8 @@ const MAIN = [
   'FeatureStyleSample',
   'FeatureRow',
   'FeaturesCollection',
+  'ScanOptions',
+  'AppliedStyle',
   'FeatureStyle',
   'FeatureStyleResolved',
   'FeatureType',

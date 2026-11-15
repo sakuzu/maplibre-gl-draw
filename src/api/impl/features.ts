@@ -32,13 +32,16 @@ import type {
 } from '../../store/types.js';
 import { drawValueOfInput } from '../../table/value-input.js';
 import { DrawError } from '../errors.js';
+import type { ScanOptions } from '../features.js';
 import type {
   StoredFeature as Feature,
   FeatureFilter,
   StoredFeatureInput as FeatureInput,
   FeatureListOptions,
   StoredFeaturePatch as FeaturePatch,
+  FeatureRow,
   MoveTarget,
+  Feature as PublicFeature,
 } from '../model.js';
 import {
   Extent,
@@ -48,6 +51,8 @@ import {
   rowsExtent,
 } from './feature-extent.js';
 import type { FeatureResource } from './feature-resource.js';
+import { createRowReader } from './feature-rows.js';
+import { toFeature } from './feature-shape.js';
 import { applyResult } from './geometry/apply.js';
 import { runBuffer } from './geometry/buffer.js';
 import { runSplit } from './geometry/split.js';
@@ -127,7 +132,7 @@ export function createFeatures(deps: ResourceDeps): FeatureResource {
    */
   const forEachRow = (
     filter: FeatureFilter | undefined,
-    visit: (id: string) => boolean,
+    visit: (id: string, handle: number) => boolean,
     after?: number,
   ): void => {
     const rowFilter = Object.fromEntries(checkedEntries(filter)) as RowFilter;
@@ -136,7 +141,7 @@ export function createFeatures(deps: ResourceDeps): FeatureResource {
     forEachMatchingRow(
       store,
       rowFilter,
-      (handle) => visit(tables.getRowId(handle) as string),
+      (handle) => visit(tables.getRowId(handle) as string, handle),
       after,
     );
   };
@@ -234,8 +239,76 @@ export function createFeatures(deps: ResourceDeps): FeatureResource {
     return features;
   }
 
+  /**
+   * Reads the features in stacking order without making them, the document as the reads read it
+   * when it begins (the one before a write over several tasks under way), in one task
+   */
+  function scan(visit: (row: FeatureRow) => void, options?: ScanOptions): Promise<void> {
+    try {
+      if (typeof visit !== 'function') throw invalidInput('visit must be a function');
+      if (options !== undefined) {
+        requireRecord(options, 'The options');
+        onlyKeys(
+          options as Record<string, unknown>,
+          ['query', 'signal', 'onProgress'],
+          'The options',
+        );
+      }
+      const signal = options?.signal;
+      if (signal !== undefined && !(signal instanceof AbortSignal)) {
+        throw invalidInput('The signal must be an AbortSignal');
+      }
+      const onProgress = options?.onProgress;
+      if (onProgress !== undefined && typeof onProgress !== 'function') {
+        throw invalidInput('onProgress must be a function');
+      }
+      const filter = options?.query;
+      checkedFilterEntries(filter);
+      const stopped = (): DrawError =>
+        new DrawError('aborted', 'The scan was stopped by its signal', { cause: signal?.reason });
+      if (signal?.aborted) throw stopped();
+      let done = 0;
+      /** Gives one row to `visit`: false once the signal is aborted */
+      const give = (row: FeatureRow): boolean => {
+        visit(row);
+        done++;
+        if (signal?.aborted) throw stopped();
+        return true;
+      };
+      const tables = store.tables;
+      if (tables) {
+        const reader = createRowReader(tables, (_row, _view, id) => {
+          const feature = store.getFeature(id);
+          return feature ? toFeature(feature) : undefined;
+        });
+        const snapshot = snapshotOf(store);
+        readWithoutKeeping(tables, () => {
+          if (snapshot) {
+            // While a write over several tasks is under way, the document before it: a row it
+            // changed is read from its feature then
+            forEachRowAt(store, snapshot, filter, (_id, changed, handle) =>
+              give(changed ? storedFeatureRow(changed) : reader.at(handle)),
+            );
+          } else {
+            forEachRow(filter, (_id, handle) => give(reader.at(handle)));
+          }
+        });
+      } else {
+        const checks = filterOf(filter);
+        for (const feature of listEveryFeatureInOrder(store)) {
+          if (keep(feature, checks)) give(storedFeatureRow(feature));
+        }
+      }
+      onProgress?.({ phase: 'read', done, total: done });
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
   return {
     ...createRestore(deps),
+    scan,
     get: (id) => store.getFeature(id),
     getMany(ids) {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
@@ -594,6 +667,37 @@ function forEachRowAt(
       if (!going) return;
     }
   });
+}
+
+/**
+ * A feature of the Store read as a row: its fields read from it, its feature in the public shape
+ * made only for a key of the library or once asked for
+ */
+function storedFeatureRow(stored: StoredFeature): FeatureRow {
+  let made: PublicFeature | undefined;
+  const feature = (): PublicFeature => {
+    made ??= toFeature(stored);
+    return made;
+  };
+  let bbox: [number, number, number, number] | null | undefined;
+  const properties = (stored.properties ?? {}) as Record<PropertyKey, unknown>;
+  return {
+    id: stored.id,
+    featureType: stored.type,
+    layerId: stored.layerId,
+    groupId: stored.groupId ?? null,
+    visible: stored.visible !== false,
+    locked: stored.locked === true,
+    get bbox() {
+      bbox ??= featureExtent(stored) as [number, number, number, number] | null;
+      return bbox;
+    },
+    property: (key) =>
+      (Object.hasOwn(properties, key)
+        ? properties[key]
+        : (feature().properties as Record<PropertyKey, unknown>)[key]) as never,
+    toFeature: feature,
+  };
 }
 
 /** The checks of a filter of features */

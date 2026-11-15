@@ -194,6 +194,13 @@ export interface AuxiliaryHandleRegistry {
   list(): AuxiliaryHandleProvider[];
   /** Cancels every registration (called when the draw instance is destroyed) */
   clear(): void;
+  /**
+   * Listens for the providers that are no longer registered (removed, replaced under their id or
+   * cleared): a drag of a handle of one of them is cancelled
+   *
+   * @returns The function that stops listening
+   */
+  onRemoved(listener: (provider: AuxiliaryHandleProvider) => void): () => void;
 }
 
 /**
@@ -203,15 +210,31 @@ export interface AuxiliaryHandleRegistry {
  */
 export function createAuxiliaryHandleRegistry(): AuxiliaryHandleRegistry {
   const providers = new Map<string, AuxiliaryHandleProvider>();
+  const listeners = new Set<(provider: AuxiliaryHandleProvider) => void>();
+  const removed = (provider: AuxiliaryHandleProvider): void => {
+    for (const listener of [...listeners]) listener(provider);
+  };
   return {
     register(provider) {
+      const replaced = providers.get(provider.id);
       providers.set(provider.id, provider);
+      if (replaced && replaced !== provider) removed(replaced);
       return () => {
-        if (providers.get(provider.id) === provider) providers.delete(provider.id);
+        if (providers.get(provider.id) !== provider) return;
+        providers.delete(provider.id);
+        removed(provider);
       };
     },
     get: (id) => providers.get(id),
     list: () => [...providers.values()],
-    clear: () => providers.clear(),
+    clear: () => {
+      const all = [...providers.values()];
+      providers.clear();
+      for (const provider of all) removed(provider);
+    },
+    onRemoved(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
 }

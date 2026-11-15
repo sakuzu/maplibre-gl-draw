@@ -72,6 +72,7 @@ import type {
   Handle,
   ScreenFootprint,
 } from '../extension/feature-type.js';
+import type { DrawPointerEvent } from '../extension/mode.js';
 import type {
   CompanionProvider,
   HandleProvider,
@@ -725,6 +726,14 @@ export function adaptSnapProvider(
 }
 
 /**
+ * The events of the pointer given to `onHandleDrag` for the release that ends a drag, which a
+ * plugin of `/extend` reads as `pointerup` (the others are moves)
+ *
+ * @internal
+ */
+export const RELEASES = new WeakSet<DrawPointerEvent>();
+
+/**
  * A provider of handles of the contract as a provider of auxiliary handles of the engine
  *
  * The drag of a handle asks `onHandleDragStart` first, which can refuse it, then calls
@@ -762,14 +771,12 @@ export function adaptHandleProvider(
    * as the Store takes it: the keys of the library in `properties` become its fields. A patch the
    * library cannot take is left out, and told in the console once.
    */
-  const drag = (event: DragNormalizedEvent): StorePatch | null => {
+  const drag = (event: DragNormalizedEvent, released: boolean): StorePatch | null => {
     if (!active) return null;
     const feature = active.featureId ? deps.shapes.get(active.featureId) : undefined;
-    const patch = provider.onHandleDrag(
-      featureForExtensionOrNull(feature),
-      active.handle,
-      toPointerEvent(event),
-    );
+    const pointer = toPointerEvent(event);
+    if (released) RELEASES.add(pointer);
+    const patch = provider.onHandleDrag(featureForExtensionOrNull(feature), active.handle, pointer);
     if (!feature || deps.store.isReadOnly() || patch === null) return null;
     try {
       return storedPatchOf(patch, feature);
@@ -816,8 +823,8 @@ export function adaptHandleProvider(
       active = { featureId: hit.featureId, handle };
       return true;
     },
-    onHandleDragMove: drag,
-    onHandleDragRelease: drag,
+    onHandleDragMove: (event) => drag(event, false),
+    onHandleDragRelease: (event) => drag(event, true),
     onHandleDragEnd(event) {
       const ended = active;
       active = null;

@@ -44,24 +44,28 @@
  * of the layer. When no provider at all is registered, this detour never happens.
  */
 
-import type { RowGroup, RowTable } from '@sakuzu/kasane/render';
+import type { PageDictionary, RowGroup, RowTable } from '@sakuzu/kasane/render';
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
+import { draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
 import { STATE_UNHIT_MASK } from '../../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
   hitTestLayerTable,
+  rowHitShape,
   type TableRowHit,
   type TableScreenHit,
 } from '../../feature-table/hit-test.js';
-import { rowFeatureToRead } from '../../feature-table/row-read.js';
+import { rowFeatureToRead, rowType } from '../../feature-table/row-read.js';
+import { inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { wrapLongitude } from '../../shared/math/longitude.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
+import { getDisplayFeatures, isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType, Layer } from '../../store/types.js';
-import { isGroupLocked, ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
+import { isGroupLocked, ROW_FLAG_LOCKED, STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import type {
   CompanionHitContext,
   FeatureCompanionHitResult,
@@ -556,6 +560,171 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       (copy) => datasets?.hitTestSide('belowStore', copy, tolerance, test) ?? null,
     );
     return below ? toTopHit(below) : null;
+  };
+}
+
+/**
+ * Every feature of the document at a screen position, from the front, each once
+ *
+ * @internal
+ */
+export type PickFeatures = (point: ScreenPoint) => Feature[];
+
+/** The moving sets of rows (`STATE_MOVE_MASK` holds 1 to 3) */
+const MOVING_SETS = [1, 2, 3] as const;
+
+/**
+ * Creates what reads every feature of the document at a screen position: the features as they are
+ * seen in the frame drawn last, the sketches of every owner applied (what the drag of this client
+ * edits included, where it is drawn) and the rows moved by their state where they are drawn, in
+ * the stacking order from the front. The datasets and the companions are no features of the
+ * document: they are left out, and occlude nothing here.
+ *
+ * Unlike the hit of a click, which reads the features as they are written, a feature a sketch
+ * edits is read as the sketch leaves it (`RenderedShapes.get`), and a row moved by its state where
+ * its state moves it: the rows of a moving set are looked for where the click is before they are
+ * moved. A point on the terrain is hit at the coordinate of the click, not where its anchor is
+ * drawn on the screen.
+ *
+ * @internal
+ */
+export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
+  const { store, hitTestService, unproject, toleranceLngLat } = deps;
+  const shapes = deps.shapes ?? new RenderedShapes(store);
+
+  return (point) => {
+    const lngLat = unproject(point);
+    const tolerance = toleranceLngLat(point);
+    const copies = clickCopies([lngLat.lng, lngLat.lat], tolerance);
+    const visible = createVisibilityLookup(store);
+    const sketched = new Set(shapes.sketchedIds());
+    const dragged = shapes.draggedRows();
+    const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;
+    const degreesPerPixel =
+      clickPx > 0 ? tolerance / clickPx : 360 / (512 * 2 ** (deps.getZoom?.() ?? 0));
+
+    /** Whether a feature as it is seen is hit: on any copy of the click, its marker included */
+    const seenHit = (feature: Feature): boolean => {
+      if (!visible(feature) || isLocallyHidden(feature, store)) return false;
+      const reachPx = hitTestService.getStrategy?.(feature.type)?.reachPx?.(feature) ?? 0;
+      const within = tolerance + reachPx * degreesPerPixel;
+      return copies.some((copy) => hitTestService.hitTestFeature(feature, copy, within));
+    };
+
+    // The features of the layers of objects, by layer in their order: the ones no sketch edits
+    // hit as they are, the others as they are seen
+    const objects = getDisplayFeatures(store);
+    const written = new Set(
+      hitTestService
+        .hitTestAll(
+          point,
+          unproject,
+          objects.filter((feature) => !sketched.has(feature.id)),
+        )
+        .map((hit) => hit.feature.id),
+    );
+    const objectsByLayer = groupByLayer(objects);
+
+    const tables = shapes.hitRows();
+    const picked: Feature[] = [];
+    const layerOrder = store.getLayerOrder();
+    for (let i = layerOrder.length - 1; i >= 0; i--) {
+      const layerId = layerOrder[i];
+      const table = tables?.rowTable(layerId);
+      if (tables && table) {
+        pickRows(tables, table, layerId);
+        continue;
+      }
+      const features = objectsByLayer.get(layerId);
+      if (!features) continue;
+      for (let j = features.length - 1; j >= 0; j--) {
+        const feature = features[j];
+        if (written.has(feature.id)) picked.push(feature);
+        else if (sketched.has(feature.id)) {
+          const seen = shapes.get(feature.id);
+          if (seen && seenHit(seen)) picked.push(seen);
+        }
+      }
+    }
+    return picked;
+
+    /** The rows of a layer held as rows at the click, from the front */
+    function pickRows(tables: FeatureTablesInternals, table: RowTable, layerId: string): void {
+      const layer = store.getLayer(layerId);
+      if (!layer || layer.visible === false || store.isHidden(layerId)) return;
+      const hidden = store.listHidden();
+      const extraReach = hitTestService.maxCandidateReachPx?.() ?? 0;
+      const reach = Math.max(
+        tolerance,
+        maxMarkerReach(tables, deps) * degreesPerPixel,
+        tolerance + extraReach * degreesPerPixel,
+      );
+      const boxes: number[] = [];
+      const around = (x: number, y: number, by: number): void => {
+        boxes.push(x - by, y - by, x + by, y + by);
+      };
+      for (const [x, y] of copies) around(x as number, y as number, reach);
+      // A row a sketch edits is seen elsewhere than it is: it is looked for where it is, to be
+      // read in its place in the order and tested as it is seen
+      const view = tables.view(layerId);
+      for (const id of sketched) {
+        const handle = store.tables?.getRowRef(id);
+        const box = handle === undefined ? null : view?.getRowBBox(handle);
+        if (box) boxes.push(box[0], box[1], box[2], box[3]);
+      }
+      // The rows of a moving set are looked for where the click is before they are moved
+      const motions = dragged ? draggedRowMotionsOf(dragged) : undefined;
+      if (motions) {
+        for (const set of MOVING_SETS) {
+          const [dx, dy] = motions.translation(set);
+          const edit = motions.transform(set);
+          if (dx === 0 && dy === 0 && !edit) continue;
+          // A scale makes the rows smaller: the click reaches farther on them before
+          const factor = edit?.kind === 'scale' ? Math.min(edit.eastFactor, edit.northFactor) : 1;
+          const by = factor > 0 ? reach / Math.min(factor, 1) : reach;
+          for (const [x, y] of copies) {
+            const back: number[] = [(x as number) - dx, (y as number) - dy];
+            const [bx, by2] = edit ? moveEnuPosition(inverseEnuEdit(edit), back, false) : back;
+            around(bx as number, by2 as number, by);
+          }
+        }
+      }
+      const found: Array<{ group: RowGroup; row: number }> = [];
+      tables.searchRowBoxesIn(table, boxes, (group, row) => {
+        found.push({ group, row });
+      });
+      // The front first: the rows are found in the order they are drawn
+      for (let k = found.length - 1; k >= 0; k--) {
+        const { group, row } = found[k];
+        if ((group.state[row] & STATE_UNHIT_MASK) !== 0) continue;
+        const data = group.data;
+        const groupHandle = data.groups[row];
+        const groupId = groupHandle >= 0 ? tables.groups.idOf(groupHandle) : undefined;
+        if (groupId !== undefined && hidden.has(groupId)) continue;
+        const handle = data.rows[row];
+        const id = tables.ids.idOf(handle) as string;
+        if (sketched.has(id) || dragged?.has(handle)) {
+          const seen = shapes.get(id);
+          if (seen && seenHit(seen)) picked.push(seen);
+          continue;
+        }
+        const type = rowType(data, row);
+        const style = tables.styles.get((data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row]);
+        const within =
+          getStyleRuleChannel(type) === 'point' && deps.pointMarkerReachPx
+            ? Math.max(tolerance, deps.pointMarkerReachPx(style) * degreesPerPixel)
+            : tolerance;
+        const shape = rowHitShape(group, row);
+        let feature: Feature | null = null;
+        const hit = copies.some((copy) => {
+          const byShape = shape ? hitTestService.hitTestShape?.(type, shape, copy, within) : null;
+          if (byShape !== null && byShape !== undefined) return byShape;
+          feature ??= tables.featureCache.featureOf(table.tableId, group, row);
+          return hitTestService.hitTestFeature(feature, copy, within);
+        });
+        if (hit) picked.push(feature ?? tables.featureCache.featureOf(table.tableId, group, row));
+      }
+    }
   };
 }
 

@@ -6,7 +6,22 @@
  */
 
 import type { BBox } from '../geometry/types.js';
-import type { Feature, FeatureFilter, FeatureListOptions, FeatureStyleResolved } from './model.js';
+import type {
+  AppliedStyle,
+  Feature,
+  FeatureFilter,
+  FeatureListOptions,
+  FeatureRow,
+  FeatureStyleResolved,
+} from './model.js';
+import type { VertexRef } from './state.js';
+import type { TaskOptions } from './write.js';
+
+/** The options of {@link FeaturesCollection.scan} */
+export interface ScanOptions extends TaskOptions {
+  /** Reads only the features that match every key given */
+  readonly query?: FeatureFilter;
+}
 
 /**
  * The features of the document, to read: what was committed, never a write under way. They are
@@ -106,4 +121,44 @@ export interface FeaturesCollection {
    * @returns The look, or `undefined` when there is no feature with this ID
    */
   getAppliedStyle(id: string): FeatureStyleResolved | undefined;
+  /**
+   * The look of a feature of the document, as `getAppliedStyle` reads it.
+   *
+   * @returns The look, or `undefined` when there is no feature with this ID
+   */
+  appliedStyle(id: string): AppliedStyle | undefined;
+  /**
+   * The features at a point of the screen, from the top: what the frame drawn last shows there. The
+   * features are as that frame draws them: the sketches of every owner applied (what a drag of this
+   * client moves included, where it is drawn) and the features moved as a whole by a drag of many
+   * where they are drawn. A feature hidden, or in a layer or a group hidden, is not there; the
+   * datasets are not features of the document, and hide none. A type of a plugin is hit by its own
+   * test, which is not asked of what this client drags.
+   *
+   * @param point - The point, as `[x, y]` in CSS pixels of the map, or the `point` of an event of
+   *   the map
+   * @param options - How far from a feature the point still hits it, in CSS pixels (the
+   *   `clickTolerance` of the options when left out)
+   * @returns The features hit, from the top, each once
+   * @throws `DrawError` with the code `invalidInput` when the point or the tolerance is not finite
+   */
+  pick(
+    point: readonly [number, number] | { readonly x: number; readonly y: number },
+    options?: { readonly tolerancePixels?: number },
+  ): readonly { readonly feature: Feature; readonly vertex?: VertexRef }[];
+  /**
+   * Reads many features without making them: `visit` is given each feature of the document in
+   * stacking order, from the back, as a row read where it is written. It reads the document as the
+   * reads of the instance read it when the scan begins (the one before a commit made over several
+   * tasks, until its last step) to the end, in one task: no commit made meanwhile is mixed in.
+   *
+   * The row is read only within `visit`: the same object is moved to the next feature after it. A
+   * feature to keep is made with `row.toFeature()`.
+   *
+   * @returns A promise settled once every feature is read
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when `visit` is not a
+   *   function or the options have the wrong shape, or `aborted` when the signal is aborted; what
+   *   `visit` throws, which ends the scan
+   */
+  scan(visit: (row: FeatureRow) => void, options?: ScanOptions): Promise<void>;
 }

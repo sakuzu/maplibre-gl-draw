@@ -7,9 +7,11 @@
  */
 
 import type { BBox } from '../../geometry/types.js';
+import type { ScanOptions } from '../features.js';
 import type {
   FeatureFilter,
   FeatureListOptions,
+  FeatureRow,
   FeatureStyleResolved,
   FeatureValues,
   MoveTarget,
@@ -224,6 +226,8 @@ export interface FeatureResource {
    * @returns The look, or `undefined` when there is no feature with this ID
    */
   getAppliedStyle(id: string): FeatureStyleResolved | undefined;
+  /** Reads many features without making them (`FeaturesCollection.scan`) */
+  scan(visit: (row: FeatureRow) => void, options?: ScanOptions): Promise<void>;
   /**
    * Joins areas into one feature and returns it; the result replaces the features given.
    *

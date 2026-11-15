@@ -37,13 +37,7 @@ import type {
 } from '../extension/provider.js';
 import type { RenderContext as EngineRenderContext, OverlayRenderer } from '../extension/render.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type {
-  Feature,
-  FeatureRow,
-  FeatureStyleResolved,
-  FeatureType,
-  Properties,
-} from '../model.js';
+import type { Feature, FeatureRow, FeatureStyleResolved, Properties } from '../model.js';
 import type {
   CompanionSource,
   CustomHandle,
@@ -66,8 +60,10 @@ import type {
   TerrainSurface,
 } from '../plugin/types.js';
 import type { LayerTableView, RowRef } from '../tables.js';
+import { RELEASES } from './adapters.js';
 import { GEOMETRY_OF_FEATURE } from './extensions.js';
-import { featureForExtension, readFeatureFields } from './feature-shape.js';
+import { createRowReader, featureRowOf, type RowReader } from './feature-rows.js';
+import { featureForExtension } from './feature-shape.js';
 import {
   boxShape,
   drawShape,
@@ -207,56 +203,10 @@ function pointerInputOf(type: PointerInput['type'], event: DrawPointerEvent): Po
 
 /** A row of a feature, read from the feature itself */
 function rowOfFeature(feature: Feature): FeatureRow {
-  const fields = readFeatureFields(feature);
-  let bbox: [number, number, number, number] | null | undefined;
-  return {
-    id: feature.id,
-    featureType: fields.featureType,
-    layerId: fields.layerId ?? '',
-    groupId: fields.groupId,
-    visible: fields.visible,
-    locked: fields.locked,
-    get bbox() {
-      bbox ??= (readShape(feature.geometry)?.bbox ?? null) as
-        | [number, number, number, number]
-        | null;
-      return bbox;
-    },
-    property: (key) => (feature.properties as Record<PropertyKey, unknown>)[key] as never,
-    toFeature: () => feature,
-  };
-}
-
-/** A row of a layer held as rows: what is not a value of a key is read from its feature */
-function rowOfView(view: LayerTableView, row: RowRef): FeatureRow {
-  let made: Feature | undefined;
-  const feature = (): Feature => {
-    const stored = made === undefined ? view.getRow(row) : undefined;
-    if (stored) made = featureForExtension(stored);
-    if (!made) throw new DrawError('notFound', 'The row is gone');
-    return made;
-  };
-  return {
-    get id() {
-      return feature().id;
-    },
-    featureType: view.getRowType(row) as FeatureType,
-    layerId: view.layerId,
-    get groupId() {
-      return readFeatureFields(feature()).groupId;
-    },
-    get visible() {
-      return readFeatureFields(feature()).visible;
-    },
-    get locked() {
-      return readFeatureFields(feature()).locked;
-    },
-    get bbox() {
-      return view.getRowBBox(row) as [number, number, number, number] | null;
-    },
-    property: (key) => view.getRowValue(row, String(key)) as never,
-    toFeature: feature,
-  };
+  return featureRowOf(
+    feature,
+    (read) => (readShape(read.geometry)?.bbox ?? null) as [number, number, number, number] | null,
+  );
 }
 
 /**
@@ -345,8 +295,14 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
     return made;
   };
 
+  /** The names of the plugins whose `setup` runs, which a plugin added inside it cannot take */
+  const installing = new Set<string>();
+
   return function use<Api>(plugin: Plugin<Api>, options?: { readonly signal?: AbortSignal }): Api {
     const name = nameOf('plugin', plugin);
+    if (installing.has(name)) {
+      throw new DrawError('alreadyExists', `A plugin named ${JSON.stringify(name)} is being added`);
+    }
     requireFunctions('plugin', plugin as unknown as Record<string, unknown>, ['setup'], []);
     if (options !== undefined && !isObject(options)) {
       throw new DrawError('invalidInput', 'The options must be an object');
@@ -426,10 +382,11 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         }
       },
       onRemove() {
-        removed = true;
-        // A mode of the plugin is left first, then the plugin is told, then what it added goes
+        // A mode of the plugin is left first, while what the plugin added still works (its `exit`
+        // clears its overlay), then the plugin is told, then what it added goes
         const draw = deps.getDraw();
         if (modes.has(draw.getMode())) draw.setMode('select');
+        removed = true;
         controller.abort();
         takeBack();
       },
@@ -529,15 +486,12 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
           }),
           onHandleDrag(feature: F, handle: EngineHandle, event: DrawPointerEvent) {
             if (!onHandleDrag) return null;
+            // A move, or the release that ends the drag
+            const type = RELEASES.has(event) ? 'pointerup' : 'pointermove';
             return call(
               `onHandleDrag of ${label}`,
               () =>
-                onHandleDrag.call(
-                  source,
-                  feature,
-                  handleOf(handle),
-                  pointerInputOf('pointermove', event),
-                ),
+                onHandleDrag.call(source, feature, handleOf(handle), pointerInputOf(type, event)),
               null,
             );
           },
@@ -732,9 +686,10 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
               () => {
                 const taken = definition.input(input);
                 if (taken !== null && typeof taken === 'object' && 'then' in taken) {
-                  (taken as Promise<unknown>).then(undefined, (error: unknown) =>
-                    failed(`input of ${label}`, error),
-                  );
+                  // What fails once the plugin is removed is nobody's problem any more
+                  (taken as Promise<unknown>).then(undefined, (error: unknown) => {
+                    if (!removed) failed(`input of ${label}`, error);
+                  });
                   return true;
                 }
                 return taken === true;
@@ -807,11 +762,22 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         const { has, render, hitTest, onClick, handles, globalHandles } = source;
         const asks = (row: () => FeatureRow): boolean =>
           call(`has of ${label}`, () => has.call(source, row()) === true, false);
+        // The rows of a layer held as rows are read where they are: no feature is made to answer
+        let reader: RowReader | null = null;
+        const rowOf = (view: LayerTableView, row: RowRef): FeatureRow => {
+          const tables = deps.getDraw().getStore().tables;
+          if (!tables) throw new DrawError('invalidState', 'The Store holds no rows');
+          reader ??= createRowReader(tables, (at, layer) => {
+            const stored = layer.getRow(at);
+            return stored ? featureForExtension(stored) : undefined;
+          });
+          return reader.at(row, view);
+        };
         const provider: CompanionProvider = {
           name: companion,
           has: (feature) => asks(() => rowOfFeature(feature)),
           rows: {
-            has: (view, row) => asks(() => rowOfView(view, row)),
+            has: (view, row) => asks(() => rowOf(view, row)),
             ...(keys !== undefined && { classifyKeys: [...keys] }),
           },
           draw: stoppedOnFailure(`render of ${label}`, (feature, context) =>
@@ -871,9 +837,9 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         }
       }
 
-      // The overlay of the plugin: added with its first shapes
+      // The overlay of the plugin, added with it: the overlays are drawn in the order the plugins
+      // were added
       let overlay: readonly OverlayShape[] = [];
-      let overlayAdded = false;
       const looks = new WeakMap<OverlayShape, { shape: Shape; look: FeatureStyleResolved }>();
       const overlayRenderer: OverlayRenderer = {
         name: `\u0000plugin:${name}`,
@@ -935,12 +901,9 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
           looks.set(given, { shape, look });
         }
         overlay = [...shapes];
-        if (!overlayAdded && overlay.length > 0) {
-          extensions.overlays.add(overlayRenderer);
-          overlayAdded = true;
-        }
         deps.map.triggerRepaint();
       }
+      extensions.overlays.add(overlayRenderer);
 
       const draw = deps.getDraw();
       const rendered: Rendered = {
@@ -981,7 +944,13 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
       };
     }
 
-    const remove = deps.collections.plugins.add(installed);
+    installing.add(name);
+    let remove: () => void;
+    try {
+      remove = deps.collections.plugins.add(installed);
+    } finally {
+      installing.delete(name);
+    }
     if (given) {
       if (given.aborted) remove();
       else {

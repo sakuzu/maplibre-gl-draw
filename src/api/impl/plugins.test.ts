@@ -373,11 +373,7 @@ const head = ([x, y]: Position): Position[] => [
   [x as number, (y as number) + 0.0001],
 ];
 
-/**
- * `pick` stands in for `ctx.draw.features.pick` of the contract, which the main entry does not
- * have yet: what is hit first at a point of the screen
- */
-const link = (pick: (point: readonly [number, number]) => string | null): Plugin => ({
+const link = (): Plugin => ({
   name: 'acme-link',
   setup(ctx) {
     // Follows the features it joins, also while they are moved
@@ -443,8 +439,10 @@ const link = (pick: (point: readonly [number, number]) => string | null): Plugin
       },
       // Joins the feature where it is let go: the sketch and the one write are the library's
       onHandleDrag(feature, _handle, input) {
-        const hit = pick(input.screenPoint);
-        return hit !== null && hit !== feature.id ? { properties: { [TO]: hit } } : null;
+        const hit = ctx.draw.features
+          .pick(input.screenPoint)
+          .find(({ feature: other }) => other.id !== feature.id);
+        return hit ? { properties: { [TO]: hit.feature.id } } : null;
       },
     });
   },
@@ -1080,10 +1078,7 @@ describe('a mode that measures (no feature)', () => {
 describe('a type drawn from the features it joins (a link)', () => {
   it('draws its line where they are drawn, is hit near its ends and joins another by its handle', () => {
     vi.useFakeTimers();
-    let view: Opened | undefined;
-    const pick = (point: readonly [number, number]) =>
-      view?.engine.extensions.hitAt({ x: point[0], y: point[1] })?.id ?? null;
-    view = open({ plugins: [link(pick)] });
+    const view = open({ plugins: [link()] });
     const a = create(view, { type: 'Point', coordinates: [0, 0] });
     const b = create(view, { type: 'Point', coordinates: [1, 0] });
     const c = create(view, { type: 'Point', coordinates: [0, 2] });
@@ -1146,6 +1141,45 @@ describe('a type drawn from the features it joins (a link)', () => {
     pointerDrag(view.engine, [1, 1], [0, 2]);
     vi.runAllTimers();
     expect(view.draw.features.get(joined.id)?.properties[TO]).toBe(c.id);
+  });
+});
+
+describe('a type drawn after other features (the limit of a link)', () => {
+  it('is hit and read by the footprint of its stored geometry, not where it is drawn', () => {
+    const view = open({ plugins: [link()] });
+    const a = create(view, { type: 'Point', coordinates: [0, 0] });
+    const b = create(view, { type: 'Point', coordinates: [1, 0] });
+    const joined = create(
+      view,
+      {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 0],
+        ],
+      },
+      { [FROM]: a.id, [TO]: b.id },
+      'acme:link',
+    );
+    // The end it draws follows the feature it joins far from its stored line
+    writesOf(view.draw).features.update(b.id, {
+      geometry: { type: 'Point', coordinates: [1, 1.5] },
+    });
+    view.drawFrame();
+    // Near the end drawn, the candidates are those of the footprints: the line is not one of them
+    expect(hitAt(view, [1.02, 1.5])).toBe(b.id);
+    const point = view.engine.map.project([1.02, 1.5]);
+    expect(view.draw.features.pick([point.x, point.y]).map((hit) => hit.feature.id)).toEqual([
+      b.id,
+    ]);
+    expect(view.draw.features.list({ bbox: [0.9, 1.4, 1.1, 1.6] }).map((f) => f.id)).toEqual([
+      b.id,
+    ]);
+    // Its selection box is around the stored line
+    const box = view.draw.rendered.getSelectionBox(joined.id);
+    if (box?.kind !== 'ground') throw new Error('no box');
+    const north = Math.max(...Object.values(box.corners).map((corner) => corner[1] as number));
+    expect(north).toBeLessThan(0.5);
   });
 });
 
@@ -1439,5 +1473,363 @@ describe('the examples that draw with WebGL of their own', () => {
       'acme-particles',
       'acme-rings',
     ]);
+  });
+});
+
+// ============================================================================
+// The edges of adding and removing
+// ============================================================================
+
+/** The drag of a handle at a position, moved through positions, let go at the last one */
+function handleDrag(engine: Engine, from: LngLat): { move(to: LngLat): void; release(): void } {
+  const screenOf = (at: LngLat) => engine.map.project(at);
+  const start = screenOf(from);
+  let last = from;
+  const mouse = (type: MouseNormalizedEvent['type'], at: LngLat): MouseNormalizedEvent => ({
+    type,
+    point: screenOf(at),
+    lngLat: { lng: at[0], lat: at[1] },
+    originalEvent: inert(type, screenOf(at)),
+    modifiers: MODIFIERS,
+    snap: false,
+  });
+  const drag = (type: DragNormalizedEvent['type'], at: LngLat): DragNormalizedEvent => ({
+    type,
+    point: screenOf(at),
+    lngLat: { lng: at[0], lat: at[1] },
+    originalEvent: inert(type, screenOf(at)),
+    modifiers: MODIFIERS,
+    dragStartPoint: start,
+    dragStartLngLat: { lng: from[0], lat: from[1] },
+    snap: false,
+  });
+  const router = engine.inputRouter;
+  router.dispatch(mouse('mousemove', from));
+  router.dispatch(mouse('mousedown', from));
+  router.dispatch(drag('dragstart', from));
+  return {
+    move(to) {
+      last = to;
+      router.dispatch(drag('dragmove', to));
+    },
+    release() {
+      router.dispatch(drag('dragend', last));
+      router.dispatch(mouse('mouseup', last));
+    },
+  };
+}
+
+describe('removing a plugin while it works', () => {
+  it('leaves its mode while what it added still works: the exit clears its overlay', () => {
+    const view = open();
+    const controller = new AbortController();
+    view.draw.use(distance(), { signal: controller.signal });
+    view.draw.mode.set('acme:distance');
+    createSyntheticInput(view.engine).click([0, 0], { snap: false });
+    controller.abort();
+    expect(view.draw.getMode()).toBe('select');
+    expect(view.draw.status.value.problems).toEqual([]);
+  });
+
+  it('cancels the drag of its handle: nothing of it is written, and its end is told once', () => {
+    vi.useFakeTimers();
+    const view = open();
+    const controller = new AbortController();
+    const calls: string[] = [];
+    view.draw.use(
+      {
+        name: 'acme-r',
+        setup(ctx) {
+          ctx.addFeatureType({
+            name: 'acme:range',
+            footprint: (f) => ({ type: 'Polygon', coordinates: [edge(f)] }),
+            handles: (f) => [{ kind: 'resize', id: 'edge', position: edge(f)[0] as Position }],
+            onHandleDragStart: () => {
+              calls.push('start');
+              return true;
+            },
+            onHandleDrag: (f, _handle, input) => {
+              calls.push(`drag:${input.type}`);
+              return { properties: { [RADIUS]: metersBetween(centerOf(f), input.snapped) } };
+            },
+            onHandleDragEnd: () => void calls.push('end'),
+          });
+        },
+      },
+      { signal: controller.signal },
+    );
+    const feature = create(
+      view,
+      { type: 'Point', coordinates: [0, 0] },
+      { [RADIUS]: 50_000 },
+      'acme:range',
+    );
+    view.draw.selection.set('feature', [feature.id]);
+    const east = 50_000 / 111320;
+    const drag = handleDrag(view.engine, [east, 0]);
+    drag.move([east * 1.5, 0]);
+    controller.abort();
+    expect(calls).toEqual(['start', 'drag:pointermove', 'end']);
+    drag.move([east * 2, 0]);
+    drag.release();
+    vi.runAllTimers();
+    expect(calls).toEqual(['start', 'drag:pointermove', 'end']);
+    expect(view.draw.features.get(feature.id)?.properties[RADIUS]).toBe(50_000);
+    expect(view.draw.sketches.list()).toEqual([]);
+    expect(view.draw.status.value.problems).toEqual([]);
+  });
+
+  it('tells nothing of a promise of its mode that fails once it is removed', async () => {
+    const view = open();
+    const controller = new AbortController();
+    let fail: (error: Error) => void = () => {};
+    view.draw.use(
+      {
+        name: 'acme-late',
+        setup(ctx) {
+          ctx.addMode({
+            name: 'acme:late',
+            input: (input) =>
+              input.type === 'click'
+                ? new Promise<void>((_, reject) => {
+                    fail = reject;
+                  })
+                : false,
+          });
+        },
+      },
+      { signal: controller.signal },
+    );
+    view.draw.mode.set('acme:late');
+    createSyntheticInput(view.engine).click([0, 0], { snap: false });
+    controller.abort();
+    fail(new Error('late failure'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(view.draw.status.value.problems).toEqual([]);
+  });
+
+  it('leaves its type unhit and out of a read of a range, its feature selected', () => {
+    const view = open();
+    const controller = new AbortController();
+    view.draw.use(range(), { signal: controller.signal });
+    const feature = create(
+      view,
+      { type: 'Point', coordinates: [0, 0] },
+      { [RADIUS]: 50_000 },
+      'acme:range',
+    );
+    view.draw.selection.set('feature', [feature.id]);
+    expect(hitAt(view, [0.3, 0])).toBe(feature.id);
+    controller.abort();
+    view.drawFrame();
+    expect(hitAt(view, [0.3, 0])).toBeNull();
+    expect(view.draw.features.list({ bbox: [0.4, -0.01, 0.5, 0.01] })).toEqual([]);
+  });
+});
+
+describe('the plugins added inside setup', () => {
+  it('cannot take the name of the plugin being added', () => {
+    const view = open();
+    let inner: unknown = null;
+    view.draw.use({
+      name: 'acme-same',
+      setup(ctx) {
+        try {
+          ctx.draw.use({ name: 'acme-same', setup() {} });
+        } catch (error) {
+          inner = error;
+        }
+      },
+    });
+    expect(inner).toBeInstanceOf(DrawError);
+    expect((inner as DrawError).code).toBe('alreadyExists');
+    expect(view.draw.extensions.plugins.has('acme-same')).toBe(true);
+  });
+
+  it('go with the plugin when they are given its signal, also when its setup throws', () => {
+    const view = open();
+    expect(() =>
+      view.draw.use({
+        name: 'acme-outer',
+        setup(ctx) {
+          ctx.draw.use({ name: 'acme-tied', setup() {} }, { signal: ctx.signal });
+          ctx.draw.use({ name: 'acme-shared', setup() {} });
+          throw new Error('outer');
+        },
+      }),
+    ).toThrow('outer');
+    expect(view.draw.extensions.plugins.has('acme-tied')).toBe(false);
+    // One not tied to it is shared: it stays, as `draw.use` added it
+    expect(view.draw.extensions.plugins.has('acme-shared')).toBe(true);
+  });
+});
+
+describe('what a plugin is given', () => {
+  it('draws the overlays in the order the plugins were added', () => {
+    const view = open();
+    let showA: () => void = () => {};
+    const point = { type: 'Point', coordinates: [0, 0] } as const;
+    view.draw.use({
+      name: 'acme-a',
+      setup(ctx) {
+        showA = () => ctx.setOverlay([{ geometry: point }]);
+      },
+    });
+    view.draw.use({ name: 'acme-b', setup: (ctx) => ctx.setOverlay([{ geometry: point }]) });
+    showA();
+    expect(view.draw.extensions.overlays.list()).toEqual([
+      '\u0000plugin:acme-a',
+      '\u0000plugin:acme-b',
+    ]);
+  });
+
+  it('tells onHandleDrag a move as pointermove and the release as pointerup', () => {
+    vi.useFakeTimers();
+    const view = open();
+    const types: string[] = [];
+    view.draw.use({
+      name: 'acme-r2',
+      setup(ctx) {
+        ctx.addFeatureType({
+          name: 'acme:range',
+          footprint: (f) => ({ type: 'Polygon', coordinates: [edge(f)] }),
+          handles: (f) => [{ kind: 'resize', id: 'edge', position: edge(f)[0] as Position }],
+          onHandleDrag: (f, _handle, input) => {
+            types.push(input.type);
+            return { properties: { [RADIUS]: metersBetween(centerOf(f), input.snapped) } };
+          },
+        });
+      },
+    });
+    const feature = create(
+      view,
+      { type: 'Point', coordinates: [0, 0] },
+      { [RADIUS]: 50_000 },
+      'acme:range',
+    );
+    view.draw.selection.set('feature', [feature.id]);
+    const east = 50_000 / 111320;
+    pointerDrag(view.engine, [east, 0], [east * 2, 0]);
+    vi.runAllTimers();
+    expect(types.length).toBeGreaterThan(1);
+    expect(types.at(-1)).toBe('pointerup');
+    expect(types.slice(0, -1).every((type) => type === 'pointermove')).toBe(true);
+  });
+
+  it('gives a mode the press, the moves and the release of a drag it takes', () => {
+    const view = open();
+    const types: string[] = [];
+    view.draw.use({
+      name: 'acme-m',
+      setup(ctx) {
+        ctx.addMode({
+          name: 'acme:m',
+          input: (input) => {
+            types.push(input.type);
+            return input.type === 'pointerdown';
+          },
+        });
+      },
+    });
+    view.draw.mode.set('acme:m');
+    pointerDrag(view.engine, [0, 0], [1, 0]);
+    expect(types[0]).toBe('pointermove');
+    expect(types).toContain('pointerdown');
+    expect(types.at(-1)).toBe('pointerup');
+  });
+
+  it('asks a companion of the rows without making their features, its fields included', () => {
+    const view = open({
+      rows: true,
+      plugins: [
+        {
+          name: 'acme-ids',
+          setup(ctx) {
+            ctx.addCompanion({
+              name: 'acme-ids',
+              has: (row) => row.id.length > 0 && row.visible && !row.locked && row.groupId === null,
+            });
+          },
+        },
+      ],
+    });
+    create(view, { type: 'Point', coordinates: [0, 0] });
+    const provider = view.draw.extensions.companionProviders.get('acme-ids');
+    const table = view.store.tables?.get('l');
+    if (!table) throw new Error('no rows');
+    const getRow = vi.spyOn(table, 'getRow');
+    const answers = [...table.listDrawnRows([-10, -10, 10, 10])].map((row) =>
+      provider?.rows?.has(table, row),
+    );
+    expect(answers).toEqual([true]);
+    expect(getRow).not.toHaveBeenCalled();
+  });
+});
+
+describe('the examples through the input', () => {
+  it('a ring pressed takes the mark off, the selection kept', async () => {
+    const view = open({ plugins: [halo()] });
+    const area = create(
+      view,
+      {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [0.5, 1],
+            [0, 0],
+          ],
+        ],
+      },
+      { [IMPORTANT]: true },
+    );
+    const plain = create(view, { type: 'Point', coordinates: [3, 3] });
+    view.draw.selection.set('feature', [plain.id]);
+    const footprint = view.draw.rendered.getFootprint(area.id);
+    if (footprint?.kind !== 'ground') throw new Error('no box');
+    const corner = footprint.corners.topRight as LngLat;
+    createSyntheticInput(view.engine).click(corner, { snap: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(view.draw.features.get(area.id)?.properties[IMPORTANT]).toBe(false);
+    expect(view.draw.selection.value).toMatchObject({ ids: [plain.id] });
+  });
+
+  it('the handle of a plan is dragged where the library puts it', () => {
+    vi.useFakeTimers();
+    const units = observable(1);
+    const view = open({ plugins: [plan(units)] });
+    const feature = create(
+      view,
+      { type: 'Point', coordinates: [0, 0] },
+      { [SIDE]: 22_264 },
+      'acme:plan',
+    );
+    view.draw.selection.set('feature', [feature.id]);
+    const box = view.draw.rendered.getSelectionBox(feature.id);
+    if (box?.kind !== 'ground') throw new Error('no box');
+    const at = middle(box.corners.topRight, box.corners.bottomRight) as LngLat;
+    pointerDrag(view.engine, at, [at[0] * 2, at[1]]);
+    vi.runAllTimers();
+    expect(view.draw.features.get(feature.id)?.properties[SIDE]).toBeGreaterThan(22_264 * 1.5);
+  });
+
+  it('a range in a layer held as rows is drawn, hit and read as in a layer of objects', () => {
+    for (const rows of [false, true]) {
+      const view = open({ plugins: [range()], rows });
+      const feature = create(
+        view,
+        { type: 'Point', coordinates: [0, 0] },
+        { [RADIUS]: 50_000 },
+        'acme:range',
+      );
+      drawn(view, feature.id);
+      view.drawFrame();
+      expect(hitAt(view, [0.3, 0])).toBe(feature.id);
+      expect(
+        view.draw.features.list({ bbox: [0.4, -0.01, 0.5, 0.01] }, { limit: 10 }).map((f) => f.id),
+      ).toEqual([feature.id]);
+    }
   });
 });

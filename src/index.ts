@@ -105,7 +105,7 @@ export type {
 } from './api/options.js';
 export type { Messages } from './messages.js';
 export { defineMessages } from './messages.js';
-export type { FeaturesCollection } from './api/features.js';
+export type { FeaturesCollection, ScanOptions } from './api/features.js';
 export type { LayersCollection } from './api/layers.js';
 export type { GroupsCollection } from './api/groups.js';
 export type { HiddenCollection } from './api/hidden.js';
@@ -156,6 +156,7 @@ export type {
 
 // Document model
 export type {
+  AppliedStyle,
   DrawDocument,
   DrawProperties,
   Feature,
