@@ -605,6 +605,14 @@ export interface Store extends StoreView, UiState {
   /** Writes the rest of the writes over several tasks queued now, in their order */
   finishSlicedWrite(): void;
   /**
+   * Gives features other IDs, the IDs a storage gave them, in one transaction from elsewhere told
+   * with the IDs given (`StoreChange.reassigned`): `write` writes them under their new IDs, and
+   * calls `follow` once they are there under both, so that what this client holds of them (the
+   * selection, the features being edited, those hidden here, the selected vertices) goes on with
+   * them
+   */
+  reassign(pairs: ReadonlyMap<string, string>, write: (follow: () => void) => void): void;
+  /**
    * Writes the rest of a restore of many rows under way (`restoreRows` writes one in steps), so
    * that what is read next reads it: a write finishes it first, a read does not
    */

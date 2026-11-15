@@ -375,3 +375,70 @@ describe('the commits a storage refuses', () => {
     none.destroy();
   });
 });
+
+/**
+ * The reference storage giving the features it is sent to create IDs of its own (`n…` becomes
+ * `s…`), as a storage that decides the IDs does
+ */
+function renaming() {
+  const reference = createReferenceBackend();
+  const backend: Backend & { readonly document: StoredDocument } = {
+    document: reference.document,
+    load: (task) => reference.load(task),
+    async send(batch, task): Promise<Answer> {
+      const reassigned: Record<string, string> = {};
+      const operations = batch.operations.map((operation) => {
+        if (operation.type !== 'create' || operation.kind !== 'feature') return operation;
+        if (!operation.id.startsWith('n')) return operation;
+        const id = `s${operation.id.slice(1)}`;
+        reassigned[operation.id] = id;
+        return { ...operation, id };
+      });
+      const answer = await reference.send({ ...batch, operations }, task);
+      if (answer.status !== 'accepted') return answer;
+      return { ...answer, reassigned };
+    },
+  };
+  return backend;
+}
+
+describe('the IDs a storage gives', () => {
+  for (const [kind, makeStore] of KINDS) {
+    it(`go on with the selection, what is hidden, the undo and the commits after (${kind})`, async () => {
+      const backend = renaming();
+      draw = drawWith(makeStore(), backend);
+      const d = draw;
+      await d.write(async (tx) => {
+        await tx.layers.create({ id: 'a', name: 'A' });
+      });
+      const changes: Array<{ source: string; reassigned: Readonly<Record<string, string>> }> = [];
+      d.on('change', (change) => {
+        if (Object.keys(change.reassigned).length > 0) {
+          changes.push({ source: change.source, reassigned: change.reassigned });
+        }
+      });
+      const created = d.write((tx) => tx.features.create([point('n1', 'a'), point('n2', 'a')]));
+      await created;
+      d.selection.set('feature', ['n1']);
+      d.hidden.add('n2');
+      const updated = d.write((tx) => tx.features.update('n1', { properties: { n: 3 } }));
+      await updated;
+      await updated.save();
+      expect(changes).toEqual([{ source: 'remote', reassigned: { n1: 's1', n2: 's2' } }]);
+      expect(d.features.get('n1')).toBeUndefined();
+      expect(d.features.get('s1')?.properties.n).toBe(3);
+      expect(d.selection.value.ids).toEqual(['s1']);
+      expect(d.hidden.has('s2')).toBe(true);
+      expect([...d.layers.listItems('a')]).toEqual(['s1', 's2']);
+      expect(backend.document.features.get('s1')?.properties.n).toBe(3);
+      expect(storedOf(backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      // The steps of undo name the features by their new IDs
+      await d.undo();
+      expect(d.features.get('s1')?.properties.n).toBeUndefined();
+      await d.undo();
+      expect(d.features.get('s1')).toBeUndefined();
+      await d.backend.save();
+      expect(storedOf(backend.document)).toEqual(writtenOf(d.document.toJSON()));
+    });
+  }
+});

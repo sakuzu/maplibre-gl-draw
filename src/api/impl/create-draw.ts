@@ -225,6 +225,7 @@ export function createDrawOnEngine(
       ...senderOptions,
       onChange: () => status.changed(),
       onTakenOut: (commits) => history.drop(commits),
+      onReassigned: (ids) => history.rename(ids),
       onSkipped: (skipped) => status.problem({ type: 'skipped', ...skipped }),
     });
     setCommitSaver(store, sender);

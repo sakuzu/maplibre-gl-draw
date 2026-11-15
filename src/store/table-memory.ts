@@ -178,7 +178,26 @@ export function createTableStore(options: TableStoreOptions = {}): {
     selectionIdsLimit === undefined ? {} : { selectionIdsLimit },
   );
   WRITERS.set(store, contract.writer);
+  RENAMES.set(store, (pairs) => contract.changeIds(pairs));
   return { store, writer: contract.writer };
+}
+
+/** What gives the rows of each Store of rows `createTableStore` made other IDs */
+const RENAMES = new WeakMap<
+  Store,
+  (pairs: readonly (readonly [from: string, to: string])[]) => void
+>();
+
+/**
+ * What gives rows of a Store of rows `createTableStore` made other IDs, keeping their references
+ * (undefined for any other Store): the IDs a storage gave them
+ *
+ * @internal
+ */
+export function rowRenamesOf(
+  store: Store,
+): ((pairs: readonly (readonly [from: string, to: string])[]) => void) | undefined {
+  return RENAMES.get(store);
 }
 
 /** The writer of the rows of each Store of rows `createTableStore` made */
@@ -870,6 +889,11 @@ export class TableContractStore implements StoreContract {
       row.properties.set(key, value);
       row.fields.set(`properties:${key}`, value);
     }
+  }
+
+  /** Gives rows other IDs (see `rowRenamesOf`), in a transaction of the caller's source */
+  changeIds(pairs: readonly (readonly [from: string, to: string])[]): void {
+    this.transact(() => this.#tablesWriter.changeIds(pairs), this.#bus.source ?? 'remote');
   }
 
   deleteFeature(id: string): boolean {

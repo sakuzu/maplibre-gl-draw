@@ -27,6 +27,7 @@ import { DrawError } from '../../shared/draw-error.js';
 import type { Refusal } from '../../shared/refusal.js';
 import { createId } from '../../shared/utils/id.js';
 import type { Store } from '../../store/store.js';
+import { rowRenamesOf } from '../../store/table-memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { toChange } from '../impl/events.js';
 import type {
@@ -42,6 +43,7 @@ import type { Answer, Backend, Task } from './backend.js';
 import { type ChangeReading, CommitValues } from './commit-values.js';
 import { createObservable } from './observable.js';
 import { batchesInSteps } from './parts.js';
+import { writeOperations } from './store-writes.js';
 import { type CommitOperations, dependentsOf, takeOut } from './take-out.js';
 import type { ValueBatch, ValueOperation } from './values.js';
 
@@ -83,6 +85,8 @@ export interface SenderOptions {
   readonly retryDelay?: (attempt: number) => number;
   /** Called once commits are taken out of the document, refused (their steps of undo go) */
   readonly onTakenOut?: (commits: ReadonlySet<string>) => void;
+  /** Called once features take the IDs the storage gave them, from the old to the new */
+  readonly onReassigned?: (ids: ReadonlyMap<string, string>) => void;
 }
 
 /**
@@ -120,6 +124,8 @@ interface Entry {
   operations: ValueOperation[] | null;
   /** What takes it back, once read to its end (see `CommitOperations`) */
   inverse: ValueOperation[];
+  /** The IDs the storage gave features after it was made, to give its operations once read */
+  renames?: ReadonlyMap<string, string>[];
 }
 
 /**
@@ -442,7 +448,9 @@ export class Sender {
     entry.readings.length = 0;
     entry.operations = operations;
     entry.inverse = inverses.reverse().flat();
-    return operations;
+    for (const ids of entry.renames ?? []) this.#renameEntry(entry, ids);
+    entry.renames = undefined;
+    return entry.operations;
   }
 
   /** The batches of a commit, cut a step a task */
@@ -532,6 +540,7 @@ export class Sender {
             });
           }
           this.#savedAt = Date.now();
+          if (answer.reassigned) this.#reassign(answer.reassigned);
           this.#reach(
             entry,
             answer.durable === true && this.#stages.includes('durable') ? 'durable' : 'accepted',
@@ -738,6 +747,57 @@ export class Sender {
     });
   }
 
+  /**
+   * Gives features the IDs the storage gave them (`Answer.accepted.reassigned`): the rows keep
+   * their references (`changeIds`), the features of objects are created again under their new IDs
+   * where they are and deleted under the old. What this client holds of them, the steps of undo
+   * and the commits not sent go on with them
+   */
+  #reassign(given: Readonly<Record<string, string>>): void {
+    const store = this.#store;
+    const pairs = new Map<string, string>();
+    const taken = new Set<string>();
+    for (const [from, to] of Object.entries(given)) {
+      if (typeof to !== 'string' || from === to || taken.has(to)) continue;
+      if (!store.getFeature(from) || store.getFeature(to)) continue;
+      pairs.set(from, to);
+      taken.add(to);
+    }
+    if (pairs.size === 0) return;
+    const values = this.#values;
+    const renameRows = rowRenamesOf(store);
+    store.reassign(pairs, (follow) => {
+      if (renameRows) {
+        renameRows([...pairs]);
+        follow();
+        return;
+      }
+      const created: ValueOperation[] = [];
+      for (const [from, to] of pairs) {
+        const record = values.recordOf('feature', from);
+        if (record) created.push({ type: 'create', kind: 'feature', id: to, record });
+      }
+      writeOperations(store, values, created);
+      follow();
+      writeOperations(store, values, [{ type: 'delete', kind: 'feature', ids: [...pairs.keys()] }]);
+    });
+    for (const entry of this.#entries) {
+      if (entry.operations === null) entry.renames = [...(entry.renames ?? []), pairs];
+      else this.#renameEntry(entry, pairs);
+    }
+    this.#refusals = this.#refusals.map((one) => ({
+      refusal: one.refusal,
+      operations: renamedOperations(one.operations, pairs),
+    }));
+    this.#options.onReassigned?.(pairs);
+  }
+
+  /** The operations of a commit with the features named by the IDs given them */
+  #renameEntry(entry: Entry, ids: ReadonlyMap<string, string>): void {
+    if (entry.operations) entry.operations = renamedOperations(entry.operations, ids);
+    entry.inverse = renamedOperations(entry.inverse, ids);
+  }
+
   /** The record of a commit refused */
   #record(
     entry: Entry,
@@ -826,6 +886,19 @@ export class Sender {
       sending: this.#sending,
     };
   }
+}
+
+/** Operations with the features named by the IDs given them, from the old to the new */
+function renamedOperations(
+  operations: readonly ValueOperation[],
+  ids: ReadonlyMap<string, string>,
+): ValueOperation[] {
+  const renamed = (id: string): string => ids.get(id) ?? id;
+  return operations.map((operation) => {
+    if (operation.kind !== 'feature') return operation;
+    if (operation.type === 'create') return { ...operation, id: renamed(operation.id) };
+    return { ...operation, ids: operation.ids.map(renamed) } as ValueOperation;
+  });
 }
 
 /** The stages a commit goes through with a storage: `local` and `accepted`, and those it gives */

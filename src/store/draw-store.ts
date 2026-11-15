@@ -201,6 +201,8 @@ export class DrawStore implements Store {
   #remoteDepth = 0;
   /** How deep the transactions that take out commits the storage refused are (see `transact`) */
   #refusedDepth = 0;
+  /** Whether features are given the IDs a storage gave them (see `reassign`): no gate stops it */
+  #reassigning = false;
   readonly selectionIdsLimit: number;
   /** What waits for the writes over several tasks under way (`whenWritten`) */
   readonly #writtenWaiters: Array<() => void> = [];
@@ -763,6 +765,45 @@ export class DrawStore implements Store {
   getVertexSelection(): VertexSelection | null {
     return this.#contract.getVertexSelection();
   }
+
+  reassign(pairs: ReadonlyMap<string, string>, write: (follow: () => void) => void): void {
+    if (pairs.size === 0) return;
+    const outer = this.#reassigning;
+    this.#reassigning = true;
+    try {
+      this.transact(() => {
+        write(() => this.#followIds(pairs));
+        this.#bus.merge({ reassigned: pairs });
+      }, 'remote');
+    } finally {
+      this.#reassigning = outer;
+    }
+  }
+
+  /** What this client holds of features goes on under the IDs given them */
+  #followIds(pairs: ReadonlyMap<string, string>): void {
+    const contract = this.#contract;
+    const renamed = (id: string): string => pairs.get(id) ?? id;
+    const selection = contract.getSelection();
+    if (selection.ids.some((id) => pairs.has(id))) {
+      this.#setContractSelection(selection.type, selection.ids.map(renamed));
+    }
+    const editing = contract.getEditingIds().filter((id) => pairs.has(id));
+    if (editing.length > 0) {
+      contract.endEditing(editing);
+      contract.startEditing(editing.map(renamed));
+    }
+    for (const id of [...contract.listHidden()]) {
+      if (!pairs.has(id)) continue;
+      contract.setLocallyHidden(id, false);
+      contract.setLocallyHidden(renamed(id), true);
+      this.#bus.merge({ uiStateChanged: true });
+    }
+    const vertices = contract.getVertexSelection();
+    if (vertices && pairs.has(vertices.featureId)) {
+      contract.setSelectedVertices({ ...vertices, featureId: renamed(vertices.featureId) });
+    }
+  }
   setSelectedVertices(selection: VertexSelection | null): void {
     this.#local(() => {
       this.#contract.setSelectedVertices(selection);
@@ -896,6 +937,7 @@ export class DrawStore implements Store {
   /** Runs one document write unless read-only; what the contract returned */
   #write(fn: () => boolean): boolean {
     if (this.#refusedDepth > 0) return this.transact(fn, 'refused');
+    if (this.#reassigning) return this.transact(fn, 'remote');
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return false;
     return this.transact(fn);
   }

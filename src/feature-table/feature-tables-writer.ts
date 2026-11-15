@@ -77,6 +77,11 @@ export interface FeatureTablesStoreWriter extends FeatureTablesWriter {
    * `watchOrderOf` watches them
    */
   watchPlacementOf(patch: RowValues, placement: RowsPlacement): () => void;
+  /**
+   * Gives rows other IDs, keeping their references (`TablesWriter.changeIds`): told as rows
+   * updated with the field `id`, and the IDs given (`StoreChange.reassigned`)
+   */
+  changeIds(pairs: readonly (readonly [from: string, to: string])[]): void;
 }
 
 /**
@@ -363,6 +368,14 @@ export function createFeatureTablesWriter(
       try {
         const found = tables.lookup(id);
         return found && { row: found.row, deleted: found.deleted };
+      } catch (error) {
+        throw writerError(error);
+      }
+    },
+    changeIds: (pairs) => {
+      try {
+        const rows = rowsChangeOf(tables.changeIds(pairs).rows);
+        notify?.({ rows, reassigned: new Map(pairs) });
       } catch (error) {
         throw writerError(error);
       }
