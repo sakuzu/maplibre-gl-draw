@@ -335,6 +335,7 @@ export function createEngine(
     datasets,
     pixelRatio: pixelRatioSource,
     featureCompanions,
+    pointSprites: context.pointSprites,
     // The selection UI extension points, the auxiliary handles and the thinned handle sets of
     // this instance (the modes hit test against the same scope)
     selectionScope: context.selectionScope,

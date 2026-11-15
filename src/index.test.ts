@@ -393,6 +393,8 @@ const EXTEND = [
   'PartCollector',
   'RowSprite',
   'RowSpriteScaleStop',
+  'RowSpriteSheet',
+  'RowSpriteSheetDefinition',
   'RowSpriteSource',
   'StoredDocument',
   'UnsetKeys',

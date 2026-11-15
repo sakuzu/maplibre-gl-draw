@@ -51,6 +51,8 @@ import type {
   PluginContext,
   PointerInput,
   Rendered,
+  RowSpriteSheet,
+  RowSpriteSheetDefinition,
   ScreenPointContext,
   SnapCandidate,
 } from '../plugin/types.js';
@@ -69,6 +71,7 @@ import {
   type Shape,
   snapShape,
 } from './plugin-shapes.js';
+import type { PointSpriteSheetsHost } from './point-sprite-sheets.js';
 import { resolvedStyleOf } from './render-context.js';
 import type { ProblemInput } from './status.js';
 
@@ -100,6 +103,8 @@ export interface PluginUseDeps {
   isCapturing(): boolean;
   /** Keeps a failure in `status.problems`, the same failure (`key`) once */
   report(problem: ProblemInput, key: string): void;
+  /** The sheets of pictures of the points */
+  readonly pointSprites: PointSpriteSheetsHost;
 }
 
 /**
@@ -800,6 +805,13 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
       }
       extensions.overlays.add(overlayRenderer);
 
+      function addPointSprites(definition: RowSpriteSheetDefinition): RowSpriteSheet {
+        open('a sheet of pictures');
+        const added = deps.pointSprites.add(definition, name, failed);
+        extras.push(() => added.remove());
+        return added.sheet;
+      }
+
       const draw = deps.getDraw();
       const rendered: Rendered = {
         get: (id) => draw.rendered.get(id),
@@ -835,6 +847,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
             engine.invalidate({ type: featureType });
           }
         },
+        addPointSprites: (definition) => addPointSprites(definition as RowSpriteSheetDefinition),
         webgl: engine.webgl,
       };
     }

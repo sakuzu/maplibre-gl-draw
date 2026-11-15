@@ -365,7 +365,7 @@ export interface RowsChunkLayout {
   /** The values of the styles the rows name */
   readonly palette: RowsPalette;
   /** The pictures the sprites of the chunk are read from (null when it has none) */
-  readonly sprites: RowSpriteSource | null;
+  readonly sprites: RowSpritePictures | null;
 }
 
 /**
@@ -386,22 +386,12 @@ export interface RowsChunkData extends RowsChunkLayout {
 }
 
 /**
- * One picture of a point an extension draws in the place of the built-in point
+ * One picture of a point an extension draws in the place of the built-in point, chosen by the
+ * style of the point (what {@link RowSpriteSource.sprite} gives)
  *
- * @experimental
+ * @internal
  */
-export interface RowSprite {
-  /** The rectangle of the picture in the texture, `[u0, v0, u1, v1]` (the top left first) */
-  readonly uv: readonly [number, number, number, number];
-  /** The half width and the half height of the picture on screen, in CSS px */
-  readonly halfWidth: number;
-  readonly halfHeight: number;
-  /**
-   * The bearing the picture is turned to, in degrees clockwise from north (the picture keeps it
-   * when the map turns), or a negative value for a picture that stays upright on screen
-   */
-  readonly direction: number;
-}
+export type RowSpriteOfStyle = NonNullable<ReturnType<RowSpriteSource['sprite']>>;
 
 /**
  * The most stops {@link RowSpriteSource.distanceScale} has
@@ -428,13 +418,39 @@ export interface RowSpriteScaleStop {
 }
 
 /**
- * The pictures an extension draws points with, in the place of the built-in point: given to
- * the drawing of the rows, which draws such points among the others, in their order, in the
- * draw of their chunk (`FeatureTypeRenderer.rowSprites`)
+ * The texture a chunk of rows draws its pictures from, and how it draws them: what the pictures
+ * of a type ({@link RowSpriteSource}) and a sheet of pictures of the points have in common
  *
  * The fragment is the texel of the picture (its colors divided by its alpha for a texture of
  * premultiplied alpha, `premultipliedAlpha`) times the opacity of the layer, blended as the other
  * drawing of the layer is.
+ *
+ * @internal
+ */
+export interface RowSpritePictures {
+  /** The texture the pictures are read from (nothing is drawn while it is null) */
+  readonly texture: WebGLTexture | null;
+  /**
+   * How the size of the pictures follows the distance of their point from the camera in a pitched
+   * view, as stops of a curve: from 1 to 8 stops in ascending order of `distanceRatio`, the factor
+   * linear between two stops and that of the first or the last stop beyond them. The same size
+   * everywhere when omitted or empty, and on the globe. Stops the library cannot read (more than
+   * 8, not in ascending order, not finite) are told once in the console and draw the same size
+   * everywhere
+   */
+  readonly distanceScale?: readonly RowSpriteScaleStop[];
+  /**
+   * True when the texture holds its colors multiplied by their alpha (a canvas uploaded with
+   * `UNPACK_PREMULTIPLY_ALPHA_WEBGL`): they are divided back before they are blended as the other
+   * drawing of the layer is. Straight alpha when omitted
+   */
+  readonly premultipliedAlpha?: boolean;
+}
+
+/**
+ * The pictures an extension draws points with, in the place of the built-in point: given to
+ * the drawing of the rows, which draws such points among the others, in their order, in the
+ * draw of their chunk (`FeatureTypeRenderer.rowSprites`)
  *
  * @experimental
  */
@@ -450,7 +466,18 @@ export interface RowSpriteSource {
    * The picture of a point of a style, or null for a point drawn at once by the renderer of
    * the extension (asked once per style)
    */
-  sprite(style: PublicFeatureStyle | undefined): RowSprite | null;
+  sprite(style: PublicFeatureStyle | undefined): {
+    /** The rectangle of the picture in the texture, `[u0, v0, u1, v1]` (the top left first) */
+    readonly uv: readonly [number, number, number, number];
+    /** The half width and the half height of the picture on screen, in CSS px */
+    readonly halfWidth: number;
+    readonly halfHeight: number;
+    /**
+     * The bearing the picture is turned to, in degrees clockwise from north (the picture keeps it
+     * when the map turns), or a negative value for a picture that stays upright on screen
+     */
+    readonly direction: number;
+  } | null;
   /**
    * How the size of the pictures follows the distance of their point from the camera in a pitched
    * view, as stops of a curve: from 1 to 8 stops in ascending order of `distanceRatio`, the factor

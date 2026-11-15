@@ -28,7 +28,7 @@ import {
   ROWS_INSTANCE_FLOATS,
   ROWS_KIND,
   ROWS_STYLE_FLOATS,
-  type RowSprite,
+  type RowSpriteOfStyle,
   type RowSpriteSource,
   type RowsChunkData,
   RowsPalette,
@@ -537,7 +537,7 @@ describe('pairTriangles', () => {
 
 describe('the packing of the points drawn with the pictures of an extension', () => {
   it('gives the sprite branch the picture of the style of the row', () => {
-    const sprite: RowSprite = {
+    const sprite: RowSpriteOfStyle = {
       uv: [0.25, 0, 0.5, 0.5],
       halfWidth: 12,
       halfHeight: 8,

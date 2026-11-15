@@ -15,6 +15,7 @@
 
 import type { Position } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { RowSpriteScaleStop } from '../../view/renderers/rows/rows-format.js';
 import type { Draw } from '../draw.js';
 import type { Observable } from '../events.js';
 import type { Webgl } from '../extension/webgl.js';
@@ -112,8 +113,87 @@ export interface PluginContext<P extends object = Properties> {
    * arrived), the features of one type or all of them.
    */
   invalidate(filter?: { readonly featureType?: string }): void;
+  /**
+   * Adds a sheet of pictures the points of the built-in type are drawn with: a point the first
+   * sheet (in the order they were added) gives a picture is drawn with it in the place of its
+   * marker, by the same drawing as the features around it, and is hit and framed by its size.
+   * The library makes the texture of the sheet and holds it under the name of the plugin, in the
+   * part `gpuShare` of the limit; it keeps no copy of the pictures.
+   *
+   * @throws `DrawError` with the code `tooLarge` when the image (4 bytes a pixel) is more than the
+   *   part of the limit, or when the shares added come to more than 0.9 (nothing is added), and
+   *   `invalidInput` for a definition that is not one
+   */
+  addPointSprites(definition: RowSpriteSheetDefinition<P>): RowSpriteSheet;
   /** Drawing with WebGL of its own: what follows is the contract of `/webgl` */
   readonly webgl: Webgl;
+}
+
+/**
+ * One picture of a point, in a sheet of pictures ({@link RowSpriteSheetDefinition.sprite})
+ */
+export interface RowSprite {
+  /** The place of the picture in the image, from 0 to 1: its left, top, right and bottom */
+  readonly uv: readonly [number, number, number, number];
+  /** Half the width of the picture on screen */
+  readonly halfWidthPixels: number;
+  /** Half the height of the picture on screen */
+  readonly halfHeightPixels: number;
+  /**
+   * Whether it turns by `maplibre-gl-draw:rotation` of its point, as a marker does. Upright on
+   * screen by default
+   */
+  readonly rotates?: boolean;
+}
+
+/**
+ * A sheet of pictures of the points ({@link PluginContext.addPointSprites})
+ */
+export interface RowSpriteSheetDefinition<P extends object = Properties> {
+  /** The part of the limit of the instance (`rendering.gpuLimitBytes`) it holds, above 0 and at most 1 */
+  readonly gpuShare: number;
+  /** The image of the pictures: the library writes it to the texture it makes, and keeps no copy */
+  readonly image: ImageBitmap;
+  /** Whether the colors of `image` are multiplied by their alpha */
+  readonly premultipliedAlpha?: boolean;
+  /** How the size of the pictures follows the distance from the camera; the same size without it */
+  readonly distanceScale?: readonly RowSpriteScaleStop[];
+  /**
+   * The picture of a point, or `null` for a point that keeps its marker. It is asked without
+   * making the feature, again for every point once `update` is called.
+   */
+  sprite(row: FeatureRow<P>): RowSprite | null;
+}
+
+/**
+ * A sheet of pictures added ({@link PluginContext.addPointSprites}). It goes with the plugin.
+ *
+ * When the WebGL context comes back after it was lost, the library makes the texture again empty,
+ * of the last size: `ctx.webgl.spriteTexture(sheet)` then gives another texture, and the plugin
+ * writes the pictures again.
+ */
+export interface RowSpriteSheet {
+  /**
+   * Writes an image and asks `sprite` again for every point, once in a frame however many times it
+   * is called.
+   *
+   * - Without `image`, it only asks again
+   * - Without `x` and `y`, the image replaces the whole sheet, which takes its size
+   * - With `x` and `y`, the image is written there, the size of the sheet kept
+   *
+   * @throws `DrawError` with the code `tooLarge` when an image that replaces the sheet is more than
+   *   the part of the limit (the sheet stays as it was), and `invalidInput` for an image written
+   *   out of the sheet
+   */
+  update(image?: ImageBitmap, x?: number, y?: number): void;
+  /**
+   * Gives the sheet another size: the texture is made again empty, and the plugin writes the
+   * pictures again (`update` with `x` and `y`). It asks `sprite` again as `update` does.
+   *
+   * @throws `DrawError` with the code `tooLarge` when the size (4 bytes a pixel) is more than the
+   *   part of the limit (the sheet stays as it was), and `invalidInput` for a size that is not one
+   */
+  resize(width: number, height: number): void;
 }
 
 /**

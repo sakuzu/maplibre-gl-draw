@@ -15,7 +15,7 @@ import type { Position } from 'geojson';
 import type { DraggedRows } from '../../feature-table/dragged-rows.js';
 import type { MemoryUsage } from '../memory.js';
 import type { Feature, FeatureGeometry, FeatureStyle, FeatureType, Properties } from '../model.js';
-import type { RenderContext } from '../plugin/types.js';
+import type { RenderContext, RowSpriteSheet } from '../plugin/types.js';
 
 /** The reference of a row: the number a document gives a row, the same while it is open */
 export type RowRef = number;
@@ -80,6 +80,15 @@ export interface Webgl<P extends object = Properties> {
   rows(id: string): LayerTableView | undefined;
   /** The rows being moved together. `null` while none are */
   draggedRows(): DraggedRows | null;
+  /**
+   * The texture of a sheet of pictures of the points, to draw its pictures in a drawing of its own
+   * too. Another texture than before means the sheet was made again empty (the WebGL context came
+   * back, or `resize`): its pictures are to be written again.
+   *
+   * @returns The texture, or `null` while there is none: no WebGL context yet, or a sheet of no
+   *   plugin of this instance, removed, or given back after a failure
+   */
+  spriteTexture(sheet: RowSpriteSheet): WebGLTexture | null;
 }
 
 /**

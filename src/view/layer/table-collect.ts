@@ -77,7 +77,8 @@ import {
   ROWS_PAIR_EDGES,
   ROWS_ROW_STYLE_FLOATS,
   ROWS_STYLE_FLOATS,
-  type RowSprite,
+  type RowSpriteOfStyle,
+  type RowSpritePictures,
   type RowSpriteSource,
   type RowsChunkData,
   type RowsKind,
@@ -269,7 +270,7 @@ export class RowStyleSlots {
    * The picture a source of pictures gives the points of a style (null for points it draws at
    * once), asked once per source, revision and style
    */
-  sprite(source: RowSpriteSource, style: number): RowSprite | null {
+  sprite(source: RowSpriteSource, style: number): RowSpriteOfStyle | null {
     const sprites = this.slotsOf(style).sprites;
     let known = sprites.get(source);
     if (!known || known.revision !== source.revision) {
@@ -332,7 +333,7 @@ interface StyleSlots {
   readonly points: Map<string, PointSlot>;
   readonly lines: Map<string, LineSlot>;
   readonly polygons: Map<string, PolygonSlot>;
-  readonly sprites: Map<RowSpriteSource, { revision: number; sprite: RowSprite | null }>;
+  readonly sprites: Map<RowSpriteSource, { revision: number; sprite: RowSpriteOfStyle | null }>;
 }
 
 /** The key of a type of feature and a rule color */
@@ -1208,7 +1209,7 @@ export class RowsStyles {
    * The number of the style of a picture: its rectangle in the texture, then its half size in
    * CSS px and its bearing
    */
-  sprite(source: RowSpriteSource, sprite: RowSprite, style: number): number {
+  sprite(source: RowSpriteSource, sprite: RowSpriteOfStyle, style: number): number {
     const key = `s${this.sourceNumber(source)}\u0000${source.revision}`;
     const known = this.known(style, key);
     if (known !== undefined) return known;
@@ -1445,7 +1446,7 @@ export class RowsDraft {
   finish(
     origin: [number, number],
     palette: RowsPalette,
-    sprites: RowSpriteSource | null,
+    sprites: RowSpritePictures | null,
   ): RowsChunkData {
     return {
       origin,

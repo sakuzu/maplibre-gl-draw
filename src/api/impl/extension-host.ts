@@ -69,6 +69,7 @@ import {
 import { featureForExtension } from './feature-shape.js';
 import { createGpuParts } from './gpu-parts.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
+import { createPointSpriteSheets, type PointSpriteSheetsHost } from './point-sprite-sheets.js';
 import { adaptGpuFeatureRenderer, createOverlayStack, terrainSurfaceOf } from './render-context.js';
 import { validateExtension } from './validate-extension.js';
 
@@ -107,6 +108,8 @@ export interface ExtensionHost {
   readonly input: ExtensionInputRoute;
   /** The interaction hooks of the plugins, which the select mode asks */
   readonly interactions: PluginInteractions;
+  /** The sheets of pictures of the points the plugins add */
+  readonly pointSprites: PointSpriteSheetsHost;
   /** The frontmost hit at a point on the screen, in the shape of the contract */
   hitAt(point: { x: number; y: number }): Hit | null;
   /**
@@ -220,6 +223,16 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       }
       return rowRoom.limitBytes;
     },
+  });
+
+  // The sheets of pictures of the points: parts of the GPU of their plugins, as the definitions are
+  const pointSprites = createPointSpriteSheets({
+    gpuParts,
+    ledger: customLayer.getGpuLedger(),
+    sheets: context.pointSprites,
+    register: (sheet) => customLayer.registerPointSprites(sheet),
+    map,
+    tables: () => store.tables,
   });
 
   /** An installer that installs nothing once the instance is destroyed */
@@ -419,6 +432,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
         rows: (id) =>
           featureTablesInternals(store.tables)?.view(id) ?? datasetRowsView(getDraw(), id),
         draggedRows: () => getDraw().rendered.getDraggedRows(),
+        spriteTexture: (sheet) => pointSprites.textureOf(sheet),
       },
     };
     try {
@@ -525,6 +539,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     collections,
     input,
     interactions,
+    pointSprites,
     loaded,
     drawingCommit,
     hitAt: (point) =>

@@ -58,6 +58,10 @@ import type { Feature, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
 import type { GpuLedger, GpuMemorySnapshot } from '../gpu-ledger.js';
+import {
+  type PointSpriteSheetSource,
+  PointSpriteSheets,
+} from '../renderers/point/point-sprites.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { installAnchorProjector, uninstallAnchorProjector } from '../terrain/anchor.js';
 import {
@@ -133,6 +137,11 @@ export interface CustomLayerDeps {
    */
   featureCompanions: FeatureCompanionRegistry;
   /**
+   * The sheets of pictures the built-in points are drawn with (those of this draw instance; none
+   * when omitted)
+   */
+  pointSprites?: PointSpriteSheets;
+  /**
    * The selection scope of this draw instance (the extension points of the custom feature
    * types, the auxiliary handles and the thinned handle sets)
    *
@@ -189,6 +198,13 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    *   registration of the same type)
    */
   registerFeatureRenderer(type: string, renderer: FeatureTypeHandler['renderer']): () => void;
+  /**
+   * Adds a sheet of pictures of the points after the others: it is given the context of the map
+   * while the drawing has one, and sees each frame begin before anything is drawn
+   *
+   * @returns the function that takes it out
+   */
+  registerPointSprites(sheet: PointSpriteSheetSource): () => void;
   /** The list of slots (the first = the backmost). Just itself when there is no separator */
   getStackSlots(): StackSlot[];
   /**
@@ -359,6 +375,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
   // The providers of companion drawing are dedicated to this instance
   const featureCompanions = deps.featureCompanions;
+  // The sheets of pictures of the points, and whether the frame being drawn has let them see it
+  // begin (in the pass before the main one, or at the first slot without it)
+  const pointSprites = deps.pointSprites ?? new PointSpriteSheets();
+  let spritesBegun = false;
 
   // Map of the custom feature handlers
   const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
@@ -740,6 +760,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     for (const renderer of dynamicOverlayRenderers) {
       renderer.onAdd(gl, mapInstance);
     }
+    for (const sheet of pointSprites.sheets) sheet.onAdd(gl);
   }
 
   /**
@@ -760,6 +781,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     for (const renderer of dynamicOverlayRenderers) {
       renderer.onRemove();
     }
+    for (const sheet of pointSprites.sheets) sheet.onRemove();
 
     // Release the retained-mode GPU resources held by the datasets (the
     // datasets themselves are kept and built again once the layer is recreated)
@@ -921,6 +943,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // or removed, for example) is closed here as well
     if (engine.frame === null || index <= engine.frame.lastIndex) {
       engine.frame = beginFrame(renderOptions);
+      // The writes of the sheets wait for a frame (the map sets its own state again after it)
+      if (!spritesBegun) pointSprites.beginFrame();
+      spritesBegun = false;
     }
     const frame = engine.frame;
     if (!frame) return;
@@ -1005,6 +1030,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       // rows written below are those of that frame
       beginWrittenFrame();
       engine.preparedTerrainState = terrainResolver.resolve(gl);
+      // The sheets of pictures write what waits for a frame here, the map setting its own state
+      // again after the pass
+      pointSprites.beginFrame();
+      spritesBegun = true;
       // The textures and buffers of the rows drawn in one draw are written here too, for the
       // same reason
       engine.tableRetained?.prerender();
@@ -1067,6 +1096,25 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         engine.tableRetained?.reclassify();
         engine.shownTableRetained?.reclassify();
         if (engine.renderers && engine.gl && !isRegisteredRenderer(renderer)) renderer.onRemove();
+        engine.mapInstance?.triggerRepaint();
+      };
+    },
+
+    registerPointSprites(sheet: PointSpriteSheetSource): () => void {
+      const remove = pointSprites.add(sheet);
+      // A point given a picture is drawn another way: the features are classified again
+      engine.storeRetainedCache?.invalidateAll();
+      engine.tableRetained?.reclassify();
+      engine.shownTableRetained?.reclassify();
+      if (engine.renderers && engine.gl) sheet.onAdd(engine.gl);
+      engine.mapInstance?.triggerRepaint();
+      return () => {
+        if (!pointSprites.sheets.includes(sheet)) return;
+        if (engine.renderers && engine.gl) sheet.onRemove();
+        remove();
+        engine.storeRetainedCache?.invalidateAll();
+        engine.tableRetained?.reclassify();
+        engine.shownTableRetained?.reclassify();
         engine.mapInstance?.triggerRepaint();
       };
     },

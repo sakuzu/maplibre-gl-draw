@@ -339,6 +339,7 @@ export function createDrawOnEngine(
     appliedStyle: engine.extensions.appliedStyle,
     getDraw: () => draw,
     report: (problem, key) => status.problem(problem, key),
+    pointSprites: engine.extensions.pointSprites,
   });
   // `editable` and `userEditing` read the read-only and the lock, which setReadOnly and
   // setInteractionLocked change too

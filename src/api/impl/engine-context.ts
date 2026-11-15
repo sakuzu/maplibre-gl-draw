@@ -56,6 +56,7 @@ import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store, StoreContract } from '../../store/store.js';
 import type { FeatureStyle, Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
+import { PointSpriteSheets } from '../../view/renderers/point/point-sprites.js';
 import { pointMarkerReachPx } from '../../view/renderers/point/point-style.js';
 import { createSelectionScope, type SelectionScope } from '../../view/ui/selection-scope.js';
 
@@ -136,6 +137,8 @@ export interface Context {
   /** The shapes as they are seen, which what draws and what picks reads */
   shapes: RenderedShapes;
   hitTestService: HitTestService;
+  /** The sheets of pictures of the points, which the drawing, the hits and the frames read */
+  pointSprites: PointSpriteSheets;
   eventEmitter: EventEmitter;
   modeManager: ModeManager;
   featureStyle: FeatureStyleConfig;
@@ -278,6 +281,8 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // What is injected is the anchor projection of this map, identical to the one the rendering
   // uses. When terrain is disabled, project returns null and the conventional longitude and
   // latitude path keeps working as before.
+  // The sheets of pictures of the points: a point given a picture is hit and framed by its size
+  const pointSprites = new PointSpriteSheets();
   const hitTestService: HitTestService = new HitTestServiceImpl(store, spatialIndex, {
     clickTolerance: opts.clickTolerance,
     anchorScreen: {
@@ -287,8 +292,14 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     drawnShape: createGlobeShapeResolver(map),
     // A click on the marker of a point hits the point (the look of a point is read at each
     // hit, so a change of the style option applies at once)
-    pointMarkerReachPx: (feature) =>
-      pointMarkerReachPx(feature.style as FeatureStyle | undefined, featureStyle.point.point),
+    pointMarkerReachPx: (feature) => {
+      const picture = pointSprites.ofFeature(feature)?.sprite;
+      if (picture) return Math.max(picture.halfWidth, picture.halfHeight);
+      return pointMarkerReachPx(
+        feature.style as FeatureStyle | undefined,
+        featureStyle.point.point,
+      );
+    },
   });
 
   // Create the BoxSelectionStrategyRegistry and register the core strategies
@@ -320,6 +331,9 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     // built-in type, or of an override of it for the points it keeps): a plain point has a
     // 16 px frame before the margin, and a larger marker a larger one
     defaultPointFrameExtent: (feature) => {
+      // A point drawn with a picture is framed by the size of the picture
+      const picture = pointSprites.ofFeature(feature)?.sprite;
+      if (picture) return { halfWidth: picture.halfWidth, halfHeight: picture.halfHeight };
       const reach = hitTestService.getStrategy?.(feature.type)?.reachPx?.(feature) ?? 0;
       return reach > 0 ? { halfWidth: reach, halfHeight: reach } : null;
     },
@@ -392,6 +406,7 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     spatialIndex,
     shapes,
     hitTestService,
+    pointSprites,
     eventEmitter,
     modeManager,
     featureStyle,
