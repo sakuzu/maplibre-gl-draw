@@ -33,7 +33,7 @@
  *   stamp it on the rows they write (`write-marks.ts`)
  */
 
-import type { ScheduleIdleWork } from '@sakuzu/kasane';
+import type { Page, ScheduleIdleWork } from '@sakuzu/kasane';
 import type { ItemWalk } from '@sakuzu/kasane/render';
 import { ROW_FLAG_DELETED, rowProperties } from '@sakuzu/kasane/render';
 import { byteColumnFromStrings, utf8String } from '@sakuzu/tabane';
@@ -179,6 +179,7 @@ export function createTableStore(options: TableStoreOptions = {}): {
   );
   WRITERS.set(store, contract.writer);
   RENAMES.set(store, (pairs) => contract.changeIds(pairs));
+  PAGES.set(store, (layerId, pages) => contract.replacePages(layerId, pages));
   return { store, writer: contract.writer };
 }
 
@@ -198,6 +199,22 @@ export function rowRenamesOf(
   store: Store,
 ): ((pairs: readonly (readonly [from: string, to: string])[]) => void) | undefined {
   return RENAMES.get(store);
+}
+
+/** What adds pages whose rows replace the rows of the same IDs, of each Store of rows */
+const PAGES = new WeakMap<Store, (layerId: string, pages: readonly Page[]) => RowsChange>();
+
+/**
+ * What adds pages to a layer of a Store of rows `createTableStore` made, a row whose ID is a row
+ * already taking its place (undefined for any other Store): the pages of a document opened a page
+ * at a time
+ *
+ * @internal
+ */
+export function rowPagesOf(
+  store: Store,
+): ((layerId: string, pages: readonly Page[]) => RowsChange) | undefined {
+  return PAGES.get(store);
 }
 
 /** The writer of the rows of each Store of rows `createTableStore` made */
@@ -272,7 +289,7 @@ export class TableContractStore implements StoreContract {
    */
   readonly #tablesWriter: FeatureTablesStoreWriter;
   /** The writer of the features, its writes of values in the frames of the marks */
-  readonly #writer: FeatureTablesWriter;
+  readonly #writer: FeatureTablesWriter & Pick<FeatureTablesStoreWriter, 'replacePages'>;
   readonly #internals: FeatureTablesInternals;
   /** The write mark of the rows, and the frames of writes */
   readonly #marks: WriteMarkKeeper;
@@ -383,6 +400,10 @@ export class TableContractStore implements StoreContract {
       addPages: (layerId, blocks) => {
         for (const snapshot of this.#snapshots()) snapshot.invalidate();
         return marks.write(() => writer.addPages(layerId, blocks));
+      },
+      replacePages: (layerId, blocks) => {
+        for (const snapshot of this.#snapshots()) snapshot.invalidate();
+        return marks.write(() => writer.replacePages(layerId, blocks));
       },
       writeRows: (patch, options) => {
         if (this.#snapshot || this.#lasting.size > 0) {
@@ -889,6 +910,17 @@ export class TableContractStore implements StoreContract {
       row.properties.set(key, value);
       row.fields.set(`properties:${key}`, value);
     }
+  }
+
+  /**
+   * Adds pages whose rows replace the rows of the same IDs (see `rowPagesOf`), in a transaction of
+   * the caller's source
+   */
+  replacePages(layerId: string, pages: readonly Page[]): RowsChange {
+    return this.transact(
+      () => this.#writer.replacePages(layerId, pages),
+      this.#bus.source ?? 'open',
+    );
   }
 
   /** Gives rows other IDs (see `rowRenamesOf`), in a transaction of the caller's source */

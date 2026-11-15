@@ -19,6 +19,7 @@
 
 import type {
   GroupRef,
+  Page,
   RowField,
   TableGroupPatch as TablesGroupPatch,
   TablesWriter,
@@ -38,6 +39,7 @@ import { asFeatureValues } from '../shared/feature-values.js';
 import type {
   ItemOrderChange,
   RestoreToken,
+  RowsChange,
   RowValues,
   StoreChange,
   TableGroupPatch,
@@ -82,6 +84,12 @@ export interface FeatureTablesStoreWriter extends FeatureTablesWriter {
    * updated with the field `id`, and the IDs given (`StoreChange.reassigned`)
    */
   changeIds(pairs: readonly (readonly [from: string, to: string])[]): void;
+  /**
+   * Adds pages to a layer as `addPages` does, a row whose ID is a row already taking its place and
+   * keeping its reference (`duplicateIds: 'replace'` of the tables): told as updated, or as
+   * created when the row of that ID was deleted
+   */
+  replacePages(layerId: string, pages: readonly Page[]): RowsChange;
 }
 
 /**
@@ -368,6 +376,17 @@ export function createFeatureTablesWriter(
       try {
         const found = tables.lookup(id);
         return found && { row: found.row, deleted: found.deleted };
+      } catch (error) {
+        throw writerError(error);
+      }
+    },
+    replacePages: (layerId, blocks) => {
+      try {
+        const rows = rowsChangeOf(
+          tables.addPages(layerId, blocks as readonly PageData[], { duplicateIds: 'replace' }).rows,
+        );
+        notify?.({ rows });
+        return rows;
       } catch (error) {
         throw writerError(error);
       }

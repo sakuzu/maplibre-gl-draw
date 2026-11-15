@@ -18,6 +18,7 @@ import type { Store } from '../../store/store.js';
 import type { DrawReader } from '../draw.js';
 import type { History } from '../impl/history.js';
 import { NATIVE_VERSION } from '../impl/import-export/constants.js';
+import { isPageSource } from '../impl/open-pages.js';
 import type { ProblemInput } from '../impl/status.js';
 import { WRITE_SOURCE_NO_UNDO, type Writer } from '../impl/write.js';
 import type { DrawDocument } from '../model.js';
@@ -28,7 +29,6 @@ import type {
   ImportSource,
   OpenOptions,
   OpenResult,
-  OpenSource,
   Progress,
   TaskOptions,
 } from '../write.js';
@@ -92,6 +92,8 @@ export interface SessionDeps {
   readonly changed: () => void;
   /** Keeps a problem nobody waits for */
   readonly problem: (problem: ProblemInput) => void;
+  /** Holds `change` until the function returned is called: the commits meanwhile told as one */
+  readonly holdChanges: () => () => void;
 }
 
 /**
@@ -165,15 +167,23 @@ export class DocumentSession {
   // ==========================================================================
 
   /** `draw.open`: from a source, or from the storage */
-  open(first: OpenSource | OpenOptions | undefined, second?: OpenOptions): Promise<OpenResult> {
+  open(first: ImportSource | OpenOptions | undefined, second?: OpenOptions): Promise<OpenResult> {
     if (isOpenOptions(first)) return this.#openFromStorage(first);
-    return this.#openSource(first as OpenSource, second);
+    return this.#openSource(first as ImportSource, second);
   }
 
-  /** Replaces the document with a source, once the commits not sent are seen to */
-  async #openSource(source: OpenSource, options: OpenOptions | undefined): Promise<OpenResult> {
+  /**
+   * Replaces the document with a source, once the commits not sent are seen to: the document is
+   * opening until it is written (a write waits, the instance is read-only), and `change` is told
+   * once
+   */
+  async #openSource(source: ImportSource, options: OpenOptions | undefined): Promise<OpenResult> {
     if (this.#closing) await this.#closing;
     if (this.#opening) throw opening();
+    // A document read-only is not replaced (nothing changes)
+    if (this.#deps.store.isReadOnly()) {
+      throw new DrawError('notEditable', 'The document is read-only');
+    }
     const sender = this.#sender;
     if (sender && this.#document.state === 'closed') {
       // A document closed is opened by a new sender: the one before stopped, and closing said what
@@ -182,15 +192,60 @@ export class DocumentSession {
     } else if (sender) {
       await this.#settleUnsent(sender, options);
     }
-    const { writer, history } = this.#deps;
-    const result = await writer.open(source, options);
-    history.clear();
-    if (this.#document.state !== 'open') {
-      this.#document = OPEN;
+    if (this.#opening) throw opening();
+    const before = this.#document;
+    let open!: () => void;
+    this.#opening = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const release = this.#deps.holdChanges();
+    this.#setDocument({ state: 'opening', progress: null, viewReady: false });
+    try {
+      const result = await this.#writeDocument(source, options, {
+        id: createId(),
+        // A commit sent to the storage is one transaction
+        steps: !this.#sender,
+      });
+      this.#deps.history.clear();
       this.#closedConnection = null;
-      this.#deps.changed();
+      this.#setDocument({ state: 'opening', progress: null, viewReady: true });
+      this.#setDocument(OPEN);
+      return result;
+    } catch (error) {
+      this.#setDocument(before);
+      throw error;
+    } finally {
+      release();
+      open();
+      this.#opening = null;
     }
-    return result;
+  }
+
+  /**
+   * Writes a source over the document, read-only or not (the caller saw to it): pages as they
+   * arrive, any other source at once
+   */
+  #writeDocument(
+    source: ImportSource,
+    options: TaskOptions | undefined,
+    internal: { readonly id: string; readonly steps: boolean },
+  ): Promise<OpenResult> {
+    const { writer } = this.#deps;
+    const signal = options?.signal;
+    const onProgress = (progress: Progress): void => {
+      options?.onProgress?.(progress);
+      if (this.#document.state === 'opening') {
+        this.#setDocument({ state: 'opening', progress, viewReady: false });
+      }
+    };
+    if (isPageSource(source)) {
+      return writer.openPages(
+        source,
+        { signal, onProgress },
+        { id: internal.id, fromStorage: true, steps: internal.steps },
+      );
+    }
+    return writer.open(source, { signal }, { id: internal.id, fromStorage: true });
   }
 
   /** What `unsent` says of the commits not sent and the refusals, when a source replaces them */
@@ -245,7 +300,6 @@ export class DocumentSession {
    * the storage writes, and the document it gives, are written all the same
    */
   #holdWrites(): void {
-    if (!this.#deps.backend) return;
     const writable = this.#document.state !== 'opening' && (this.#sender?.editable ?? true);
     this.#deps.store.setDocumentWritable(writable, 'storage');
   }
@@ -291,9 +345,13 @@ export class DocumentSession {
         : null;
       if (signal?.aborted || this.#removed) throw aborted();
       this.#disconnectNow();
-      const result = await this.#replaceWith(sender, source, signal);
+      const result = await this.#replaceWith(sender, source, {
+        signal,
+        onProgress: task.onProgress,
+      });
       if (kept) sender.restore(kept.batches, kept.refusals, this.#writeKept);
       written();
+      this.#setDocument({ state: 'opening', progress: null, viewReady: true });
       this.#closedConnection = null;
       if (backend.connect) {
         sender.report({ connection: { state: 'connecting', attempt: 1 } });
@@ -333,13 +391,20 @@ export class DocumentSession {
   async #replaceWith(
     sender: Sender,
     source: ImportSource,
-    signal: AbortSignal | undefined,
+    options: TaskOptions | undefined,
   ): Promise<OpenResult> {
-    const { writer, history } = this.#deps;
+    const { history } = this.#deps;
     await sender.readAll();
     const id = createId();
     sender.ignore(id);
-    const result = await writer.open(source, { signal }, { id, fromStorage: true });
+    // The pages written as they arrive are told as one change
+    const release = this.#deps.holdChanges();
+    let result: OpenResult;
+    try {
+      result = await this.#writeDocument(source, options, { id, steps: true });
+    } finally {
+      release();
+    }
     history.clear();
     sender.values.kept.clear();
     sender.writeAgain(this.#writeKept);
@@ -595,7 +660,7 @@ export class DocumentSession {
     if (!sender || this.#removed || this.#document.state === 'closed') {
       throw new DrawError('invalidState', 'The document is not open');
     }
-    await this.#replaceWith(sender, source, options?.signal);
+    await this.#replaceWith(sender, source, options);
   }
 }
 

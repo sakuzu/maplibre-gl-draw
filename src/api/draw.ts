@@ -28,9 +28,9 @@ import type { View } from './view.js';
 import type {
   CloseOptions,
   CloseResult,
+  ImportSource,
   OpenOptions,
   OpenResult,
-  OpenSource,
   TaskOptions,
   Transaction,
   Write,
@@ -219,13 +219,20 @@ export interface Draw extends DrawReader {
   redo(options?: TaskOptions): Write<void>;
   /**
    * Replaces the whole document with what a source holds: a document of the library replaces
-   * everything, GeoJSON replaces the features and the groups and keeps the layers. It is one
-   * `change` with the source `open`, and the steps of undo are dropped. A source is added to the
-   * document with `tx.import`.
+   * everything, GeoJSON replaces the features and the groups and keeps the layers, and so do
+   * pages of rows, whose rows go into the current layer. It is one `change` with the source
+   * `open`, and the steps of undo are dropped. A source is added to the document with
+   * `tx.import`.
    *
    * Without a source, the document is read from the storage (`Backend.load`), then the storage is
-   * connected (`Backend.connect`) and the commits its outbox kept are sent on. Until it is open,
-   * `status.document` is `opening`, the reads give the document before it, and `draw.write` waits.
+   * connected (`Backend.connect`) and the commits its outbox kept are sent on.
+   *
+   * Until it is open, `status.document` is `opening` (`viewReady` once every page is drawn), the
+   * instance is read-only, and `draw.write` waits. The pages are drawn as they arrive, in the order
+   * of their keys, and the reads give what arrived; a row of a page whose ID a page before gave
+   * takes its place (the rows in view first, then the pages that hold them). A source read at
+   * once (a string, a file, a document, GeoJSON) is written at once. `change` is told once, when
+   * the document is open.
    *
    * With commits not sent or refusals not dismissed, a source fails with `unsentWrites` and
    * changes nothing, unless `unsent` says what becomes of them.
@@ -235,7 +242,7 @@ export interface Draw extends DrawReader {
    *   read-only, `unsentWrites` as above, or `invalidState` when no source is given and there is
    *   no storage to open from
    */
-  open(source: OpenSource, options?: OpenOptions): Promise<OpenResult>;
+  open(source: ImportSource, options?: OpenOptions): Promise<OpenResult>;
   open(options?: OpenOptions): Promise<OpenResult>;
   /**
    * Closes the document: the storage is disconnected, the document emptied, and `draw.write`

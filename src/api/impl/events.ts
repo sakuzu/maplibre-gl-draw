@@ -273,7 +273,11 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
     // The commit first, then the values of this client it moved: a listener of a value (the
     // selection) reads what the commit wrote as already told
     const change = toChange(changes, store);
-    if (change) hub.emit('change', change);
+    if (change) {
+      const held = HELD.get(hub);
+      if (held) held.push(change);
+      else hub.emit('change', change);
+    }
 
     const selection = selectionChangeOf(changes, store);
     if (selection) hub.emit('selection.changed', selection);
@@ -306,6 +310,142 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
       hub.emit('interactionLock.changed', { locked });
     }
   });
+}
+
+/** The changes held while a document opens, by hub (`holdChanges`) */
+const HELD = new WeakMap<EventHub, Change[]>();
+
+/**
+ * Holds `change` until the function returned is called: the commits written meanwhile (the parts
+ * of a document opened a page at a time) are told then, as one change. Their reads and their
+ * drawing are not held
+ *
+ * @internal
+ */
+export function holdChanges(hub: EventHub): () => void {
+  if (HELD.has(hub)) return () => {};
+  HELD.set(hub, []);
+  return () => {
+    const held = HELD.get(hub);
+    HELD.delete(hub);
+    const change = held ? mergeChanges(held) : null;
+    if (change) hub.emit('change', change);
+  };
+}
+
+/**
+ * Changes told as one: an item created then deleted is none, deleted then created is updated,
+ * created then updated is created; the rows and the flag of the document are those of all
+ */
+function mergeChanges(changes: readonly Change[]): Change | null {
+  if (changes.length <= 1) return changes[0] ?? null;
+  const [first] = changes;
+  const rows = mergeRows(changes);
+  return {
+    commit: first.commit,
+    source: first.source,
+    label: first.label,
+    features: mergeIds(changes.map((change) => change.features)),
+    layers: mergeIds(changes.map((change) => change.layers)),
+    groups: mergeIds(changes.map((change) => change.groups)),
+    document: changes.some((change) => change.document),
+    reassigned: Object.assign({}, ...changes.map((change) => change.reassigned)),
+    previous(id) {
+      for (const change of changes) {
+        const found = change.previous(id);
+        if (found) return found;
+      }
+      return undefined;
+    },
+    ...(rows && { rows }),
+  };
+}
+
+/** The IDs of changes one after the other, as one change tells them */
+function mergeIds(lists: readonly ChangedIds[]): ChangedIds {
+  const state = new Map<string, 'created' | 'updated' | 'deleted'>();
+  const placed = new Set<string>();
+  for (const ids of lists) {
+    for (const id of ids.created)
+      state.set(id, state.get(id) === 'deleted' ? 'updated' : 'created');
+    for (const id of ids.updated) if (!state.has(id)) state.set(id, 'updated');
+    for (const id of ids.deleted) {
+      if (state.get(id) === 'created') state.delete(id);
+      else state.set(id, 'deleted');
+    }
+    for (const id of ids.placed) placed.add(id);
+  }
+  const created: string[] = [];
+  const updated: string[] = [];
+  const deleted: string[] = [];
+  for (const [id, of] of state) {
+    if (of === 'created') created.push(id);
+    else if (of === 'updated') updated.push(id);
+    else deleted.push(id);
+  }
+  const placedIds = [...placed].filter((id) => {
+    const of = state.get(id);
+    return of !== 'created' && of !== 'deleted';
+  });
+  return {
+    created: idsOf(created),
+    updated: idsOf(updated),
+    deleted: idsOf(deleted),
+    placed: idsOf(placedIds),
+  };
+}
+
+/** The rows of changes one after the other, by layer (undefined when none tells rows) */
+function mergeRows(changes: readonly Change[]): Change['rows'] {
+  const all = changes.flatMap((change) => (change.rows ? [change.rows] : []));
+  if (all.length <= 1) return all[0];
+  const layers = new Map<
+    string,
+    {
+      created: Int32Array[];
+      updated: Int32Array[];
+      deleted: Int32Array[];
+      fields: Set<RowField>;
+      changedKeys: Set<string>;
+    }
+  >();
+  for (const rows of all) {
+    for (const [layerId, change] of rows.layers) {
+      let into = layers.get(layerId);
+      if (!into) {
+        into = { created: [], updated: [], deleted: [], fields: new Set(), changedKeys: new Set() };
+        layers.set(layerId, into);
+      }
+      into.created.push(change.created);
+      into.updated.push(change.updated);
+      into.deleted.push(change.deleted);
+      for (const field of change.fields) into.fields.add(field);
+      for (const key of change.changedKeys) into.changedKeys.add(key);
+    }
+  }
+  const joined = (parts: readonly Int32Array[]): Int32Array => {
+    const out = new Int32Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let at = 0;
+    for (const part of parts) {
+      out.set(part, at);
+      at += part.length;
+    }
+    return out;
+  };
+  return {
+    layers: new Map(
+      [...layers].map(([layerId, into]) => [
+        layerId,
+        {
+          created: joined(into.created),
+          updated: joined(into.updated),
+          deleted: joined(into.deleted),
+          fields: into.fields,
+          changedKeys: into.changedKeys,
+        },
+      ]),
+    ),
+  };
 }
 
 /** Whether two sets hold the same IDs */

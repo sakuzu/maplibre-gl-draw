@@ -68,7 +68,6 @@ import type { SelectionTarget } from '../state.js';
 import type {
   ImportOptions,
   ImportResult,
-  ImportSource,
   Many,
   Neighbor,
   OpenResult,
@@ -107,6 +106,7 @@ import type { GroupResource } from './group-resource.js';
 import { createGroups, idsInStackingOrder, prepareGroup, prepareGroupPatch } from './groups.js';
 import type { LayerResource } from './layer-resource.js';
 import { createLayers, prepareLayer, prepareLayerPatch } from './layers.js';
+import { openPages, type PageSource } from './open-pages.js';
 import { placementOf, resolveMoveTarget } from './placement.js';
 import { publishedStore } from './published-store.js';
 import { writeOf } from './saving.js';
@@ -209,6 +209,16 @@ export interface Writer {
     options?: { readonly signal?: AbortSignal },
     internal?: { readonly id?: string; readonly fromStorage?: boolean },
   ): Promise<OpenResult>;
+  /**
+   * Opens a document from pages of rows (see `open-pages.ts`)
+   *
+   * @param internal.steps - Whether the pages are written as they arrive (else in one transaction)
+   */
+  openPages(
+    pages: PageSource,
+    options: { readonly signal?: AbortSignal; readonly onProgress?: (progress: Progress) => void },
+    internal: { readonly id: string; readonly fromStorage?: boolean; readonly steps: boolean },
+  ): Promise<OpenResult>;
   /** Places an image at a position as one commit of this client (the image mode) */
   placeImage(
     image: Blob,
@@ -306,6 +316,19 @@ export function createWriter(writerDeps: WriterDeps): Writer {
           ) ?? [];
         return result ?? null;
       });
+    },
+    openPages(pages, options, internal) {
+      return openPages(
+        {
+          store,
+          loader: writerDeps.writers.document,
+          layerId: () => writerDeps.deps.getActiveLayerId(),
+          queue: (make) => queueCommit(store, make),
+        },
+        pages,
+        options,
+        internal,
+      );
     },
     async open(source, options, internal) {
       if (source === undefined) {
@@ -2186,7 +2209,7 @@ class TransactionImpl implements Transaction {
   readonly #importIds = new Set<string>();
   readonly #importLayers = new Set<string>();
 
-  import(source: ImportSource, options?: ImportOptions): Promise<ImportResult> {
+  import(source: OpenSource, options?: ImportOptions): Promise<ImportResult> {
     return this.#runAsync(async (keep) => {
       if (options !== undefined && !isRecord(options)) {
         throw invalidInput('The options must be an object');

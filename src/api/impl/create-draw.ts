@@ -17,7 +17,7 @@ import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
 import type { FeaturesCollection } from '../features.js';
 import type { DrawOptions } from '../options.js';
-import type { OpenOptions, OpenSource, Write } from '../write.js';
+import type { ImportSource, OpenOptions, Write } from '../write.js';
 import { captureImage } from './capture.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
@@ -31,7 +31,7 @@ import {
 } from './drawing.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
-import { observe, requireEventName } from './events.js';
+import { holdChanges, observe, requireEventName } from './events.js';
 import type { FeatureResource } from './feature-resource.js';
 import { toFeature, toFeatureOrUndefined } from './feature-shape.js';
 import { createFeatures } from './features.js';
@@ -245,6 +245,7 @@ export function createDrawOnEngine(
     },
     changed: () => status.changed(),
     problem: (problem) => status.problem(problem),
+    holdChanges: () => holdChanges(events),
   });
   session = opened;
   status.changed();
@@ -420,7 +421,7 @@ export function createDrawOnEngine(
     write: (fn, writeOptions) => noteSkipped(writer.write(fn, writeOptions), writeOptions?.label),
     undo: (taskOptions) => history.undo(taskOptions),
     redo: (taskOptions) => history.redo(taskOptions),
-    open: ((first?: OpenSource | OpenOptions, second?: OpenOptions) =>
+    open: ((first?: ImportSource | OpenOptions, second?: OpenOptions) =>
       opened.open(first, second)) as Draw['open'],
     close: (closeOptions) => opened.close(closeOptions),
     remove() {

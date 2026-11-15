@@ -424,7 +424,10 @@ export class DrawStore implements Store {
     if (!tables || !this.#contract.applyRows) {
       throw new Error('The Store does not hold its features as rows: it writes no rows');
     }
-    if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
+    // What the storage gives is written even while read-only (as `#write` writes it)
+    if (this.#storageDepth === 0 && (this.#contract.isReadOnly() || !this.#takesWrites())) {
+      return null;
+    }
     this.#queue.finish();
     const before = tables.readValues(patch);
     // Many rows are written in steps by a Store of core that has them, as one transaction

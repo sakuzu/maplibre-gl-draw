@@ -5,6 +5,7 @@
  * `draw.write`: the one way to change the document, and the transaction it hands its function
  */
 
+import type { Page } from '@sakuzu/kasane';
 import type { FeatureCollection, Position } from 'geojson';
 import type { BBox } from '../geometry/types.js';
 import type { FeaturesCollection } from './features.js';
@@ -194,7 +195,7 @@ export interface Transaction<P extends object = Properties> {
    * times it is called, so several files are one step. A document is replaced with `draw.open`.
    * `options.layer` wins over the `maplibre-gl-draw:layerId` of the features.
    */
-  import(source: ImportSource, options?: ImportOptions): Promise<ImportResult>;
+  import(source: OpenSource, options?: ImportOptions): Promise<ImportResult>;
 }
 
 /**
@@ -302,8 +303,14 @@ export interface TransactionDocument {
 /** A source to open: a JSON string, a file, a document of the library or GeoJSON */
 export type OpenSource = string | Blob | DrawDocument | FeatureCollection;
 
-/** A source to import */
-export type ImportSource = OpenSource;
+/**
+ * A source to open (`draw.open`, `Backend.load`): a source of {@link OpenSource}, or pages of
+ * rows (`createPageBuilder` or `toPage` of `@sakuzu/maplibre-gl-draw/table`), given in their
+ * order. Pages replace the features and the groups and keep the layers, as GeoJSON does: their
+ * rows go into the current layer, a Store that holds its features as rows takes them without a
+ * copy, and they are drawn as they arrive
+ */
+export type ImportSource = OpenSource | Iterable<Page> | AsyncIterable<Page>;
 
 /** A feature of the source that was left out, and why */
 export interface SkippedFeature {
