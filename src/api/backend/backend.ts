@@ -17,7 +17,7 @@ export interface BackendBase {
   /** Reads the document: `draw.open()` calls it. A failure is thrown as a `DrawError` */
   load(task: Task): Promise<ImportSource>;
   /**
-   * Given by a storage that receives the edits of other clients, or tells later that a commit is
+   * Given by a storage that receives the edits made elsewhere, or tells later that a commit is
    * kept: called once the document it read is open, with what it writes to the instance through
    *
    * @returns What cuts the connection: called when the document is closed
@@ -112,7 +112,7 @@ export interface BackendContext {
   /** The reads of the document and of the state, as the application reads them */
   readonly draw: DrawReader;
   /**
-   * Writes to the document here what the storage decided: the commits of other clients, and what
+   * Writes to the document here what the storage decided: the commits made elsewhere, and what
    * makes a commit of this client as the storage made it. It is written in their order, as they
    * are: what decides between writes is the storage's. However large, it does not stop the page:
    * until it is written, the reads give the document before it, and `change` is told once
@@ -138,7 +138,7 @@ export interface BackendReport {
 }
 
 /**
- * What a storage decided, written to the document here: a commit of another client, or what makes
+ * What a storage decided, written to the document here: a commit made elsewhere, or what makes
  * a commit of this client as the storage made it
  */
 export interface Received {

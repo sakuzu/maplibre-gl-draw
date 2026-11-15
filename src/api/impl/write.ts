@@ -247,36 +247,39 @@ export function createWriter(writerDeps: WriterDeps): Writer {
     if (typeof fn !== 'function') throw invalidInput('draw.write takes a function');
     const checked = checkWriteOptions(options);
     const id = createId();
-    const tx = new TransactionImpl(id, checked.signal, writerDeps);
+    // While the document opens, the transaction begins once it is open (on the document opened)
+    const gate = writerDeps.gate?.() ?? null;
+    let tx: TransactionImpl | null = null;
     const run = (): T | Promise<T> => {
+      const begun = new TransactionImpl(id, checked.signal, writerDeps);
+      tx = begun;
       running++;
       try {
-        return fn(tx);
+        return fn(begun);
       } catch (error) {
         return Promise.reject(error);
       } finally {
         running--;
       }
     };
-    // While the document opens, the function runs once it is open
-    const gate = writerDeps.gate?.() ?? null;
     const returned: T | Promise<T> = gate ? gate.then(run) : run();
     // Once the function ends (and its writes not awaited are done), the commit is queued
-    const commit = (value: T): WriteResult<T> | Promise<WriteResult<T>> => {
-      tx.throwFailure();
+    const commit = (made: TransactionImpl, value: T): WriteResult<T> | Promise<WriteResult<T>> => {
+      made.throwFailure();
       if (checked.signal.aborted) throw abortedError(checked.signal);
-      if (tx.empty) return { value, skipped: 0 };
+      if (made.empty) return { value, skipped: 0 };
       return queueCommit(store, () =>
-        tx.commit({ id, label: checked.label, undo: checked.undo }, checked.onProgress),
+        made.commit({ id, label: checked.label, undo: checked.undo }, checked.onProgress),
       ).then((skipped) => ({ value, skipped }));
     };
     const result: Promise<WriteResult<T>> = Promise.resolve(returned).then(
       (value) => {
-        tx.close();
-        return tx.pending ? tx.settled().then(() => commit(value)) : commit(value);
+        const made = tx as unknown as TransactionImpl;
+        made.close();
+        return made.pending ? made.settled().then(() => commit(made, value)) : commit(made, value);
       },
       (error: unknown) => {
-        tx.close();
+        (tx as TransactionImpl | null)?.close();
         throw error;
       },
     );
