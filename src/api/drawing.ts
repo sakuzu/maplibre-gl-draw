@@ -103,8 +103,8 @@ export interface DrawingResource {
  * and then to the mode. The position is used as it is: nothing snaps it. A click of the image
  * mode asks the application for the image to place there (`requestImage`).
  *
- * Every method throws `DrawError` with the code `invalidState` when the current mode is no
- * drawing mode (`commit` rejects with it).
+ * Every method but `holdPointer` throws `DrawError` with the code `invalidState` when the current
+ * mode is no drawing mode (`commit` rejects with it).
  */
 export interface Drawing<P extends object = Properties> {
   /** Whether a shape is being drawn: the mode shows a shape that is not created yet */
@@ -144,4 +144,16 @@ export interface Drawing<P extends object = Properties> {
   commit(options?: WriteOptions): Write<Feature<P>>;
   /** Drops the shape being drawn; the mode stays the current one. Nothing when there is none */
   cancel(): void;
+  /**
+   * Holds the pointer: while held, the clicks, the double clicks and the moves of the pointer do
+   * not reach the mode (nor the `input` receivers of the plugins), and the pan and the zoom of the
+   * map go on, since its presses and drags still pass. The input of `add`, `move` and `commit` is
+   * not held. For a panel where the coordinates of the next vertex are typed: open, a click on the
+   * map does not place a vertex. It holds until it is released with `false`, whatever the mode;
+   * the mode does not release it.
+   *
+   * @param held - True to hold the pointer, false to release it
+   * @throws `DrawError` with the code `invalidInput` when `held` is not a boolean
+   */
+  holdPointer(held: boolean): void;
 }

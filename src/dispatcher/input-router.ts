@@ -66,8 +66,9 @@ export interface InputRouter {
   /**
    * Toggles the hold on input that originates from the pointer
    *
-   * While held, the click / dblclick / mousemove of the real pointer are not
-   * delivered to the mode. Synthetic input (dispatch) is unaffected.
+   * While held, the input of the real pointer (its presses, moves, releases, clicks, double
+   * clicks and drags, but not a press cancelled) is not delivered to the plugins and the mode.
+   * Synthetic input (dispatch) is unaffected.
    */
   setPointerHold(held: boolean): void;
 
@@ -159,15 +160,20 @@ export interface ExtensionInputRoute {
 }
 
 /**
- * The event types that are stopped while the pointer is held
- *
- * Only the ones that determine coordinates are stopped. Stopping mousedown /
- * mouseup / the drag events would also break the pan and zoom of MapLibre.
+ * The event types that are stopped while the pointer is held: every input of the pointer, as
+ * `Drawing.holdPointer` holds it. The map listens to the pointer itself, so its pan and zoom go
+ * on. A press cancelled (dragcancel) is never held: the mode must always get the chance to abort
+ * the press.
  */
 const HELD_EVENT_TYPES: ReadonlySet<NormalizedEvent['type']> = new Set([
   'click',
   'dblclick',
   'mousemove',
+  'mousedown',
+  'mouseup',
+  'dragstart',
+  'dragmove',
+  'dragend',
 ]);
 
 /**
@@ -441,7 +447,14 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     if (deps.isBlocked?.()) return false;
     // Only input originating from the real pointer is stopped while held.
     // Synthetic input (dispatch) is let through
-    if (pointerHeld && !options.synthetic && HELD_EVENT_TYPES.has(input.type)) return false;
+    if (pointerHeld && !options.synthetic && HELD_EVENT_TYPES.has(input.type)) {
+      // A double click held in a drawing mode does not zoom the map either, as it does not when
+      // it reaches the mode (below)
+      if (input.type === 'dblclick' && modeManager.getHandler()?.writesFeatures === true) {
+        input.originalEvent.preventDefault();
+      }
+      return false;
+    }
 
     const handler = modeManager.getHandler();
     if (!handler) return false;

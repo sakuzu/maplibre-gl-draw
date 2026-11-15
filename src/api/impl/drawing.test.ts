@@ -609,6 +609,84 @@ describe('mode.drawing', () => {
     expect(draw.mode.value).toBe('drawLine');
   });
 
+  it('holds the pointer from the mode and the plugins, and lets add through', () => {
+    // The map of the stub, with the listeners the input of the map goes to
+    const stub = createMapStub();
+    const listeners = new Map<string, ((event: unknown) => void)[]>();
+    const on = stub.map.on.bind(stub.map) as (type: string, fn: (event: unknown) => void) => void;
+    Object.assign(stub.map, {
+      on(type: string, fn: (event: unknown) => void) {
+        listeners.set(type, [...(listeners.get(type) ?? []), fn]);
+        on(type, fn);
+        return stub.map;
+      },
+    });
+    const fire = (type: string, [lng, lat]: [number, number]) => {
+      const point = stub.map.project([lng, lat]);
+      const originalEvent = {
+        type,
+        button: 0,
+        buttons: type === 'mouseup' ? 0 : 1,
+        target: stub.map.getCanvas(),
+        clientX: point.x,
+        clientY: point.y,
+        preventDefault() {},
+        stopPropagation() {},
+      };
+      for (const fn of listeners.get(type) ?? [])
+        fn({ point, lngLat: { lng, lat }, originalEvent });
+    };
+    const click = (at: [number, number]) => {
+      fire('mousedown', at);
+      fire('mouseup', at);
+      fire('click', at);
+    };
+    const seen: string[] = [];
+    draw = createDraw(stub.map);
+    const record = (type: string) => () => {
+      seen.push(type);
+      return false;
+    };
+    draw.extensions.plugins.add({
+      name: 'acme-input',
+      onAdd() {},
+      input: {
+        onPointerDown: record('pointerdown'),
+        onPointerUp: record('pointerup'),
+        onClick: record('click'),
+      },
+    });
+    draw.mode.set('drawPoint', { repeat: true });
+    click([0, 0]);
+    expect(draw.features.count()).toBe(1);
+    seen.length = 0;
+
+    draw.mode.drawing.holdPointer(true);
+    click([1, 0]);
+    expect(draw.features.count()).toBe(1);
+    expect(seen).toEqual([]);
+    // The input of code is not held
+    draw.mode.drawing.add([2, 0]);
+    expect(draw.features.count()).toBe(2);
+
+    // It holds whatever the mode, and is released only with false
+    draw.mode.set('select');
+    draw.mode.set('drawPoint', { repeat: true });
+    click([3, 0]);
+    expect(draw.features.count()).toBe(2);
+    draw.mode.set('select');
+    draw.mode.drawing.holdPointer(false);
+    draw.mode.set('drawPoint', { repeat: true });
+    seen.length = 0;
+    click([4, 0]);
+    expect(draw.features.count()).toBe(3);
+    expect(seen).toContain('click');
+
+    expect(() => draw.mode.drawing.holdPointer('yes' as unknown as boolean)).toThrow(
+      expect.objectContaining({ code: 'invalidInput' }),
+    );
+  });
+
   it('throws invalidState once the instance is destroyed, and commit rejects with it', async () => {
     draw = createDraw(createMapStub().map);
     const { mode } = draw;

@@ -731,15 +731,39 @@ describe('holding input that originates from the pointer', () => {
     expect(mode.clicks).toHaveLength(1);
   });
 
-  it('mousedown and drag events pass through as before while held (camera not killed)', () => {
+  it('the press, the release and the drag of the pointer do not reach the mode while held', () => {
     const router = startRouter();
     router.setPointerHold(true);
 
     emit(makeMouseEvent('mousedown', TARGET[0], TARGET[1]));
+    emit(makeMouseEvent('mouseup', TARGET[0], TARGET[1]));
+    emit(makeDragEvent('dragstart', TARGET[0], TARGET[1]));
     emit(makeDragMoveEvent(TARGET[0], TARGET[1]));
+    emit(makeDragEvent('dragend', TARGET[0], TARGET[1]));
 
-    expect(mode.downs).toHaveLength(1);
-    expect(mode.dragMoves).toHaveLength(1);
+    expect(mode.downs).toHaveLength(0);
+    expect(mode.dragStarts).toHaveLength(0);
+    expect(mode.dragMoves).toHaveLength(0);
+    expect(mode.dragEnds).toHaveLength(0);
+  });
+
+  it('a double click held in a drawing mode does not zoom the map, and in select it does', () => {
+    const router = startRouter();
+    router.setPointerHold(true);
+    const prevented: string[] = [];
+    const dblclick = () =>
+      makeMouseEvent('dblclick', TARGET[0], TARGET[1], {
+        originalEvent: {
+          stopPropagation: () => {},
+          preventDefault: () => prevented.push(mode.modeName),
+        } as unknown as MouseEvent,
+      });
+
+    emit(dblclick());
+    Object.assign(mode, { modeName: 'drawPolygon', writesFeatures: true });
+    emit(dblclick());
+
+    expect(prevented).toEqual(['drawPolygon']);
   });
 
   it('is not held by default', () => {

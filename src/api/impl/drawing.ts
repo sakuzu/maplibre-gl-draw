@@ -288,7 +288,7 @@ function failedWrite<T>(error: unknown, id = createId()): Write<T> {
  * @internal
  */
 export function createModeDrawing(
-  engine: Pick<Engine, 'context' | 'extensions'>,
+  engine: Pick<Engine, 'context' | 'extensions' | 'inputRouter'>,
   resource: DrawingResource,
 ): Drawing {
   const { store } = engine.context;
@@ -363,6 +363,11 @@ export function createModeDrawing(
     cancel() {
       requireDrawingMode();
       resource.cancel();
+    },
+
+    holdPointer(held) {
+      if (typeof held !== 'boolean') throw invalidInput('held must be a boolean');
+      engine.inputRouter.setPointerHold(held);
     },
   };
 }

@@ -515,6 +515,10 @@ for (const kind of KINDS) {
         const drawn = engine.context.shapes.drawnFeaturesInOrder().map((f) => f.geometry.type);
         expect(drawn).toEqual(['LineString', 'LineString', 'Point']);
       }
+      // Drawn by the key it has, a layer of rows too, and not in the document yet
+      const key = engine.sketches.view.creates()[0]?.key as string;
+      expect(draw.rendered.get(key)?.geometry).toEqual({ type: 'Point', coordinates: [5, 5] });
+      expect(draw.features.has('n')).toBe(false);
       expect(draw.sketches.commit(sketch.id)).toBe(true);
       expect(items()).toEqual([a.id, b.id, 'n']);
       expect(writesOf(draw).features.get('n')?.geometry).toEqual({
