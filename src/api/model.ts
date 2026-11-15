@@ -1121,6 +1121,17 @@ export interface LoadOptions {
   zoom?: number;
   /** Whether the Multi geometries of GeoJSON are split into one feature per part */
   flattenMulti?: boolean;
+  /**
+   * What an ID the document already holds does: a new ID (`renew`, when it is left out), or the
+   * load fails with `alreadyExists` (`refuse`); GeoJSON only
+   */
+  duplicateIds?: 'renew' | 'refuse';
+  /**
+   * A group of the document to put the features in: they go into its layer, and a group a
+   * GeoJSON feature names is not kept. It cannot be given with `group` nor with a layer other
+   * than the one of the group; GeoJSON only
+   */
+  groupId?: string;
 }
 
 /** A GeoJSON feature that `document.load` left out, and why. */
@@ -1145,6 +1156,8 @@ export interface LoadResult {
   layerId?: string;
   /** The ID of the group created from `LoadOptions.group`, when something was read */
   groupId?: string;
+  /** How many features were given a new ID because theirs was taken or not taken by the Store */
+  renewed?: number;
 }
 
 // ============================================================================

@@ -271,6 +271,102 @@ for (const [kind, store] of [
       expect(draw.features.count()).toBe(0);
     });
 
+    it('gives a taken ID of an import a new one, or refuses it with duplicateIds refuse', async () => {
+      const a = await draw.write((tx) => tx.features.create({ ...point(1), id: 'a' }));
+      const collection = {
+        type: 'FeatureCollection' as const,
+        features: [
+          { ...point(2), id: 'a' },
+          { ...point(3), id: 'b' },
+          { ...point(4), id: 'b' },
+        ],
+      };
+      const renewed = await draw.write((tx) => tx.import(collection));
+      // The ID the document holds and the one the source holds twice are new
+      expect(renewed).toMatchObject({ count: 3, renewed: 2 });
+      expect(draw.features.get(a.id)?.geometry).toEqual({ type: 'Point', coordinates: [1, 0] });
+      expect(draw.features.count()).toBe(4);
+      const before = changes.length;
+      const refused = draw.write((tx) => tx.import(collection, { duplicateIds: 'refuse' }));
+      await expect(refused).rejects.toMatchObject({ code: 'alreadyExists' });
+      await expect(refused).rejects.toMatchObject({ ids: ['a', 'b'] });
+      expect(draw.features.count()).toBe(4);
+      expect(changes).toHaveLength(before);
+      // An ID the same transaction creates first is held by the document at the commit
+      const later = draw.write(async (tx) => {
+        await tx.features.create({ ...point(5), id: 'c' });
+        await tx.import(
+          { type: 'FeatureCollection', features: [{ ...point(6), id: 'c' }] },
+          { duplicateIds: 'refuse' },
+        );
+      });
+      expect(await codeOf(later)).toBe('alreadyExists');
+      expect(draw.features.has('c')).toBe(false);
+      expect(
+        await codeOf(
+          draw.write((tx) => tx.import(collection, { duplicateIds: 'replace' as never })),
+        ),
+      ).toBe('invalidInput');
+    });
+
+    it('puts the features of an import into a group of the document, in its layer', async () => {
+      const layer = await draw.write((tx) => tx.layers.create({ name: 'other' }));
+      const group = await draw.write(async (tx) => {
+        const [first] = await tx.features.create([{ ...point(1), id: 'g1' }]);
+        await tx.features.place(first as string, { layerId: layer.id });
+        return tx.groups.create({ members: ['g1'] });
+      });
+      const result = await draw.write((tx) =>
+        tx.import(
+          { type: 'FeatureCollection', features: [point(2), point(3)] },
+          { group: group.id },
+        ),
+      );
+      expect(result).toMatchObject({ count: 2, layerId: layer.id, renewed: 0 });
+      const members = draw.features.list(undefined, { limit: 10 }).filter((f) => f.id !== 'g1');
+      expect(members).toHaveLength(2);
+      for (const feature of members) {
+        expect(readFeature(feature)).toMatchObject({ layerId: layer.id, groupId: group.id });
+      }
+      // A group the same transaction creates is taken too
+      const both = await draw.write(async (tx) => {
+        await tx.features.create({ ...point(5), id: 'g2' });
+        const made = await tx.groups.create({ members: ['g2'] });
+        const read = await tx.import(
+          { type: 'FeatureCollection', features: [point(6)] },
+          { group: made.id },
+        );
+        return { made, read };
+      });
+      expect(both.read.count).toBe(1);
+      expect(draw.groups.get(both.made.id)).toBeDefined();
+      expect(
+        draw.features
+          .list(undefined, { limit: 10 })
+          .filter((f) => readFeature(f).groupId === both.made.id),
+      ).toHaveLength(2);
+      expect(
+        await codeOf(
+          draw.write((tx) =>
+            tx.import({ type: 'FeatureCollection', features: [] }, { group: 'none' }),
+          ),
+        ),
+      ).toBe('notFound');
+      expect(
+        await codeOf(
+          draw.write((tx) =>
+            tx.import(
+              { type: 'FeatureCollection', features: [point(4)] },
+              {
+                group: group.id,
+                layer: 'default-layer-x',
+              },
+            ),
+          ),
+        ),
+      ).toBe('invalidInput');
+    });
+
     it('writes the document out with GeoJSON features and opens it again as it was', async () => {
       await draw.write(async (tx) => {
         await tx.features.create(point(1, { name: 'a' }));

@@ -1076,6 +1076,8 @@ export interface LoadResult {
    * on the first problem.
    */
   skipped?: SkippedFeature[];
+  /** How many features were given a new ID because theirs was taken (GeoJSON only) */
+  renewed?: number;
 }
 
 /**

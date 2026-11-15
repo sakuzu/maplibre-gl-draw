@@ -5,6 +5,7 @@
  * Types internal to the Import/Export module
  */
 
+import type { Store } from '../../../store/store.js';
 import type { Feature, FileData, LoadResult } from '../../../store/types.js';
 
 /**
@@ -13,6 +14,12 @@ import type { Feature, FileData, LoadResult } from '../../../store/types.js';
  * does not roll back.
  */
 export interface PreparedLoad {
+  /**
+   * Checks what was read against a document (the one a transaction reads, its writes over it),
+   * before anything is written: it throws what the load fails with (an ID the document holds,
+   * refused; a group of the document that is not there)
+   */
+  check?(document: Pick<Store, 'getFeature' | 'getGroup'>): void;
   /** Writes what was read and returns what was loaded */
   write(): LoadResult;
 }
@@ -63,4 +70,8 @@ export interface GeoJSONImportOptions {
   oneGroup?: boolean;
   /** IDs the features must not take, such as those of a layer and a group the load creates */
   reservedIds?: ReadonlySet<string>;
+  /** Whether an ID of the source the document holds fails the load (`alreadyExists`) */
+  refuseDuplicates?: boolean;
+  /** A group of the document every feature goes into, in its layer */
+  groupId?: string;
 }

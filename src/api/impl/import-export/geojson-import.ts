@@ -15,6 +15,7 @@ import { deleteFeaturesAndGroups } from '../../../store/feature-stream.js';
 import type { Store } from '../../../store/store.js';
 import type { FileData, LoadResult, SkippedFeature } from '../../../store/types.js';
 import { DrawError, type DrawErrorCode } from '../../errors.js';
+import { notFound } from '../shared.js';
 import type { EmbeddedFileProblem } from './embedded-file.js';
 import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
 import type { ConvertedFeatureResult, GeoJSONImportOptions, PreparedLoad } from './types.js';
@@ -24,6 +25,8 @@ export interface GeoJSONLoadResult extends LoadResult {
   format: 'geojson';
   /** The features of the source that were not imported, in source order */
   skipped: SkippedFeature[];
+  /** How many features were given a new ID */
+  renewed: number;
 }
 
 /** How a GeoJSON Feature is converted */
@@ -209,6 +212,35 @@ export async function prepareGeoJSON(
   }
 
   const replace = options?.replace === true;
+  const intoGroup = options?.groupId;
+  // What fails the load, against the document a transaction reads before it is written
+  const check: NonNullable<PreparedLoad['check']> = (document) => {
+    if (intoGroup !== undefined && !document.getGroup(intoGroup)) {
+      throw notFound('group', intoGroup);
+    }
+    if (options?.refuseDuplicates !== true || replace) return;
+    const held = new Set<string>();
+    for (const { sourceId } of results) {
+      if (sourceId === undefined) continue;
+      if (
+        document.getFeature(sourceId) !== undefined ||
+        document.getGroup(sourceId) !== undefined
+      ) {
+        held.add(sourceId);
+      }
+    }
+    if (held.size > 0) {
+      const ids = [...held];
+      throw new DrawError(
+        'alreadyExists',
+        `The document already holds the IDs ${ids
+          .slice(0, 10)
+          .map((id) => JSON.stringify(id))
+          .join(', ')}`,
+        { ids },
+      );
+    }
+  };
   // 2. The writes, in the transaction of the caller, the deletion of a replace included: the
   //    whole import is one notification, one step for a subscriber that records changes
   const write = (): LoadResult => {
@@ -246,9 +278,12 @@ export async function prepareGeoJSON(
     // The new ID of each ID of the file that was taken (the first feature of an ID names it)
     const renamed: Record<string, string> = {};
     const seenIds = new Set<string>();
+    const group = intoGroup !== undefined ? store.getGroup(intoGroup) : undefined;
+    let renewed = 0;
     for (const { feature } of results) {
       const before = feature.id;
       feature.id = resolveId(before);
+      if (feature.id !== before) renewed++;
       if (!seenIds.has(before)) {
         seenIds.add(before);
         if (feature.id !== before) setOwnProperty(renamed, before, feature.id);
@@ -263,8 +298,15 @@ export async function prepareGeoJSON(
       } else if (forcedLayerId !== undefined || oneGroup || !store.getLayer(feature.layerId)) {
         feature.layerId = currentLayerId;
       }
-      // The features of a load that makes a group of them leave the group they name
-      if (oneGroup) delete feature.groupId;
+      // The features of a load that makes a group of them leave the group they name, and those
+      // of a load into a group of the document go into it, in its layer (a group gone by the
+      // commit is dropped, as a group a feature names that the document does not have)
+      if (oneGroup || intoGroup !== undefined) delete feature.groupId;
+      if (group) {
+        feature.layerId = group.layerId;
+        feature.groupId = group.id;
+        continue;
+      }
       if (feature.groupId !== undefined) {
         const group = replace ? undefined : store.getGroup(feature.groupId);
         if (!group || group.layerId !== feature.layerId) delete feature.groupId;
@@ -303,8 +345,9 @@ export async function prepareGeoJSON(
       featureIds,
       replaced: replace,
       skipped,
+      renewed,
     };
     return loaded;
   };
-  return { write };
+  return { check, write };
 }

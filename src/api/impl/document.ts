@@ -229,6 +229,19 @@ export function createDocument(
     if (options.layer !== undefined && options.layerId !== undefined) {
       throw invalidInput('layer and layerId cannot be given together');
     }
+    const duplicateIds = options.duplicateIds;
+    if (duplicateIds !== undefined && duplicateIds !== 'renew' && duplicateIds !== 'refuse') {
+      throw invalidInput("duplicateIds must be 'renew' or 'refuse'");
+    }
+    // A group of the document (whether it is there is checked when the load is written, against
+    // the document as it is then): its layer is the layer of the features
+    const intoGroup = options.groupId;
+    if (intoGroup !== undefined) {
+      if (typeof intoGroup !== 'string') throw invalidInput('The group must be an ID or a group');
+      if (options.group !== undefined || options.layer !== undefined) {
+        throw invalidInput('The features of a group of the document go into its layer');
+      }
+    }
     // A layer an earlier item of the same write creates is known: it is written before this one
     if (
       options.layerId !== undefined &&
@@ -282,6 +295,9 @@ export function createDocument(
         layerId !== undefined && store.getLayer(layerId) ? layerId : deps.getActiveLayerId(),
     };
 
+    if (options.groupId !== undefined && (read.kind === 'image' || isNativeFormat(read.data))) {
+      throw invalidInput('Only GeoJSON goes into a group of the document');
+    }
     if (read.kind === 'image') {
       if (!options.coordinate) throw invalidInput('An image needs the coordinate option');
       const replace = mode === 'replace';
@@ -330,6 +346,8 @@ export function createDocument(
       replace: mode === 'replace',
       oneGroup: extra.grouped,
       reservedIds: extra.reservedIds,
+      refuseDuplicates: options.duplicateIds === 'refuse',
+      ...(options.groupId !== undefined && { groupId: options.groupId }),
     });
   }
 }

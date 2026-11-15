@@ -2173,15 +2173,27 @@ class TransactionImpl implements Transaction {
         throw invalidInput('The options must be an object');
       }
       const { layer, group, duplicateIds } = options ?? {};
-      if (duplicateIds !== undefined && duplicateIds !== 'renew') {
-        throw invalidInput("duplicateIds takes 'renew': an ID taken is given a new one");
+      if (duplicateIds !== undefined && duplicateIds !== 'renew' && duplicateIds !== 'refuse') {
+        throw invalidInput("duplicateIds must be 'renew' or 'refuse'");
+      }
+      // A group of the document, as the transaction reads it: the features go into its layer
+      if (typeof group === 'string') {
+        const target = this.#overlay.view.getGroup(group);
+        if (!target) throw notFound('group', group);
+        if (layer !== undefined && layer !== target.layerId) {
+          throw invalidInput(`The features of the group ${group} go into its layer`);
+        }
       }
       const loader = this.#writers.document;
       const loadOptions: LoadOptions = {
         mode: 'merge',
         ...(typeof layer === 'string' ? { layerId: layer } : {}),
         ...(layer !== undefined && typeof layer !== 'string' ? { layer: layer as LayerInput } : {}),
-        ...(group !== undefined ? { group: group as Omit<GroupInput, 'members'> } : {}),
+        ...(typeof group === 'string' ? { groupId: group } : {}),
+        ...(group !== undefined && typeof group !== 'string'
+          ? { group: group as Omit<GroupInput, 'members'> }
+          : {}),
+        ...(duplicateIds !== undefined ? { duplicateIds } : {}),
       };
       const prepared: PreparedItem | null = await loader.prepare(
         source as never,
@@ -2191,6 +2203,8 @@ class TransactionImpl implements Transaction {
       );
       if (this.signal.aborted) throw abortedError(this.signal);
       if (!prepared) throw notEditable();
+      // Against the document the transaction reads: an ID it holds, refused, fails the import
+      prepared.load.check?.(this.#overlay.view);
       // The layer and the group it creates are taken from now on in the transaction: a write
       // after it that gives one of their IDs fails as it would once they are written
       const overlay = this.#overlay;
@@ -2205,7 +2219,12 @@ class TransactionImpl implements Transaction {
       // What it read is known once it is written, at the commit: the result fills in then
       const result = {
         count: 0,
-        layerId: prepared.layer?.layer.id ?? loadOptions.layerId ?? '',
+        layerId:
+          prepared.layer?.layer.id ??
+          loadOptions.layerId ??
+          (typeof group === 'string' ? this.#overlay.view.getGroup(group)?.layerId : undefined) ??
+          '',
+        renewed: 0,
         skipped: [] as ImportResult['skipped'],
       };
       keep(() => {
@@ -2216,6 +2235,7 @@ class TransactionImpl implements Transaction {
         const [written] = this.#writers.document.writeAll([prepared]) ?? [];
         if (!written) return false;
         result.count = written.featureIds.length;
+        result.renewed = written.renewed ?? 0;
         result.layerId =
           written.layerId ??
           this.#store.getFeature(written.featureIds[0] ?? '')?.layerId ??

@@ -321,15 +321,27 @@ export interface OpenResult {
 export interface ImportOptions {
   /** The layer to put the features in: its ID, or a new layer made in the same commit */
   readonly layer?: string | LayerInput;
-  /** A new group, made in the same commit, to put the features in */
-  readonly group?: Omit<GroupInput, 'members'>;
-  /** What an ID the document already holds becomes: a new ID. Nothing is written over */
-  readonly duplicateIds?: 'renew';
+  /**
+   * The group to put the features in: the ID of a group of the document (the features go into its
+   * layer, at its front), or a new group made in the same commit
+   */
+  readonly group?: string | Omit<GroupInput, 'members'>;
+  /**
+   * What an ID the document already holds does: `renew` gives the feature a new ID (the default),
+   * `refuse` fails the import with `alreadyExists`, naming the IDs, and nothing of it is written.
+   * Nothing is written over
+   */
+  readonly duplicateIds?: 'renew' | 'refuse';
 }
 
 /** What `tx.import` read */
 export interface ImportResult {
   readonly count: number;
   readonly layerId: string;
+  /**
+   * How many features were given a new ID: their ID was taken (by the document, by an earlier
+   * feature of the source, or by what the transaction creates) or is not one the document takes
+   */
+  readonly renewed: number;
   readonly skipped: readonly SkippedFeature[];
 }

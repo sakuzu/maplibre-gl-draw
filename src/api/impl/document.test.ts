@@ -553,7 +553,8 @@ describe('document.loadMany store contents', () => {
            "index": 4,
            "reason": "the Point has malformed coordinates"
           }
-         ]
+         ],
+         "renewed": 1
         },
         {
          "format": "geojson",
@@ -573,6 +574,7 @@ describe('document.loadMany store contents', () => {
            "reason": "the Point has malformed coordinates"
           }
          ],
+         "renewed": 2,
          "layerId": "#13"
         },
         {
@@ -592,6 +594,7 @@ describe('document.loadMany store contents', () => {
            "reason": "the Point has malformed coordinates"
           }
          ],
+         "renewed": 2,
          "groupId": "#20"
         }
        ],
