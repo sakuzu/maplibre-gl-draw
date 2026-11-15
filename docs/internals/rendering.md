@@ -534,7 +534,8 @@ attributes, so differences in style do not split the batch.
   decided by `toInstancedPointShape`)
 - The style is folded into `PointInstanceDataFull` (coordinates, fill
   color, radius, stroke color, stroke width), with opacity multiplied into
-  the alpha of the colors
+  the alpha of the colors, and the rotation of the feature its marker turns
+  by (none for a marker upright on screen)
 - A point whose stroke opacity is 0 is treated as having stroke width 0
 
 ### Batching lines
@@ -845,6 +846,22 @@ which is feature order.
 - A point below a diameter of one pixel is drawn at that diameter and
   fainter (`pointInkFactor`; see
   [Sizes below one pixel](#sizes-below-one-pixel))
+- A marker with a rotation (`maplibre-gl-draw:rotation`) keeps its
+  direction on the map. The rotation is one whole number in every way the
+  points are drawn (`pointAngleSteps`: 0 for none, else 1 plus the steps of
+  0.01 degree within a turn). An instance folds it into its shape code
+  (`pointMarkerCode`: the code plus 8 times the steps, below 2^24, so the
+  float holds it exactly and the instance keeps its size), and a row drawn in
+  one draw holds it in the fourth float of the texel of its style. The
+  vertex shader turns the offset the fragment reads by the rotation plus the
+  bearing of the map, and while a drag turns the row, by the angle of its
+  moving set (`rowStateRotation`). The billboard is not turned. The circle,
+  the triangle and the star are inscribed in the circle of the outer radius,
+  which the billboard covers at any angle; the square, half its side the
+  outer radius, reaches its corners at √2 times it, so the billboard of a
+  turned marker is widened by `pointTurnReach` (√2 for the square, 1 for the
+  others). A marker without a rotation stays upright on screen, with the
+  billboard it had
 
 An instance is 12 floats: relative coordinates 2, fill color 4, stroke
 color 4, radius 1, stroke width 1. The order is exactly the input order;

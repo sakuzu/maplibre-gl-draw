@@ -9,6 +9,7 @@
  */
 
 import { generateCirclePolygon } from '../../shared/math/index.js';
+import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
@@ -140,15 +141,21 @@ export function collectPoints(
 
   for (const feature of features) {
     const style = styles.getPointStyle(feature, layer);
-    // The shape is a value of the instance (a run holds points of every instanced shape)
+    // The shape is a value of the instance (a run holds points of every instanced shape), and so
+    // is the rotation its markers turn with the map by (upright on screen without one)
     const shape = toInstancedPointShape(style.shape) ?? undefined;
+    const rotation = feature.properties?.[DRAW_PROPERTY_KEYS.rotation];
 
     if (feature.type === 'MultiPoint') {
       for (const coord of coordinatesOf(feature) as Coordinate[]) {
-        points.push({ ...toPointInstanceData(coord, style), shape });
+        points.push({ ...toPointInstanceData(coord, style), shape, rotation });
       }
     } else {
-      points.push({ ...toPointInstanceData(coordinatesOf(feature) as Coordinate, style), shape });
+      points.push({
+        ...toPointInstanceData(coordinatesOf(feature) as Coordinate, style),
+        shape,
+        rotation,
+      });
     }
   }
 

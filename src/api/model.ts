@@ -199,7 +199,11 @@ export interface DrawProperties {
   readonly 'maplibre-gl-draw:locked'?: true;
   /** The reference zoom: the zoom the feature was drawn or created at */
   readonly 'maplibre-gl-draw:createdZoom'?: number;
-  /** The rotation, in degrees */
+  /**
+   * The rotation, in degrees counterclockwise seen from above (0: the north up). The marker of a
+   * point with one keeps that direction on the map and turns with it; the marker of a point
+   * without one stays upright on screen
+   */
   readonly 'maplibre-gl-draw:rotation'?: number;
   /** The scale factor */
   readonly 'maplibre-gl-draw:scale'?: number;

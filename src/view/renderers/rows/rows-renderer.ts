@@ -624,12 +624,15 @@ export class RowsRenderer {
    * @param row The row, in the chunk
    * @param style The number of its resolved style (counted by the caller for the chunk)
    * @param createdZoom Its created zoom (undefined for a width fixed on screen)
+   * @param angleSteps The rotation of the markers of a point row (`pointAngleSteps`; 0 for markers
+   *   upright on screen and for a row that is not a point)
    */
   patchRowStyle(
     chunk: RowsChunk,
     row: number,
     style: number,
     createdZoom: number | undefined,
+    angleSteps = 0,
   ): void {
     if (chunk.disposed) return;
     const data = chunk.data;
@@ -637,7 +640,7 @@ export class RowsRenderer {
     scratch[0] = style;
     scratch[1] = createdZoom ?? 0;
     scratch[2] = createdZoom === undefined ? 0 : 1;
-    scratch[3] = 0;
+    scratch[3] = angleSteps;
     this.writeTexel(chunk, 'rowStyles', row, scratch);
     const old = data.rowStyle[row];
     if (old >= 0) data.palette.release(old);

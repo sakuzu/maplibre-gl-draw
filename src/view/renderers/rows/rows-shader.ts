@@ -59,7 +59,7 @@ import {
 import { TERRAIN_OCCLUSION_GLSL } from '../../terrain/occlusion.js';
 import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
-import { POINT_SDF_GLSL } from '../point/point-sdf.js';
+import { POINT_SDF_GLSL, POINT_TURN_GLSL } from '../point/point-sdf.js';
 import { ROW_HIDDEN_POSITION_GLSL, TABLE_ROWS_GLSL } from '../row-state.js';
 import {
   ROW_SPRITE_SCALE_MAX_STOPS,
@@ -172,7 +172,7 @@ uniform sampler2D u_heights;
 // 1 when the points and the sprites stand on the terrain (their elevation from u_heights)
 uniform float u_symbol_terrain;
 // The style of each row of the chunk: x the number of its style, y its created zoom, z 1 when it
-// has one
+// has one, w the steps of the rotation of the markers of a point row (0: upright on screen)
 uniform sampler2D u_row_styles;
 uniform int u_row_style_width;
 // The first row of the chunk in its group
@@ -344,7 +344,9 @@ vec4 dashNeighbor(vec2 from, vec2 to, float lengthCss, vec2 dir, float corner, v
     return vec4(turn, (start - corner) / perPx, (min(start + dash, last) - corner) / perPx);
 }
 
-void drawPoint(int style) {
+${POINT_TURN_GLSL}
+// A point; \`angleSteps\` is the rotation of its marker (pointAngleSteps), 0 for an upright one
+void drawPoint(int style, int angleSteps) {
     vec2 offset = rowsCoord(a_head.x);
     emitShadeOffset(offset);
     float elevation = rowsAnchorElevation(a_head.x, offset);
@@ -363,12 +365,21 @@ void drawPoint(int style) {
         radius *= grow;
         outer = ${glslFloat(POINT_MIN_OUTER_PX)};
     }
-    vec2 offsetPx = quadCorner() * (outer + ${glslFloat(POINT_AA_PADDING_PX)});
+    // The billboard is widened for a turned marker as far as its shape reaches
+    float extent = outer + ${glslFloat(POINT_AA_PADDING_PX)};
+    if (angleSteps > 0) extent *= pointTurnReach(size.z);
+    vec2 offsetPx = quadCorner() * extent;
     gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
     v_color = rowsStyle(style, 0);
     v_color2 = rowsStyle(style, 1);
     v_params = vec4(radius, outer, ink * rowsGhost(offset, elevation), size.z);
     v_geom = vec4(offsetPx, 0.0, 0.0);
+    // A marker with a rotation keeps its direction on the map: turned by it and the bearing (and
+    // while its row is turned by a drag, by the angle written once let go)
+    if (angleSteps > 0) {
+        float degrees = pointAngleDegrees(angleSteps) + u_bearing + rowStateRotation(g_row_state);
+        v_geom.xy = pointTurnOffset(offsetPx, degrees);
+    }
 }
 
 // The factor of the size of a sprite at a ratio of distances: linear between two stops, that of
@@ -1005,7 +1016,7 @@ void main() {
     }
 #endif
     if (kind == ${ROWS_KIND.point}) {
-        drawPoint(style);
+        drawPoint(style, int(rowStyle.w + 0.5));
     } else if (kind == ${ROWS_KIND.segment} || kind == ${ROWS_KIND.dashedOutline}) {
         drawSegment(kind, style, createdZoom, hasCreatedZoom);
     } else if (kind == ${ROWS_KIND.outline}) {

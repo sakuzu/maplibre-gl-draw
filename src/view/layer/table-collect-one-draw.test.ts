@@ -193,6 +193,47 @@ describe('the packing of the points drawn in one draw', () => {
   });
 });
 
+describe('the rotation of the markers of the point rows', () => {
+  const ROTATION = drawPropertyKey('rotation');
+  const features = [
+    feature('upright', 'Point', [139.7, 35.6], { style: { pointShape: 'triangle' } }),
+    feature('zero', 'Point', [139.71, 35.61], {
+      style: { pointShape: 'triangle' },
+      properties: { [ROTATION]: 0 },
+    }),
+    feature(
+      'turned',
+      'MultiPoint',
+      [
+        [139.72, 35.62],
+        [139.73, 35.63],
+      ],
+      { style: { pointShape: 'star' }, properties: { [ROTATION]: -30 } },
+    ),
+    feature('g', 'Polygon', [ring], { properties: { [ROTATION]: 45 } }),
+  ];
+
+  it('holds the steps of the rotation of a point row in the free float of the texel of its style', () => {
+    const { group, context, palette } = setup(features);
+    const data = pack(group, context, palette);
+    // 0 for a row without one, 1 + the steps of 0.01 degree within a turn otherwise; a row that is
+    // not a point has none
+    expect([0, 1, 2, 3].map((row) => data.rowStyles[row * 4 + 3])).toEqual([0, 1, 33_001, 0]);
+  });
+
+  it('folds the same steps into the code of the marker of the rows drawn by kind', () => {
+    const { group, base } = setup(features);
+    const codes: number[] = [];
+    for (let row = 0; row < 3; row++) {
+      const target = new Float32Array(2 * ROW_POINT_STRIDE);
+      const written = writePointRow(group, row, target, 0, ORIGIN, base);
+      for (let i = 0; i < written; i++) codes.push(target[i * ROW_POINT_STRIDE + 13]);
+    }
+    // triangle 2, star 3, plus 8 times the steps of the texel of the style of the row
+    expect(codes).toEqual([2, 2 + 8 * 1, 3 + 8 * 33_001, 3 + 8 * 33_001]);
+  });
+});
+
 describe('the packing of the lines drawn in one draw', () => {
   it('gives the segment branch the values the instances of the lines carry', () => {
     const features = [

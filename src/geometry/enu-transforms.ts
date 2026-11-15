@@ -409,6 +409,22 @@ function moveGeometry(motion: Motion, geometry: Geometry): Geometry {
 }
 
 /**
+ * The rotation an edit that turns a feature turns from, read from the value of the key of its
+ * rotation as the feature holds it: the value when it is a finite number; 0 when it is no number
+ * (no value, null, a string), which the edit writes as the angle it turns by; none for a number
+ * that is not finite (NaN, an infinity), which the edit leaves as it is
+ *
+ * What draws the markers of the points reads the key the same way (`pointAngleSteps`), so a marker
+ * is drawn at the same angle while a drag turns it and once the drag is written.
+ *
+ * @internal
+ */
+export function rotationTurnedFrom(value: unknown): number | undefined {
+  if (typeof value !== 'number') return 0;
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/**
  * An angle within [0, 360)
  *
  * @internal
@@ -447,7 +463,8 @@ export function applyEnuEdit<V extends EnuValues>(edit: EnuEdit, values: V): V {
   const turn = enuEditTurn(edit);
   if (edit.kind === 'rotate') {
     if ('angleDegrees' in values) {
-      out.angleDegrees = withinTurn((values.angleDegrees ?? 0) + turn.angleDegrees);
+      const from = rotationTurnedFrom(values.angleDegrees);
+      if (from !== undefined) out.angleDegrees = withinTurn(from + turn.angleDegrees);
     }
     if ('bearingDegrees' in values && typeof values.bearingDegrees === 'number') {
       out.bearingDegrees = withinTurn(values.bearingDegrees - turn.angleDegrees);

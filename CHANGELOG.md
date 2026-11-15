@@ -639,6 +639,11 @@ writing it. Its changes are listed after those of 3.0.0.
   other: the resize and the rotation no longer write
   `maplibre-gl-draw:rotation` and `maplibre-gl-draw:scale` of its
   features because they have them.
+- The marker of a point with `maplibre-gl-draw:rotation` keeps that
+  direction on the map: it is turned by the rotation, counterclockwise seen
+  from above, turns with the map, and turns while the rotation of the
+  selection turns it. The marker of a point without one stays upright on
+  screen, as every marker did.
 
 ### Removed in 3.0.0
 
