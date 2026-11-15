@@ -599,6 +599,52 @@ describe('the document closed', () => {
       expect(d.backend.refusals.value.map((one) => one.id)).not.toContain(refusal.id);
     });
 
+    it(`sends on what the outbox kept when a commit was made before the document was opened (${kind})`, async () => {
+      const outbox = memoryOutbox();
+      const s = seeded({ outbox });
+      const before = make(makeStore, s.backend);
+      await before.open();
+      s.hold();
+      await before
+        .write((tx) => tx.features.update('f1', { properties: { n: 11 } }))
+        .save({ until: 'stored' });
+      expect(await before.close({ unsent: 'keep' })).toMatchObject({ unsent: 1, kept: true });
+      before.destroy();
+      s.release();
+      await tasks();
+      // Another instance on the same device writes before it is opened, and opens
+      s.hold();
+      const d = make(makeStore, s.backend);
+      const early = d.write(async (tx) => {
+        await tx.layers.create({ id: 'e', name: 'e' });
+        await tx.features.create(point('e1', 'e', { n: 5 }));
+      });
+      await early;
+      await tasks();
+      await d.open();
+      expect([n(d, 'f1'), n(d, 'e1')]).toEqual([11, 5]);
+      s.release();
+      await settled(d);
+      expect([
+        s.document.features.get('f1')?.properties.n,
+        s.document.features.get('e1')?.properties.n,
+      ]).toEqual([11, 5]);
+      expect(writtenOf(d.document.toJSON())).toEqual(
+        storedOf(readStoredDocument(s.document).shown),
+      );
+      await tasks();
+      expect(outbox.batches.size).toBe(0);
+      // Opened again while it holds a commit the outbox keeps too: it is sent once
+      s.hold();
+      const again = d.write((tx) => tx.features.update('f3', { properties: { n: 7 } }));
+      await again.save({ until: 'stored' });
+      await d.open();
+      s.release();
+      await settled(d);
+      expect(s.sent.filter((batch) => batch.commit === again.id)).toHaveLength(1);
+      expect(n(d, 'f3')).toBe(7);
+    });
+
     it(`waits for the commits not sent, or drops them (${kind})`, async () => {
       const s = seeded();
       const d = make(makeStore, s.backend);

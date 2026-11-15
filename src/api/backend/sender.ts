@@ -439,15 +439,22 @@ export class Sender {
    * Takes what the outbox kept (once the document is opened): the commits not sent, written again
    * here, not sent again by this write (`write` writes their operations, in a transaction told
    * with the ID of the commit), and the refusals with what their commits did. A commit whose parts
-   * are not all there was never stored: it is dropped
+   * are not all there was never stored: it is dropped. What this sender holds already (a commit
+   * made before the document was opened, or opened again) is left out; the commits of the outbox
+   * come after those it holds, as they are sent
    */
   restore(
     batches: readonly ValueBatch[],
     refusals: readonly Refusal[],
     write: (commit: string, label: string | undefined, write: () => void) => void,
   ): void {
+    const held = new Set<string>();
+    for (const entry of this.#entries) held.add(entry.commit);
+    for (const one of this.#refusals) held.add(one.refusal.commit);
+    const heldRefusals = new Set(this.#refusals.map((one) => one.refusal.id));
     const byCommit = new Map<string, ValueBatch[]>();
     for (const batch of batches) {
+      if (held.has(batch.commit)) continue;
       let parts = byCommit.get(batch.commit);
       if (!parts) {
         parts = [];
@@ -455,7 +462,11 @@ export class Sender {
       }
       parts.push(batch);
     }
-    const refused = new Map(refusals.map((refusal) => [refusal.commit, refusal]));
+    const refused = new Map(
+      refusals
+        .filter((refusal) => !held.has(refusal.commit) && !heldRefusals.has(refusal.id))
+        .map((refusal) => [refusal.commit, refusal]),
+    );
     const incomplete: string[] = [];
     for (const [commit, parts] of byCommit) {
       const ordered = [...parts].sort((a, b) => a.part.index - b.part.index);

@@ -272,12 +272,10 @@ export class DocumentSession {
       const source = await backend.load(task);
       if (signal?.aborted || this.#removed) throw aborted();
       const outbox = backend.outbox;
-      // Read once the document is written: a sender that holds nothing yet takes it
-      const fresh = sender.unsent === 0 && sender.refusals.value.length === 0;
-      const kept =
-        outbox && fresh
-          ? { batches: await outbox.list(task), refusals: await outbox.refusals(task) }
-          : null;
+      // Taken once the document is written: what the sender holds already is left out of it
+      const kept = outbox
+        ? { batches: await outbox.list(task), refusals: await outbox.refusals(task) }
+        : null;
       if (signal?.aborted || this.#removed) throw aborted();
       this.#disconnectNow();
       const result = await this.#replaceWith(sender, source, signal);
