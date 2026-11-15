@@ -488,6 +488,9 @@ export class DocumentSession {
       store.writeInSteps(
         'remote',
         (deadline) => {
+          // The notification goes out in a task of its own after a step that wrote: its readers (the
+          // change, the names made) take long for many features
+          if (at >= operations.length) return true;
           while (at < operations.length) {
             let end = at;
             let weight = 0;
@@ -506,7 +509,8 @@ export class DocumentSession {
             if (performance.now() >= deadline) break;
           }
           if (receipt) receipt.inverse = [...inverses].reverse().flat();
-          return at >= operations.length;
+          // A step given no time (another write finishes it) ends now
+          return at >= operations.length && deadline === Number.POSITIVE_INFINITY;
         },
         {
           budgetMs: STEP_MS,
