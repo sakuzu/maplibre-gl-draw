@@ -20,11 +20,15 @@
  * Every instance reads such a document by the same rules, and so does what reads it on a server:
  *
  * - A member of a group is in the layer of its group: its `maplibre-gl-draw:layerId` is not read
- * - A feature whose group is not there is in its own layer (`maplibre-gl-draw:layerId`), at its own
- *   key, and back in the group once the group is there again
- * - A feature or a group whose layer is not there is not shown. It is shown again with the layer,
- *   what was written to it meanwhile included, once the layer is there again
+ * - A layer holds what is in it: a feature or a group whose layer is not there is not live, and is
+ *   not shown. It is shown again with the layer, what was written to it meanwhile included, once
+ *   the layer is there again
+ * - A group does not: a feature whose group is not there is live in its own layer
+ *   (`maplibre-gl-draw:layerId`), shown there at its own key, and back in the group once the group
+ *   is there again
  * - A group with no member is not shown, and is once a member comes
+ * - A move of what is not live, or under a parent that is not live, is skipped
+ *   (`applyOperations`): what is not live comes back where it was
  *
  * The records are kept as they are: the document is not written to fit the rules.
  *
