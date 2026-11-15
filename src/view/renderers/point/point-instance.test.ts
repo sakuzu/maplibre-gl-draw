@@ -303,6 +303,44 @@ describe('single-pass rendering of points', () => {
     expect(mixed.map((_, i) => data[i * STRIDE + 13])).toEqual([3, 1, 2]);
   });
 
+  it('folds the rotation of a marker into the code of its shape, the code alone without one', () => {
+    const mock = createRecordingGL();
+    const renderer = createRenderer(mock);
+    const turned = [
+      { ...POINTS[0], shape: 'triangle' as const, rotation: 90 },
+      { ...POINTS[1], shape: 'star' as const },
+      { ...POINTS[2], rotation: -0.004 },
+    ];
+
+    mock.reset();
+    renderer.drawAll(turned, 'square');
+
+    const data = instanceUpload(mock);
+    // The code plus 8 times (1 + the rotation in steps of 0.01 degree within a turn)
+    expect(turned.map((_, i) => data[i * STRIDE + 13])).toEqual([2 + 8 * 9_001, 3, 1 + 8 * 1]);
+    // The instance keeps its size
+    expect(data).toHaveLength(turned.length * STRIDE);
+  });
+
+  it('writes the bearing of the map the markers with a rotation turn by, once per frame', () => {
+    const mock = createRecordingGL();
+    const renderer = new PointInstanceRenderer(
+      { getBearing: () => 30 } as unknown as MapLibreMap,
+      mock.gl,
+      new GpuLedger(),
+      1,
+    );
+    renderer.ensureShader(SHADER_DATA);
+    renderer.setProjectionData(createProjectionData());
+
+    mock.reset();
+    renderer.drawAll(POINTS, 'circle');
+    renderer.drawAll(POINTS, 'circle');
+
+    const bearings = mock.calls('uniform1f').filter((call) => call.args[0] === 'u_bearing');
+    expect(bearings.map((call) => call.args[1])).toEqual([30]);
+  });
+
   it('uses a single shader that receives both the fill and the stroke color as attributes', () => {
     const mock = createRecordingGL();
     createRenderer(mock);

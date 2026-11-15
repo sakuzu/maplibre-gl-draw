@@ -21,7 +21,8 @@
  * - fill color (vec4) / stroke color (vec4): RGBA
  * - radius (float) / stroke width (float): device pixels
  * - shape (float): the code of the shape (`POINT_SHAPE_CODE`), so points of every shape are
- *   drawn in one draw call and in their order
+ *   drawn in one draw call and in their order, with the rotation of the marker folded into it
+ *   (`pointMarkerCode`): a marker with a rotation turns with the map, one without stays upright
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
@@ -54,7 +55,15 @@ import {
   drawBillboardsWithoutDepth,
   restoreDepthAfterBillboards,
 } from './billboard-depth.js';
-import { POINT_SDF_GLSL, POINT_SHAPE_CODE, type SdfPointShape } from './point-sdf.js';
+import {
+  POINT_MARKER_GLSL,
+  POINT_SDF_GLSL,
+  POINT_SHAPE_CODE,
+  POINT_TURN_GLSL,
+  pointAngleSteps,
+  pointMarkerCode,
+  type SdfPointShape,
+} from './point-sdf.js';
 
 /** Color type */
 export type Color = [number, number, number, number];
@@ -100,6 +109,12 @@ export interface PointInstanceDataFull {
    * their order.
    */
   shape?: PointShape;
+  /**
+   * The rotation of the marker in degrees counterclockwise seen from above (the value of
+   * `maplibre-gl-draw:rotation`): the marker keeps this direction on the map and turns with it.
+   * Omitted, the marker stays upright on screen
+   */
+  rotation?: number;
   /**
    * Opacity factor used when the point is occluded by the terrain (omitted or 1 is normal
    * display)
@@ -152,7 +167,7 @@ export const POINT_MIN_OUTER_PX = 0.5;
 const INSTANCE_STRIDE = 14;
 const INSTANCE_BYTES_PLAIN = INSTANCE_STRIDE * 4;
 
-/** The float of the instance that holds the code of the shape */
+/** The float of the instance that holds the code of the marker (its shape and its rotation) */
 const INSTANCE_SHAPE = 13;
 
 /**
@@ -347,7 +362,10 @@ export function buildPointInstanceData(
     // disabled it returns 0 and the result is identical to before.
     data[offset + 12] =
       p.elevationMeters ?? (terrain ? anchorElevationMeters(terrain, p.coord[0], p.coord[1]) : 0);
-    data[offset + INSTANCE_SHAPE] = p.shape ? pointShapeCode(p.shape) : defaultCode;
+    data[offset + INSTANCE_SHAPE] = pointMarkerCode(
+      p.shape ? pointShapeCode(p.shape) : defaultCode,
+      pointAngleSteps(p.rotation),
+    );
   }
 
   return data;
@@ -389,7 +407,8 @@ export interface PackedPointInstances {
  * @param style The packed style ({@link PACKED_POINT_STYLE_STRIDE} values from `styleAt`)
  * @param dpr The pixel ratio the sizes are converted with
  * @param elevation The elevation of the anchor in meters
- * @param shapeCode The code of the shape ({@link pointShapeCode})
+ * @param shapeCode The code of the marker: the code of its shape ({@link pointShapeCode}), with its
+ *   rotation folded in for a marker that has one (`pointMarkerCode`)
  * @internal
  */
 export function writePointInstance(
@@ -481,6 +500,8 @@ interface PointProjectionLocs {
   sizeScale: WebGLUniformLocation | null;
   /** Opacity factor at draw time (fragment) */
   opacity: WebGLUniformLocation | null;
+  /** The bearing of the map (vertex), which turns the markers with a rotation */
+  bearing: WebGLUniformLocation | null;
 }
 
 /**
@@ -499,6 +520,8 @@ interface PointUniformMemo {
   /** Canvas dimensions that u_pixel_to_clip was based on */
   canvasWidth: number;
   canvasHeight: number;
+  /** Frame number in which u_bearing was last written (-1 if never written) */
+  bearingFrame: number;
   /** Values written to the draw-time factors */
   sizeScale: number;
   opacity: number;
@@ -528,6 +551,7 @@ function createPointMemo(): PointUniformMemo {
     pixelToClipFrame: -1,
     canvasWidth: Number.NaN,
     canvasHeight: Number.NaN,
+    bearingFrame: -1,
     sizeScale: Number.NaN,
     opacity: Number.NaN,
   };
@@ -590,15 +614,22 @@ export class PointInstanceRenderer {
    * draw (the projection keeps its values, not the array)
    */
   private readonly originShift: [number, number] = [0, 0];
+  /** The map, whose bearing turns the markers with a rotation */
+  private readonly map: MapLibreMap;
+  /** The frame the bearing was read in (-1 before the first read) */
+  private bearingFrame = -1;
+  /** The bearing of the map, read once per frame */
+  private bearing = 0;
 
   constructor(
-    _map: MapLibreMap,
+    map: MapLibreMap,
     gl: WebGL2RenderingContext,
     ledger: GpuLedger,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
   ) {
     this.gl = gl;
+    this.map = map;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
     this.ledger = ledger;
@@ -671,13 +702,14 @@ layout(location = 3) in vec4 a_instance_stroke_color;   // stroke color
 layout(location = 4) in float a_instance_size;          // fill radius (pixels)
 layout(location = 5) in float a_instance_stroke_width;  // stroke width (pixels)
 layout(location = 6) in float a_instance_elevation_m;   // anchor ground elevation (meters)
-layout(location = 7) in float a_instance_shape;         // shape (0 circle, 1 square, 2 triangle, 3 star)
+layout(location = 7) in float a_instance_shape;         // marker: shape (0 circle, 1 square, 2 triangle, 3 star) + 8 x rotation steps
 #ifdef TABLE_ROWS
 layout(location = 8) in float a_row;                    // the number of the row in its group
 #endif
 
 uniform vec2 u_pixel_to_clip; // pixel-to-clip-space conversion factor
 uniform float u_size_scale;   // size factor at draw time (default 1)
+uniform float u_bearing;      // the bearing of the map (degrees), which turns the markers with a rotation
 
 // Values constant per instance are passed as flat (avoids both interpolation error and cost)
 flat out vec4 v_fill_color;
@@ -687,7 +719,7 @@ flat out float v_radius_px;
 flat out float v_outer_px;
 flat out float v_ink;
 flat out float v_shape;
-
+${POINT_MARKER_GLSL}${POINT_TURN_GLSL}
 void main() {
     // The anchor elevation comes from the CPU (the same source as hit testing).
     // The DEM atlas is not sampled (two sources make the rendering and the hit area disagree).
@@ -731,7 +763,18 @@ void main() {
     v_offset_px = offsetPx;
     v_radius_px = radius;
     v_outer_px = outer;
-    v_shape = a_instance_shape;
+    int markerCode = int(a_instance_shape + 0.5);
+    v_shape = float(pointMarkerShape(markerCode));
+    // A marker with a rotation keeps its direction on the map: turned by it and the bearing (and
+    // while its row is turned by a drag, by the angle written once let go)
+    int angleSteps = pointMarkerSteps(markerCode);
+    if (angleSteps > 0) {
+        float degrees = pointAngleDegrees(angleSteps) + u_bearing;
+#ifdef TABLE_ROWS
+        degrees += rowStateRotation(rowState);
+#endif
+        v_offset_px = pointTurnOffset(offsetPx, degrees);
+    }
 }`;
 
     const fragmentSource = `#version 300 es
@@ -880,6 +923,7 @@ void main() {
       pixelToClip: gl.getUniformLocation(program, 'u_pixel_to_clip'),
       sizeScale: gl.getUniformLocation(program, 'u_size_scale'),
       opacity: gl.getUniformLocation(program, 'u_opacity'),
+      bearing: gl.getUniformLocation(program, 'u_bearing'),
     };
     const projection = new ProjectionUniformManager(gl).useTerrainState(this.terrain);
     projection.getLocations(program);
@@ -963,6 +1007,21 @@ void main() {
       memo.canvasHeight = this.canvasHeight;
     }
     memo.pixelToClipFrame = frame;
+    // The bearing changes only between frames
+    if (locs.bearing && memo.bearingFrame !== frame) {
+      gl.uniform1f(locs.bearing, this.frameBearing());
+    }
+    memo.bearingFrame = frame;
+  }
+
+  /** The bearing of the map, read once per frame */
+  private frameBearing(): number {
+    const frame = getRenderFrame();
+    if (this.bearingFrame !== frame) {
+      this.bearingFrame = frame;
+      this.bearing = this.map?.getBearing?.() ?? 0;
+    }
+    return this.bearing;
   }
 
   /**

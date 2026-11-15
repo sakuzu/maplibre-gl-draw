@@ -7,8 +7,11 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  POINT_ANGLE_STEPS,
   POINT_SDF_GLSL,
   POINT_SHAPE_CODE,
+  pointAngleSteps,
+  pointMarkerCode,
   pointShapeSdf,
   STAR_INNER_RATIO,
   samplePointShapeRings,
@@ -103,5 +106,42 @@ describe('samplePointShapeRings', () => {
   it('collapses the inner ring to the center when the stroke fills the shape', () => {
     const rings = samplePointShapeRings('triangle', R, R);
     for (const [x, y] of rings.inner) expect(Math.hypot(x, y)).toBe(0);
+  });
+});
+
+describe('the rotation of a marker (pointAngleSteps, pointMarkerCode)', () => {
+  it('is 0 without a rotation, and for a value that is not a finite number', () => {
+    expect(pointAngleSteps(undefined)).toBe(0);
+    expect(pointAngleSteps(Number.NaN)).toBe(0);
+    expect(pointAngleSteps(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+
+  it('tells a rotation of 0 from none', () => {
+    expect(pointAngleSteps(0)).toBe(1);
+    expect(pointAngleSteps(-0)).toBe(1);
+  });
+
+  it('holds the rotation in steps of 0.01 degree within one turn, plus 1', () => {
+    expect(pointAngleSteps(90)).toBe(9_001);
+    expect(pointAngleSteps(-90)).toBe(27_001);
+    expect(pointAngleSteps(450)).toBe(9_001);
+    expect(pointAngleSteps(12.34)).toBe(1_235);
+    // A rotation rounded to a whole turn is 0
+    expect(pointAngleSteps(359.996)).toBe(1);
+    expect(pointAngleSteps(-0.004)).toBe(1);
+    expect(pointAngleSteps(359.99)).toBe(POINT_ANGLE_STEPS);
+  });
+
+  it('folds the steps into the code of the shape so a float holds every code exactly', () => {
+    const largest = pointMarkerCode(POINT_SHAPE_CODE.star, POINT_ANGLE_STEPS);
+    expect(largest).toBeLessThan(2 ** 24);
+    expect(Math.fround(largest)).toBe(largest);
+    // The shape is the 3 lowest bits, the steps the rest
+    for (const [shape, code] of Object.entries(POINT_SHAPE_CODE)) {
+      const marker = pointMarkerCode(code, pointAngleSteps(271.5));
+      expect(marker & 7, shape).toBe(code);
+      expect(marker >> 3, shape).toBe(27_151);
+      expect(pointMarkerCode(code, 0), shape).toBe(code);
+    }
   });
 });

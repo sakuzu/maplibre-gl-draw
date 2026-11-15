@@ -12,7 +12,8 @@
  *
  * - the coordinates of the chunk (`RG32F`, offsets from the origin of the chunk), by number
  * - the style of each row of the chunk (`RGBA32F`, one texel per row): the number of its
- *   resolved style, its created zoom and whether it has one
+ *   resolved style, its created zoom and whether it has one, and for a point row the rotation of
+ *   its markers (`pointAngleSteps`, 0 for markers upright on screen)
  * - the values of the resolved styles of the layer (`RGBA32F`, four texels per style)
  * - the state of the rows of the group (`R8UI`, `row-state.ts`)
  *

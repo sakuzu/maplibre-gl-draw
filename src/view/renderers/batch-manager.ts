@@ -10,6 +10,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { generateCirclePolygon } from '../../shared/math/index.js';
+import { getDrawProperty } from '../../shared/properties.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
@@ -436,8 +437,10 @@ export class BatchManager {
       }
       // Points occluded by the terrain are drawn faintly (ghost). This is the
       // immediate path, rebuilt every frame, so it follows the camera movement directly.
+      // A marker with a rotation turns with the map.
       batch.points.push({
         ...toPointInstanceData(coord, style),
+        rotation: getDrawProperty(feature, 'rotation'),
         ghost: anchorGhostOpacity(this.terrain, coord[0], coord[1]),
       });
       this.currentPointBatchKey = batchKey;

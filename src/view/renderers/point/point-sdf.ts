@@ -137,6 +137,95 @@ float pointShapeSdf(vec2 p, float r, float shape) {
 }
 `;
 
+/**
+ * The steps of the rotation of a marker in one turn: the rotation is held in steps of 0.01 degree
+ *
+ * A marker of a feature with a rotation (`maplibre-gl-draw:rotation`) keeps its direction on the
+ * map: it turns with the map. A marker of a feature without one stays upright on screen. The
+ * three ways points are drawn (the rows in one draw, the rows by kind and the features of the
+ * Store or of a frame) hold the rotation as the same whole number (`pointAngleSteps`), so they
+ * draw a marker at the same angle:
+ *
+ * - an instance of the renderer of the points folds it into the float of the code of its shape
+ *   (`pointMarkerCode`): the code plus 8 times the steps, the code alone without a rotation. The
+ *   largest value, 3 + 8 × 36,000, is below 2^24, so a float holds it exactly
+ * - a row drawn in one draw holds the steps in the free float of the texel of its style
+ *
+ * @internal
+ */
+export const POINT_ANGLE_STEPS = 36_000;
+
+/** The steps of the rotation in one degree */
+const POINT_ANGLE_STEPS_PER_DEGREE = POINT_ANGLE_STEPS / 360;
+
+/** What a code of a marker holds besides its shape: the shape is its 3 lowest bits */
+const POINT_SHAPE_BITS = 8;
+
+/**
+ * The rotation of a marker as it is drawn: 0 for a marker upright on screen (no rotation, or one
+ * that is not a finite number), else 1 plus the rotation in steps of 0.01 degree within one turn
+ * (1 to {@link POINT_ANGLE_STEPS})
+ *
+ * @param rotation The rotation in degrees counterclockwise seen from above, 0 with the north up
+ * @internal
+ */
+export function pointAngleSteps(rotation: number | undefined): number {
+  if (rotation === undefined || !Number.isFinite(rotation)) return 0;
+  const turn = ((rotation % 360) + 360) % 360;
+  return (Math.round(turn * POINT_ANGLE_STEPS_PER_DEGREE) % POINT_ANGLE_STEPS) + 1;
+}
+
+/**
+ * The code of a marker an instance of the renderer of the points holds: the code of its shape,
+ * plus 8 times its steps of rotation ({@link pointAngleSteps})
+ *
+ * @internal
+ */
+export function pointMarkerCode(shapeCode: number, angleSteps: number): number {
+  return shapeCode + POINT_SHAPE_BITS * angleSteps;
+}
+
+/**
+ * GLSL that turns a marker by its rotation
+ *
+ * - `float pointAngleDegrees(int steps)`: the rotation of steps of {@link pointAngleSteps} (1 or
+ *   more), in degrees
+ * - `vec2 pointTurnOffset(vec2 offsetPx, float degrees)`: the offset of a fragment from the center
+ *   of a marker turned counterclockwise by `degrees` on screen, as the offset of the upright
+ *   shape `pointShapeSdf` reads (+y up)
+ *
+ * A marker turned on the map by its rotation is turned on screen by it plus the bearing of the
+ * map. The billboard is not turned: every shape is inscribed in the circle of its outer radius,
+ * which the billboard covers whatever the angle.
+ */
+export const POINT_TURN_GLSL = `
+float pointAngleDegrees(int steps) {
+    return float(steps - 1) * ${(1 / POINT_ANGLE_STEPS_PER_DEGREE).toFixed(2)};
+}
+
+vec2 pointTurnOffset(vec2 offsetPx, float degrees) {
+    float a = radians(degrees);
+    float s = sin(a);
+    float c = cos(a);
+    return vec2(c * offsetPx.x + s * offsetPx.y, c * offsetPx.y - s * offsetPx.x);
+}
+`;
+
+/**
+ * GLSL that takes a code of a marker apart (`pointMarkerCode`): `int pointMarkerShape(int code)`
+ * gives the code of its shape, `int pointMarkerSteps(int code)` its steps of rotation (0 for an
+ * upright marker)
+ */
+export const POINT_MARKER_GLSL = `
+int pointMarkerShape(int code) {
+    return code & ${POINT_SHAPE_BITS - 1};
+}
+
+int pointMarkerSteps(int code) {
+    return code >> 3;
+}
+`;
+
 /** Angles (radians) of the vertices of the polygonal shapes, counterclockwise from the top */
 function vertexAngles(shape: 'triangle' | 'star'): number[] {
   const count = shape === 'triangle' ? 3 : 10;

@@ -161,6 +161,16 @@ describe('BatchManager Point batches', () => {
     ]);
   });
 
+  it('gives each point the rotation of its feature its marker turns by, none without one', () => {
+    const { manager, calls } = createManager();
+    const turned = makePoint('b', [1, 1]);
+    manager.processFeature(makePoint('a', [0, 0]), false);
+    manager.processFeature({ ...turned, properties: { 'maplibre-gl-draw:rotation': 30 } }, false);
+    manager.endFrame();
+
+    expect(calls[0].points.map((p) => p.rotation)).toEqual([undefined, 30]);
+  });
+
   it('folds the opacity into the color alpha and carries over the stroke attributes', () => {
     const { manager, calls } = createManager();
 

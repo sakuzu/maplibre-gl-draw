@@ -60,6 +60,7 @@ import {
   toInstancedPointShape,
   writePointInstance,
 } from '../renderers/point/point-instance.js';
+import { pointAngleSteps, pointMarkerCode } from '../renderers/point/point-sdf.js';
 import {
   ROW_POLYGON_STRIDE,
   writePolygonFillVertex,
@@ -107,6 +108,16 @@ const STYLE = STYLE_COLUMN;
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
+/** The key of the rotation in the attributes of a row (the markers of a point row turn by it) */
+const ROTATION_KEY = drawPropertyKey('rotation');
+
+/**
+ * The rotation of the markers of a point row as they are drawn (`pointAngleSteps`): 0 for a row
+ * without one, whose markers stay upright on screen
+ */
+function rowAngleSteps(group: RowGroup, row: number): number {
+  return pointAngleSteps(rowNumber(group, row, ROTATION_KEY));
+}
 
 /** The created zoom of a row whose width is fixed on screen (the shader ignores it) */
 const FIXED_WIDTH_CREATED_ZOOM = 0;
@@ -540,7 +551,7 @@ export function writePointRow(
   // A shape that is not instanced makes the row a run drawn at once; it is not packed
   const shape = slot.shape;
   if (!shape) return 0;
-  const code = pointShapeCode(shape);
+  const code = pointMarkerCode(pointShapeCode(shape), rowAngleSteps(group, row));
   const dpr = resolvePixelRatio(context.pixelRatio);
   const first = reader.vertexStart(at);
   const end = reader.vertexStart(at + 1);
@@ -1587,6 +1598,8 @@ function collectPointRow(
   if (!resolved) return;
   const { kind, style } = resolved;
   writeRowStyle(draft, styleAt, style, undefined);
+  // The markers turn by the rotation of the row (a picture of an extension does not read it)
+  if (kind === ROWS_KIND.point) draft.rowStyles[styleAt + 3] = rowAngleSteps(group, row);
   const coords = reader.coords;
   const stride = reader.stride;
   const first = reader.vertexStart(at);

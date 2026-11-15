@@ -156,4 +156,24 @@ describe('collectPoints', () => {
     );
     expect(points).toHaveLength(3);
   });
+
+  it('gives every point of a feature the rotation its markers turn by, none without one', () => {
+    const points = collectPoints(
+      [
+        makeFeature('p', 'Point', [0, 0]),
+        makeFeature(
+          'm',
+          'MultiPoint',
+          [
+            [1, 1],
+            [2, 2],
+          ],
+          { 'maplibre-gl-draw:rotation': -45 },
+        ),
+      ],
+      makeStyles(),
+      undefined,
+    );
+    expect(points.map((p) => p.rotation)).toEqual([undefined, -45, -45]);
+  });
 });
