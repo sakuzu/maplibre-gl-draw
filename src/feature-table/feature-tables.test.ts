@@ -287,7 +287,7 @@ describe('createFeatureTables', () => {
     const internals = featureTablesInternals(tables);
     const layer = internals?.rowTable('layer') as RowTable;
     const versions = [layer.groupAt(0).stateVersion, layer.groupAt(1).stateVersion];
-    const revision = tables.get('layer')?.getDrawnRowsRevision();
+    const revision = tables.get('layer')?.getDrawnRowsVersion();
     const r4 = tables.getRowRef('r4') as number;
     internals?.states.setHidden(Int32Array.of(r4), true);
     internals?.states.setBulk(Int32Array.of(r4, tables.getRowRef('r0') as number), true);
@@ -296,7 +296,7 @@ describe('createFeatureTables', () => {
     expect(layer.groupAt(0).gpuState[0]).toBe(GPU_STATE_BULK);
     expect(layer.groupAt(0).stateVersion).toBe(versions[0] + 1);
     expect(layer.groupAt(1).stateVersion).toBe(versions[1] + 2);
-    expect(tables.get('layer')?.getDrawnRowsRevision()).not.toBe(revision);
+    expect(tables.get('layer')?.getDrawnRowsVersion()).not.toBe(revision);
     internals?.states.setMoving(Int32Array.of(r4), 2);
     expect((layer.groupAt(1).gpuState[1] >> 1) & 3).toBe(2);
     expect(toGpuState(layer.groupAt(1).state[1])).toBe(layer.groupAt(1).gpuState[1]);

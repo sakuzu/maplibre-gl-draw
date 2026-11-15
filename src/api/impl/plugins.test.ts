@@ -33,7 +33,7 @@ import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
-import type { Observable } from '../events.js';
+import type { Observable, ScreenPoint } from '../events.js';
 import type { RenderContext as EngineRenderContext } from '../extension/render.js';
 import type { Feature, FeatureGeometry } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
@@ -174,7 +174,7 @@ function recordingContext(draw: Draw): {
       pixelRatio: 1,
     },
     opacity: 1,
-    terrain: { elevation: () => 0, occlusionOpacity: () => 1, generation: () => 0 },
+    terrain: { elevation: () => 0, occlusionOpacity: () => 1, elevationVersion: () => 0 },
     line: { draw: line },
     fill: { draw: fill },
     point: { draw: point },
@@ -513,10 +513,6 @@ const flat = (value: unknown): number =>
       ? 1
       : value.reduce((sum: number, part) => sum + flat(part), 0);
 
-/**
- * `getDrawnRowsRevision` and `getRow` stand in for `getDrawnRowsVersion` and `getRowGeometry` of
- * the contract, which `/webgl` names so later
- */
 const density = (layerId: string): Plugin<Observable<number>> => ({
   name: 'acme-density',
   setup(ctx) {
@@ -530,16 +526,16 @@ const density = (layerId: string): Plugin<Observable<number>> => ({
       const box = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()] as const;
       let total = 0;
       for (const row of view.listDrawnRows([box[0], box[1], box[2], box[3]])) {
-        const geometry = view.getRow(row)?.geometry;
+        const geometry = view.getRowGeometry(row);
         const coordinates = geometry && 'coordinates' in geometry ? geometry.coordinates : null;
         total += view.getRowPoint(row) ? 1 : flat(coordinates);
       }
-      seen = view.getDrawnRowsRevision();
+      seen = view.getDrawnRowsVersion();
       value = total;
       for (const run of listeners) run(value);
     };
     const changed = () => {
-      if (ctx.webgl.rows(layerId)?.getDrawnRowsRevision() !== seen) count();
+      if (ctx.webgl.rows(layerId)?.getDrawnRowsVersion() !== seen) count();
     };
     ctx.map.on('moveend', count);
     ctx.map.on('render', changed);
@@ -1126,8 +1122,7 @@ describe('a type drawn from the features it joins (a link)', () => {
     );
     expect(marks.point).toHaveBeenCalledWith(
       [1, 1],
-      expect.objectContaining({ size: 10, fillColor: '#cc3333' }),
-      undefined,
+      expect.objectContaining({ sizePixels: 10, fillColor: '#cc3333' }),
     );
     expect(marks.line).toHaveBeenCalledWith(
       [
@@ -1135,7 +1130,6 @@ describe('a type drawn from the features it joins (a link)', () => {
         [1, 1],
       ],
       expect.objectContaining({ lineStyle: 'dashed' }),
-      undefined,
     );
     // Dragged to another feature and let go there, it joins it
     pointerDrag(view.engine, [1, 1], [0, 2]);
@@ -1220,7 +1214,7 @@ describe('a companion of every type (a ring)', () => {
     expect(box?.kind).toBe('ground');
     const corner = (box as { corners: { topRight: Position } }).corners.topRight;
     const hit = provider?.hitTest(featureOf(area.id), {
-      point: context.screen.project(corner),
+      point: [...context.screen.project(corner)] as ScreenPoint,
       lngLat: corner,
       tolerancePx: 4,
       screen: context.screen,
@@ -1231,7 +1225,7 @@ describe('a companion of every type (a ring)', () => {
       featureOf(area.id),
       { kind: 'companion', id: 'ring', distancePx: 0 },
       {
-        point: context.screen.project(corner),
+        point: [...context.screen.project(corner)] as ScreenPoint,
         lngLat: corner,
         snapped: { lngLat: corner },
         modifiers: MODIFIERS,

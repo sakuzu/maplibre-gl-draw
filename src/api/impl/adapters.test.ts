@@ -199,7 +199,7 @@ describe('a custom feature type', () => {
     // So do the size and the outline of a point marker: four times as large two zooms in
     const marker = {
       shape: 'circle' as const,
-      size: 6,
+      sizePixels: 6,
       fillColor: '#00ff00',
       fillOpacity: 1,
       strokeColor: '#000000',
@@ -210,15 +210,11 @@ describe('a custom feature type', () => {
     expect(base.pointShapeRenderer.draw).toHaveBeenLastCalledWith(
       [0, 0],
       expect.objectContaining({ size: 6, strokeWidth: 1 }),
-      undefined,
-      undefined,
     );
     ctx.point.draw([0, 0], marker, { referenceZoom: 10 });
     expect(base.pointShapeRenderer.draw).toHaveBeenLastCalledWith(
       [0, 0],
       expect.objectContaining({ size: 24, strokeWidth: 4 }),
-      undefined,
-      undefined,
     );
     ctx.fill.draw(
       [

@@ -19,8 +19,6 @@ import { DrawError } from '../errors.js';
 import type {
   HandleContext as EngineHandleContext,
   PluginContext as EnginePluginContext,
-  TerrainSurface as EngineTerrainSurface,
-  ScreenContext,
 } from '../extension/context.js';
 import type {
   CustomHandle as EngineCustomHandle,
@@ -52,12 +50,9 @@ import type {
   Plugin,
   PluginContext,
   PointerInput,
-  RenderContext,
   Rendered,
   ScreenPointContext,
-  ScreenProjection,
   SnapCandidate,
-  TerrainSurface,
 } from '../plugin/types.js';
 import type { LayerTableView, RowRef } from '../tables.js';
 import { RELEASES } from './adapters.js';
@@ -74,6 +69,7 @@ import {
   type Shape,
   snapShape,
 } from './plugin-shapes.js';
+import { resolvedStyleOf } from './render-context.js';
 import type { ProblemInput } from './status.js';
 
 /** The prefix of the names of the library, which a type or a mode of a plugin cannot take */
@@ -163,21 +159,6 @@ const HANDLE_MEMBERS = [
   'onHandleDragEnd',
 ] as const;
 
-/** The conversion of the engine as the plugins read it */
-function projectionOf(screen: ScreenContext): ScreenProjection {
-  return {
-    project: (at) => screen.project(at),
-    unproject: (point) => screen.unproject([point[0], point[1]]),
-    metersPerPixel: (at) => screen.metersPerPixel(at),
-    get zoom() {
-      return screen.zoom;
-    },
-    get pixelRatio() {
-      return screen.pixelRatio;
-    },
-  };
-}
-
 /** A footprint of the engine as the plugins read it */
 function footprintOfEngine(footprint: EngineFootprint | null): Footprint | null {
   if (footprint === null) return null;
@@ -215,86 +196,6 @@ function rowOfFeature(feature: Feature): FeatureRow {
  * @internal
  */
 export function createPluginUse(deps: PluginUseDeps): PluginUse {
-  // The render contexts of the engine as the plugins read them, one each
-  const renderContexts = new WeakMap<EngineRenderContext, RenderContext>();
-  const projections = new WeakMap<ScreenContext, ScreenProjection>();
-  const terrains = new WeakMap<EngineTerrainSurface, TerrainSurface>();
-
-  const projection = (screen: ScreenContext): ScreenProjection => {
-    let made = projections.get(screen);
-    if (!made) {
-      made = projectionOf(screen);
-      projections.set(screen, made);
-    }
-    return made;
-  };
-  const terrainOf = (terrain: EngineTerrainSurface): TerrainSurface => {
-    let made = terrains.get(terrain);
-    if (!made) {
-      made = {
-        elevation: (at) => terrain.elevation(at),
-        occlusionOpacity: (at) => terrain.occlusionOpacity(at),
-        elevationVersion: () => terrain.generation(),
-      };
-      terrains.set(terrain, made);
-    }
-    return made;
-  };
-  const renderContextOf = (context: EngineRenderContext): RenderContext => {
-    let made = renderContexts.get(context);
-    if (!made) {
-      made = {
-        screen: projection(context.screen),
-        terrain: terrainOf(context.terrain),
-        opacity: context.opacity,
-        line: {
-          draw: (coordinates, style, options) =>
-            context.line.draw(
-              coordinates,
-              {
-                width: style.width,
-                color: style.color,
-                opacity: style.opacity,
-                lineStyle: style.lineStyle,
-              },
-              options && {
-                ...(options.closed !== undefined && { closed: options.closed }),
-                ...(options.widthUnit !== undefined && { widthUnit: options.widthUnit }),
-                ...(options.referenceZoom !== undefined && {
-                  referenceZoom: options.referenceZoom,
-                }),
-              },
-            ),
-        },
-        fill: {
-          draw: (rings, style) =>
-            context.fill.draw(rings, { color: style.color, opacity: style.opacity }),
-        },
-        point: {
-          draw: (at, style, options) =>
-            context.point.draw(
-              at,
-              {
-                shape: style.shape,
-                size: style.sizePixels,
-                fillColor: style.fillColor,
-                fillOpacity: style.fillOpacity,
-                strokeColor: style.strokeColor,
-                strokeWidth: style.strokeWidth,
-                strokeOpacity: style.strokeOpacity,
-              },
-              options?.referenceZoom === undefined
-                ? undefined
-                : { referenceZoom: options.referenceZoom },
-            ),
-        },
-        appliedStyle: (feature) => context.appliedStyle(feature),
-      };
-      renderContexts.set(context, made);
-    }
-    return made;
-  };
-
   /** The names of the plugins whose `setup` runs, which a plugin added inside it cannot take */
   const installing = new Set<string>();
 
@@ -404,7 +305,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         }
       };
       const handleContextOf = (context: EngineHandleContext): HandleContext => ({
-        screen: projection(context.screen),
+        screen: context.screen,
         get selectionBox() {
           return footprintOfEngine(context.selectionBox);
         },
@@ -458,13 +359,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
             ) {
               call(
                 `drawHandles of ${label}`,
-                () =>
-                  drawHandles.call(
-                    source,
-                    feature,
-                    handles.map(customOf),
-                    renderContextOf(context),
-                  ),
+                () => drawHandles.call(source, feature, handles.map(customOf), context),
                 undefined,
               );
             },
@@ -570,7 +465,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         });
         const { render, hitTest, snapCandidates, handles } = definition;
         const renders = stoppedOnFailure(`render of ${label}`, (feature, context) =>
-          render?.call(definition, feature, renderContextOf(context)),
+          render?.call(definition, feature, context),
         );
 
         const installed: EngineTypeDefinition = {
@@ -589,7 +484,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
             : (feature, context) => {
                 // Without a renderer, its footprint is drawn
                 const shape = shapeOf(feature);
-                if (shape) drawShape(shape, context.appliedStyle(feature), context);
+                if (shape) drawShape(shape, resolvedStyleOf(context, feature), context);
               },
           footprint: (feature) => {
             const shape = shapeOf(feature);
@@ -781,7 +676,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
             ...(keys !== undefined && { classifyKeys: [...keys] }),
           },
           draw: stoppedOnFailure(`render of ${label}`, (feature, context) =>
-            render?.call(source, feature, renderContextOf(context)),
+            render?.call(source, feature, context),
           ),
           hitTest(feature, context) {
             if (!hitTest) return null;
@@ -925,7 +820,7 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         addCompanion: (source) => addCompanion(source as CompanionSource),
         setOverlay,
         rendered,
-        screen: projection(engine.screen),
+        screen: engine.screen,
         names: { next: (featureType) => engine.names.next(featureType) },
         invalidate(filter) {
           if (filter !== undefined && !isObject(filter)) {

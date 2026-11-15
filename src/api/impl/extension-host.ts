@@ -28,14 +28,16 @@ import { createTransformFieldsRegistry } from '../../store/transform-roles.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
+import type { Dataset } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { PluginContext } from '../extension/context.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { Hit } from '../extension/provider.js';
 import type { StoreView } from '../extension/store.js';
+import type { LayerTableView as WebglLayerTableView } from '../extension/webgl.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature, FeatureStyleResolved, LoadResult } from '../model.js';
+import type { Feature, FeatureGeometry, FeatureStyleResolved, LoadResult } from '../model.js';
 import type { RuntimeOptions } from '../options.js';
 import type { AdapterDeps } from './adapters.js';
 import {
@@ -414,7 +416,8 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
             part.release();
           });
         },
-        rows: (layerId) => featureTablesInternals(store.tables)?.view(layerId),
+        rows: (id) =>
+          featureTablesInternals(store.tables)?.view(id) ?? datasetRowsView(getDraw(), id),
         draggedRows: () => getDraw().rendered.getDraggedRows(),
       },
     };
@@ -569,4 +572,36 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       destroyed = true;
     },
   };
+}
+
+/** The views of the rows of the datasets, one each (`Webgl.rows`) */
+const datasetViews = new WeakMap<Dataset, WebglLayerTableView>();
+
+/**
+ * The rows of a dataset as `ctx.webgl.rows` reads them (undefined for an id of no dataset): the
+ * rows drawn after the thinning, read by their indices
+ */
+function datasetRowsView(draw: Draw, id: string): WebglLayerTableView | undefined {
+  const dataset = draw.datasets.get(id);
+  if (!dataset) return undefined;
+  let view = datasetViews.get(dataset);
+  if (!view) {
+    const geometryOf = (row: number): FeatureGeometry | null => {
+      const geometry = dataset.getRow(row)?.geometry ?? null;
+      return geometry === null || geometry.type === 'GeometryCollection' ? null : geometry;
+    };
+    view = {
+      listDrawnRows: (bbox) => dataset.listDrawnRows([bbox[0], bbox[1], bbox[2], bbox[3]]),
+      getDrawnRowsVersion: () => dataset.getDrawnRowsRevision(),
+      findRow: (rowId) => dataset.findRow(rowId) ?? undefined,
+      getRowType: (row) => dataset.getRowType(row),
+      getRowPoint: (row) => dataset.getRowPoint(row),
+      getRowGeometry: geometryOf,
+      getRowValue: (row, key) =>
+        (dataset.getRow(row)?.properties as Record<string, unknown> | null | undefined)?.[key],
+      getRowStyle: (row) => dataset.getRow(row)?.style,
+    };
+    datasetViews.set(dataset, view);
+  }
+  return view;
 }

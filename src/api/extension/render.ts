@@ -6,136 +6,14 @@
  * and the shared renderers they can draw through
  */
 
-import type { Position } from 'geojson';
-import type { Feature, FeatureStyleResolved, LineStyle, PointShape } from '../model.js';
-import type { ScreenContext, TerrainSurface } from './context.js';
+import type { RenderContext } from '../plugin/types.js';
 
-/**
- * The shared renderer of lines. It only draws; the zoom, the projection and the terrain come
- * from the {@link RenderContext} it was taken from.
- *
- * The shared renderers read their colors as `parseCssColor` does: a color they cannot read
- * is drawn transparent, and told by a warning in the console, once for each part of each
- * renderer of an instance.
- */
-export interface LineRenderer {
-  /**
-   * Draws a line.
-   *
-   * @param coordinates - The positions of the line
-   * @param style - The width in pixels, the CSS color, the opacity from 0 to 1, the dash
-   *   pattern, and a custom `[dash, gap]` in pixels
-   * @param options - `closed` joins the last position to the first; `widthUnit` says whether
-   *   the width is in CSS pixels (`'pixels'`, when it is left out) or in meters on the ground
-   *   (`'meters'`: a length on the ground, drawn as the pixels it spans at the zoom and at the
-   *   latitude of the middle of the line, so it follows the map); `referenceZoom` is the zoom at
-   *   which a width in pixels is given, so that the line grows and shrinks with the zoom: it is
-   *   drawn `2 ** (zoom - referenceZoom)` times as wide (the width stays the same at every zoom
-   *   when it is left out). `referenceZoom` applies to a width in pixels only: a width in meters
-   *   follows the map by itself and does not take it
-   */
-  draw(
-    coordinates: readonly Position[],
-    style: {
-      width: number;
-      color: string;
-      opacity: number;
-      lineStyle: LineStyle;
-      dashArray?: number[];
-    },
-    options?: { closed?: boolean; widthUnit?: 'pixels' | 'meters'; referenceZoom?: number },
-  ): void;
-}
-
-/**
- * The shared renderer of areas. It only draws; the zoom, the projection and the terrain come
- * from the {@link RenderContext} it was taken from.
- */
-export interface FillRenderer {
-  /**
-   * Fills an area.
-   *
-   * @param rings - The outer ring first, then the holes
-   * @param style - The CSS color and the opacity from 0 to 1
-   */
-  draw(rings: readonly (readonly Position[])[], style: { color: string; opacity: number }): void;
-}
-
-/**
- * The shared renderer of point markers. It only draws; the zoom, the projection and the
- * terrain come from the {@link RenderContext} it was taken from.
- */
-export interface PointRenderer {
-  /**
-   * Draws a point marker.
-   *
-   * @param position - The position
-   * @param style - The shape, the size in pixels, the fill and the outline (CSS colors,
-   *   opacities from 0 to 1, the outline width in pixels). The size is the diameter of the
-   *   marker, twice the `pointRadius` of a style: a marker drawn with the look a feature is drawn
-   *   with (`RenderContext.appliedStyle`) takes `size: 2 * look.pointRadius`
-   * @param options - `elevationMeters` places the marker at this height instead of on the
-   *   ground; `referenceZoom` is the zoom at which the size and the outline width are given, so
-   *   that the marker grows and shrinks with the zoom as a line does: it is drawn `2 ** (zoom -
-   *   referenceZoom)` times as large (the same size at every zoom when it is left out)
-   */
-  draw(
-    position: Position,
-    style: {
-      shape: PointShape;
-      /** The diameter of the marker, in CSS pixels */
-      size: number;
-      fillColor: string;
-      fillOpacity: number;
-      strokeColor: string;
-      strokeWidth: number;
-      strokeOpacity: number;
-    },
-    options?: { elevationMeters?: number; referenceZoom?: number },
-  ): void;
-}
-
-/**
- * Everything a renderer needs to draw: the shared renderers, the screen and the terrain of the
- * view being drawn. A renderer with shaders of its own reads the values of the GPU of that view
- * through `viewUniforms(ctx)` and `offsetUniformsAt(ctx, position)` of
- * `@sakuzu/maplibre-gl-draw/webgl`.
- */
-export interface RenderContext {
-  /**
-   * The conversion between the map and the screen, its zoom and its pixel ratio, in the view
-   * being drawn: the same object as `ctx.screen` of the context of an extension, which answers
-   * for the view drawn last once the view is drawn
-   */
-  readonly screen: ScreenContext;
-  /** The opacity of the layer being drawn, from 0 to 1 */
-  readonly opacity: number;
-  /**
-   * The heights of the terrain and where it hides a position. The building blocks of the
-   * `/webgl` entry that draw on the terrain take it, or the whole render context.
-   */
-  readonly terrain: TerrainSurface;
-  /** The shared renderer of lines */
-  readonly line: LineRenderer;
-  /** The shared renderer of areas */
-  readonly fill: FillRenderer;
-  /** The shared renderer of point markers */
-  readonly point: PointRenderer;
-  /**
-   * The look a feature is drawn with, put together as `draw.features.getAppliedStyle` puts it:
-   * the look its type declares (`FeatureTypeDefinition.defaultStyle`, the defaults of its
-   * geometry for a type that declares none), the color of the rule of its layer and the style of
-   * the feature, put on top of each other by the library. It answers for the feature given, the
-   * one the renderer draws with the sketches applied, where `getAppliedStyle` answers for the
-   * values of the document. A renderer draws with it rather than reading `feature.style` and
-   * defaults of its own, so that what it draws is what the library answers.
-   *
-   * It is put together once for a feature as it is: reading it again, in the same draw or in the
-   * next one, gives the same object until the feature, the rule of its layer or the `style`
-   * option changes. Do not change the object.
-   */
-  appliedStyle(feature: Feature): FeatureStyleResolved;
-}
+export type {
+  FillRenderer,
+  LineRenderer,
+  PointRenderer,
+  RenderContext,
+} from '../plugin/types.js';
 
 /**
  * A renderer that draws above the features, or between the layers, with the shared renderers: it

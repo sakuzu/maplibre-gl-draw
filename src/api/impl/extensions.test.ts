@@ -637,11 +637,11 @@ describe('extensions.plugins', () => {
     // Without terrain: the ground is at 0 and nothing hides a position
     expect(context.terrain.elevation([1, 1])).toBe(0);
     expect(context.terrain.occlusionOpacity([1, 1])).toBe(1);
-    expect(context.terrain.generation()).toEqual(expect.any(Number));
+    expect(context.terrain.elevationVersion()).toEqual(expect.any(Number));
     // One projection: the screen answers where a position is drawn, on the terrain when it is on
     expect(Object.keys(context.terrain).sort()).toEqual([
       'elevation',
-      'generation',
+      'elevationVersion',
       'occlusionOpacity',
     ]);
     const map = draw.getMap();

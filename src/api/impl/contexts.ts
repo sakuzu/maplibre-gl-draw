@@ -187,7 +187,7 @@ export function createTerrainSurface(terrain: TerrainContext): TerrainSurface {
   const surface: TerrainSurface = {
     elevation: (lngLat) => anchorElevationMeters(terrain, lngLat[0], lngLat[1]),
     occlusionOpacity: (lngLat) => anchorGhostOpacity(terrain, lngLat[0], lngLat[1]),
-    generation: () => getAnchorElevationGeneration(terrain),
+    elevationVersion: () => getAnchorElevationGeneration(terrain),
   };
   // The building blocks of the second entry find the state behind the surface
   bindTerrainState(surface, terrain);

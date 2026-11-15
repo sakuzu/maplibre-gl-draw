@@ -28,35 +28,14 @@ import type { DrawEvents, ScreenPoint } from '../events.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature, FeatureInput, FeatureType, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
+import type { ScreenProjection, TerrainSurface } from '../plugin/types.js';
 import type { Mode, SnapResult } from '../state.js';
 import type { Footprint } from './feature-type.js';
 import type { Hit } from './provider.js';
 import type { StoreView } from './store.js';
 import type { Webgl } from './webgl.js';
 
-/**
- * The surface of the terrain of the map, for placing marks on it: its heights, and where it hides
- * a position from the camera. Where a position is on the screen, on the terrain when it is on, is
- * {@link ScreenContext.project}.
- */
-export interface TerrainSurface {
-  /**
-   * The height of the terrain at a position.
-   *
-   * @returns The height in meters; 0 when the terrain is off
-   */
-  elevation(lngLat: Position): number;
-  /**
-   * The opacity to draw a mark at a position with for what of it the terrain hides from the
-   * camera: 1 where it is in view, lower behind a slope. Multiply it into the opacity of the
-   * mark.
-   *
-   * @returns A value from 0 to 1; 1 when the terrain is off
-   */
-  occlusionOpacity(lngLat: Position): number;
-  /** A number that changes whenever the heights `elevation` returns may have changed. */
-  generation(): number;
-}
+export type { TerrainSurface } from '../plugin/types.js';
 
 /** The automatic names of new features, layers and groups. */
 export interface NameGenerator {
@@ -69,46 +48,10 @@ export interface NameGenerator {
 }
 
 /**
- * The conversion between positions on the map and points on the screen, in the view drawn last:
- * what is drawn, also when the camera moved since (by code, between two draws). While a view is
- * drawn, it answers for that view. Before the first draw, it answers for the camera of the map.
+ * The conversion between the map and the screen of the view drawn last: the
+ * {@link ScreenProjection} of the plugins
  */
-export interface ScreenContext {
-  /**
-   * The point on the screen where a position is drawn: on the terrain when it is on, as the
-   * shared renderers lay what they draw on it.
-   */
-  project(lngLat: Position): ScreenPoint;
-  /** The position drawn at a point on the screen, on the terrain when it is on. */
-  unproject(point: ScreenPoint): Position;
-  /**
-   * The length on the ground that a CSS pixel spans at a position, in the view drawn last.
-   *
-   * The engine turns the sizes in pixels of what it draws on the map for the current view (the
-   * margin of the selection box, the distance of the rotate handle, the move of an arrow key)
-   * into meters with it, and lays them on the plane tangent to the sphere of the map at the
-   * feature (maplibre's sphere, of a radius of 6,371,008.8 m), so they tilt and turn with the map
-   * and keep their place on it. It follows the projection: on Web Mercator the scale at the
-   * latitude of the position, on the globe the scale at the center of the view, and the mix of
-   * the two while the map goes from one to the other. It is read from the view drawn last, so a
-   * hit test between two draws finds what that view drew; before the first draw it is the
-   * scale of the camera on Web Mercator. On a map turned flat and untilted, without terrain, a
-   * length of `n * metersPerPixel(position)` meters is `n` pixels on the screen; tilted, on the
-   * globe away from the center, or over terrain, it is foreshortened as the map is.
-   *
-   * Use it for a size of the current view, which keeps its pixels as the map zooms (a margin, a
-   * handle out of a box). A size kept with a zoom of its own, which grows and shrinks with the
-   * map from that zoom (a box made at a zoom), takes `pixelsToMeters(pixels, zoom, latitude)` of
-   * `/geometry` instead: it does not depend on the view.
-   *
-   * @returns The meters of a CSS pixel
-   */
-  metersPerPixel(lngLat: Position): number;
-  /** The zoom of the view */
-  readonly zoom: number;
-  /** The pixel ratio the drawing uses */
-  readonly pixelRatio: number;
-}
+export type ScreenContext = ScreenProjection;
 
 /**
  * What every context of an extension has: the public API, the Store, the events, the

@@ -46,6 +46,7 @@ import { rowValuesOfTables, tablesValuesToCheck } from '../table/tables-values.j
 import type { GeometryTransforms, Store, StoreView, UpdateSource } from './extension/store.js';
 import type {
   StoredFeature as Feature,
+  FeatureGeometry,
   FeatureStyle,
   FeatureType,
   FeatureValues,
@@ -119,7 +120,11 @@ export interface LayerTableView {
    */
   getRow(row: RowRef): Feature | undefined;
   /** Changes whenever the rows drawn may have changed (added, hidden, shown) */
-  getDrawnRowsRevision(): number;
+  getDrawnRowsVersion(): number;
+  /** The reference of the row of an id in this layer (undefined for an id of no row here) */
+  findRow(id: string): RowRef | undefined;
+  /** The geometry of a row (null for a row without one, or not in this layer) */
+  getRowGeometry(row: RowRef): FeatureGeometry | null;
   /**
    * The references of `count` rows from the `start`-th one, in the order of the layer: the rows read,
    * deleted rows included until they are dropped (`rowCountWithDeleted` of them)

@@ -442,7 +442,7 @@ export function drawShape(
     else {
       context.point.draw(part.at, {
         shape: look.pointShape,
-        size: look.pointRadius * 2,
+        sizePixels: look.pointRadius * 2,
         fillColor: look.pointColor,
         fillOpacity: look.pointOpacity * opacity,
         strokeColor: look.pointStrokeColor,

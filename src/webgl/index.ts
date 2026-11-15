@@ -74,8 +74,8 @@ export type {
   Webgl,
 } from '../api/extension/webgl.js';
 
-// The rows of a layer read without making features
-export type { LayerTableView, RowRef } from '../api/tables.js';
+// The rows of a layer or a dataset read without making features
+export type { LayerTableView, RowRef } from '../api/extension/webgl.js';
 
 // Shaders and projection
 export { DEFAULT_TILE_SIZE } from '../shared/math/constants.js';

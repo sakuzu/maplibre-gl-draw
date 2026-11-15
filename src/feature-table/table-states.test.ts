@@ -96,7 +96,7 @@ describe('the copy of the state of the rows', () => {
     const place = internals.placeOf(handle('a'));
     const mark = place?.group.mark;
     const version = place?.group.stateVersion as number;
-    const revision = tables.get('layer')?.getDrawnRowsRevision();
+    const revision = tables.get('layer')?.getDrawnRowsVersion();
     writer.setRowStates(Int32Array.of(handle('a'), handle('c')), MARKED | PICKED, PICKED);
     expect([stateOf('a'), stateOf('c')]).toEqual([PICKED, PICKED]);
     expect(drawn()).toEqual(['a', 'c']);
@@ -109,7 +109,7 @@ describe('the copy of the state of the rows', () => {
     expect(drawn()).toEqual([]);
     expect(place?.group.mark).toBe(mark);
     expect(place?.group.stateVersion).toBeGreaterThan(version);
-    expect(tables.get('layer')?.getDrawnRowsRevision()).not.toBe(revision);
+    expect(tables.get('layer')?.getDrawnRowsVersion()).not.toBe(revision);
   });
 
   it('gives the members the bits of the flag of their group as it is written', () => {

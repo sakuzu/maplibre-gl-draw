@@ -122,7 +122,7 @@ async function addCustomType(page: Page): Promise<void> {
           );
           ctx.point.draw(p(places.customPoint), {
             shape: 'circle',
-            size: 20,
+            sizePixels: 20,
             fillColor: blue,
             fillOpacity: opacity,
             strokeColor: blue,

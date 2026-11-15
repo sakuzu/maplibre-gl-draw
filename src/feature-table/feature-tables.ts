@@ -33,6 +33,7 @@ import {
 } from '@sakuzu/kasane/render';
 import { byteColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
+import type { FeatureGeometry } from '../api/model.js';
 import type {
   FeatureTables,
   FeatureTablesOptions,
@@ -339,10 +340,26 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  getDrawnRowsRevision(): number {
+  getDrawnRowsVersion(): number {
     try {
       this.gate();
-      return this.view.getDrawnRowsRevision();
+      return this.view.getDrawnRowsVersion();
+    } catch (error) {
+      throw tablesError(error);
+    }
+  }
+  findRow(id: string): RowRef | undefined {
+    try {
+      this.gate();
+      return this.view.findRow(id);
+    } catch (error) {
+      throw tablesError(error);
+    }
+  }
+  getRowGeometry(handle: RowRef): FeatureGeometry | null {
+    try {
+      this.gate();
+      return this.view.getRowGeometry(handle);
     } catch (error) {
       throw tablesError(error);
     }
@@ -1021,8 +1038,19 @@ class LayerTableViewImpl implements LayerTableView {
     return this.view.getRowBBox(handle);
   }
 
-  getDrawnRowsRevision(): number {
+  getDrawnRowsVersion(): number {
     return this.view.getVisibleRowsVersion();
+  }
+
+  findRow(id: string): RowRef | undefined {
+    const handle = this.store.handleOf(id);
+    return handle !== undefined && this.locate(handle) ? handle : undefined;
+  }
+
+  getRowGeometry(handle: RowRef): FeatureGeometry | null {
+    if (!this.locate(handle)) return null;
+    const geometry = rowGeometry(this.store.foundGroup as RowGroup, this.store.foundRow);
+    return geometry === null || geometry.type === 'GeometryCollection' ? null : geometry;
   }
 
   listRowRefs(start: number, count: number): Int32Array {

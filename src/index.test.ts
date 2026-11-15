@@ -334,6 +334,7 @@ const KASANE = [
   'FeatureTablesWorker',
   'FeatureTablesWriter',
   'FeatureTypeRows',
+  'LayerTableView',
   'featureValuesOf',
   'GeoJSONRow',
   'GeoJSONRows',
@@ -452,6 +453,12 @@ const PLUGIN_NAMES_OF_MAIN = [
   'TerrainSurface',
   'TransformFields',
 ];
+
+/**
+ * The names /kasane shares with /webgl: the reading of the rows of a layer of the tables, all of it,
+ * and the part a plugin reads. The two are there together until /kasane goes
+ */
+const KASANE_NAMES_OF_WEBGL = ['LayerTableView'];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
 const WEBGL = [
@@ -587,7 +594,7 @@ describe('the six entries', () => {
   it('share no name, but the box of /geometry, which the main entry gives too, and the names of the plugins', () => {
     const all = [...MAIN, ...GEOMETRY, ...TABLE, ...EXTEND, ...KASANE, ...WEBGL];
     expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual(
-      ['BBox', ...PLUGIN_NAMES_OF_MAIN].sort(),
+      ['BBox', ...PLUGIN_NAMES_OF_MAIN, ...KASANE_NAMES_OF_WEBGL].sort(),
     );
   });
 });

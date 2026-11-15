@@ -11,16 +11,47 @@
  * that releases what was prepared: a renderer is what `prepare` returns.
  */
 
+import type { Position } from 'geojson';
 import type { DraggedRows } from '../../feature-table/dragged-rows.js';
 import type { MemoryUsage } from '../memory.js';
-import type { Feature } from '../model.js';
-import type { LayerTableView, RowRef } from '../tables.js';
-import type { RenderContext } from './render.js';
+import type { Feature, FeatureGeometry, FeatureStyle, FeatureType, Properties } from '../model.js';
+import type { RenderContext } from '../plugin/types.js';
+
+/** The reference of a row: the number a document gives a row, the same while it is open */
+export type RowRef = number;
+
+/**
+ * The rows of one layer or dataset, read without making features
+ */
+export interface LayerTableView {
+  /**
+   * The rows drawn now whose box as drawn meets a box `[west, south, east, north]`, in their order
+   * (after the thinning of a dataset; a hidden row is not drawn)
+   */
+  listDrawnRows(bbox: readonly [number, number, number, number]): Int32Array;
+  /** Changes whenever the rows drawn may have changed (added, hidden, shown, thinned) */
+  getDrawnRowsVersion(): number;
+  /** The row of an id (undefined for an id of no row) */
+  findRow(id: string): RowRef | undefined;
+  /** The type of a row (null for a row not there) */
+  getRowType(row: RowRef): FeatureType | null;
+  /** The position of a row whose geometry is a Point (null for any other row) */
+  getRowPoint(row: RowRef): Position | null;
+  /** The geometry of a row (null for a row without one, or not there) */
+  getRowGeometry(row: RowRef): FeatureGeometry | null;
+  /** The value of an attribute of a row (undefined when it does not hold the key) */
+  getRowValue(row: RowRef, key: string): unknown;
+  /**
+   * The style of a row (undefined for a row not there): shared between the rows of the same style,
+   * frozen, read without a copy
+   */
+  getRowStyle(row: RowRef): Readonly<FeatureStyle> | undefined;
+}
 
 /**
  * What a plugin draws with WebGL through (`PluginContext.webgl`)
  */
-export interface Webgl {
+export interface Webgl<P extends object = Properties> {
   /**
    * Draws above every feature, overlay and selection box, once in a frame. Overlays of plugins go
    * in the order they were added.
@@ -35,17 +66,18 @@ export interface Webgl {
    * have their rows in one range, also where the rows of the types alternate, and `prepare` runs
    * once for them: the draws of a layer where they alternate do not follow its rows.
    *
-   * @param featureType - A type added with `ctx.extensions.featureTypes`
+   * @param featureType - A type added with `ctx.addFeatureType`
    * @throws `DrawError` as {@link Webgl.addOverlay} does, and with the code `notFound` for a type
    *   that was not added
    */
-  addFeatureRenderer(featureType: string, definition: GpuDefinition<FeatureRenderer>): void;
+  addFeatureRenderer(featureType: string, definition: GpuDefinition<FeatureRenderer<P>>): void;
   /**
-   * The rows of a layer held as rows, read without making features of them.
+   * The rows of a layer held as rows, or of a dataset, by its id, read without making features of
+   * them.
    *
-   * @returns The rows, or `undefined` when the layer does not hold rows
+   * @returns The rows, or `undefined` when there is no such layer held as rows nor such dataset
    */
-  rows(layerId: string): LayerTableView | undefined;
+  rows(id: string): LayerTableView | undefined;
   /** The rows being moved together. `null` while none are */
   draggedRows(): DraggedRows | null;
 }
@@ -78,9 +110,9 @@ export interface OverlayContext extends RenderContext {
 /**
  * Draws the features of a type (`GpuDefinition.prepare` of {@link Webgl.addFeatureRenderer})
  */
-export interface FeatureRenderer {
+export interface FeatureRenderer<P extends object = Properties> {
   /** Draws one feature at its place in the order */
-  render(feature: Feature, context: RenderContext): void;
+  render(feature: Feature<P>, context: RenderContext): void;
   /**
    * Holds the rows of a layer on the GPU and draws them by range. Without it the rows in view are
    * made features and given to `render`.

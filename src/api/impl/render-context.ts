@@ -70,6 +70,21 @@ export function terrainSurfaceOf(
 /** The offsets of each projection matrix of a frame */
 const offsetsByMatrix = new WeakMap<object, OffsetUniforms>();
 
+/** The look of each render context with every key of the drawing (`resolvedStyleOf`) */
+const resolvedStyles = new WeakMap<RenderContext, (feature: Feature) => FeatureStyleResolved>();
+
+/**
+ * The look a render context draws a feature with, every key of the drawing there (the
+ * `appliedStyle` of the context, as core reads it)
+ *
+ * @internal
+ */
+export function resolvedStyleOf(context: RenderContext, feature: Feature): FeatureStyleResolved {
+  const resolve = resolvedStyles.get(context);
+  if (!resolve) throw new Error('A render context made elsewhere has no look of the drawing');
+  return resolve(feature);
+}
+
 /** The projection of a frame the CPU computes centers with: the matrix of the frame in float64 */
 function frameOf(base: FrameDrawContext, projection: ProjectionData): ProjectionData {
   return { ...projection, mainMatrix: base.mainMatrixArray as ProjectionData['mainMatrix'] };
@@ -151,7 +166,6 @@ export function createRenderContext(
         color: colorOf(style.color, 'the color of ctx.line', warnColor),
         opacity: style.opacity,
         lineStyle: style.lineStyle,
-        ...(style.dashArray !== undefined && { dashArray: style.dashArray }),
       };
       const common = {
         widthUnit: options.widthUnit ?? 'pixels',
@@ -178,22 +192,19 @@ export function createRenderContext(
     draw(position, style, options = {}) {
       // A size given at a reference zoom follows the zoom from it, as the width of a line does
       const scale = options.referenceZoom === undefined ? 1 : 2 ** (zoom - options.referenceZoom);
-      base.pointShapeRenderer.draw(
-        pair(position),
-        {
-          shape: style.shape,
-          size: style.size * scale,
-          fillColor: colorOf(style.fillColor, 'the fillColor of ctx.point', warnColor),
-          fillOpacity: style.fillOpacity,
-          strokeColor: colorOf(style.strokeColor, 'the strokeColor of ctx.point', warnColor),
-          strokeWidth: style.strokeWidth * scale,
-          strokeOpacity: style.strokeOpacity,
-        },
-        undefined,
-        options.elevationMeters,
-      );
+      base.pointShapeRenderer.draw(pair(position), {
+        shape: style.shape,
+        size: style.sizePixels * scale,
+        fillColor: colorOf(style.fillColor, 'the fillColor of ctx.point', warnColor),
+        fillOpacity: style.fillOpacity,
+        strokeColor: colorOf(style.strokeColor, 'the strokeColor of ctx.point', warnColor),
+        strokeWidth: style.strokeWidth * scale,
+        strokeOpacity: style.strokeOpacity,
+      });
     },
   };
+  const resolve = (feature: Feature): FeatureStyleResolved =>
+    appliedStyle(storedOfExtensionFeature(feature) ?? storedFeatureOf(feature));
   const context: RenderContext = {
     screen,
     opacity: base.opacity,
@@ -202,9 +213,9 @@ export function createRenderContext(
     fill,
     point,
     // A renderer is given the features in the public shape, made from those of the Store
-    appliedStyle: (feature) =>
-      appliedStyle(storedOfExtensionFeature(feature) ?? storedFeatureOf(feature)),
+    appliedStyle: resolve,
   };
+  resolvedStyles.set(context, resolve);
   // The building blocks of the second entry find the terrain state and the values of the GPU of
   // the frame behind the context
   bindTerrainState(context, base.terrain);

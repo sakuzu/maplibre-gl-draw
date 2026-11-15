@@ -36,6 +36,7 @@ import type { RenderContext } from '../extension/render.js';
 import type { Feature, FeatureStyle, FeatureStyleResolved } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine, type Engine } from './engine.js';
+import { resolvedStyleOf } from './render-context.js';
 
 /** The look of a board without a style of its own: a pale fill with a darker edge */
 const BOARD_LOOK: FeatureStyle = {
@@ -217,7 +218,9 @@ function drawnLook(view: Opened, id: string, context = frame()): FeatureStyleRes
   renderer.draw(feature, PROJECTION, 12, context);
   const last = lastRead(feature.type);
   if (!last) throw new Error(`${id} was not drawn`);
-  return last.ctx.appliedStyle(last.feature);
+  // What the render context answers, with every key the drawing reads
+  expect(last.ctx.appliedStyle(last.feature)).toEqual(resolvedStyleOf(last.ctx, last.feature));
+  return resolvedStyleOf(last.ctx, last.feature);
 }
 
 describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) => {
@@ -458,7 +461,7 @@ describe('a color a shared renderer cannot read', () => {
         ctx.fill.draw([[at, at, at]], { color: 'not a color', opacity: 1 });
         ctx.point.draw(at, {
           shape: 'circle',
-          size: 4,
+          sizePixels: 4,
           fillColor: '#ff0000',
           fillOpacity: 1,
           strokeColor: 'nope',

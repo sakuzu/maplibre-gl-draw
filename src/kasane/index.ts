@@ -70,6 +70,7 @@ export type {
   FeatureTablesWorker,
   FeatureTablesWriter,
   LayerRowsChange,
+  LayerTableView,
   RowApplyOptions,
   RowCursor,
   RowField,

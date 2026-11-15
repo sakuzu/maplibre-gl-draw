@@ -13,9 +13,11 @@ import type {
   FeatureTypeRenderer,
   FrameDrawContext,
 } from '../../extension/renderers.js';
+import { createTableStore } from '../../store/table-memory.js';
 import { createMapStub } from '../../test-utils.js';
+import { createDraw } from '../draw.js';
 import type { PluginContext } from '../extension/context.js';
-import type { FeatureRenderer, Gpu, GpuDefinition } from '../extension/webgl.js';
+import type { FeatureRenderer, Gpu, GpuDefinition, Webgl } from '../extension/webgl.js';
 import type { StoredFeature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -286,5 +288,73 @@ describe('ctx.webgl.addOverlay', () => {
       expect.objectContaining({ code: 'tooLarge' }),
     );
     engine.destroy();
+  });
+});
+
+describe('ctx.webgl.rows', () => {
+  it('reads the rows of a layer held as rows and of a dataset by their ids, without features', async () => {
+    const draw = createDraw(createMapStub().map, { store: createTableStore().store });
+    try {
+      const webgl: Webgl = draw.use({ name: 'acme-rows', setup: (ctx) => ctx.webgl });
+      const layerId = draw.layers.list()[0]?.id as string;
+      const [point, line] = await draw.write((tx) =>
+        tx.features.create([
+          {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [1, 2] },
+            properties: { name: 'a' },
+          },
+          {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
+            properties: {},
+          },
+        ]),
+      );
+      const layer = webgl.rows(layerId);
+      const row = layer?.findRow(point as string);
+      expect(row).toBeTypeOf('number');
+      expect(layer?.getRowValue(row as number, 'name')).toBe('a');
+      expect(layer?.getRowGeometry(row as number)).toEqual({ type: 'Point', coordinates: [1, 2] });
+      const lineRow = layer?.findRow(line as string) as number;
+      expect(layer?.getRowGeometry(lineRow)).toEqual({
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 1],
+        ],
+      });
+      expect(layer?.findRow('none')).toBeUndefined();
+      expect(layer?.getDrawnRowsVersion()).toBeTypeOf('number');
+
+      draw.datasets.add({
+        id: 'places',
+        rows: [
+          {
+            type: 'Feature',
+            id: 'p1',
+            geometry: { type: 'Point', coordinates: [3, 4] },
+            properties: { name: 'b' },
+          },
+        ],
+      });
+      const places = webgl.rows('places');
+      const at = places?.findRow('p1') as number;
+      expect(at).toBeTypeOf('number');
+      expect(places?.getRowType(at)).toBe('Point');
+      expect(places?.getRowPoint(at)).toEqual([3, 4]);
+      expect(places?.getRowValue(at, 'name')).toBe('b');
+      expect(places?.getRowGeometry(at)).toEqual({ type: 'Point', coordinates: [3, 4] });
+      expect(places?.findRow('none')).toBeUndefined();
+      expect(webgl.rows('nothing')).toBeUndefined();
+    } finally {
+      draw.destroy();
+    }
   });
 });

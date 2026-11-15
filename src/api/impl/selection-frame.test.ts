@@ -63,7 +63,7 @@ extensions.registerBoundingBox('Turned', (feature) => {
 function footprintOf(
   target: Feature,
   registry: typeof extensions = extensions,
-  project: (lngLat: Coordinate) => ScreenPoint = (c) => screen.project(c),
+  project: (lngLat: Coordinate) => ScreenPoint = (c) => [...screen.project(c)] as ScreenPoint,
 ): ScreenPoint[] {
   const box = computeBoundingBox(target, registry);
   if (!box) return [];
@@ -147,7 +147,10 @@ function recordingRenderer(
 
 /** The corners of the frame the renderer draws for one selected feature, on the screen */
 function drawnFrame(target: Feature): ScreenPoint[] {
-  const { renderer, frames } = recordingRenderer(extensions, (c) => screen.project(c));
+  const { renderer, frames } = recordingRenderer(
+    extensions,
+    (c) => [...screen.project(c)] as ScreenPoint,
+  );
   renderer.setTransform(transform);
   renderer.draw([target], ZOOM);
   expect(frames).toHaveLength(1);
@@ -224,11 +227,18 @@ describe('the selection frame of a built-in point of a draw instance', () => {
         pixelRatio: { resolve: () => 1 } as never,
       });
       const [x] = engineScreen.project([0.1, 0.1]);
-      const { renderer, frames } = recordingRenderer(registry, (c) => engineScreen.project(c));
+      const { renderer, frames } = recordingRenderer(
+        registry,
+        (c) => [...engineScreen.project(c)] as ScreenPoint,
+      );
       renderer.setTransform(createCoordinateTransform(engineMap));
       renderer.draw([stored], ZOOM);
       const right = frames[0][1][0];
-      const outline = footprintOf(stored, registry, (c) => engineScreen.project(c));
+      const outline = footprintOf(
+        stored,
+        registry,
+        (c) => [...engineScreen.project(c)] as ScreenPoint,
+      );
       return { outline: outline[1][0] - x, frame: right - x };
     } finally {
       engine.destroy();
@@ -260,7 +270,10 @@ describe('the combined frame of a multiple selection', () => {
 
   /** The corners of the combined frame (the last frame drawn) and of the corner handles */
   function frameAndHandles(features: Feature[]): { frame: ScreenPoint[]; handles: ScreenPoint[] } {
-    const { renderer, frames } = recordingRenderer(extensions, (c) => screen.project(c));
+    const { renderer, frames } = recordingRenderer(
+      extensions,
+      (c) => [...screen.project(c)] as ScreenPoint,
+    );
     renderer.setTransform(transform);
     renderer.draw(features, ZOOM);
 
@@ -268,7 +281,7 @@ describe('the combined frame of a multiple selection', () => {
     const handlesRenderer = new SelectionHandlesRenderer(
       { draw: () => {} } as unknown as StrokeRenderer,
       {
-        draw: (position: Coordinate) => handles.push(screen.project(position)),
+        draw: (position: Coordinate) => handles.push([...screen.project(position)] as ScreenPoint),
       } as unknown as PointShapeRenderer,
       DEFAULT_SELECTION_CONFIG,
     );
