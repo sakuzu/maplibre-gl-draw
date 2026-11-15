@@ -234,7 +234,20 @@ export class DocumentSession {
     this.#sender?.stop();
     const sender = this.#deps.makeSender(this.#deps.backend as Backend);
     this.#sender = sender;
+    this.#holdWrites();
     return sender;
+  }
+
+  /**
+   * Refuses the writes of this client while the storage does not let it write: the document
+   * opening (a write waits until it is open, the drawing does not start), or the storage telling
+   * `editable: false` (a write fails with `notEditable`), as while the instance is read-only. What
+   * the storage writes, and the document it gives, are written all the same
+   */
+  #holdWrites(): void {
+    if (!this.#deps.backend) return;
+    const writable = this.#document.state !== 'opening' && (this.#sender?.editable ?? true);
+    this.#deps.store.setDocumentWritable(writable, 'storage');
   }
 
   /** Reads the document from the storage, connects it, and sends on what the outbox kept */
@@ -458,6 +471,7 @@ export class DocumentSession {
 
   #setDocument(state: DocumentState): void {
     this.#document = state;
+    this.#holdWrites();
     this.#deps.changed();
   }
 
@@ -482,7 +496,10 @@ export class DocumentSession {
       receive: (result, options) => this.#receive(result, options),
       replace: (source, options) => this.#replace(source, options),
       advance: (commit: string, stage: SaveStage) => this.#sender?.advance(commit, stage),
-      report: (report: BackendReport) => this.#sender?.report(report),
+      report: (report: BackendReport) => {
+        this.#sender?.report(report);
+        this.#holdWrites();
+      },
       key: (id: string) => {
         const values = this.#sender?.values;
         if (!values) return undefined;

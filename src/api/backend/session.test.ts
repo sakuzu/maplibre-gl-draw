@@ -501,6 +501,40 @@ describe('what the storage writes', () => {
     });
   }
 
+  for (const [kind, makeStore] of STORE_KINDS) {
+    it(`refuses the writes as read-only while the storage does not let this client write, or it opens (${kind})`, async () => {
+      const { s, d } = await opened(makeStore);
+      const told: boolean[] = [];
+      d.on('readOnly.changed', ({ readOnly }) => told.push(readOnly));
+      s.context.report({ editable: false });
+      expect([d.isReadOnly(), d.status.value.editable]).toEqual([true, false]);
+      await expect(
+        d.write((tx) => tx.features.update('f1', { properties: { n: 1 } })),
+      ).rejects.toMatchObject({ code: 'notEditable' });
+      // The read-only of the application does not lift it
+      d.setReadOnly(false);
+      expect(d.isReadOnly()).toBe(true);
+      // What the storage writes arrives all the same
+      await s.push([{ type: 'set', kind: 'feature', ids: ['f2'], set: { properties: { n: 2 } } }]);
+      expect([n(d, 'f1'), n(d, 'f2')]).toEqual([0, 2]);
+      s.context.report({ editable: true });
+      expect([d.isReadOnly(), d.status.value.editable]).toEqual([false, true]);
+      const write = d.write((tx) => tx.features.update('f1', { properties: { n: 3 } }));
+      await settled(d);
+      expect([...new Set(s.sent.map((batch) => batch.commit))]).toEqual([write.id]);
+      // While it opens: read-only too (no drawing starts), and a write waits until it is open
+      const opening = d.open();
+      expect([d.isReadOnly(), d.status.value.editable]).toEqual([true, false]);
+      const waiting = d.write((tx) => tx.features.update('f3', { properties: { n: 4 } }));
+      await opening;
+      expect(d.isReadOnly()).toBe(false);
+      await waiting;
+      expect(n(d, 'f3')).toBe(4);
+      await tasks();
+      expect(told).toEqual([true, false, true, false]);
+    });
+  }
+
   it('replaces the document, tells the connection, the stages, the editing and the keys', async () => {
     const { s, d } = await opened(STORE_KINDS[1][1], { stages: ['durable'] });
     expect(d.status.value.connection).toEqual({ state: 'connecting', attempt: 1 });

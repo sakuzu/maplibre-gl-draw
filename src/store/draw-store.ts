@@ -61,6 +61,7 @@ import type { DocumentSnapshot, LastingSnapshot } from './read-snapshot.js';
 import { BULK_SLICE_ROWS, heldWritesOf, type RowSteps, rowStepsOf } from './row-steps.js';
 import { settleSelectionValues, valueOfSelection } from './selection-value.js';
 import type {
+  DocumentWriteHold,
   EditResult,
   FeatureEdit,
   GeometryTransforms,
@@ -193,10 +194,11 @@ export class DrawStore implements Store {
   /** The value this Store told last as the one before (`#toldValue` before it) */
   #toldBefore: SelectionValue | null = null;
   /**
-   * Whether the writes of this client of the document are taken (not while another document is
-   * shown in its place); the writes in a transaction from elsewhere (`remote`) always are
+   * Why the writes of this client of the document are not taken (another document shown in its
+   * place, the storage not letting this client write): they are taken while there is none. The
+   * writes in a transaction from elsewhere (`remote`) always are
    */
-  #documentWritable = true;
+  readonly #writeHolds = new Set<DocumentWriteHold>();
   /** The transactions from elsewhere (`remote`) under way */
   #remoteDepth = 0;
   /** The writes of the document a storage gave under way (see `fromStorage`) */
@@ -868,7 +870,7 @@ export class DrawStore implements Store {
 
   isReadOnly(): boolean {
     // Read-only too while another document is shown in place of the document
-    return this.#contract.isReadOnly() || !this.#documentWritable;
+    return this.#contract.isReadOnly() || this.#writeHolds.size > 0;
   }
   setReadOnly(value: boolean): void {
     if (this.#contract.isReadOnly() === value) return;
@@ -1023,16 +1025,17 @@ export class DrawStore implements Store {
     return this.transact(fn);
   }
 
-  /** Whether a write of the document is taken now (see `#documentWritable`) */
+  /** Whether a write of the document is taken now (see `#writeHolds`) */
   #takesWrites(): boolean {
-    return this.#documentWritable || this.#remoteDepth > 0;
+    return this.#writeHolds.size === 0 || this.#remoteDepth > 0;
   }
 
-  setDocumentWritable(writable: boolean): void {
-    if (this.#documentWritable === writable) return;
+  setDocumentWritable(writable: boolean, reason: DocumentWriteHold): void {
+    if (this.#writeHolds.has(reason) !== writable) return;
     // Told as a change of read-only (`isReadOnly`)
     this.#local(() => {
-      this.#documentWritable = writable;
+      if (writable) this.#writeHolds.delete(reason);
+      else this.#writeHolds.add(reason);
     }, true);
   }
 

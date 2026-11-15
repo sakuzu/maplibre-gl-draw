@@ -454,6 +454,13 @@ export interface StepsOptions {
   readonly snapshot?: boolean;
 }
 
+/**
+ * Why the writes of this client of the document are refused (`Store.setDocumentWritable`)
+ *
+ * @internal
+ */
+export type DocumentWriteHold = 'shown' | 'storage';
+
 export interface Store extends StoreView, UiState {
   /**
    * A number that changes whenever the Store may have changed: each of its transactions and each
@@ -548,10 +555,12 @@ export interface Store extends StoreView, UiState {
   restoreRows(patch: RowValues): RowValues | null;
   /**
    * Refuses the writes of this client of the document through this Store, which is read-only
-   * then (`isReadOnly`), or takes them again: while another document is shown in place of the
-   * document. The writes in a transaction from elsewhere (`remote`) are not refused
+   * then (`isReadOnly`), or takes them again, for one reason: while another document is shown in
+   * place of the document (`shown`), or while the storage does not let this client write
+   * (`storage`: the document opening, or `BackendReport.editable` false). They are taken once no
+   * reason holds. The writes in a transaction from elsewhere (`remote`) are not refused
    */
-  setDocumentWritable(writable: boolean): void;
+  setDocumentWritable(writable: boolean, reason: DocumentWriteHold): void;
 
   /**
    * The most features of rows the selection lists the IDs of: past it they are selected in bulk,

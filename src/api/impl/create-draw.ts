@@ -196,7 +196,7 @@ export function createDrawOnEngine(
       if (other === engine.customLayer.getShown()) return;
       // No mode receives the input while another document is shown: a drawing mode is left
       if (other !== null && modeManager.getMode() !== 'select') modeManager.setMode('select');
-      store.setDocumentWritable(other === null);
+      store.setDocumentWritable(other === null, 'shown');
       engine.customLayer.setShown(other);
     },
   });
