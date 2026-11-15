@@ -51,6 +51,24 @@ function createStore(count: number) {
 }
 
 describe('DisplayListCache', () => {
+  it('builds the list again once the types the instance knows change, and only then', () => {
+    const { store, reads } = createStore(10);
+    let revision = 0;
+    const cache = new DisplayListCache({
+      displayed: () => getDisplayFeatures(store),
+      typesRevision: () => revision,
+    });
+    cache.features();
+    cache.inOrder(new Set(['f1']));
+    expect(reads()).toBe(1);
+    // A custom type defined (or no longer): the features of the type come into the list or leave it
+    revision = 1;
+    cache.features();
+    expect(reads()).toBe(2);
+    cache.inOrder(new Set(['f1']));
+    expect(reads()).toBe(2);
+  });
+
   it('puts the ids in view in draw order, whichever way it takes them', () => {
     const { store } = createStore(100);
     const cache = new DisplayListCache({ displayed: () => getDisplayFeatures(store) });

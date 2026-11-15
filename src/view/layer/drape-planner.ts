@@ -570,6 +570,8 @@ export class DrapePlanner {
       store.getLayerOrder().join('/'),
       datasets.map((c) => `${c.id}:${c.drapeRevision}:${c.visible ? 1 : 0}:${c.order}`).join(','),
       bakedLayerOpacityKey(store, datasets.length),
+      // The features of a type defined, or no longer, come into what is displayed or leave it
+      shapes.typesRevision?.() ?? 0,
     ].join('|');
 
     let collected = this.collected;
