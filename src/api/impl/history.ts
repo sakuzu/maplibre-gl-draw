@@ -12,7 +12,9 @@
  * metadata and the files, and for the rows of a layer held as rows the values they had before (a
  * row deleted is kept by the Store until its step is let go of) and the rows created (written
  * deleted). Taking a step back is a commit too, told with the source `undo`; what it wrote is
- * the step that makes it again (`redo`).
+ * the step that makes it again (`redo`). A group a step creates again is not kept when none of
+ * its members is there once the step is written (they were deleted elsewhere since): a group with
+ * no member is not kept.
  *
  * A commit from elsewhere is no step; a commit of `draw.write` with `undo: false` is none either.
  * Opening a document drops every step.
@@ -262,9 +264,18 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         try {
           runCommit(store, { id, label: step.label, undo: false }, direction, () =>
             withLocksIgnored(store, () => {
-              if (step.written) step.written.write();
-              else
-                for (let i = step.parts.length - 1; i >= 0; i--) applyInverse(store, step.parts[i]);
+              if (step.written) {
+                step.written.write();
+                return;
+              }
+              // The groups of rows the step may make again that a row comes back into, read
+              // before the rows are written (they may be written over several tasks)
+              const coming = groupsComing(store, step.parts);
+              const madeAgain = new Set<string>();
+              for (let i = step.parts.length - 1; i >= 0; i--) {
+                applyInverse(store, step.parts[i], madeAgain);
+              }
+              deleteEmptyGroups(store, madeAgain, coming);
             }),
           );
         } finally {
@@ -415,8 +426,16 @@ function featureFields(feature: StoredFeature): Partial<StoredFeature> {
   return fields;
 }
 
-/** Takes one notification back, in the transaction of the caller */
-function applyInverse(store: Store, inverse: Inverse): void {
+/**
+ * Takes one notification back, in the transaction of the caller
+ *
+ * @param madeAgain - Where the IDs of the groups it creates again are added
+ */
+function applyInverse(store: Store, inverse: Inverse, madeAgain: Set<string>): void {
+  const createGroupAgain = (group: StoredGroup): void => {
+    createGroup(store, group);
+    madeAgain.add(group.id);
+  };
   const tables = store.tables;
   // 1. What was deleted comes back: the layers, the groups, then the features in them
   for (const layer of inverse.layersDeleted) {
@@ -426,7 +445,7 @@ function applyInverse(store: Store, inverse: Inverse): void {
     );
   }
   for (const group of inverse.groupsDeleted) {
-    if (!store.getGroup(group.id)) createGroupAgain(store, group);
+    if (!store.getGroup(group.id)) createGroupAgain(group);
   }
   for (const feature of inverse.featuresDeleted) {
     if (store.getFeature(feature.id)) continue;
@@ -477,7 +496,7 @@ function applyInverse(store: Store, inverse: Inverse): void {
     for (const parent of before.fields.get('parent') ?? []) {
       if (typeof parent !== 'string' || store.getGroup(parent) || store.getLayer(parent)) continue;
       const group = inverse.groupsBefore.get(parent);
-      if (group) createGroupAgain(store, group);
+      if (group) createGroupAgain(group);
     }
     store.restoreRows(before);
   };
@@ -486,7 +505,7 @@ function applyInverse(store: Store, inverse: Inverse): void {
     if (move.kind === 'item' && move.to === null && !store.getGroup(move.itemId)) {
       const before = inverse.groupsBefore.get(move.itemId);
       if (before) {
-        createGroupAgain(store, before);
+        createGroupAgain(before);
         if (tables) continue;
       }
     }
@@ -564,11 +583,102 @@ function applyInverse(store: Store, inverse: Inverse): void {
  * Creates a group again as it was, with no member (its members go back by the moves and the
  * values of the rows)
  */
-function createGroupAgain(store: Store, group: StoredGroup): void {
+function createGroup(store: Store, group: StoredGroup): void {
   if ('featureIds' in group) {
     store.createGroup({ ...group, featureIds: [] } as StoredGroup);
   } else {
     store.createGroup({ ...group } as StoredGroup);
+  }
+}
+
+/**
+ * The groups of features held as rows a step may create again (deleted by its commit, or deleted
+ * and created again) that a row comes back into: a row the step puts in one that is there now, or
+ * that the step brings back. Read before the step is written, since the rows it puts back may be
+ * written over several tasks (null for a Store of objects, or a step that creates no such group)
+ */
+function groupsComing(store: Store, parts: readonly Inverse[]): Set<string> | null {
+  const tables = store.tables;
+  if (!tables) return null;
+  const candidates = new Set<string>();
+  for (const part of parts) {
+    for (const group of [...part.groupsDeleted, ...part.groupsBefore.values()]) {
+      if (group.kind === 'table' && !store.getGroup(group.id)) candidates.add(group.id);
+    }
+  }
+  if (candidates.size === 0) return null;
+  // The rows put in each, from the values the step writes back, and those it brings back
+  const rows = new Map<string, number[]>();
+  const coming = new Set<string>();
+  const read = (values: RowValues): void => {
+    const parents = values.fields.get('parent');
+    if (!parents) return;
+    parents.forEach((parent, i) => {
+      if (typeof parent !== 'string' || !candidates.has(parent) || coming.has(parent)) return;
+      if (values.deleted && values.deleted[i] === 0) {
+        coming.add(parent);
+        return;
+      }
+      let list = rows.get(parent);
+      if (!list) {
+        list = [];
+        rows.set(parent, list);
+      }
+      list.push(values.rows[i]);
+    });
+  };
+  for (const part of parts) {
+    if (part.rowsBefore) read(part.rowsBefore);
+    for (const move of part.moves) if (move.before) read(move.before);
+  }
+  // A row there now comes back into its group (the first one there is enough)
+  for (const [groupId, list] of rows) {
+    if (coming.has(groupId)) continue;
+    for (let at = 0; at < list.length; at += ROWS_READ_AT_ONCE) {
+      const handles = Int32Array.from(list.slice(at, at + ROWS_READ_AT_ONCE));
+      const deleted = tables.readValues({
+        rows: handles,
+        fields: new Map(),
+        deleted: new Uint8Array(handles.length),
+      }).deleted;
+      if (deleted?.some((value) => value === 0)) {
+        coming.add(groupId);
+        break;
+      }
+    }
+  }
+  return coming;
+}
+
+/** The rows read at a time for whether they are there */
+const ROWS_READ_AT_ONCE = 256;
+
+/**
+ * Deletes the groups a step created again that hold no member once it is written: their members
+ * are gone (deleted elsewhere since), and a group with no member is not kept. A group of rows is
+ * read when the rows are written; while they are being written over several tasks, it is kept
+ * when a row comes back into it (`groupsComing`)
+ */
+function deleteEmptyGroups(
+  store: Store,
+  ids: ReadonlySet<string>,
+  coming: ReadonlySet<string> | null,
+): void {
+  for (const id of ids) {
+    const group = store.getGroup(id);
+    if (!group) continue;
+    if (group.kind !== 'table') {
+      if (group.featureIds.length === 0) store.deleteGroup(id);
+      continue;
+    }
+    if (store.slicedWritePending) {
+      if (!coming?.has(id)) store.deleteGroup(id);
+      continue;
+    }
+    const tables = store.tables;
+    const ref = tables?.getGroupRef(id);
+    const view = tables?.get(group.layerId);
+    if (ref === undefined || !view || view.countGroupMembers(ref) === 0) store.deleteGroup(id);
   }
 }
 
