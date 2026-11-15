@@ -217,6 +217,12 @@ export class Sender {
   readonly #preparing = new WeakMap<Entry, Promise<void>>();
   /** Whether the commits are being kept in the outbox as they come */
   #storing = false;
+  /**
+   * The writes of the outbox under way, by commit: each starts once the one before it is done, so
+   * that what a commit keeps there is what was written last (its batches put again with the IDs
+   * the storage gave, deleted once it is accepted, its refusal kept and dismissed)
+   */
+  readonly #outboxWrites = new Map<string, Promise<void>>();
 
   constructor(store: Store, backend: Backend, options: SenderOptions) {
     this.#store = store;
@@ -516,6 +522,7 @@ export class Sender {
       if (this.#stopped) return;
       if (!entry.batches && !reached(entry.stage, 'accepted')) await this.#prepare(entry);
     }
+    await this.outboxWritten();
   }
 
   /**
@@ -543,21 +550,50 @@ export class Sender {
       this.#forget(entry);
     }
     this.dismiss([...this.#refusals]);
+    await this.outboxWritten();
   }
 
   /** Deletes batches and refusals from the outbox; a failure is a problem nobody waits for */
   #unkeep(ids: readonly string[], label: string | undefined, commit: string | null): void {
+    if (!this.#outbox || ids.length === 0) return;
+    void this.#outboxWrite(commit, label, async (outbox) => {
+      for (const id of ids) await outbox.delete(id);
+    });
+  }
+
+  /**
+   * Writes the outbox for a commit once the writes of the outbox before it for the same commit are
+   * done: a failure is a problem nobody waits for. Settles with whether it was written
+   */
+  #outboxWrite(
+    commit: string | null,
+    label: string | undefined,
+    write: (outbox: Outbox) => Promise<void>,
+  ): Promise<boolean> {
     const outbox = this.#outbox;
-    if (!outbox || ids.length === 0) return;
-    void (async () => {
-      for (const id of ids) {
-        try {
-          await outbox.delete(id);
-        } catch (error) {
+    if (!outbox) return Promise.resolve(false);
+    const key = commit ?? '';
+    const before = this.#outboxWrites.get(key) ?? Promise.resolve();
+    const written = before
+      .then(() => write(outbox))
+      .then(
+        () => true,
+        (error: unknown) => {
           this.#options.onFailed?.({ error: failureOf(error), label, commit, count: 1 });
-        }
-      }
-    })();
+          return false;
+        },
+      );
+    const done = written.then(() => undefined);
+    this.#outboxWrites.set(key, done);
+    void done.then(() => {
+      if (this.#outboxWrites.get(key) === done) this.#outboxWrites.delete(key);
+    });
+    return written;
+  }
+
+  /** Settles once every write of the outbox asked for so far is done */
+  async outboxWritten(): Promise<void> {
+    while (this.#outboxWrites.size > 0) await Promise.all([...this.#outboxWrites.values()]);
   }
 
   /**
@@ -803,26 +839,22 @@ export class Sender {
   }
 
   async #prepareNow(entry: Entry): Promise<void> {
-    const operations = entry.operations ?? (await this.#read(entry));
+    let operations = entry.operations ?? (await this.#read(entry));
     if (this.#stopped || entry.batches) return;
-    const batches = operations.length === 0 ? [] : await this.#cut(entry, operations);
+    let batches = operations.length === 0 ? [] : await this.#cut(entry, operations);
+    // The storage gave features IDs while it was cut (see `#renameEntry`): cut again with them
+    while (!this.#stopped && !entry.batches && entry.operations !== operations) {
+      operations = entry.operations ?? [];
+      batches = operations.length === 0 ? [] : await this.#cut(entry, operations);
+    }
     if (this.#stopped || entry.batches) return;
     entry.batches = batches;
-    const outbox = this.#outbox;
-    if (!outbox || batches.length === 0) return;
-    try {
+    if (!this.#outbox || batches.length === 0) return;
+    // Not kept on the device when it fails: it is sent all the same
+    const put = await this.#outboxWrite(entry.commit, entry.label, async (outbox) => {
       for (const batch of batches) await outbox.put(batch);
-    } catch (error) {
-      // Not kept on the device: it is sent all the same
-      this.#options.onFailed?.({
-        error: failureOf(error),
-        label: entry.label,
-        commit: entry.commit,
-        count: 1,
-      });
-      return;
-    }
-    if (this.#stopped || !this.#entries.includes(entry)) return;
+    });
+    if (!put || this.#stopped || !this.#entries.includes(entry)) return;
     if (!reached(entry.stage, 'stored')) this.#reach(entry, 'stored');
   }
 
@@ -1209,22 +1241,13 @@ export class Sender {
     let next = cutting.next();
     while (!next.done) next = cutting.next();
     entry.batches = next.value;
-    const outbox = this.#outbox;
-    if (!outbox) return;
+    if (!this.#outbox) return;
     const now = new Set(entry.batches.map((batch) => batch.id));
     const batches = entry.batches;
-    void (async () => {
-      try {
-        for (const batch of batches) await outbox.put(batch);
-      } catch (error) {
-        this.#options.onFailed?.({
-          error: failureOf(error),
-          label: entry.label,
-          commit: entry.commit,
-          count: 1,
-        });
-      }
-    })();
+    // After what was put before (the batches of the same IDs are put over them)
+    void this.#outboxWrite(entry.commit, entry.label, async (outbox) => {
+      for (const batch of batches) await outbox.put(batch);
+    });
     this.#unkeep(
       before.map((batch) => batch.id).filter((id) => !now.has(id)),
       entry.label,
@@ -1237,27 +1260,27 @@ export class Sender {
    * a later `draw.open()` gives it back, with what the commit did
    */
   async #keep(entry: Entry, refusal: Refusal): Promise<void> {
-    const outbox = this.#outbox;
-    if (!outbox) return;
-    try {
+    // In the order of the writes of the outbox of the commit: a dismissal asked for after it
+    // deletes what it kept
+    await this.#outboxWrite(entry.commit, entry.label, async (outbox) => {
+      const held = (): RefusedCommit | undefined =>
+        this.#refusals.find((one) => one.refusal === refusal);
+      // Dismissed meanwhile: nothing of it is kept
+      if (!held()) return;
+      let batches: readonly ValueBatch[] = [];
       if (!entry.batches) {
-        const batches = await this.#cut(entry, entry.operations ?? []);
-        for (const batch of batches) await outbox.put(batch);
-        const kept = this.#refusals.find((one) => one.refusal === refusal);
-        if (kept) {
-          const at = this.#refusals.indexOf(kept);
-          this.#refusals[at] = { ...kept, batchIds: batches.map((batch) => batch.id) };
-        }
+        batches = await this.#cut(entry, entry.operations ?? []);
+        const kept = held();
+        if (!kept) return;
+        // Told before they are put, so that a dismissal from now on deletes them
+        this.#refusals[this.#refusals.indexOf(kept)] = {
+          ...kept,
+          batchIds: batches.map((batch) => batch.id),
+        };
       }
+      for (const batch of batches) await outbox.put(batch);
       await outbox.keep(refusal);
-    } catch (error) {
-      this.#options.onFailed?.({
-        error: failureOf(error),
-        label: entry.label,
-        commit: entry.commit,
-        count: 1,
-      });
-    }
+    });
   }
 
   /** The record of a commit refused */

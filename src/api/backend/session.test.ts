@@ -682,6 +682,95 @@ describe('the document closed', () => {
       s.release();
     });
   }
+  for (const [kind, makeStore] of STORE_KINDS) {
+    it(`keeps in the outbox the IDs given while a later commit is put there, and sends them on (${kind})`, async () => {
+      const outbox = memoryOutbox();
+      // A store of the device that is slow to put the later commit
+      let letPut: (() => void) | null = null;
+      const put = outbox.put;
+      outbox.put = async (batch) => {
+        if (batch.label === 'later' && !letPut) {
+          await new Promise<void>((resolve) => {
+            letPut = resolve;
+          });
+        }
+        await put(batch);
+      };
+      const held: { document?: StoredDocument } = {};
+      const { s, d } = await opened(makeStore, {
+        outbox,
+        answer: (batch, answer) => {
+          if (answer.status !== 'accepted' || batch.label !== 'make') return answer;
+          // The storage keeps it under the ID it gave
+          const features = held.document?.features;
+          const record = features?.get('n1');
+          if (features && record) {
+            features.delete('n1');
+            features.set('s1', record);
+          }
+          return { ...answer, reassigned: { n1: 's1' } };
+        },
+      });
+      held.document = s.document;
+      // The later commit is not answered until the end
+      const send = s.backend.send;
+      let holdLater = true;
+      s.backend.send = async (batch, task) => {
+        if (batch.label === 'later' && holdLater) await new Promise<void>(() => {});
+        return send(batch, task);
+      };
+      s.hold();
+      const made = d.write((tx) => tx.features.create(point('n1', 'a')), { label: 'make' });
+      await made.save({ until: 'stored' });
+      const later = d.write((tx) => tx.features.update('n1', { properties: { n: 4 } }), {
+        label: 'later',
+      });
+      await later;
+      await tasks(5);
+      expect(letPut).not.toBeNull();
+      // The answer gives n1 the ID s1 while the later commit is being put
+      s.release();
+      await made.save({ until: 'accepted' });
+      (letPut as unknown as () => void)();
+      await later.save({ until: 'stored' });
+      expect(await d.close({ unsent: 'keep' })).toEqual({ unsent: 1, refused: 0, kept: true });
+      const kept = [...outbox.batches.values()]
+        .filter((batch) => batch.commit === later.id)
+        .flatMap((batch) => batch.operations.flatMap((one) => ('ids' in one ? one.ids : [])));
+      expect(kept).toEqual(['s1']);
+      // Opened again: sent on with the ID given, and its value is there
+      holdLater = false;
+      await d.open();
+      await settled(d);
+      expect(s.document.features.get('s1')?.properties.n).toBe(4);
+      expect(n(d, 's1')).toBe(4);
+      expect(outbox.batches.size).toBe(0);
+    });
+
+    it(`deletes from the outbox a refusal dismissed while it is being kept there (${kind})`, async () => {
+      const outbox = memoryOutbox();
+      // A store of the device that is slow to keep the refusal
+      let letKeep: (() => void) | null = null;
+      const keep = outbox.keep;
+      outbox.keep = async (refusal) => {
+        await new Promise<void>((resolve) => {
+          letKeep = resolve;
+        });
+        await keep(refusal);
+      };
+      const { d } = await opened(makeStore, { outbox, refuse: (batch) => batch.label === 'no' });
+      await d.write((tx) => tx.features.update('f1', { properties: { n: 1 } }), { label: 'no' });
+      await settled(d);
+      await tasks(5);
+      expect(d.backend.refusals.value).toHaveLength(1);
+      expect(letKeep).not.toBeNull();
+      await d.backend.refusals.dismiss({ all: true });
+      (letKeep as unknown as () => void)();
+      expect(await d.close()).toEqual({ unsent: 0, refused: 0, kept: true });
+      expect([outbox.batches.size, outbox.kept.size]).toEqual([0, 0]);
+    });
+  }
+
   it('cuts again the commits kept in the outbox with the IDs the storage gave', async () => {
     const outbox = memoryOutbox();
     const { s, d } = await opened(STORE_KINDS[1][1], {

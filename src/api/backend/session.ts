@@ -357,6 +357,8 @@ export class DocumentSession {
       } else {
         result = { unsent, refused, kept: refused === 0 || sender.keeps };
       }
+      // What the outbox is asked to keep and to let go of is written before the next opening reads it
+      await sender.outboxWritten();
       sender.stop();
     }
     this.#disconnectNow();
