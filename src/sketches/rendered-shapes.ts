@@ -345,6 +345,15 @@ export class RenderedShapes {
     return dragged ? features.filter((feature) => !dragged.hasFeature(feature.id)) : features;
   }
 
+  /**
+   * The features shown of the layers of objects, in the stacking order, as the document has them,
+   * what the drag of this client edits included: a pick reads the ones a sketch edits as they are
+   * seen (`get`)
+   */
+  shownFeatures(): Feature[] {
+    return getDisplayFeatures(this.#store);
+  }
+
   /** The rows a hit tests, read where they are written and left out by their state */
   hitRows(): FeatureTablesInternals | undefined {
     return featureTablesInternals(this.#store.tables);

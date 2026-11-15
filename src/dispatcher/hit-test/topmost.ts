@@ -62,7 +62,7 @@ import { inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.j
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { wrapLongitude } from '../../shared/math/longitude.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
-import { getDisplayFeatures, isLocallyHidden } from '../../store/local-visibility.js';
+import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType, Layer } from '../../store/types.js';
 import { isGroupLocked, ROW_FLAG_LOCKED, STYLE_COLUMN } from '../../table/feature-row-columns.js';
@@ -613,7 +613,7 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
 
     // The features of the layers of objects, by layer in their order: the ones no sketch edits
     // hit as they are, the others as they are seen
-    const objects = getDisplayFeatures(store);
+    const objects = shapes.shownFeatures();
     const written = new Set(
       hitTestService
         .hitTestAll(
