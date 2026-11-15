@@ -20,6 +20,7 @@ import type { History } from '../impl/history.js';
 import { NATIVE_VERSION } from '../impl/import-export/constants.js';
 import type { ProblemInput } from '../impl/status.js';
 import { WRITE_SOURCE_NO_UNDO, type Writer } from '../impl/write.js';
+import type { DrawDocument } from '../model.js';
 import type { Connection, DocumentState, SaveStage } from '../status.js';
 import type {
   CloseOptions,
@@ -39,8 +40,13 @@ import type { ValueOperation } from './values.js';
 /** The time of one step of a receipt written over several tasks (ms) */
 const STEP_MS = 8;
 
-/** The most operations written at once in a step of a receipt */
-const STEP_OPERATIONS = 256;
+/**
+ * How much is written at once in a step of a receipt, counted in what the operations name (one a
+ * creation, the IDs of the others): more than the rows put in a place whose moves a Store of rows
+ * tells one at a time (`ORDER_ITEM_LIMIT`), which reads the items of the layer around each write,
+ * so that a large receipt is not as many reads of the layer
+ */
+const STEP_WEIGHT = 1024;
 
 /** The most IDs of one operation written at once (a larger one is cut) */
 const STEP_IDS = 1024;
@@ -49,7 +55,7 @@ const OPEN: DocumentState = Object.freeze({ state: 'open' });
 const CLOSED: DocumentState = Object.freeze({ state: 'closed' });
 
 /** A document with nothing in it: what is left once the document is closed */
-const EMPTY = Object.freeze({ version: NATIVE_VERSION, layerOrder: [], features: [] });
+const EMPTY: DrawDocument = { version: NATIVE_VERSION, layerOrder: [], features: [] };
 
 /** The keys of the options of `draw.open` (an object with only them is no source) */
 const OPEN_OPTION_KEYS: ReadonlySet<string> = new Set(['signal', 'onProgress', 'unsent']);
@@ -356,7 +362,7 @@ export class DocumentSession {
     this.#disconnectNow();
     // The document emptied, as nothing of it is open
     const { writer, history } = this.#deps;
-    await writer.open(EMPTY as never, undefined, { id: createId(), fromStorage: true });
+    await writer.open(EMPTY, undefined, { id: createId(), fromStorage: true });
     history.clear();
     this.#closedConnection = Object.freeze({
       state: 'closed',
@@ -483,8 +489,14 @@ export class DocumentSession {
         'remote',
         (deadline) => {
           while (at < operations.length) {
-            const part = operations.slice(at, at + STEP_OPERATIONS);
-            at += part.length;
+            let end = at;
+            let weight = 0;
+            while (end < operations.length && weight < STEP_WEIGHT) {
+              weight += weightOf(operations[end]);
+              end++;
+            }
+            const part = operations.slice(at, end);
+            at = end;
             const before = receipt ? values.namedBefore(part) : null;
             failed += writeOperations(store, values, part).failed.length;
             if (receipt && before) {
@@ -525,6 +537,12 @@ export class DocumentSession {
     }
     await this.#replaceWith(sender, source, options?.signal);
   }
+}
+
+/** How much an operation names: one a creation, the IDs of the others */
+function weightOf(operation: ValueOperation): number {
+  if (operation.type === 'create' || operation.kind === 'document') return 1;
+  return Math.max(1, operation.ids.length);
 }
 
 /** Operations with no more IDs each than a step writes at once */

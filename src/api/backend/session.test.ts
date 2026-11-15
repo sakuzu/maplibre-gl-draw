@@ -12,7 +12,8 @@ import { createReferenceBackend } from '@sakuzu/maplibre-gl-draw-testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { random, storedOf, writtenOf } from '../../test-support/random-commits.js';
 import { drawWith, point, STORE_KINDS, settled } from '../../test-support/refusing-storage.js';
-import type { Draw } from '../draw.js';
+import { createMapStub } from '../../test-utils.js';
+import { createDraw, type Draw } from '../draw.js';
 import type { Change } from '../events.js';
 import type { DrawDocument } from '../model.js';
 import type { Refusal, SaveStage } from '../status.js';
@@ -298,6 +299,19 @@ describe('the document opened from its storage', () => {
       expect(d.status.value.editable).toBe(false);
       await s.push([{ type: 'set', kind: 'feature', ids: ['f1'], set: { properties: { n: 9 } } }]);
       expect(n(d, 'f1')).toBe(9);
+      // A large one, written over several tasks, all of it
+      const many = Array.from({ length: 6000 }, (_, i) => `r${i}`);
+      await s.push(
+        many.map((id, i) => ({
+          type: 'create',
+          kind: 'feature',
+          id,
+          record: featureRecord('a', keyOf(10 + i), i),
+        })),
+      );
+      expect(d.features.count()).toBe(6003);
+      await s.push([{ type: 'delete', kind: 'feature', ids: many }]);
+      expect(d.features.count()).toBe(3);
       expect(s.sent).toEqual([]);
     });
 
@@ -320,10 +334,11 @@ describe('the document opened from its storage', () => {
   it('is no source given in place of its options, and needs a storage', async () => {
     const d = drawWith(STORE_KINDS[0][1](), seeded().backend);
     draws.push(d);
-    await expect(d.open({ unsent: 'nothing' as never })).rejects.toMatchObject({
+    // @ts-expect-error: no such value
+    await expect(d.open({ unsent: 'nothing' })).rejects.toMatchObject({
       code: 'invalidInput',
     });
-    const none = drawWith(STORE_KINDS[0][1](), undefined as never);
+    const none = createDraw(createMapStub().map, { initDefaultLayer: false });
     draws.push(none);
     await expect(none.open()).rejects.toMatchObject({ code: 'invalidState' });
   });

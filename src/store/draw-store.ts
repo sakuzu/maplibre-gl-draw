@@ -704,8 +704,14 @@ export class DrawStore implements Store {
       running = true;
       let done: boolean;
       try {
+        // A later step writes as its transaction does: from elsewhere still, for a write from
+        // elsewhere (taken while read-only, see `#write`)
         done = around(() =>
-          this.#queue.runStep(() => this.#bus.continueHeld(() => held.step(() => step(deadline)))),
+          this.#queue.runStep(() =>
+            this.#bus.continueHeld(() =>
+              held.step(() => this.#asSource(source, () => step(deadline))),
+            ),
+          ),
         );
       } catch (error) {
         running = false;
@@ -942,6 +948,17 @@ export class DrawStore implements Store {
 
   get revision(): number {
     return this.#revision;
+  }
+
+  /** Runs a step of a transaction held, as its source writes (see `writeInSteps`) */
+  #asSource<T>(source: UpdateSource, fn: () => T): T {
+    if (source !== 'remote') return fn();
+    this.#remoteDepth++;
+    try {
+      return fn();
+    } finally {
+      this.#remoteDepth--;
+    }
   }
 
   fromStorage<T>(fn: () => T): T {

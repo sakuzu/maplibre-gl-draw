@@ -395,7 +395,7 @@ export class CommitValues {
       this.#files(changes, out, inv);
       this.#layers(change, changes, out, inv);
       const groups = this.#groups(change, changes, out, inv);
-      rows = this.#features(change, changes, out, inv, groups);
+      rows = this.#features(change, changes, out, inv, groups, values);
       this.#document(changes, out, inv);
       if (inv) this.#placementsBack(change, inv);
     } finally {
@@ -935,9 +935,25 @@ export class CommitValues {
     out: Operations,
     inv: Operations | null,
     groups: GroupsMoved,
+    values = true,
   ): RowsToRead {
     const store = this.store;
     const ids = change.features;
+    // Read for the places only (a notification not sent): the rows keep their places in their
+    // tables, and nothing of them is read
+    const readsRows = values;
+    // Only rows, read for the places only: nothing to read
+    if (!values && changes.features === undefined) {
+      return {
+        created: [],
+        deleted: [],
+        updated: [],
+        handles: [],
+        at: 0,
+        index: new Map(),
+        indexed: 0,
+      };
+    }
     // The rows deleted, by their IDs: what makes them again is read with the values of the rows
     const rowsDeleted = inv ? rowsDeletedOf(changes, store) : null;
     const deletedRows: DeletedRow[] = [];
@@ -962,7 +978,7 @@ export class CommitValues {
       const was = this.#places.get(id);
       if (was) touched.add(was.parent);
       if (this.#isRow(id)) {
-        rows.push(id);
+        if (readsRows) rows.push(id);
         continue;
       }
       const feature = store.getFeature(id);
@@ -982,12 +998,13 @@ export class CommitValues {
     // The members of a group put in another layer are put there: their layer is written
     for (const group of groups.relayered) {
       for (const id of this.#membersOf(group)) {
-        if (this.#isRow(id)) rows.push(id);
-        else moved.add(id);
+        if (this.#isRow(id)) {
+          if (readsRows) rows.push(id);
+        } else moved.add(id);
       }
     }
     // The rows written with their place among the fields (a row put elsewhere and changed)
-    const placedFields = placeFieldsWritten(changes);
+    const placedFields = readsRows ? placeFieldsWritten(changes) : new Set<string>();
     for (const id of ids.updated) {
       if (placedFields.size > 0 && this.#isRow(id)) {
         const layerId = store.getFeature(id)?.layerId;
@@ -1009,11 +1026,11 @@ export class CommitValues {
     const tables = store.tables;
     for (const id of ids.created) {
       inv?.deletedFeatures.push(id);
-      const key = rowPlaces.get(id)?.key ?? this.#places.get(id)?.key ?? '';
       if (this.#isRow(id)) {
-        toRead.created.push({ id, key });
+        if (readsRows) toRead.created.push({ id, key: rowPlaces.get(id)?.key ?? '' });
         continue;
       }
+      const key = this.#places.get(id)?.key ?? '';
       const feature = store.getFeature(id);
       if (feature) out.createdFeatures.push(createFeature(feature, key));
     }
