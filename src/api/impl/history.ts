@@ -611,8 +611,20 @@ function groupsComing(store: Store, parts: readonly Inverse[]): Set<string> | nu
   const rows = new Map<string, number[]>();
   const coming = new Set<string>();
   const read = (values: RowValues): void => {
-    const parents = values.fields.get('parent');
-    if (!parents) return;
+    let parents = values.fields.get('parent');
+    if (!parents) {
+      // Rows brought back without their place written come back where they were: their group is
+      // the one a token keeps them in, read now
+      if (!values.deleted?.some((value) => value === 0)) return;
+      parents = tables.readValues({
+        rows: values.rows,
+        fields: new Map([['parent', []]]),
+      }).fields.get('parent');
+      if (!parents) {
+        for (const id of candidates) coming.add(id);
+        return;
+      }
+    }
     parents.forEach((parent, i) => {
       if (typeof parent !== 'string' || !candidates.has(parent) || coming.has(parent)) return;
       if (values.deleted && values.deleted[i] === 0) {
