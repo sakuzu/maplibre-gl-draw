@@ -55,7 +55,8 @@ const NO_ROLES: TransformRoles = { uniformScale: false };
 
 /**
  * The fields the custom types of an instance declare (`FeatureTypeDefinition.transformFields`),
- * by type
+ * by type: every custom type of the instance is registered here, so it is also what tells the
+ * types the instance knows (`feature-types.ts`)
  *
  * @internal
  */
@@ -65,6 +66,8 @@ export interface TransformFieldsRegistry {
    * `undefined` for a type that is not a custom type of the instance
    */
   of(type: string): TransformFields | undefined;
+  /** A number that changes whenever a custom type is registered or its registration cancelled */
+  readonly revision: number;
   /** Every key of `properties` a custom type declares */
   keys(): readonly string[];
   /**
@@ -86,8 +89,12 @@ export interface TransformFieldsRegistry {
 export function createTransformFieldsRegistry(): TransformFieldsRegistry {
   const byType = new Map<string, TransformFields>();
   let keys: readonly string[] | null = null;
+  let revision = 0;
   return {
     of: (type) => byType.get(type),
+    get revision() {
+      return revision;
+    },
     keys() {
       if (!keys) {
         const all = new Set<string>();
@@ -103,15 +110,18 @@ export function createTransformFieldsRegistry(): TransformFieldsRegistry {
       const own = { ...fields };
       byType.set(type, own);
       keys = null;
+      revision++;
       return () => {
         if (byType.get(type) !== own) return;
         byType.delete(type);
         keys = null;
+        revision++;
       };
     },
     clear() {
       byType.clear();
       keys = null;
+      revision++;
     },
   };
 }

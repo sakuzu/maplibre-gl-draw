@@ -463,6 +463,10 @@ export function installFeatureType(
   const appliesToRow = appliesTo && rows ? rows.appliesTo.bind(rows) : undefined;
 
   try {
+    // The fields its resize and rotation write, for a custom type (an override keeps the fields of
+    // the built-in type). Registered first and cancelled last: the instance knows the type, and
+    // draws and hits its features, while anything of it is installed (`feature-types.ts`)
+    if (!overriding) add(deps.transformFields.register(type, definition.transformFields ?? {}));
     const render = definition.render?.bind(definition);
     const renderer = {
       ...adaptFeatureRender(type, render, deps),
@@ -562,9 +566,6 @@ export function installFeatureType(
       );
     }
 
-    // The fields its resize and rotation write, for a custom type (an override keeps the fields of
-    // the built-in type)
-    if (!overriding) add(deps.transformFields.register(type, definition.transformFields ?? {}));
     // The look it declares, for a custom type (an override keeps the defaults of the built-in
     // type)
     if (!overriding) {

@@ -25,6 +25,7 @@ import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
+import { rowTypeKnown } from '../../store/feature-types.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
@@ -89,7 +90,9 @@ export interface RowClassifyContext {
   /**
    * The fields the custom types declare: a row of a type that declares a scale field is drawn at
    * once, also where its renderer gives pictures (a picture is chosen by the style of a point,
-   * and does not follow its scale)
+   * and does not follow its scale). It tells the custom types of the instance too: a row of a type
+   * that is neither built in nor registered here draws nothing (none given: only the built-in
+   * types are drawn)
    */
   readonly transformFields?: TransformFieldsRegistry | null;
 }
@@ -145,7 +148,8 @@ export function rowHasCompanion(
  * a change on one side only breaks the order). For the drawing in one draw (`oneDraw`) it is
  * `rows` or `immediate`
  *
- * @returns The kind, or null for a row without a geometry (it draws nothing)
+ * @returns The kind, or null for a row without a geometry or of a type the instance does not
+ *   know (it draws nothing)
  * @internal
  */
 export function classifyRow(
@@ -155,6 +159,8 @@ export function classifyRow(
 ): TableRunKind | null {
   const data = group.data;
   if (!rowHasGeometry(group, row)) return null;
+  // A row of a type the instance does not know draws nothing (`feature-types.ts`)
+  if (!rowTypeKnown(data, row, context.transformFields)) return null;
   const type = rowType(data, row);
   const oneDraw = context.oneDraw === true;
 

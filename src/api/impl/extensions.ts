@@ -11,6 +11,7 @@
  */
 
 import type { Geometry } from 'geojson';
+import { BUILT_IN_FEATURE_TYPES } from '../../store/feature-types.js';
 import { getStyleRuleChannel, type StyleRuleChannel } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
 import type { FeatureTypeDefinition } from '../extension/feature-type.js';
@@ -312,17 +313,7 @@ export function createExtensionsCollections(
  *
  * @internal
  */
-export const BUILT_IN_TYPES: ReadonlySet<string> = new Set([
-  'Point',
-  'LineString',
-  'Polygon',
-  'MultiPoint',
-  'MultiLineString',
-  'MultiPolygon',
-  'Image',
-  'Circle',
-  'Freehand',
-]);
+export const BUILT_IN_TYPES: ReadonlySet<string> = BUILT_IN_FEATURE_TYPES;
 
 /**
  * The channel a layer rule colors for a feature type, the one judgment of an instance: a built-in
