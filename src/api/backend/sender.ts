@@ -213,6 +213,10 @@ export class Sender {
   #shown: Connection;
   /** Whether sending waits (the document is closed or opening) */
   #paused = false;
+  /** The reading, cutting and keeping of each commit under way or done */
+  readonly #preparing = new WeakMap<Entry, Promise<void>>();
+  /** Whether the commits are being kept in the outbox as they come */
+  #storing = false;
 
   constructor(store: Store, backend: Backend, options: SenderOptions) {
     this.#store = store;
@@ -728,6 +732,7 @@ export class Sender {
     this.#open = null;
     // Read and sent from a later task: not in the task of the commit
     if (!this.#running) setTimeout(() => void this.#run(), 0);
+    if (this.#outbox && !this.#storing) setTimeout(() => void this.#storeKept(), 0);
   }
 
   /**
@@ -766,8 +771,38 @@ export class Sender {
     }
   }
 
-  /** Reads and cuts a commit, and puts its batches in the outbox (then it is `stored`) */
-  async #prepare(entry: Entry): Promise<void> {
+  /** Reads and cuts a commit, and puts its batches in the outbox (then it is `stored`), once */
+  #prepare(entry: Entry): Promise<void> {
+    let preparing = this.#preparing.get(entry);
+    if (!preparing) {
+      preparing = this.#prepareNow(entry);
+      this.#preparing.set(entry, preparing);
+    }
+    return preparing;
+  }
+
+  /**
+   * With an outbox, keeps every commit complete on the device as it comes, while an earlier one is
+   * being sent
+   */
+  async #storeKept(): Promise<void> {
+    if (this.#storing || !this.#outbox) return;
+    this.#storing = true;
+    try {
+      for (;;) {
+        if (this.#stopped) return;
+        const entry = this.#entries.find(
+          (one) => !one.open && !one.batches && !reached(one.stage, 'accepted'),
+        );
+        if (!entry) return;
+        await this.#prepare(entry);
+      }
+    } finally {
+      this.#storing = false;
+    }
+  }
+
+  async #prepareNow(entry: Entry): Promise<void> {
     const operations = entry.operations ?? (await this.#read(entry));
     if (this.#stopped || entry.batches) return;
     const batches = operations.length === 0 ? [] : await this.#cut(entry, operations);
@@ -928,7 +963,7 @@ export class Sender {
             entry.label,
             entry.commit,
           );
-          if (answer.reassigned) this.#reassign(answer.reassigned);
+          if (answer.reassigned) this.#reassign(answer.reassigned, entry);
           this.#reach(
             entry,
             answer.durable === true && this.#stages.includes('durable') ? 'durable' : 'accepted',
@@ -1099,7 +1134,7 @@ export class Sender {
    * the commits not sent and the refusals go on with them, those deleted here before the answer
    * came included (only the Store has nothing to write of them)
    */
-  #reassign(given: Readonly<Record<string, string>>): void {
+  #reassign(given: Readonly<Record<string, string>>, answered?: Entry): void {
     const store = this.#store;
     const pairs = new Map<string, string>();
     const taken = new Set<string>();
@@ -1143,7 +1178,7 @@ export class Sender {
     this.#values.followIds(pairs);
     for (const entry of this.#entries) {
       if (entry.operations === null) entry.renames = [...(entry.renames ?? []), pairs];
-      else this.#renameEntry(entry, pairs);
+      else this.#renameEntry(entry, pairs, entry === answered);
     }
     this.#refusals = this.#refusals.map((one) => ({
       refusal: one.refusal,
@@ -1154,9 +1189,11 @@ export class Sender {
   }
 
   /** The operations of a commit with the features named by the IDs given them */
-  #renameEntry(entry: Entry, ids: ReadonlyMap<string, string>): void {
+  #renameEntry(entry: Entry, ids: ReadonlyMap<string, string>, answered = false): void {
     if (entry.operations) entry.operations = renamedOperations(entry.operations, ids);
     entry.inverse = renamedOperations(entry.inverse, ids);
+    // The commit answered now is sent: nothing of it is cut again nor kept
+    if (answered) return;
     // Cut again with the new IDs, before it is sent (the batches of the same IDs put again)
     const before = entry.batches;
     if (!before || before.length === 0 || reached(entry.stage, 'accepted')) return;

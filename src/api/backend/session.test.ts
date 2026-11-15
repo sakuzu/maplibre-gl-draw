@@ -122,6 +122,8 @@ function storage(
     readonly stages?: readonly SaveStage[];
     readonly refuse?: (batch: ValueBatch) => boolean;
     readonly connect?: boolean;
+    /** What the storage answers a batch it accepted, given the answer of the reference */
+    readonly answer?: (batch: ValueBatch, answer: Answer) => Answer;
   } = {},
 ) {
   const reference = createReferenceBackend();
@@ -153,7 +155,8 @@ function storage(
       sent.push(batch);
       if (gate) await gate;
       if (options.refuse?.(batch)) return { status: 'refused', reason: 'rules', message: 'no' };
-      return reference.send(batch, task);
+      const answer = await reference.send(batch, task);
+      return options.answer ? options.answer(batch, answer) : answer;
     },
     abandon: (commit, task) => reference.abandon?.(commit, task) ?? Promise.resolve(),
   };
@@ -679,4 +682,43 @@ describe('the document closed', () => {
       s.release();
     });
   }
+  it('cuts again the commits kept in the outbox with the IDs the storage gave', async () => {
+    const outbox = memoryOutbox();
+    const { s, d } = await opened(STORE_KINDS[1][1], {
+      outbox,
+      answer: (batch, answer) =>
+        answer.status === 'accepted' && batch.label === 'make'
+          ? { ...answer, reassigned: { n1: 's1' } }
+          : answer,
+    });
+    s.hold();
+    const made = d.write((tx) => tx.features.create(point('n1', 'a')), { label: 'make' });
+    await made;
+    const later = d.write((tx) => tx.features.update('n1', { properties: { n: 4 } }));
+    await later.save({ until: 'stored' });
+    const kept = () =>
+      [...outbox.batches.values()]
+        .filter((batch) => batch.commit === later.id)
+        .flatMap((batch) => batch.operations.flatMap((one) => ('ids' in one ? one.ids : [])));
+    expect(kept()).toEqual(['n1']);
+    const put: string[][] = [];
+    const putBefore = outbox.put;
+    outbox.put = async (batch) => {
+      if (batch.commit === later.id) {
+        put.push(batch.operations.flatMap((one) => ('ids' in one ? one.ids : [])));
+      }
+      await putBefore(batch);
+    };
+    s.release();
+    await later.save({ until: 'accepted' });
+    expect(d.features.has('s1')).toBe(true);
+    // Put again and sent with the ID given
+    expect(put).toEqual([['s1']]);
+    const sent = s.sent.filter((batch) => batch.commit === later.id);
+    expect(
+      sent.flatMap((batch) => batch.operations.flatMap((one) => ('ids' in one ? one.ids : []))),
+    ).toEqual(['s1']);
+    await settled(d);
+    expect(outbox.batches.size).toBe(0);
+  });
 });
