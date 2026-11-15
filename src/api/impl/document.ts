@@ -20,15 +20,22 @@ import type { DocumentLoads } from './document-resource.js';
  * @internal
  */
 export interface DocumentLoader extends DocumentLoads {
-  /** Reads a source; null when the document is read-only. Every failure is a DrawError */
+  /**
+   * Reads a source; null when the document is read-only (unless it is what the storage gave:
+   * `fromStorage`). Every failure is a DrawError
+   */
   prepare(
     source: LoadSource,
     options: LoadOptions | undefined,
     pending: Set<string>,
     createdLayers: Set<string>,
+    fromStorage?: boolean,
   ): Promise<PreparedItem | null>;
-  /** Writes what was read in one transaction; null when the document became read-only */
-  writeAll(prepared: readonly PreparedItem[]): LoadResult[] | null;
+  /**
+   * Writes what was read in one transaction; null when the document became read-only (unless it
+   * is what the storage gave: `fromStorage`)
+   */
+  writeAll(prepared: readonly PreparedItem[], fromStorage?: boolean): LoadResult[] | null;
 }
 
 import { DrawError } from '../errors.js';
@@ -113,9 +120,10 @@ export function createDocument(
     options: LoadOptions | undefined,
     pending: Set<string>,
     createdLayers: Set<string>,
+    fromStorage = false,
   ) => {
     try {
-      return await read(source, options, pending, createdLayers);
+      return await read(source, options, pending, createdLayers, fromStorage);
     } catch (error) {
       // Whatever went wrong, the promise rejects with a DrawError
       throw asDrawError('invalidInput', error);
@@ -126,8 +134,11 @@ export function createDocument(
    * Writes the loads that were read in one transaction and announces each one, or returns
    * null when the document became read-only while they were read
    */
-  const writeAll = (prepared: readonly PreparedItem[]): LoadResult[] | null => {
-    if (store.isReadOnly() || shown.get() !== null) return null;
+  const writeAll = (
+    prepared: readonly PreparedItem[],
+    fromStorage = false,
+  ): LoadResult[] | null => {
+    if (!fromStorage && (store.isReadOnly() || shown.get() !== null)) return null;
     // An ID given to a new layer or group may have been taken while the sources were read;
     // nothing may throw once the writing has started
     for (const { layer, group } of prepared) {
@@ -219,6 +230,7 @@ export function createDocument(
     given: LoadOptions | undefined,
     pending: Set<string>,
     createdLayers: Set<string>,
+    fromStorage: boolean,
   ): Promise<PreparedItem | null> {
     const options = given ?? {};
     if (!isRecord(options as unknown)) throw invalidInput('The options must be an object');
@@ -249,7 +261,7 @@ export function createDocument(
         ? prepareGroupShell(deps, options.group, GROUP_KEYS, pending)
         : undefined;
     if (group) pending.add(group.id);
-    if (store.isReadOnly()) return null;
+    if (!fromStorage && store.isReadOnly()) return null;
     const load = await readLoad(source, options, layer?.layer.id ?? options.layerId, {
       grouped: group !== undefined,
       creates: layer !== undefined || group !== undefined,

@@ -10,7 +10,7 @@
 import type { DrawError } from '../../shared/draw-error.js';
 import type { Store } from '../../store/store.js';
 import { createObservable } from '../backend/observable.js';
-import type { Sender } from '../backend/sender.js';
+import type { DocumentSession } from '../backend/session.js';
 import type { Observable } from '../events.js';
 import type { Connection, DocumentState, Problem, SaveState, Status } from '../status.js';
 import type { EventHub } from './events.js';
@@ -55,26 +55,29 @@ export interface StatusResource {
 /**
  * Creates the state of an instance
  *
- * @param sender - What sends the commits to the storage (`null` without one)
+ * @param session - The document opened and closed, and what sends its commits to the storage
  * @internal
  */
 export function createStatus(deps: {
   readonly store: Store;
   readonly history: History;
   readonly events: EventHub;
-  readonly sender: () => Sender | null;
+  readonly session: () => DocumentSession | null;
 }): StatusResource {
   const { store, history, events } = deps;
   let problems: readonly Problem[] = Object.freeze([]);
   let nextId = 1;
   const make = (before: Status | null): Status => {
-    const sender = deps.sender();
+    const session = deps.session();
+    const sender = session?.sender ?? null;
+    const document = session?.document ?? OPEN;
     const saving = sender?.saving ?? NOT_SAVED;
-    const connection = sender?.connection ?? NO_CONNECTION;
+    const connection = session?.connection(NO_CONNECTION) ?? NO_CONNECTION;
     const steps = history.state();
-    const editable = !store.isReadOnly();
+    const editable = !store.isReadOnly() && (session?.editable ?? true);
     if (
       before &&
+      before.document === document &&
       before.saving === saving &&
       before.connection === connection &&
       before.history === steps &&
@@ -84,7 +87,7 @@ export function createStatus(deps: {
       return before;
     }
     return Object.freeze({
-      document: OPEN,
+      document,
       saving,
       connection,
       history: steps,

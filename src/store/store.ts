@@ -505,6 +505,11 @@ export interface Store extends StoreView, UiState {
   /** Deletes a feature (see {@link DocumentStore.deleteFeature}) */
   deleteFeature(id: string): boolean;
   /**
+   * Runs writes of the document a storage gave (opened from it): they are taken even while
+   * read-only or while another document is shown, told with the source of their transaction
+   */
+  fromStorage<T>(fn: () => T): T;
+  /**
    * Deletes features, each as `deleteFeature` does: the rows of a Store of rows in one write, the
    * others one at a time. Every one named must be there
    */

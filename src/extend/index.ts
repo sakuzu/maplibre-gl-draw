@@ -45,7 +45,16 @@ export type {
 } from '../view/renderers/rows/rows-format.js';
 
 // The storage of the documents
-export type { Answer, Backend, BackendBase, Task } from '../api/backend/backend.js';
+export type {
+  Answer,
+  Backend,
+  BackendBase,
+  BackendContext,
+  BackendReport,
+  Outbox,
+  Received,
+  Task,
+} from '../api/backend/backend.js';
 
 // The values a storage receives
 export type {

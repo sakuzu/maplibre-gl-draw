@@ -11,12 +11,13 @@ import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import { createBackendResource } from '../backend/refusals.js';
 import { Sender, type SenderOptions } from '../backend/sender.js';
+import { DocumentSession } from '../backend/session.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
 import type { FeaturesCollection } from '../features.js';
 import type { DrawOptions } from '../options.js';
-import type { Write } from '../write.js';
+import type { OpenOptions, OpenSource, Write } from '../write.js';
 import { captureImage } from './capture.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
@@ -62,6 +63,7 @@ const ASYNC_MEMBERS: ReadonlySet<string> = new Set([
   'undo',
   'redo',
   'open',
+  'close',
   'view.preview',
   'captureImage',
   'mode.drawing.commit',
@@ -203,8 +205,11 @@ export function createDrawOnEngine(
     { features: featureResource, groups: groupResource },
     events,
   );
+  // The document opened from the storage and closed (made below): a write waits while it opens
+  let session: DocumentSession | null = null;
   const writer = createWriter({
     deps,
+    gate: () => session?.gate() ?? null,
     published: readDeps.store,
     writers: {
       features: featureResource,
@@ -218,20 +223,31 @@ export function createDrawOnEngine(
   });
   const history = createHistory(store, options.history);
   // The storage: the commits of this client are sent to it, and the state tells how far
-  let sender: Sender | null = null;
-  const status = createStatus({ store, history, events, sender: () => sender });
-  if (options.backend) {
-    sender = new Sender(store, options.backend, {
-      ...senderOptions,
-      onChange: () => status.changed(),
-      onTakenOut: (commits, written) => history.drop(commits, written),
-      originOf: (commit) => history.originOf(commit),
-      onReassigned: (ids) => history.rename(ids),
-      onSkipped: (skipped) => status.problem({ type: 'skipped', ...skipped }),
-    });
-    setCommitSaver(store, sender);
-    status.changed();
-  }
+  const status = createStatus({ store, history, events, session: () => session });
+  const opened = new DocumentSession({
+    store,
+    backend: options.backend,
+    writer,
+    history,
+    draw: () => draw,
+    makeSender: (backend) => {
+      const sender = new Sender(store, backend, {
+        ...senderOptions,
+        onChange: () => status.changed(),
+        onTakenOut: (commits, written) => history.drop(commits, written),
+        originOf: (commit) => history.originOf(commit),
+        onReassigned: (ids) => history.rename(ids),
+        onSkipped: (skipped) => status.problem({ type: 'skipped', ...skipped }),
+        onFailed: (failed) => status.problem({ type: 'failed', ...failed }),
+      });
+      setCommitSaver(store, sender);
+      return sender;
+    },
+    changed: () => status.changed(),
+    problem: (problem) => status.problem(problem),
+  });
+  session = opened;
+  status.changed();
   // A commit that left out writes whose targets were gone is a problem nobody waits for
   const noteSkipped = <T>(write: Write<T>, label: string | undefined): Write<T> => {
     write.result.then(
@@ -370,7 +386,7 @@ export function createDrawOnEngine(
     extensions: engine.extensions.collections,
     memory: memory.memory,
     status: status.status,
-    backend: createBackendResource({ store, sender: () => sender }),
+    backend: createBackendResource({ store, sender: () => opened.sender }),
 
     getMap: () => map,
     getStore: () => view,
@@ -404,11 +420,14 @@ export function createDrawOnEngine(
     write: (fn, writeOptions) => noteSkipped(writer.write(fn, writeOptions), writeOptions?.label),
     undo: (taskOptions) => history.undo(taskOptions),
     redo: (taskOptions) => history.redo(taskOptions),
-    open: (source, taskOptions) =>
-      writer.open(source, taskOptions).then((result) => {
-        history.clear();
-        return result;
-      }),
+    open: ((first?: OpenSource | OpenOptions, second?: OpenOptions) =>
+      opened.open(first, second)) as Draw['open'],
+    close: (closeOptions) => opened.close(closeOptions),
+    remove() {
+      const result = opened.remove();
+      draw.destroy();
+      return result;
+    },
     on(event, listener) {
       requireEventName(event);
       return events.on(event, listener);
@@ -430,7 +449,7 @@ export function createDrawOnEngine(
       if (destroyed) return;
       try {
         stopChecks();
-        sender?.stop();
+        opened.stop();
         setCommitSaver(store, null);
         status.stop();
         history.stop();

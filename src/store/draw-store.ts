@@ -199,6 +199,8 @@ export class DrawStore implements Store {
   #documentWritable = true;
   /** The transactions from elsewhere (`remote`) under way */
   #remoteDepth = 0;
+  /** The writes of the document a storage gave under way (see `fromStorage`) */
+  #storageDepth = 0;
   /** How deep the transactions that take out commits the storage refused are (see `transact`) */
   #refusedDepth = 0;
   /**
@@ -942,6 +944,15 @@ export class DrawStore implements Store {
     return this.#revision;
   }
 
+  fromStorage<T>(fn: () => T): T {
+    this.#storageDepth++;
+    try {
+      return fn();
+    } finally {
+      this.#storageDepth--;
+    }
+  }
+
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     this.#revision++;
     // The take-out of the commits the storage refused settles the document as the storage has
@@ -987,6 +998,10 @@ export class DrawStore implements Store {
   #write(fn: () => boolean): boolean {
     if (this.#refusedDepth > 0) return this.transact(fn, 'refused');
     if (this.#reassigning) return this.transact(fn, 'remote');
+    // What comes from elsewhere, or from the storage, is written even while read-only: it is no
+    // write of the user
+    if (this.#remoteDepth > 0) return this.transact(fn, 'remote');
+    if (this.#storageDepth > 0) return this.transact(fn);
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return false;
     return this.transact(fn);
   }

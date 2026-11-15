@@ -39,7 +39,7 @@ import type {
   SaveState,
 } from '../status.js';
 import type { Progress, SaveOptions } from '../write.js';
-import type { Answer, Backend, Task } from './backend.js';
+import type { Answer, Backend, BackendReport, Outbox, Task } from './backend.js';
 import { type ChangeReading, CommitValues } from './commit-values.js';
 import { KeptRecords } from './kept.js';
 import { createObservable } from './observable.js';
@@ -97,6 +97,13 @@ export interface SenderOptions {
   readonly originOf?: (commit: string) => string | undefined;
   /** Called once features take the IDs the storage gave them, from the old to the new */
   readonly onReassigned?: (ids: ReadonlyMap<string, string>) => void;
+  /** Takes what failed with nobody to throw to (a write of the outbox) */
+  readonly onFailed?: (failed: {
+    readonly error: DrawError;
+    readonly label: string | undefined;
+    readonly commit: string | null;
+    readonly count: number;
+  }) => void;
 }
 
 /**
@@ -107,6 +114,20 @@ export interface SenderOptions {
 export interface RefusedCommit {
   readonly refusal: Refusal;
   readonly operations: readonly ValueOperation[];
+  /** The IDs of its batches the outbox keeps */
+  readonly batchIds: readonly string[];
+}
+
+/**
+ * What was received from the storage while commits of this client were not answered: put back in
+ * their order when one of them is refused, so that what it wrote stays (see `take-out.ts`)
+ *
+ * @internal
+ */
+export interface Receipt {
+  readonly seq: number;
+  operations: ValueOperation[];
+  inverse: ValueOperation[];
 }
 
 /** The most IDs a refusal lists */
@@ -121,6 +142,8 @@ interface Waiter {
 
 /** A commit of this client, until it reaches the last stage */
 interface Entry {
+  /** Its place among the commits and what was received, in their order */
+  readonly seq: number;
   readonly commit: string;
   readonly label: string | undefined;
   readonly writtenAtMilliseconds: number;
@@ -138,6 +161,8 @@ interface Entry {
   renames?: ReadonlyMap<string, string>[];
   /** For an undo or a redo, the commit whose step it took */
   readonly origin?: string;
+  /** Its batches, once cut (put in the outbox, when there is one) */
+  batches: ValueBatch[] | null;
 }
 
 /**
@@ -173,16 +198,127 @@ export class Sender {
   #refusals: RefusedCommit[] = [];
   readonly #refusalsValue = createObservable<readonly Refusal[]>(Object.freeze([]));
   #nextRefusal = 1;
+  /** Where the commits not sent and the refusals are kept on the device */
+  readonly #outbox: Outbox | undefined;
+  /** The commits written here that are not sent (what the storage gave, opened from it) */
+  readonly #ignored = new Set<string>();
+  /** What was received while commits of this client were not answered, in their order */
+  #receipts: Receipt[] = [];
+  #seq = 0;
+  /** What the storage told of the connection, of what this client may do and of a transfer */
+  #reported: BackendReport['connection'] | null = null;
+  #editable = true;
+  #transfer: Progress | null = null;
+  /** The connection as it is shown: what the sending says, else what the storage told */
+  #shown: Connection;
+  /** Whether sending waits (the document is closed or opening) */
+  #paused = false;
 
   constructor(store: Store, backend: Backend, options: SenderOptions) {
     this.#store = store;
     this.#backend = backend;
     this.#options = options;
+    this.#outbox = backend.outbox;
     this.#stages = stagesOf(backend);
     this.#values = new CommitValues(store);
     this.#connection = { state: 'online', sinceMilliseconds: Date.now() };
+    this.#shown = this.#connection;
     this.#saving = this.#savingNow();
     this.#unsubscribe = store.subscribe((changes) => this.#follow(changes));
+  }
+
+  /** Whether the storage lets this client write (`BackendReport.editable`) */
+  get editable(): boolean {
+    return this.#editable;
+  }
+
+  /** Takes what the storage tells (`BackendContext.report`) */
+  report(report: BackendReport): void {
+    if (this.#stopped) return;
+    if (report.connection !== undefined) this.#reported = report.connection;
+    if (report.editable !== undefined) this.#editable = report.editable !== false;
+    if (report.transfer !== undefined) this.#transfer = report.transfer;
+    this.#changed();
+  }
+
+  /** A commit written here that is not sent: the document the storage gave, opened from it */
+  ignore(commit: string): void {
+    this.#ignored.add(commit);
+  }
+
+  /** Stops sending until `resume` (while the document opens) */
+  pause(): void {
+    this.#paused = true;
+  }
+
+  /** Sends on what waits */
+  resume(): void {
+    if (!this.#paused) return;
+    this.#paused = false;
+    if (!this.#running) setTimeout(() => void this.#run(), 0);
+  }
+
+  /** The commits not accepted yet */
+  get unsent(): number {
+    let count = 0;
+    for (const entry of this.#entries) if (!reached(entry.stage, 'accepted')) count++;
+    return count;
+  }
+
+  /** Whether the outbox keeps the commits not sent and the refusals */
+  get keeps(): boolean {
+    return this.#outbox !== undefined;
+  }
+
+  /** Whether the outbox holds every commit not sent now (each reached `stored`) */
+  get kept(): boolean {
+    if (!this.#outbox) return false;
+    return this.#entries.every((one) => reached(one.stage, 'stored'));
+  }
+
+  /** Settles once every commit made so far is accepted or refused (fails with the signal) */
+  waitAccepted(signal: AbortSignal | undefined): Promise<void> {
+    const commits = this.#entries
+      .filter((one) => !reached(one.stage, 'accepted'))
+      .map((one) => one.commit);
+    return Promise.all(
+      commits.map((commit) =>
+        this.save(commit, { until: 'accepted', signal }).catch((error: unknown) => {
+          if (error instanceof DrawError && error.code === 'refused') return;
+          throw error;
+        }),
+      ),
+    ).then(() => undefined);
+  }
+
+  /** Reads every commit made so far to its end */
+  async readAll(): Promise<void> {
+    this.#store.finishSlicedWrite();
+    this.#closeOpen();
+    for (const entry of [...this.#entries]) {
+      if (this.#stopped) return;
+      if (entry.operations === null) await this.#read(entry);
+    }
+  }
+
+  /**
+   * Writes again the commits not accepted, as they were, over the document the storage gave in
+   * place of the one they were made on (`write` writes their operations, in a transaction told
+   * with the ID of the commit): what takes each back is read again
+   */
+  writeAgain(write: (commit: string, label: string | undefined, write: () => void) => void): void {
+    const values = this.#values;
+    for (const entry of this.#entries) {
+      if (reached(entry.stage, 'accepted') || !entry.operations) continue;
+      const operations = entry.operations;
+      this.ignore(entry.commit);
+      write(entry.commit, entry.label, () => {
+        const before = values.namedBefore(operations);
+        writeOperations(this.#store, values, operations);
+        entry.inverse = values.inverseSince(before);
+      });
+    }
+    this.#receipts = [];
   }
 
   /** How far the commits are saved */
@@ -192,7 +328,7 @@ export class Sender {
 
   /** The connection to the storage */
   get connection(): Connection {
-    return this.#connection;
+    return this.#shown;
   }
 
   /** The stages a commit goes through */
@@ -234,13 +370,190 @@ export class Sender {
     return this.#refusals.filter((one) => wanted.has(one.refusal.id));
   }
 
-  /** Drops the records of refusals */
+  /** Drops the records of refusals (and what the outbox keeps of them) */
   dismiss(refusals: readonly RefusedCommit[]): void {
     if (refusals.length === 0) return;
     const gone = new Set(refusals);
     this.#refusals = this.#refusals.filter((one) => !gone.has(one));
     this.#refusalsValue.set(Object.freeze(this.#refusals.map((one) => one.refusal)));
+    for (const one of refusals) {
+      this.#unkeep([one.refusal.id, ...one.batchIds], one.refusal.label, one.refusal.commit);
+    }
     this.#changed();
+  }
+
+  /**
+   * Brings a commit to a stage the storage tells (`BackendContext.advance`): `stored`, or
+   * `durable` after it was accepted. A stage it reached already, or one it does not go through,
+   * changes nothing
+   */
+  advance(commit: string, stage: SaveStage): void {
+    if (this.#stopped || !this.#stages.includes(stage)) return;
+    const entry = this.#entries.find((one) => one.commit === commit);
+    if (!entry || reached(entry.stage, stage)) return;
+    // Accepted once the answer comes: the storage tells the stages after it
+    if (stage === 'accepted' || (stage === 'durable' && !reached(entry.stage, 'accepted'))) return;
+    this.#reach(entry, stage);
+  }
+
+  // ==========================================================================
+  // What is received
+  // ==========================================================================
+
+  /**
+   * Notes what is received now, while a commit of this client is not answered: the caller writes
+   * its operations and what takes them back into it (null when every commit is answered)
+   */
+  receipt(): Receipt | null {
+    if (!this.#entries.some((one) => !reached(one.stage, 'accepted'))) return null;
+    const receipt: Receipt = { seq: ++this.#seq, operations: [], inverse: [] };
+    this.#receipts.push(receipt);
+    return receipt;
+  }
+
+  /** Drops what was received before every commit not answered */
+  #pruneReceipts(): void {
+    if (this.#receipts.length === 0) return;
+    let first = Number.POSITIVE_INFINITY;
+    for (const entry of this.#entries) {
+      if (!reached(entry.stage, 'accepted')) first = Math.min(first, entry.seq);
+    }
+    this.#receipts = this.#receipts.filter((one) => one.seq > first);
+  }
+
+  // ==========================================================================
+  // The outbox
+  // ==========================================================================
+
+  /**
+   * Takes what the outbox kept (once the document is opened): the commits not sent, written again
+   * here, not sent again by this write (`write` writes their operations, in a transaction told
+   * with the ID of the commit), and the refusals with what their commits did. A commit whose parts
+   * are not all there was never stored: it is dropped
+   */
+  restore(
+    batches: readonly ValueBatch[],
+    refusals: readonly Refusal[],
+    write: (commit: string, label: string | undefined, write: () => void) => void,
+  ): void {
+    const byCommit = new Map<string, ValueBatch[]>();
+    for (const batch of batches) {
+      let parts = byCommit.get(batch.commit);
+      if (!parts) {
+        parts = [];
+        byCommit.set(batch.commit, parts);
+      }
+      parts.push(batch);
+    }
+    const refused = new Map(refusals.map((refusal) => [refusal.commit, refusal]));
+    const incomplete: string[] = [];
+    for (const [commit, parts] of byCommit) {
+      const ordered = [...parts].sort((a, b) => a.part.index - b.part.index);
+      const whole =
+        ordered.length === ordered[0].part.count &&
+        ordered.every((batch, i) => batch.part.index === i);
+      if (!whole) {
+        incomplete.push(...ordered.map((batch) => batch.id));
+        continue;
+      }
+      const operations = ordered.flatMap((batch) => batch.operations);
+      const refusal = refused.get(commit);
+      if (refusal) {
+        this.#refusals.push({ refusal, operations, batchIds: ordered.map((batch) => batch.id) });
+        refused.delete(commit);
+        continue;
+      }
+      const first = ordered[0];
+      const entry: Entry = {
+        seq: ++this.#seq,
+        commit,
+        label: first.label,
+        writtenAtMilliseconds: first.writtenAtMilliseconds,
+        readings: [],
+        open: false,
+        stage: 'stored',
+        waiters: [],
+        operations,
+        inverse: [],
+        batches: ordered,
+      };
+      // Written here again on the document the storage gave, as the storage applies them
+      this.ignore(commit);
+      write(commit, first.label, () => {
+        const values = this.#values;
+        const before = values.namedBefore(operations);
+        writeOperations(this.#store, values, operations);
+        entry.inverse = values.inverseSince(before);
+      });
+      this.#entries.push(entry);
+    }
+    // A refusal whose batches are gone keeps its record
+    for (const refusal of refused.values()) {
+      this.#refusals.push({ refusal, operations: [], batchIds: [] });
+    }
+    for (const one of this.#refusals) {
+      const n = Number(/^refusal-(\d+)$/.exec(one.refusal.id)?.[1] ?? 0);
+      if (n >= this.#nextRefusal) this.#nextRefusal = n + 1;
+    }
+    this.#refusalsValue.set(Object.freeze(this.#refusals.map((one) => one.refusal)));
+    if (incomplete.length > 0) this.#unkeep(incomplete, undefined, null);
+    this.#changed();
+    if (!this.#running) setTimeout(() => void this.#run(), 0);
+  }
+
+  /**
+   * Reads, cuts and puts in the outbox every commit complete (they reach `stored`): what closing
+   * with `keep` waits for
+   */
+  async storeAll(): Promise<void> {
+    this.#store.finishSlicedWrite();
+    this.#closeOpen();
+    for (const entry of [...this.#entries]) {
+      if (this.#stopped) return;
+      if (!entry.batches && !reached(entry.stage, 'accepted')) await this.#prepare(entry);
+    }
+  }
+
+  /**
+   * Drops the commits not sent and the refusals: their parts received are let go of
+   * (`Backend.abandon`), and the outbox keeps nothing of them
+   */
+  async discard(): Promise<void> {
+    this.#store.finishSlicedWrite();
+    this.#closeOpen();
+    const unsent = this.#entries.filter((one) => !reached(one.stage, 'accepted'));
+    for (const entry of unsent) {
+      if (this.#backend.abandon) {
+        try {
+          await this.#backend.abandon(entry.commit, this.#task());
+        } catch {
+          // Nothing of the commit is applied before its last part
+        }
+      }
+      for (const reading of entry.readings) reading.release();
+      this.#unkeep(
+        (entry.batches ?? []).map((batch) => batch.id),
+        entry.label,
+        entry.commit,
+      );
+      this.#forget(entry);
+    }
+    this.dismiss([...this.#refusals]);
+  }
+
+  /** Deletes batches and refusals from the outbox; a failure is a problem nobody waits for */
+  #unkeep(ids: readonly string[], label: string | undefined, commit: string | null): void {
+    const outbox = this.#outbox;
+    if (!outbox || ids.length === 0) return;
+    void (async () => {
+      for (const id of ids) {
+        try {
+          await outbox.delete(id);
+        } catch (error) {
+          this.#options.onFailed?.({ error: failureOf(error), label, commit, count: 1 });
+        }
+      }
+    })();
   }
 
   /**
@@ -340,7 +653,9 @@ export class Sender {
     if (this.#stopped) return;
     // A notification from elsewhere, or of the take-out of refused commits, is read for the places
     // only: it is not sent
-    const remote = changes.source === 'remote' || changes.source === 'refused';
+    const commit = this.#ignored.size > 0 ? toChange(changes, this.#store)?.commit : undefined;
+    const ignored = commit !== undefined && this.#ignored.has(commit);
+    const remote = changes.source === 'remote' || changes.source === 'refused' || ignored;
     const reading = this.#values.readChange(changes, this.#options.rowsReadAtOnce, !remote);
     if (reading === null) {
       // The whole document replaced: nothing of it is sent
@@ -365,6 +680,7 @@ export class Sender {
       }
       const taken = change.source === 'undo' || change.source === 'redo';
       entry = {
+        seq: ++this.#seq,
         commit: change.commit,
         ...(taken && { origin: this.#options.originOf?.(change.commit) }),
         label: change.label,
@@ -375,6 +691,7 @@ export class Sender {
         waiters: [],
         operations: null,
         inverse: [],
+        batches: null,
       };
       this.#entries.push(entry);
       this.#open = entry;
@@ -413,29 +730,65 @@ export class Sender {
     if (!this.#running) setTimeout(() => void this.#run(), 0);
   }
 
-  /** Sends the complete commits, one at a time in their order */
+  /**
+   * Sends the complete commits, one at a time in their order. With an outbox, every complete
+   * commit is first read, cut and put in it (`stored`), sent or not
+   */
   async #run(): Promise<void> {
     if (this.#running) return;
     this.#running = true;
     try {
       for (;;) {
-        if (this.#stopped || this.#closed) return;
-        const entry = this.#entries.find((one) => one.stage === 'local');
-        if (!entry || entry.open) return;
-        const operations = entry.operations ?? (await this.#read(entry));
         if (this.#stopped) return;
-        if (operations.length === 0) {
+        const entry = this.#entries.find((one) => !reached(one.stage, 'accepted'));
+        if (!entry || entry.open) return;
+        if (this.#outbox) {
+          for (const one of [...this.#entries]) {
+            if (one.open || this.#stopped) break;
+            if (!one.batches && !reached(one.stage, 'accepted')) await this.#prepare(one);
+          }
+        } else if (!entry.batches) {
+          await this.#prepare(entry);
+        }
+        if (this.#stopped || this.#closed || this.#paused) return;
+        // Refused meanwhile (a commit it depends on), or taken by another run
+        if (!this.#entries.includes(entry) || reached(entry.stage, 'accepted')) continue;
+        const batches = entry.batches ?? [];
+        if (batches.length === 0) {
           // Nothing of the document to save
           this.#reach(entry, this.#stages[this.#stages.length - 1]);
           continue;
         }
-        const batches = await this.#cut(entry, operations);
-        if (this.#stopped) return;
         await this.#send(entry, batches);
       }
     } finally {
       this.#running = false;
     }
+  }
+
+  /** Reads and cuts a commit, and puts its batches in the outbox (then it is `stored`) */
+  async #prepare(entry: Entry): Promise<void> {
+    const operations = entry.operations ?? (await this.#read(entry));
+    if (this.#stopped || entry.batches) return;
+    const batches = operations.length === 0 ? [] : await this.#cut(entry, operations);
+    if (this.#stopped || entry.batches) return;
+    entry.batches = batches;
+    const outbox = this.#outbox;
+    if (!outbox || batches.length === 0) return;
+    try {
+      for (const batch of batches) await outbox.put(batch);
+    } catch (error) {
+      // Not kept on the device: it is sent all the same
+      this.#options.onFailed?.({
+        error: failureOf(error),
+        label: entry.label,
+        commit: entry.commit,
+        count: 1,
+      });
+      return;
+    }
+    if (this.#stopped || !this.#entries.includes(entry)) return;
+    if (!reached(entry.stage, 'stored')) this.#reach(entry, 'stored');
   }
 
   /**
@@ -570,6 +923,11 @@ export class Sender {
             });
           }
           this.#savedAt = Date.now();
+          this.#unkeep(
+            batches.map((one) => one.id),
+            entry.label,
+            entry.commit,
+          );
           if (answer.reassigned) this.#reassign(answer.reassigned);
           this.#reach(
             entry,
@@ -614,6 +972,7 @@ export class Sender {
   /** A commit brought to a stage: the saves waiting for it settle */
   #reach(entry: Entry, stage: SaveStage): void {
     entry.stage = stage;
+    if (reached(stage, 'accepted')) this.#pruneReceipts();
     for (let i = entry.waiters.length - 1; i >= 0; i--) {
       const waiter = entry.waiters[i];
       if (!reached(stage, waiter.until)) continue;
@@ -652,17 +1011,20 @@ export class Sender {
       await this.#read(unread);
       if (this.#stopped) return;
     }
-    const later = this.#entries.filter((one) => one !== entry && one.stage === 'local');
+    const later = this.#entries.filter((one) => one !== entry && !reached(one.stage, 'accepted'));
     const dependents = dependentsOf(entry as CommitOperations, later as CommitOperations[]).map(
       (i) => later[i],
     );
     const refused = [entry, ...dependents];
+    // What was received after it is taken back and written again with the later commits
+    const receipts = this.#receipts.filter((one) => one.seq > entry.seq);
+    const commits = [...later, ...receipts].sort((a, b) => a.seq - b.seq);
     const { failed, written } = this.#store.transact(
       () =>
         takeOut(
           this.#store,
           this.#values,
-          [entry, ...later] as CommitOperations[],
+          [entry, ...commits] as CommitOperations[],
           new Set<CommitOperations>(refused as CommitOperations[]),
         ),
       'refused',
@@ -698,8 +1060,13 @@ export class Sender {
       this.#refused.set(one.commit, error);
       this.#forget(one);
       for (const waiter of one.waiters.splice(0)) waiter.reject(error);
-      this.#refusals.push({ refusal, operations: one.operations ?? [] });
+      this.#refusals.push({
+        refusal,
+        operations: one.operations ?? [],
+        batchIds: (one.batches ?? []).map((batch) => batch.id),
+      });
       one.inverse = [];
+      if (this.#outbox) void this.#keep(one, refusal);
     }
     this.#refusalsValue.set(Object.freeze(this.#refusals.map((one) => one.refusal)));
     const steps = new Map<string, StepWrite | null>();
@@ -781,6 +1148,7 @@ export class Sender {
     this.#refusals = this.#refusals.map((one) => ({
       refusal: one.refusal,
       operations: renamedOperations(one.operations, pairs),
+      batchIds: one.batchIds,
     }));
     this.#options.onReassigned?.(pairs);
   }
@@ -789,6 +1157,70 @@ export class Sender {
   #renameEntry(entry: Entry, ids: ReadonlyMap<string, string>): void {
     if (entry.operations) entry.operations = renamedOperations(entry.operations, ids);
     entry.inverse = renamedOperations(entry.inverse, ids);
+    // Cut again with the new IDs, before it is sent (the batches of the same IDs put again)
+    const before = entry.batches;
+    if (!before || before.length === 0 || reached(entry.stage, 'accepted')) return;
+    const cutting = batchesInSteps(
+      {
+        commit: entry.commit,
+        label: entry.label,
+        writtenAtMilliseconds: entry.writtenAtMilliseconds,
+      },
+      entry.operations ?? [],
+      this.#backend.maxBatchBytes ?? DEFAULT_MAX_BATCH_BYTES,
+    );
+    let next = cutting.next();
+    while (!next.done) next = cutting.next();
+    entry.batches = next.value;
+    const outbox = this.#outbox;
+    if (!outbox) return;
+    const now = new Set(entry.batches.map((batch) => batch.id));
+    const batches = entry.batches;
+    void (async () => {
+      try {
+        for (const batch of batches) await outbox.put(batch);
+      } catch (error) {
+        this.#options.onFailed?.({
+          error: failureOf(error),
+          label: entry.label,
+          commit: entry.commit,
+          count: 1,
+        });
+      }
+    })();
+    this.#unkeep(
+      before.map((batch) => batch.id).filter((id) => !now.has(id)),
+      entry.label,
+      entry.commit,
+    );
+  }
+
+  /**
+   * Keeps a refusal in the outbox, with the batches of its commit (put now when they were not):
+   * a later `draw.open()` gives it back, with what the commit did
+   */
+  async #keep(entry: Entry, refusal: Refusal): Promise<void> {
+    const outbox = this.#outbox;
+    if (!outbox) return;
+    try {
+      if (!entry.batches) {
+        const batches = await this.#cut(entry, entry.operations ?? []);
+        for (const batch of batches) await outbox.put(batch);
+        const kept = this.#refusals.find((one) => one.refusal === refusal);
+        if (kept) {
+          const at = this.#refusals.indexOf(kept);
+          this.#refusals[at] = { ...kept, batchIds: batches.map((batch) => batch.id) };
+        }
+      }
+      await outbox.keep(refusal);
+    } catch (error) {
+      this.#options.onFailed?.({
+        error: failureOf(error),
+        label: entry.label,
+        commit: entry.commit,
+        count: 1,
+      });
+    }
   }
 
   /** The record of a commit refused */
@@ -845,6 +1277,7 @@ export class Sender {
   #forget(entry: Entry): void {
     const at = this.#entries.indexOf(entry);
     if (at >= 0) this.#entries.splice(at, 1);
+    this.#pruneReceipts();
   }
 
   #setSending(progress: Progress | null): void {
@@ -860,6 +1293,10 @@ export class Sender {
   #changed(): void {
     const saving = this.#savingNow();
     if (!sameSaving(saving, this.#saving)) this.#saving = saving;
+    // What the sending says comes first (sent again, closed by an answer); then what the storage
+    // told
+    const sending = this.#connection;
+    this.#shown = sending.state !== 'online' || !this.#reported ? sending : this.#reported;
     this.#options.onChange();
   }
 
@@ -876,7 +1313,7 @@ export class Sender {
       unsaved,
       refused: this.#refusals.length,
       savedAtMilliseconds: this.#savedAt,
-      sending: this.#sending,
+      sending: this.#transfer ?? this.#sending,
     };
   }
 }
@@ -894,11 +1331,15 @@ function renamedOperations(
   });
 }
 
-/** The stages a commit goes through with a storage: `local` and `accepted`, and those it gives */
+/**
+ * The stages a commit goes through with a storage: `local` and `accepted`, `stored` with an outbox,
+ * and `durable` when it gives it
+ */
 function stagesOf(backend: Backend): readonly SaveStage[] {
   const given = new Set<SaveStage>(['local', 'accepted', ...(backend.stages ?? [])]);
-  // A storage of the first shape has no outbox yet: nothing is kept on the device
-  given.delete('stored');
+  // Kept on the device only with an outbox
+  if (backend.outbox) given.add('stored');
+  else given.delete('stored');
   return Object.freeze(STAGES.filter((stage) => given.has(stage)));
 }
 

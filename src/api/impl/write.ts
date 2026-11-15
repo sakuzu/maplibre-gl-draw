@@ -181,6 +181,11 @@ export interface WriterDeps {
    */
   readonly published: Store;
   readonly writers: Writers;
+  /**
+   * What a write waits for before its function runs (the document opening), or what it fails with
+   * (the document closed): null when it runs at once
+   */
+  readonly gate?: () => Promise<void> | null;
   readonly reads: {
     readonly features: FeaturesCollection;
     readonly layers: LayersCollection;
@@ -195,7 +200,15 @@ export interface WriterDeps {
  */
 export interface Writer {
   write<T>(fn: (tx: Transaction) => T | Promise<T>, options?: WriteOptions): Write<T>;
-  open(source?: OpenSource, options?: { readonly signal?: AbortSignal }): Promise<OpenResult>;
+  /**
+   * @param internal.id - The ID of the commit (a new one when left out)
+   * @param internal.fromStorage - Written as the storage gave it: taken even while read-only
+   */
+  open(
+    source?: OpenSource,
+    options?: { readonly signal?: AbortSignal },
+    internal?: { readonly id?: string; readonly fromStorage?: boolean },
+  ): Promise<OpenResult>;
   /** Places an image at a position as one commit of this client (the image mode) */
   placeImage(
     image: Blob,
@@ -235,15 +248,19 @@ export function createWriter(writerDeps: WriterDeps): Writer {
     const checked = checkWriteOptions(options);
     const id = createId();
     const tx = new TransactionImpl(id, checked.signal, writerDeps);
-    let returned: T | Promise<T>;
-    running++;
-    try {
-      returned = fn(tx);
-    } catch (error) {
-      returned = Promise.reject(error);
-    } finally {
-      running--;
-    }
+    const run = (): T | Promise<T> => {
+      running++;
+      try {
+        return fn(tx);
+      } catch (error) {
+        return Promise.reject(error);
+      } finally {
+        running--;
+      }
+    };
+    // While the document opens, the function runs once it is open
+    const gate = writerDeps.gate?.() ?? null;
+    const returned: T | Promise<T> = gate ? gate.then(run) : run();
     // Once the function ends (and its writes not awaited are done), the commit is queued
     const commit = (value: T): WriteResult<T> | Promise<WriteResult<T>> => {
       tx.throwFailure();
@@ -287,27 +304,30 @@ export function createWriter(writerDeps: WriterDeps): Writer {
         return result ?? null;
       });
     },
-    async open(source, options) {
+    async open(source, options, internal) {
       if (source === undefined) {
         throw new DrawError('invalidState', 'There is no storage to open the document from');
       }
       const signal = options?.signal;
       const loader = writerDeps.writers.document;
+      const fromStorage = internal?.fromStorage === true;
       const prepared = await loader.prepare(
         source as never,
         { mode: 'replace' },
         new Set(),
         new Set(),
+        fromStorage,
       );
       if (signal?.aborted) throw abortedError(signal);
       if (!prepared) throw notEditable();
       return queueCommit(store, () => {
-        if (store.isReadOnly()) throw notEditable();
-        const id = createId();
-        const [result] =
+        if (!fromStorage && store.isReadOnly()) throw notEditable();
+        const id = internal?.id ?? createId();
+        const commit = () =>
           runCommit(store, { id, label: undefined, undo: false }, 'open', () =>
-            loader.writeAll([prepared]),
-          ) ?? [];
+            loader.writeAll([prepared], fromStorage),
+          );
+        const [result] = (fromStorage ? store.fromStorage(commit) : commit()) ?? [];
         return {
           features: result?.featureIds.length ?? 0,
           skipped: (result?.skipped ?? []).map(({ index, reason }) => ({

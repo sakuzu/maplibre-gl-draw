@@ -317,6 +317,39 @@ export interface OpenResult {
   readonly skipped: readonly SkippedFeature[];
 }
 
+/** The options of {@link Draw.open} */
+export interface OpenOptions extends TaskOptions {
+  /**
+   * What becomes of the commits not sent and of the refusals, when a source replaces the
+   * document: `wait` opens once they reach the storage, `keep` keeps them on the device (with an
+   * outbox), `discard` drops them
+   */
+  readonly unsent?: 'wait' | 'keep' | 'discard';
+}
+
+/**
+ * The options of {@link Draw.close}: what becomes of the commits not sent
+ *
+ * - `wait`: waits until they are accepted (the default); a signal that stops the wait does not
+ *   close
+ * - `keep`: keeps them on the device, and the next `open` sends them on; `invalidState` without
+ *   an outbox
+ * - `discard`: drops them
+ */
+export interface CloseOptions extends TaskOptions {
+  readonly unsent?: 'wait' | 'keep' | 'discard';
+}
+
+/** What closing left */
+export interface CloseResult {
+  /** The commits not accepted when the document was closed */
+  readonly unsent: number;
+  /** The refusals not dismissed when the document was closed */
+  readonly refused: number;
+  /** Whether both are kept on the device: false when they are lost */
+  readonly kept: boolean;
+}
+
 /** The options of `tx.import` */
 export interface ImportOptions {
   /** The layer to put the features in: its ID, or a new layer made in the same commit */

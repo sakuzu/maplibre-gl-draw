@@ -26,6 +26,9 @@ import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } 
 import type { BackendResource, Status } from './status.js';
 import type { View } from './view.js';
 import type {
+  CloseOptions,
+  CloseResult,
+  OpenOptions,
   OpenResult,
   OpenSource,
   TaskOptions,
@@ -220,11 +223,34 @@ export interface Draw extends DrawReader {
    * `change` with the source `open`, and the steps of undo are dropped. A source is added to the
    * document with `tx.import`.
    *
+   * Without a source, the document is read from the storage (`Backend.load`), then the storage is
+   * connected (`Backend.connect`) and the commits its outbox kept are sent on. Until it is open,
+   * `status.document` is `opening`, the reads give the document before it, and `draw.write` waits.
+   *
+   * With commits not sent or refusals not dismissed, a source fails with `unsentWrites` and
+   * changes nothing, unless `unsent` says what becomes of them.
+   *
    * @throws `DrawError` (the promise rejects) with the code `unsupportedFormat` when the source
    *   cannot be read, `invalidInput` when it is not valid, `notEditable` when the document is
-   *   read-only, or `invalidState` when no source is given (there is no storage to open from)
+   *   read-only, `unsentWrites` as above, or `invalidState` when no source is given and there is
+   *   no storage to open from
    */
-  open(source?: OpenSource, options?: TaskOptions): Promise<OpenResult>;
+  open(source: OpenSource, options?: OpenOptions): Promise<OpenResult>;
+  open(options?: OpenOptions): Promise<OpenResult>;
+  /**
+   * Closes the document: the storage is disconnected, the document emptied, and `draw.write`
+   * fails with `invalidState` until it is opened again. What becomes of the commits not sent is
+   * `unsent` (`wait` by default).
+   *
+   * @throws `DrawError` (the promise rejects) with the code `aborted` when the signal stops the
+   *   wait (it does not close), or `invalidState` for `keep` without an outbox
+   */
+  close(options?: CloseOptions): Promise<CloseResult>;
+  /**
+   * Removes the instance from the map and releases everything it holds, as `destroy` does, without
+   * waiting: the commits not sent that the outbox does not hold are lost, which `kept` tells.
+   */
+  remove(): CloseResult;
 
   // Events
   /**
