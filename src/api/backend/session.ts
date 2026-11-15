@@ -105,6 +105,8 @@ export class DocumentSession {
   #document: DocumentState = OPEN;
   /** Settles once the document under way is open (or failed to) */
   #opening: Promise<void> | null = null;
+  /** Settles once the document under way is closed (or stays open, its wait stopped) */
+  #closing: Promise<void> | null = null;
   /** Settles once the document read from the storage is written (what a receipt waits for) */
   #written: Promise<void> | null = null;
   /** What cuts the connection of the storage */
@@ -141,9 +143,13 @@ export class DocumentSession {
     return this.#document.state === 'open' && (this.#sender?.editable ?? true);
   }
 
-  /** What a write waits for (the document opening), or fails with (the document closed) */
+  /**
+   * What a write waits for (the document opening or closing), or fails with (the document closed):
+   * a write that comes while the document is closed waits, as nothing of it would be sent
+   */
   gate(): Promise<void> | null {
-    if (this.#opening) return this.#opening.then(() => this.#gateAfter() ?? undefined);
+    const under = this.#opening ?? this.#closing;
+    if (under) return under.then(() => this.#gateAfter() ?? undefined);
     return this.#gateAfter();
   }
 
@@ -166,9 +172,16 @@ export class DocumentSession {
 
   /** Replaces the document with a source, once the commits not sent are seen to */
   async #openSource(source: OpenSource, options: OpenOptions | undefined): Promise<OpenResult> {
+    if (this.#closing) await this.#closing;
     if (this.#opening) throw opening();
     const sender = this.#sender;
-    if (sender) await this.#settleUnsent(sender, options);
+    if (sender && this.#document.state === 'closed') {
+      // A document closed is opened by a new sender: the one before stopped, and closing said what
+      // became of its commits
+      this.#newSender();
+    } else if (sender) {
+      await this.#settleUnsent(sender, options);
+    }
     const { writer, history } = this.#deps;
     const result = await writer.open(source, options);
     history.clear();
@@ -212,9 +225,16 @@ export class DocumentSession {
   /** A sender in place of one that stops (what it kept stays in the outbox) */
   #replaceSender(sender: Sender): void {
     sender.stop();
-    const backend = this.#deps.backend as Backend;
-    this.#sender = this.#deps.makeSender(backend);
+    this.#newSender();
     this.#deps.changed();
+  }
+
+  /** A new sender, in place of the one before (stopped) */
+  #newSender(): Sender {
+    this.#sender?.stop();
+    const sender = this.#deps.makeSender(this.#deps.backend as Backend);
+    this.#sender = sender;
+    return sender;
   }
 
   /** Reads the document from the storage, connects it, and sends on what the outbox kept */
@@ -222,6 +242,7 @@ export class DocumentSession {
     const backend = this.#deps.backend;
     if (!backend)
       throw new DrawError('invalidState', 'There is no storage to open the document from');
+    if (this.#closing) await this.#closing;
     if (this.#opening) throw opening();
     if (options?.unsent !== undefined && !['wait', 'keep', 'discard'].includes(options.unsent)) {
       throw new DrawError('invalidInput', 'unsent must be wait, keep or discard');
@@ -237,10 +258,8 @@ export class DocumentSession {
       written = resolve;
     });
     // A document closed is opened by a new sender: the one before stopped
-    if (this.#document.state === 'closed' || !this.#sender) {
-      this.#sender = this.#deps.makeSender(backend);
-    }
-    const sender = this.#sender;
+    const sender =
+      this.#document.state === 'closed' || !this.#sender ? this.#newSender() : this.#sender;
     sender.pause();
     this.#setDocument({ state: 'opening', progress: null, viewReady: false });
     try {
@@ -336,8 +355,27 @@ export class DocumentSession {
     }
     const signal = options?.signal;
     if (signal?.aborted) throw aborted();
+    if (this.#closing) await this.#closing;
     if (this.#opening) await this.#opening;
     if (this.#document.state === 'closed') return { unsent: 0, refused: 0, kept: true };
+    // The writes that come from now on wait until it is closed (then they fail)
+    let closed!: () => void;
+    this.#closing = new Promise<void>((resolve) => {
+      closed = resolve;
+    });
+    try {
+      return await this.#closeNow(unsentMode, signal, options);
+    } finally {
+      this.#closing = null;
+      closed();
+    }
+  }
+
+  async #closeNow(
+    unsentMode: 'wait' | 'keep' | 'discard',
+    signal: AbortSignal | undefined,
+    options: CloseOptions | undefined,
+  ): Promise<CloseResult> {
     const sender = this.#sender;
     let result: CloseResult = { unsent: 0, refused: 0, kept: true };
     if (sender) {
@@ -355,7 +393,8 @@ export class DocumentSession {
         await sender.discard();
         result = { unsent, refused, kept: unsent + refused === 0 };
       } else {
-        result = { unsent, refused, kept: refused === 0 || sender.keeps };
+        // What could not be sent (the storage closed the connection) is lost without the outbox
+        result = { unsent, refused, kept: unsent + refused === 0 || sender.kept };
       }
       // What the outbox is asked to keep and to let go of is written before the next opening reads it
       await sender.outboxWritten();

@@ -632,6 +632,56 @@ describe('the document closed', () => {
       s.release();
     });
 
+    it(`holds a write that comes while it closes, and tells what could not be sent (${kind})`, async () => {
+      const s = seeded();
+      const d = make(makeStore, s.backend);
+      await d.open();
+      s.hold();
+      await d.write((tx) => tx.features.create(point('p1', 'a')));
+      await tasks();
+      const closing = d.close();
+      await tasks();
+      // It waits until the document is closed: then nothing of it would be sent
+      const during = d.write((tx) => tx.features.create(point('p2', 'a')));
+      s.release();
+      expect(await closing).toEqual({ unsent: 0, refused: 0, kept: true });
+      await expect(during).rejects.toMatchObject({ code: 'invalidState' });
+      expect([s.document.features.has('p1'), s.document.features.has('p2')]).toEqual([true, false]);
+      // A write that comes while a wait stopped by its signal is written once it stays open
+      await d.open();
+      s.hold();
+      void d.write((tx) => tx.features.update('f1', { properties: { n: 1 } }));
+      await tasks();
+      const stop = new AbortController();
+      const stopped = d.close({ signal: stop.signal });
+      await tasks();
+      const after = d.write((tx) => tx.features.update('f2', { properties: { n: 2 } }));
+      stop.abort();
+      await expect(stopped).rejects.toMatchObject({ code: 'aborted' });
+      await after;
+      expect(n(d, 'f2')).toBe(2);
+      s.release();
+      await settled(d);
+      // The storage closes the connection: what it was not sent is lost without an outbox
+      s.backend.send = async () => ({ status: 'closed', reason: 'permission' });
+      void d.write((tx) => tx.features.update('f3', { properties: { n: 3 } }));
+      await tasks();
+      expect(await d.close()).toEqual({ unsent: 1, refused: 0, kept: false });
+    });
+
+    it(`sends the writes once opened from a source after it was closed (${kind})`, async () => {
+      const s = seeded();
+      const d = make(makeStore, s.backend);
+      await d.open();
+      await d.close();
+      await d.open(JSON.stringify(documentOf(s.document)));
+      expect(d.status.value.document).toEqual({ state: 'open' });
+      const write = d.write((tx) => tx.features.create(point('p9', 'a')));
+      await write.save({ until: 'accepted' });
+      expect(s.document.features.has('p9')).toBe(true);
+      expect(d.status.value.connection.state).toBe('online');
+    });
+
     it(`cannot keep without an outbox, and remove says what is lost (${kind})`, async () => {
       const s = seeded();
       const d = make(makeStore, s.backend);
