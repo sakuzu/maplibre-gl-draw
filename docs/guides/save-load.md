@@ -171,6 +171,27 @@ input?.addEventListener('change', async () => {
 What is read arrives in one `change` that lists every feature it adds in
 `features.created` ([Events](../reference/events.md)).
 
+### Opening bit by bit
+
+`draw.open` also takes pages of rows, built with `createPageBuilder` or
+read with `toPage` of `@sakuzu/maplibre-gl-draw/table`, as an array or an
+async iterable of them, in their order. So does the `load` of a storage.
+
+- Pages replace the features and the groups and keep the layers, as
+  GeoJSON does. Their rows go into the active layer, of a Store that holds
+  its features as rows (another Store rejects them with `invalidInput`,
+  and no active layer with `notFound`)
+- The pages are drawn as they arrive, each row at the place of its key. A
+  row of a page whose ID a page before gave takes its place: give the rows
+  in view first, then the pages that hold them
+- Until the document is open, `status.document` is `opening` (with
+  `viewReady` once every page is written), the instance is read-only and
+  `draw.write` waits. The reads give what arrived; `change` is told once,
+  when it is open. A source read at once (a file, a string, a document,
+  GeoJSON) is opened the same way, written at once
+- With a storage, pages opened as a source are sent as one commit
+- `tx.import` does not take pages
+
 ### Several sources at once
 
 `tx.import` can be called several times in one `draw.write`: an import

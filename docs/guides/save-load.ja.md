@@ -159,6 +159,26 @@ input?.addEventListener('change', async () => {
 読んだものは、足したすべての地物を `features.created` に並べた 1 回の
 `change` で届きます ([イベント](../reference/events.md))。
 
+### 段々に開く
+
+`draw.open` は、`@sakuzu/maplibre-gl-draw/table` の `createPageBuilder` で
+作った行の頁や `toPage` で読んだ頁も、配列か非同期の列にして順に受けます。
+保存先の `load` も同じです。
+
+- 頁は GeoJSON と同じく、地物と群を置き換え、レイヤーを残します。行は
+  今のレイヤーに入ります。地物を行で持つ Store だけが受け、ほかの Store は
+  `invalidInput`、今のレイヤーが無い時は `notFound` で失敗します
+- 頁は届いた順に描かれ、行はそれぞれの鍵の場所に入ります。前の頁にあった
+  id の行が後の頁にあると、後の行と入れ替わります。見えている範囲の行を
+  先に渡し、それを持つ頁を後で渡せます
+- 開き終わるまで `status.document` は `opening` で (頁を全部書くと
+  `viewReady` になります)、インスタンスは読み取り専用で、`draw.write` は
+  待ちます。読みは届いた分を返し、`change` は開き終わった時に 1 回だけ
+  届きます。一度に読む入力 (ファイル、文字、文書、GeoJSON) も同じように
+  開き、一度に書きます
+- 保存先がある時に入力として開いた頁は、1 つの確定として送ります
+- `tx.import` は頁を受けません
+
 ### 複数のソースをまとめて読む
 
 `tx.import` は 1 つの `draw.write` の中で何度でも呼べます。複数の

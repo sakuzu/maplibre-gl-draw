@@ -363,6 +363,12 @@ function mergeChanges(changes: readonly Change[]): Change | null {
 
 /** The IDs of changes one after the other, as one change tells them */
 function mergeIds(lists: readonly ChangedIds[]): ChangedIds {
+  // The IDs of one change alone are told as they are (the pages of an opening after the features
+  // and the groups it replaced, when there were none)
+  const told = lists.filter(
+    (ids) => ids.created.length + ids.updated.length + ids.deleted.length + ids.placed.length > 0,
+  );
+  if (told.length <= 1) return told[0] ?? lists[0];
   const state = new Map<string, 'created' | 'updated' | 'deleted'>();
   const placed = new Set<string>();
   for (const ids of lists) {

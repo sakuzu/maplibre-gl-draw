@@ -17,10 +17,13 @@ export interface BackendBase {
   /**
    * Reads the document: `draw.open()` calls it. A failure is thrown as a `DrawError`.
    *
-   * A document of the library, a string, a file or GeoJSON carries no keys of the order of its
-   * items: the keys here are made from its order, and what is made here and what is received later
-   * may then stand in another order here than in the storage. Such a `load` is for small documents
-   * and tests; a storage that holds the keys gives them once it is connected (`connect`)
+   * A storage gives a document of the library, in the order of its items, and the keys of that
+   * order once it is connected (`connect`). A document of the library, a string, a file or
+   * GeoJSON carries no keys of the order: the keys here are made from its order, and until the
+   * storage gives its own, what is made here and what is received later may stand in another
+   * order here than in the storage (a storage that gives none is for small documents and tests).
+   * Pages of rows replace the features and the groups, keep the layers, and go into the current
+   * layer, drawn as they arrive
    */
   load(task: Task): Promise<ImportSource>;
   /**
