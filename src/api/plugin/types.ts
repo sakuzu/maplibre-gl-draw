@@ -488,6 +488,12 @@ export interface ModeDefinition {
    */
   readonly name: string;
   readonly cursor?: string;
+  /**
+   * Whether the mode writes new features, as the built-in drawing modes do: it is entered only
+   * while a layer can be written (`draw.mode.set` changes nothing otherwise), and a double click
+   * never zooms the map while it is the current mode. False when it is left out.
+   */
+  readonly writes?: boolean;
   enter?(options: { readonly repeat: boolean }): void;
   exit?(): void;
   /**

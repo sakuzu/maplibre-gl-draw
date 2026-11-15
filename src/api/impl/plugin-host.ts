@@ -577,6 +577,10 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
         if (definition.cursor !== undefined && typeof definition.cursor !== 'string') {
           throw new DrawError('invalidInput', 'The cursor of the mode must be a string');
         }
+        if (definition.writes !== undefined && typeof definition.writes !== 'boolean') {
+          throw new DrawError('invalidInput', 'The writes of the mode must be a boolean');
+        }
+        const writes = definition.writes === true;
         const label = `the mode ${JSON.stringify(mode)}`;
         const factory: ModeFactory = (context) => {
           /** Gives an input to the mode: whether it took it */
@@ -601,6 +605,8 @@ export function createPluginUse(deps: PluginUseDeps): PluginUse {
             (event: DrawPointerEvent): boolean =>
               give(pointerInputOf(type, event));
           const handler: ModeHandler = {
+            // Entered only while a layer can be written, as the built-in drawing modes
+            writes,
             onEnter() {
               if (definition.cursor !== undefined) context.cursor.set(definition.cursor);
               const enter = definition.enter;

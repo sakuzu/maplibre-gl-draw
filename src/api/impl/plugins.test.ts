@@ -972,6 +972,51 @@ describe('a type drawn and hit by its footprint (a range)', () => {
   });
 });
 
+describe('a mode that writes features', () => {
+  const writing = (writes?: boolean): Plugin => ({
+    name: 'acme-writing',
+    setup(ctx) {
+      ctx.addMode({ name: 'acme:pin', ...(writes !== undefined && { writes }), input: () => false });
+    },
+  });
+
+  it('is entered only while a layer can be written, as the built-in drawing modes', () => {
+    const view = open({ plugins: [writing(true)] });
+    view.draw.mode.set('acme:pin');
+    expect(view.draw.getMode()).toBe('acme:pin');
+    view.draw.mode.set('select');
+    writesOf(view.draw).layers.update('l', { locked: true });
+    view.draw.mode.set('acme:pin');
+    expect(view.draw.getMode()).toBe('select');
+    view.draw.mode.set('drawPoint');
+    expect(view.draw.getMode()).toBe('select');
+    writesOf(view.draw).layers.update('l', { locked: false });
+    view.draw.mode.set('acme:pin');
+    expect(view.draw.getMode()).toBe('acme:pin');
+  });
+
+  it('is entered with no layer to write when it does not write', () => {
+    for (const writes of [undefined, false]) {
+      const view = open({ plugins: [writing(writes)] });
+      writesOf(view.draw).layers.update('l', { locked: true });
+      view.draw.mode.set('acme:pin');
+      expect(view.draw.getMode()).toBe('acme:pin');
+    }
+  });
+
+  it('refuses a declaration that is not a boolean', () => {
+    const view = open();
+    expect(() =>
+      view.draw.use({
+        name: 'acme-bad',
+        setup(ctx) {
+          ctx.addMode({ name: 'acme:bad', writes: 1 as never, input: () => false });
+        },
+      }),
+    ).toThrow(expect.objectContaining({ code: 'invalidInput' }));
+  });
+});
+
 describe('a mode that measures (no feature)', () => {
   it('shows its line in the overlay and tells the distance', () => {
     const view = open();
