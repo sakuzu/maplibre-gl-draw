@@ -29,6 +29,7 @@ import type { Store } from '../../store/store.js';
 import { rowRenamesOf } from '../../store/table-memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { toChange } from '../impl/events.js';
+import type { StepWrite } from '../impl/history.js';
 import type {
   CloseReason,
   Connection,
@@ -37,7 +38,6 @@ import type {
   SaveStage,
   SaveState,
 } from '../status.js';
-import type { StepWrite } from '../impl/history.js';
 import type { Progress, SaveOptions } from '../write.js';
 import type { Answer, Backend, Task } from './backend.js';
 import { type ChangeReading, CommitValues } from './commit-values.js';
