@@ -332,6 +332,12 @@ own, without the `maplibre-gl-draw:` prefix, such as `boardAngle`: the
 prefix is the library's, whose keys mean what this table says for every
 type.
 
+The marker of a point (a circle, a square, a triangle or a star) with a
+`rotation` keeps that direction on the map: it is turned by the rotation,
+counterclockwise seen from above, and turns with the map. A rotation of 0
+points the top of the marker to the north. The marker of a point without a
+`rotation` stays upright on screen whatever the bearing of the map.
+
 The library reads `name` and `description` as the name and the
 description of a feature; they are plain keys, which other tools read too.
 New features get a name from the `autoName` option.

@@ -304,7 +304,8 @@ handles around all of it. Dragging inside the box moves every feature by
 the same amount; a corner scales them all from the opposite corner, each
 by its own rule (coordinates for geometries, the scale for images, only
 the position for points); the rotation handle turns them around the
-center of the box (points keep their markers upright).
+center of the box (the marker of a point turns only when the point has a
+`rotation`; a point without one keeps its marker upright).
 
 A touch screen has no Shift key, so box selection and Shift+click are not
 available there. Offer your own control and call `draw.selection.set` and
