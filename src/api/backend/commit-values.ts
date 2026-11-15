@@ -106,6 +106,8 @@ interface RowsToRead {
   readonly index: Map<number, number>;
   /** How many of the values before are in `index` */
   indexed: number;
+  /** Where the rows were before the notification, read once for the rows deleted */
+  placesBefore?: Map<number, Place>;
 }
 
 /** What the groups of a notification moved, for the features */
@@ -607,15 +609,17 @@ export class CommitValues {
       if (late()) return false;
     }
     if (inv && rows.at < created.length + updated.length + deleted.length) {
-      // The rows deleted, as they were: kept by the tables while their deletion can be undone
+      // The rows deleted, as they were: kept by the tables while their deletion can be undone, at
+      // the key they had before the notification (a row put elsewhere before it was deleted)
       const from = rows.at - created.length - updated.length;
       const places = this.#rowPlacesOf(deleted.slice(from).map(({ handle }) => handle));
+      rows.placesBefore ??= rowPlacesBefore(changes);
       for (let i = from; i < deleted.length; i++) {
         rows.at++;
         const { id, handle } = deleted[i];
         const before = change.previous(id);
-        if (before)
-          inv.createdFeatures.push(createShownFeature(id, before, places.get(handle) ?? ''));
+        const key = rows.placesBefore.get(handle)?.key ?? places.get(handle) ?? '';
+        if (before) inv.createdFeatures.push(createShownFeature(id, before, key));
         if (late()) return false;
       }
     }
@@ -998,8 +1002,9 @@ function rowsDeletedOf(changes: StoreChange, store: Store): Map<string, number> 
 }
 
 /**
- * Where rows were before a notification put them elsewhere, by their handles: what the moves of
- * the notification say they were first, else the values of their place before
+ * Where rows were before a notification put them elsewhere, by their handles: where the Store says
+ * they were (`placesBefore`, those given another key where they stand included), else what the
+ * moves of the notification say they were first, else the values of their place before
  */
 function rowPlacesBefore(changes: StoreChange): Map<number, Place> {
   const out = new Map<number, Place>();
@@ -1014,6 +1019,7 @@ function rowPlacesBefore(changes: StoreChange): Map<number, Place> {
       }
     });
   };
+  take(changes.placesBefore);
   for (const move of changes.order ?? []) take(move.before);
   take(changes.previousValues as RowValues | undefined);
   return out;

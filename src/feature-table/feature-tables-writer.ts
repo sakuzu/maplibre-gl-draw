@@ -17,7 +17,12 @@
  * copied row by row.
  */
 
-import type { GroupRef, TableGroupPatch as TablesGroupPatch, TablesWriter } from '@sakuzu/kasane';
+import type {
+  GroupRef,
+  RowField,
+  TableGroupPatch as TablesGroupPatch,
+  TablesWriter,
+} from '@sakuzu/kasane';
 import { KasaneError } from '@sakuzu/kasane';
 import {
   ItemWalk,
@@ -383,8 +388,10 @@ export function createFeatureTablesWriter(
           // The values before, the token that keeps the rows deleted and the changes of the order
           // go with the last of the additions to the notification
           const order = watch?.finish() ?? [];
+          const places = watch ? placesBeforeOf(watch, order) : null;
           const extra: StoreChange = {
             ...(order.length > 0 && { order }),
+            ...(places && { placesBefore: places }),
             ...(kept &&
               options.restoreToken !== undefined && { restoreToken: options.restoreToken }),
           };
@@ -412,9 +419,15 @@ export function createFeatureTablesWriter(
         const kept = written.kept;
         // A group created again whose id is hidden on this client is hidden again
         internals.states.groupsWritten(patch.groups);
-        const order = [...(followers?.finish() ?? []), ...moves];
-        if (rows.layers.size > 0) notify?.({ rows, ...(order.length > 0 && { order }) });
-        else if (order.length > 0) notify?.({ order });
+        const followed = followers?.finish() ?? [];
+        const places = followers ? placesBeforeOf(followers, followed) : null;
+        const order = [...followed, ...moves];
+        const extra: StoreChange = {
+          ...(order.length > 0 && { order }),
+          ...(places && { placesBefore: places }),
+        };
+        if (rows.layers.size > 0) notify?.({ rows, ...extra });
+        else if (Object.keys(extra).length > 0) notify?.(extra);
         if (kept) notify?.({ restoreToken: options.restoreToken });
       } catch (error) {
         throw writerError(error);
@@ -441,6 +454,32 @@ export function createFeatureTablesWriter(
       };
     },
   };
+}
+
+/**
+ * Where the rows a write put in another place were before it (`StoreChange.placesBefore`): kept by
+ * its watch when they are few, else what its changes of the order hold of them, those of one layer
+ * as they are (null for none)
+ */
+function placesBeforeOf(
+  watch: ItemOrderWatch,
+  order: readonly ItemOrderChange[],
+): RowValues | null {
+  const kept = watch.placesBefore();
+  if (kept) return kept;
+  const lists = order.flatMap((move) => (move.kind === 'rows' ? [move.before] : []));
+  if (lists.length <= 1) return lists[0] ?? null;
+  const fields = new Map<RowField, unknown[]>([
+    ['parent', lists.flatMap((list) => [...(list.fields.get('parent') ?? [])])],
+    ['key', lists.flatMap((list) => [...(list.fields.get('key') ?? [])])],
+  ]);
+  const rows = new Int32Array(lists.reduce((sum, list) => sum + list.rows.length, 0));
+  let at = 0;
+  for (const list of lists) {
+    rows.set(list.rows, at);
+    at += list.rows.length;
+  }
+  return { rows, fields };
 }
 
 /**

@@ -846,6 +846,14 @@ export interface StoreChange {
    */
   previousValues?: FeatureValues;
   /**
+   * Where the rows a write put with the fields of their place were before it (their parent and
+   * the key of their order), each as it was before the first write of it: those `order` tells as
+   * moved and those given another key where they stand (a row put with others among which it
+   * already was), which `order` does not tell. Read by what takes a commit back to the keys it
+   * had (a Store that holds its features as rows sets it)
+   */
+  placesBefore?: RowValues;
+  /**
    * The features given other IDs, from the ID each had to the one it has (a storage that gave
    * them IDs of its own): the features of objects are told deleted under the old IDs and created
    * under the new ones, the rows updated with the field `id`

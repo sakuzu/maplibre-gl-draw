@@ -665,6 +665,13 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
       : changes.previousValues;
   }
 
+  // where the rows put elsewhere were (a row where it was before the first write of it)
+  if (changes.placesBefore) {
+    target.placesBefore = target.placesBefore
+      ? mergeSnapshots(target.placesBefore, changes.placesBefore)
+      : changes.placesBefore;
+  }
+
   // files
   if (changes.files) {
     if (!target.files) target.files = {};

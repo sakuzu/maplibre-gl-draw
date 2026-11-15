@@ -270,6 +270,17 @@ export class ItemOrderWatch {
     });
   }
 
+  /**
+   * The parents and keys before the write of every row it put in another place that was
+   * somewhere, those the changes of the order do not tell included (a row given another key
+   * where it stands); null for none, and when the rows are many (the changes of the order hold
+   * them all, `RowsMove.before`)
+   */
+  placesBefore(): RowsMove['before'] | null {
+    if (this.before.size === 0 || this.moved.size > ORDER_ITEM_LIMIT) return null;
+    return this.placeBefore(Int32Array.from(this.before.keys()));
+  }
+
   /** The parents and keys of rows before the write, as `RowsMove.before` holds them */
   private placeBefore(handles: Int32Array): RowsMove['before'] {
     const fields = new Map<RowField, unknown[]>(PLACE_FIELDS.map((field) => [field, []]));
