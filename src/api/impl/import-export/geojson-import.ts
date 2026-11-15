@@ -213,6 +213,13 @@ export async function prepareGeoJSON(
 
   const replace = options?.replace === true;
   const intoGroup = options?.groupId;
+  // The IDs of the file the features take, which the document may already hold: a feature read
+  // whole takes the ID of its input, and the parts of a flattened Multi and of a
+  // GeometryCollection get new ones, so the ID of their input is no feature's (it is taken by
+  // none, and renewed for none, as the writes below count)
+  const sourceIds = results.flatMap(({ feature, sourceId }) =>
+    sourceId !== undefined && feature.id === sourceId ? [sourceId] : [],
+  );
   // What fails the load, against the document a transaction reads before it is written
   const check: NonNullable<PreparedLoad['check']> = (document) => {
     if (intoGroup !== undefined && !document.getGroup(intoGroup)) {
@@ -220,8 +227,7 @@ export async function prepareGeoJSON(
     }
     if (options?.refuseDuplicates !== true || replace) return;
     const held = new Set<string>();
-    for (const { sourceId } of results) {
-      if (sourceId === undefined) continue;
+    for (const sourceId of sourceIds) {
       if (
         document.getFeature(sourceId) !== undefined ||
         document.getGroup(sourceId) !== undefined

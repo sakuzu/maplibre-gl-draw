@@ -309,6 +309,49 @@ for (const [kind, store] of [
       ).toBe('invalidInput');
     });
 
+    it('takes the same ID for taken in a renew and a refuse, the ID no part takes left out', async () => {
+      await draw.write((tx) => tx.features.create({ ...point(1), id: 'a' }));
+      await draw.write((tx) => tx.features.create({ ...point(1), id: '7' }));
+      // The parts of a GeometryCollection get IDs of their own: the ID of the input is no one's
+      const parts = {
+        type: 'FeatureCollection' as const,
+        features: [
+          {
+            type: 'Feature' as const,
+            id: 'a',
+            geometry: {
+              type: 'GeometryCollection' as const,
+              geometries: [
+                { type: 'Point' as const, coordinates: [5, 5] },
+                {
+                  type: 'LineString' as const,
+                  coordinates: [
+                    [0, 0],
+                    [1, 1],
+                  ],
+                },
+              ],
+            },
+            properties: {},
+          },
+        ],
+      };
+      expect(await draw.write((tx) => tx.import(parts))).toMatchObject({ count: 2, renewed: 0 });
+      expect(await draw.write((tx) => tx.import(parts, { duplicateIds: 'refuse' }))).toMatchObject({
+        count: 2,
+        renewed: 0,
+      });
+      // A number is the ID of its digits: taken in both
+      const numbered = { type: 'FeatureCollection' as const, features: [{ ...point(2), id: 7 }] };
+      expect(await draw.write((tx) => tx.import(numbered))).toMatchObject({
+        count: 1,
+        renewed: 1,
+      });
+      expect(
+        await codeOf(draw.write((tx) => tx.import(numbered, { duplicateIds: 'refuse' }))),
+      ).toBe('alreadyExists');
+    });
+
     it('puts the features of an import into a group of the document, in its layer', async () => {
       const layer = await draw.write((tx) => tx.layers.create({ name: 'other' }));
       const group = await draw.write(async (tx) => {
