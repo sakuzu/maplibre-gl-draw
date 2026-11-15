@@ -36,6 +36,8 @@ import { DrawError } from '../errors.js';
 import type { Observable } from '../events.js';
 import type { RenderContext as EngineRenderContext } from '../extension/render.js';
 import type { Feature, FeatureGeometry } from '../model.js';
+import type { SelectionStyleOptions } from '../options.js';
+import { toSelectionStyle } from './contexts.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine, type Engine } from './engine.js';
 
@@ -121,9 +123,9 @@ function create(
     geometry,
     layerId: 'l',
     properties,
-  } as never);
+  });
   if (!feature) throw new Error('no feature');
-  return feature as StoredFeature;
+  return feature;
 }
 
 const PROJECTION = { mainMatrix: new Float32Array(16) } as never;
@@ -183,6 +185,16 @@ function recordingContext(draw: Draw): {
     },
   };
   return { context, line, fill, point };
+}
+
+/** The look of the selection of an instance, as the handles of a feature are placed with it */
+function selectionStyleOf(view: Opened): Required<SelectionStyleOptions> {
+  const { context } = view.engine;
+  return toSelectionStyle(
+    context.selectionStyle,
+    context.renderingConfig.boxSelectionStyle,
+    undefined,
+  );
 }
 
 const MODIFIERS = { shift: false, ctrl: false, alt: false, meta: false };
@@ -1052,6 +1064,9 @@ describe('a type drawn from the features it joins (a link)', () => {
       { [FROM]: a.id, [TO]: b.id },
       'acme:link',
     );
+    // Hit by its own test near its ends, above the features it joins, and not along its line
+    expect(hitAt(view, [1.01, 0])).toBe(joined.id);
+    expect(hitAt(view, [0.5, 0])).toBeNull();
     // The end follows the feature it joins
     writesOf(view.draw).features.update(b.id, { geometry: { type: 'Point', coordinates: [1, 1] } });
     const context = drawn(view, joined.id);
@@ -1064,22 +1079,19 @@ describe('a type drawn from the features it joins (a link)', () => {
     // Its handle is on the end; its mark is drawn as the plugin draws it
     view.draw.selection.set('feature', [joined.id]);
     const definition = view.draw.extensions.featureTypes.get('acme:link');
-    const handleContext = {
-      screen: recordingContext(view.draw).context.screen,
-      selectionBox: null,
-      selectionStyle: {} as never,
-    };
-    const handles = definition?.handles?.(
-      view.draw.features.get(joined.id) as Feature,
-      handleContext,
-    );
+    const handles =
+      definition?.handles?.(view.draw.features.get(joined.id) as Feature, {
+        screen: recordingContext(view.draw).context.screen,
+        selectionBox: null,
+        selectionStyle: selectionStyleOf(view),
+      }) ?? [];
     expect(handles).toEqual([
       { kind: 'custom', id: 'tip', position: [1, 1], sizePx: 10, cursor: 'grab' },
     ]);
     const marks = recordingContext(view.draw);
     definition?.drawHandles?.(
       view.draw.features.get(joined.id) as Feature,
-      handles as never,
+      handles.filter((handle) => handle.kind === 'custom'),
       marks.context,
     );
     expect(marks.point).toHaveBeenCalledWith(
@@ -1170,7 +1182,7 @@ describe('a companion of every type (a ring)', () => {
       handles?.handles(featureOf(area.id), {
         screen: context.screen,
         selectionBox: null,
-        selectionStyle: {} as never,
+        selectionStyle: selectionStyleOf(view),
       }),
     ).toEqual([{ kind: 'resize', id: 'width', position: corner }]);
   });
@@ -1183,7 +1195,7 @@ describe('a companion of every type (a ring)', () => {
     const table = view.store.tables?.get('l');
     if (!table) throw new Error('no rows');
     const rows = Array.from(table.listDrawnRows([-10, -10, 10, 10]));
-    const answered = rows.filter((row) => provider?.rows?.has(table as never, row) === true);
+    const answered = rows.filter((row) => provider?.rows?.has(table, row) === true);
     expect(answered).toHaveLength(1);
     expect(table.getRow(answered[0] as number)?.id).toBe(marked.id);
   });
@@ -1192,12 +1204,7 @@ describe('a companion of every type (a ring)', () => {
 describe('the rows read without features (a count of vertices)', () => {
   it('counts the vertices drawn in view, again when the map moves', () => {
     const view = open({ rows: true });
-    const listeners = new Map<string, () => void>();
-    const on = view.engine.map.on.bind(view.engine.map);
-    vi.spyOn(view.engine.map, 'on').mockImplementation(((type: string, run: () => void) => {
-      listeners.set(type, run);
-      return on(type as never, run as never);
-    }) as never);
+    const on = vi.spyOn(view.engine.map, 'on');
     const counted = view.draw.use(density('l'));
     create(view, {
       type: 'LineString',
@@ -1208,7 +1215,9 @@ describe('the rows read without features (a count of vertices)', () => {
       ],
     });
     create(view, { type: 'Point', coordinates: [0.2, 0.2] });
-    listeners.get('moveend')?.();
+    const moveend = on.mock.calls.find(([type]) => type === 'moveend')?.[1];
+    if (typeof moveend !== 'function') throw new Error('no listener of moveend');
+    moveend({} as never);
     expect(counted.value).toBe(4);
   });
 });
@@ -1231,15 +1240,15 @@ describe('a type turned and resized by the library (a plan)', () => {
     expect(corners()[0]).toBeCloseTo(0.02, 6);
     // Snapped to its center alone
     const snap = view.engine.context.snapTargets.get('acme:plan');
-    const candidates = snap?.(
-      view.store.getFeature(feature.id) as StoredFeature,
-      {
-        point: { x: 400, y: 300 },
-        lngLat: { lng: 0, lat: 0 },
-        tolerancePx: 10,
-        zoom: 10,
-      } as never,
-    );
+    const candidates = snap?.(view.store.getFeature(feature.id) as StoredFeature, {
+      point: { x: 400, y: 300 },
+      lngLat: { lng: 0, lat: 0 },
+      tolerancePx: 10,
+      toleranceLngDeg: 0.1,
+      toleranceLatDeg: 0.1,
+      zoom: 10,
+      modifiers: MODIFIERS,
+    });
     expect(candidates?.map((c) => ('coordinate' in c ? c.coordinate : null))).toEqual([[0, 0]]);
     // A rotation of the library writes its angle
     await view.draw.write((tx) =>
@@ -1259,7 +1268,7 @@ describe('a type turned and resized by the library (a plan)', () => {
           bottomLeft: [-1, -1],
         },
       },
-      selectionStyle: {} as never,
+      selectionStyle: selectionStyleOf(view),
     });
     expect(handles).toEqual([
       { kind: 'resize', id: 'east', position: [1, 0], cursor: 'ew-resize' },
@@ -1348,6 +1357,52 @@ describe('the examples that draw with WebGL of their own', () => {
         });
       },
     });
-    expect([compass(), particles()].map((p) => p.name)).toEqual(['acme-compass', 'acme-particles']);
+    // A ring on each point drawn: what follows the number of points is allocated as rows
+    const rings = (layerId: string): Plugin => ({
+      name: 'acme-rings',
+      setup(ctx) {
+        ctx.webgl.addOverlay({
+          gpuShare: 0.001,
+          prepare(gpu) {
+            const { gl } = gpu;
+            const program = gpu.program('', '');
+            const vertices = gpu.vertexArray();
+            let points: WebGLBuffer | null = null;
+            let capacity = 0;
+            return () => {
+              const view = ctx.webgl.rows(layerId);
+              if (!view) return;
+              const b = ctx.map.getBounds();
+              const drawn = view.listDrawnRows([
+                b.getWest(),
+                b.getSouth(),
+                b.getEast(),
+                b.getNorth(),
+              ]);
+              if (drawn.length > capacity) {
+                if (points) gpu.rows.release(points);
+                capacity = drawn.length * 2;
+                points = gpu.rows.buffer(capacity * 8);
+              }
+              const data = new Float32Array(drawn.length * 2);
+              drawn.forEach((row, i) => {
+                const [x = 0, y = 0] = view.getRowPoint(row) ?? [];
+                data.set([x, y], i * 2);
+              });
+              gl.useProgram(program);
+              gl.bindVertexArray(vertices);
+              gl.bindBuffer(gl.ARRAY_BUFFER, points);
+              gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+              gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawn.length);
+            };
+          },
+        });
+      },
+    });
+    expect([compass(), particles(), rings('l')].map((p) => p.name)).toEqual([
+      'acme-compass',
+      'acme-particles',
+      'acme-rings',
+    ]);
   });
 });
