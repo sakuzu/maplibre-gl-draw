@@ -102,6 +102,7 @@ describe('the document of a storage, read by the rules', () => {
   it('puts a feature whose group is gone in its own layer, and back in the group when it comes back', () => {
     const document = documentOf();
     const deleted = document.groups.get('g');
+    if (!deleted) throw new Error('no group g');
     applyOperations(document, [{ type: 'delete', kind: 'group', ids: ['g'] }]);
     expect(readOf(document)).toEqual({
       features: { f1: ['a', undefined], f2: ['a', undefined], f3: ['a', undefined] },
@@ -113,7 +114,7 @@ describe('the document of a storage, read by the rules', () => {
       groupId: 'g',
     });
     applyOperations(document, [
-      { type: 'create', kind: 'group', id: 'g', record: deleted as never },
+      { type: 'create', kind: 'group', id: 'g', record: deleted },
     ]);
     expect(readOf(document).features.f1).toEqual(['a', 'g']);
   });
@@ -121,6 +122,7 @@ describe('the document of a storage, read by the rules', () => {
   it('keeps what is in a layer gone, and shows it again with the layer, what was made in it meanwhile included', () => {
     const document = documentOf();
     const a = document.layers.get('a');
+    if (!a) throw new Error('no layer a');
     // A deletes the layer, naming what it holds there (f1, f2, the group); B made f4 in it at the
     // same time, and wrote f3 before (A had not received it)
     applyOperations(document, [
@@ -136,7 +138,7 @@ describe('the document of a storage, read by the rules', () => {
     });
     // A takes the deletion back: the layer comes back with what was in it
     applyOperations(document, [
-      { type: 'create', kind: 'layer', id: 'a', record: a as never },
+      { type: 'create', kind: 'layer', id: 'a', record: a },
       group('g', 'a', 'V'),
       feature('f1', 'a', 'V', 'g'),
       feature('f2', 'a', 'W', 'g'),
