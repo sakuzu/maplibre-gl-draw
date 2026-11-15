@@ -76,12 +76,36 @@ describe('history.maxBytes', () => {
     });
   }
 
-  /** Points of a long name, so that a step that keeps them keeps far more than their IDs */
-  const named = (batch: number, count = 100) =>
-    points(count, batch).map((point, i) => ({
-      ...point,
-      properties: { name: `${'n'.repeat(200)}${String(batch * 1000 + i).padStart(4, '0')}` },
-    }));
+  /** What the features a step deletes are like: the length of their names, their positions */
+  interface Shape {
+    readonly nameLength?: number;
+    /** 1 for points, more for lines of as many positions */
+    readonly positions?: number;
+  }
+
+  /**
+   * Points (or lines) of a long name, so that a step that keeps them keeps far more than their
+   * IDs
+   */
+  const named = (batch: number, count = 100, shape: Shape = {}) =>
+    points(count, batch).map((point, i) => {
+      // Where `points` puts it
+      const [x, y] = [i * 0.001, batch];
+      const positions = shape.positions ?? 1;
+      return {
+        ...point,
+        geometry:
+          positions === 1
+            ? point.geometry
+            : {
+                type: 'LineString' as const,
+                coordinates: Array.from({ length: positions }, (_, v) => [x + v * 1e-5, y]),
+              },
+        properties: {
+          name: `${'n'.repeat(shape.nameLength ?? 200)}${String(batch * 1000 + i).padStart(4, '0')}`,
+        },
+      };
+    });
 
   /** An instance whose IDs are given in order, its Store of rows or of objects */
   function openWith(rows: boolean, maxBytes: number): Draw {
@@ -102,6 +126,7 @@ describe('history.maxBytes', () => {
     rows: boolean,
     maxBytes: number,
     count = 100,
+    shape: Shape = {},
   ): Promise<number[]> {
     const opened = openWith(rows, maxBytes);
     try {
@@ -111,8 +136,8 @@ describe('history.maxBytes', () => {
         writes.transact(
           () =>
             writes.features.createMany(
-              named(batch, count).map((point) => ({
-                type: 'Point' as const,
+              named(batch, count, shape).map((point) => ({
+                type: point.geometry.type,
                 geometry: point.geometry,
                 layerId,
                 properties: point.properties,
@@ -141,12 +166,12 @@ describe('history.maxBytes', () => {
   }
 
   /** The least budget that keeps two deletions (found by halving) */
-  async function budgetOfTwo(rows: boolean, count = 100): Promise<number> {
+  async function budgetOfTwo(rows: boolean, count = 100, shape: Shape = {}): Promise<number> {
     let low = 0;
     let high = 10_000_000;
     while (high - low > 1) {
       const middle = Math.floor((low + high) / 2);
-      if ((await deletionsTakenBack(rows, middle, count)).length >= 2) high = middle;
+      if ((await deletionsTakenBack(rows, middle, count, shape)).length >= 2) high = middle;
       else low = middle;
     }
     return high;
@@ -171,6 +196,22 @@ describe('history.maxBytes', () => {
       const more = await budgetOfTwo(rows, 200);
       expect(more - two).toBeGreaterThanOrEqual(2 * 100 * MEMORY_FACTORS.rows.jsPerFeature);
     }, 30_000);
+
+    it(`counts the values and the positions of the features a deletion keeps (${kind})`, async () => {
+      const two = await budgetOfTwo(rows);
+      // Names of 500 characters rather than 200: 300 more characters (2 bytes each) per feature,
+      // for the 200 features of two deletions
+      const longer = await budgetOfTwo(rows, 100, { nameLength: 500 });
+      expect(longer - two).toBeGreaterThanOrEqual(2 * 100 * 300 * 2);
+      // Lines of 10 positions rather than points: 9 more positions per feature, each at least its
+      // two numbers (8 bytes each); a row counts a position as the memory of the rows does
+      const lines = await budgetOfTwo(rows, 100, { positions: 10 });
+      const perPosition = rows ? MEMORY_FACTORS.rows.jsPerPosition : 16;
+      expect(lines - two).toBeGreaterThanOrEqual(2 * 100 * 9 * perPosition);
+      // The budget found keeps two such deletions, and a byte less one
+      expect(await deletionsTakenBack(rows, longer, 100, { nameLength: 500 })).toEqual([3, 2]);
+      expect(await deletionsTakenBack(rows, longer - 1, 100, { nameLength: 500 })).toEqual([3]);
+    }, 60_000);
 
     it(`lets go of the farthest step to make again once one step to take back is left (${kind})`, async () => {
       const two = await budgetOfTwo(rows);

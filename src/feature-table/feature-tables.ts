@@ -24,6 +24,7 @@ import { KasaneError, type TablesOptions } from '@sakuzu/kasane';
 import type { RowGroup, RowTable } from '@sakuzu/kasane/render';
 import {
   type DeltaInput,
+  geometryAt,
   type Pages,
   ROW_FLAG_DELETED,
   type RowPlace,
@@ -60,7 +61,7 @@ import { fieldsToRead, rowValuesOfTables } from '../table/tables-values.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
 import { RowStateSets, STATE_HIDDEN_SKETCH } from './feature-row-states.js';
-import { rowGeometry, rowInputOf, rowPoint, rowType, rowValue } from './row-read.js';
+import { rowGeometry, rowInputOf, rowPoint, rowProperties, rowType, rowValue } from './row-read.js';
 import type { TableSelection } from './selection.js';
 
 /**
@@ -399,6 +400,15 @@ export interface FeatureTablesInternals extends Pages<FeatureStyle> {
   /** The values the rows of `rows` have now, for its fields (see `FeatureTables.readValues`) */
   readRowValues(rows: RowValues): RowValues;
   /**
+   * Calls `read` with the number of positions and the values (`properties`) of each row of
+   * `rows` that is deleted and still held (kept for whatever takes its deletion back): what a
+   * step of the local undo that keeps it is counted by. A row read here makes its values only
+   */
+  readDeletedRows(
+    rows: Int32Array,
+    read: (positions: number, properties: Readonly<Record<string, unknown>>) => void,
+  ): void;
+  /**
    * Calls `listener` with the rows of a selection of many features once it is decided (a box let
    * go of, every feature selected), and with null once there is none: what moves them on the
    * terrain (the moving parts of the drape) starts being built then, before they are pressed
@@ -585,6 +595,23 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
   /** The values the rows of `rows` have now, for its fields, as a feature holds them */
   readRowValues(rows: RowValues): RowValues {
     return rowValuesOfTables(this.readValues(rows.rows, fieldsToRead(rows)));
+  }
+
+  readDeletedRows(
+    rows: Int32Array,
+    read: (positions: number, properties: Readonly<Record<string, unknown>>) => void,
+  ): void {
+    for (const handle of rows) {
+      if (!this.findPlace(handle)) continue;
+      const group = this.foundGroup as RowGroup;
+      const row = this.foundRow;
+      if ((group.data.flags[row] & ROW_FLAG_DELETED) === 0) continue;
+      const geometry = geometryAt(group, row);
+      const positions = geometry
+        ? geometry.reader.vertexStart(geometry.at + 1) - geometry.reader.vertexStart(geometry.at)
+        : 0;
+      read(positions, rowProperties(group, row));
+    }
   }
 
   override readValues(rows: Int32Array, read: readonly RowField[]): TablesRowValues {

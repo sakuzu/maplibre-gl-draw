@@ -359,22 +359,19 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
 /**
  * An estimate of the bytes a part of a step keeps: its features, layers, groups, files and
  * metadata as values, the values of its rows and their handles, and the rows it deleted, which
- * the Store keeps for it (as many bytes as a row of the document takes, on average)
+ * the Store keeps for it: for each, the bytes of a row and of its positions as the memory of the
+ * rows counts them, and the bytes of its values (`properties`), as for a feature kept as a value
  */
 function inverseBytes(store: Store, inverse: Inverse): number {
   const { token, ...kept } = inverse;
   let n = valueBytes(kept);
   const before = inverse.rowsBefore;
-  if (token !== undefined && before) {
-    let deleted = before.rows.length;
-    if (before.deleted) {
-      deleted = 0;
-      for (const flag of before.deleted) if (flag !== 0) deleted++;
-    }
-    const size = featureTablesInternals(store.tables)?.size();
-    const positions = size && size.rows > 0 ? size.positions / size.rows : 0;
+  const internals = featureTablesInternals(store.tables);
+  if (token !== undefined && before && internals) {
     const { jsPerFeature, jsPerPosition } = MEMORY_FACTORS.rows;
-    n += Math.round(deleted * (jsPerFeature + positions * jsPerPosition));
+    internals.readDeletedRows(before.rows, (positions, properties) => {
+      n += jsPerFeature + positions * jsPerPosition + valueBytes(properties);
+    });
   }
   return n;
 }
