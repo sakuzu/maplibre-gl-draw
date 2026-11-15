@@ -177,7 +177,7 @@ input?.addEventListener('change', async () => {
   届きます。一度に読む入力 (ファイル、文字、文書、GeoJSON) も同じように
   開き、一度に書きます
 - 保存先がある時に入力として開いた頁は、1 つの確定として送ります
-- `tx.import` は頁を受けません
+- `tx.import` は頁を `invalidInput` で断ります
 
 ### 複数のソースをまとめて読む
 

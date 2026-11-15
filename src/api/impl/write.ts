@@ -68,6 +68,7 @@ import type { SelectionTarget } from '../state.js';
 import type {
   ImportOptions,
   ImportResult,
+  ImportSource,
   Many,
   Neighbor,
   OpenResult,
@@ -106,7 +107,7 @@ import type { GroupResource } from './group-resource.js';
 import { createGroups, idsInStackingOrder, prepareGroup, prepareGroupPatch } from './groups.js';
 import type { LayerResource } from './layer-resource.js';
 import { createLayers, prepareLayer, prepareLayerPatch } from './layers.js';
-import { openPages, type PageSource } from './open-pages.js';
+import { isPageSource, openPages, type PageSource } from './open-pages.js';
 import { placementOf, resolveMoveTarget } from './placement.js';
 import { publishedStore } from './published-store.js';
 import { writeOf } from './saving.js';
@@ -2209,10 +2210,13 @@ class TransactionImpl implements Transaction {
   readonly #importIds = new Set<string>();
   readonly #importLayers = new Set<string>();
 
-  import(source: OpenSource, options?: ImportOptions): Promise<ImportResult> {
+  import(source: ImportSource, options?: ImportOptions): Promise<ImportResult> {
     return this.#runAsync(async (keep) => {
       if (options !== undefined && !isRecord(options)) {
         throw invalidInput('The options must be an object');
+      }
+      if (isPageSource(source)) {
+        throw invalidInput('Pages of rows are opened with draw.open, not imported');
       }
       const { layer, group, duplicateIds } = options ?? {};
       if (duplicateIds !== undefined && duplicateIds !== 'renew') {

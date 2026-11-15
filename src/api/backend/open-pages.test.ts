@@ -342,3 +342,11 @@ describe('a storage whose load gives pages', () => {
     expect(d.features.count()).toBe(30);
   });
 });
+
+describe('tx.import', () => {
+  it('does not take pages of rows', async () => {
+    const d = make();
+    expect(await codeOf(d.write((tx) => tx.import(pagesOf(0, 2, 2))))).toBe('invalidInput');
+    expect(d.features.count()).toBe(0);
+  });
+});

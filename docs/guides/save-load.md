@@ -190,7 +190,7 @@ async iterable of them, in their order. So does the `load` of a storage.
   when it is open. A source read at once (a file, a string, a document,
   GeoJSON) is opened the same way, written at once
 - With a storage, pages opened as a source are sent as one commit
-- `tx.import` does not take pages
+- `tx.import` rejects pages with `invalidInput`
 
 ### Several sources at once
 

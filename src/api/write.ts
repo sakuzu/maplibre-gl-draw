@@ -195,7 +195,7 @@ export interface Transaction<P extends object = Properties> {
    * times it is called, so several files are one step. A document is replaced with `draw.open`.
    * `options.layer` wins over the `maplibre-gl-draw:layerId` of the features.
    */
-  import(source: OpenSource, options?: ImportOptions): Promise<ImportResult>;
+  import(source: ImportSource, options?: ImportOptions): Promise<ImportResult>;
 }
 
 /**
