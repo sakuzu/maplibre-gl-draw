@@ -42,7 +42,7 @@ import type { LayerResource } from './layer-resource.js';
 import { createLayers } from './layers.js';
 import { createMemory } from './memory.js';
 import { createMetadata } from './metadata.js';
-import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
+import { checkDrawOptions, createOptions, setUserEditing, toEngineOptions } from './options.js';
 import { createPick } from './pick.js';
 import { createPluginUse } from './plugin-host.js';
 import { publishedStore } from './published-store.js';
@@ -340,7 +340,14 @@ export function createDrawOnEngine(
     getDraw: () => draw,
     report: (problem, key) => status.problem(problem, key),
   });
-  const optionsObservable = observe(events, ['options.changed'], drawOptions.get, { kept: true });
+  // `editable` and `userEditing` read the read-only and the lock, which setReadOnly and
+  // setInteractionLocked change too
+  const optionsObservable = observe(
+    events,
+    ['options.changed', 'readOnly.changed', 'interactionLock.changed'],
+    drawOptions.get,
+    { kept: true },
+  );
   const drawingResource = createDrawingResource(engine);
   const modeObservable = observe(events, ['mode.changed'], () => modeManager.getMode());
   const members: Draw = {
@@ -420,9 +427,7 @@ export function createDrawOnEngine(
     },
     isInteractionLocked: () => store.isInteractionLocked(),
     setInteractionLocked(value) {
-      store.setInteractionLock(value === true);
-      // A drawing mode cannot run under the lock
-      if (value === true && modeManager.getMode() !== 'select') modeManager.setMode('select');
+      setUserEditing(engine, value !== true);
     },
 
     write: (fn, writeOptions) => noteSkipped(writer.write(fn, writeOptions), writeOptions?.label),

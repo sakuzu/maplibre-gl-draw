@@ -56,6 +56,8 @@ const CREATION_KEYS = [
 
 /** The options that change while the instance runs */
 const RUNTIME_KEYS = [
+  'editable',
+  'userEditing',
   'messages',
   'autoName',
   'style',
@@ -185,6 +187,8 @@ const SELECTION_STYLE_CHECKS = {
 };
 
 const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => void>> = {
+  editable: bool,
+  userEditing: bool,
   messages(value, what) {
     if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
     // The keys of the library and those the extensions defined (defineMessages)
@@ -327,6 +331,7 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
             throw invalidInput(`${where} must be an integer from 0`);
           }
         },
+        maxBytes: nonNegative,
       });
     },
     debug(value, what) {
@@ -757,6 +762,11 @@ export function createOptions(
     let rebuild = false;
     const next = current;
 
+    // The read-only and the interaction lock of the Store, as setReadOnly and
+    // setInteractionLocked set them
+    if (patch.editable !== undefined) context.store.setReadOnly(!patch.editable);
+    if (patch.userEditing !== undefined) setUserEditing(engine, patch.userEditing);
+
     if (patch.messages !== undefined) {
       Object.assign(context.messages, resolveMessages(next.messages));
     }
@@ -862,6 +872,8 @@ export function createOptions(
     const snap = snapService.getOptions();
     const values: RuntimeOptions = {
       ...current,
+      editable: !context.store.isReadOnly(),
+      userEditing: !context.store.isInteractionLocked(),
       scaleWithZoom: context.options.scaleWithZoom,
       clickTolerance: context.options.clickTolerance,
       dragThreshold: context.options.dragThreshold,
@@ -903,6 +915,13 @@ export function createOptions(
     },
 
     applyCreation(): void {
+      const { editable, userEditing } = current;
+      if (editable !== undefined || userEditing !== undefined) {
+        apply({
+          ...(editable !== undefined && { editable }),
+          ...(userEditing !== undefined && { userEditing }),
+        });
+      }
       const scale = current.rendering?.renderScale;
       if (scale !== undefined) apply({ rendering: { renderScale: scale } });
       // The look of the snapping indicator is not an option of the engine
@@ -914,6 +933,17 @@ export function createOptions(
       }
     },
   };
+}
+
+/**
+ * Turns the interaction lock off (`true`) or on (`false`), as `draw.setInteractionLocked` does:
+ * a drawing mode cannot run under the lock, so it goes back to select
+ *
+ * @internal
+ */
+export function setUserEditing(engine: Pick<Engine, 'context' | 'modeManager'>, on: boolean): void {
+  engine.context.store.setInteractionLock(!on);
+  if (!on && engine.modeManager.getMode() !== 'select') engine.modeManager.setMode('select');
 }
 
 /**

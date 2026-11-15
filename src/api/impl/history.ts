@@ -23,6 +23,7 @@
  * until it is cleared for whatever takes the deletion back.
  */
 
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { FileData, Metadata } from '../../shared/types/model.js';
 import { createId } from '../../shared/utils/id.js';
 import { commitOf, runCommit } from '../../store/commit-scope.js';
@@ -38,6 +39,7 @@ import type {
 import { DrawError } from '../errors.js';
 import type { HistoryState } from '../status.js';
 import type { TaskOptions, Write } from '../write.js';
+import { MEMORY_FACTORS } from './memory.js';
 import { writeOf } from './saving.js';
 import { withLocksIgnored } from './shared.js';
 import { queueCommit } from './write.js';
@@ -71,6 +73,11 @@ export interface History {
 export interface HistoryOptions {
   /** The most steps kept, the oldest let go of first; 0 for no local undo */
   readonly maxSteps?: number;
+  /**
+   * The bytes the steps to take back and to make again keep, as one budget (an estimate): past
+   * it, the oldest steps are let go of first, the last one kept. No limit when it is left out
+   */
+  readonly maxBytes?: number;
 }
 
 const DEFAULT_MAX_STEPS = 100;
@@ -113,6 +120,8 @@ interface Step {
   /** The ID of the commit it takes back (or makes again) */
   readonly commit: string | undefined;
   readonly parts: Inverse[];
+  /** An estimate of the bytes its parts keep, counted only under a limit of the bytes */
+  bytes: number;
 }
 
 /**
@@ -122,6 +131,7 @@ interface Step {
  */
 export function createHistory(store: Store, options: HistoryOptions | undefined): History {
   const maxSteps = options?.maxSteps ?? DEFAULT_MAX_STEPS;
+  const maxBytes = options?.maxBytes;
   const undoSteps: Step[] = [];
   const redoSteps: Step[] = [];
   // What a step being taken back or made again records: the step that reverses it
@@ -140,6 +150,33 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
   };
   const dropAll = (steps: Step[]): void => {
     for (const step of steps.splice(0)) release(step);
+  };
+  /** Adds a part to a step, and counts its bytes under a limit of the bytes */
+  const addPart = (step: Step, inverse: Inverse): void => {
+    step.parts.push(inverse);
+    if (maxBytes !== undefined) step.bytes += inverseBytes(store, inverse);
+  };
+  /**
+   * Keeps the steps within the limit of the bytes: the oldest step to take back is let go of
+   * first, then the farthest one to make again, the last one kept
+   *
+   * @returns Whether a step was let go of
+   */
+  const keepBytes = (): boolean => {
+    if (maxBytes === undefined) return false;
+    let total = 0;
+    for (const step of undoSteps) total += step.bytes;
+    for (const step of redoSteps) total += step.bytes;
+    let dropped = false;
+    while (total > maxBytes && undoSteps.length + redoSteps.length > 1) {
+      const step = (undoSteps.length > 1 ? undoSteps : redoSteps).shift() as Step;
+      total -= step.bytes;
+      release(step);
+      if (open === step) open = null;
+      if (taken?.step === step) taken = null;
+      dropped = true;
+    }
+    return dropped;
   };
   const listeners = new Set<() => void>();
   let told: HistoryState = NO_STEPS;
@@ -180,7 +217,10 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     if (source === 'remote' || source === 'silent' || source === 'refused') return;
     if (source === 'undo' || source === 'redo') {
       const inverse = taken?.direction === source ? inverseOf(change) : null;
-      if (taken && inverse) taken.step.parts.push(inverse);
+      if (taken && inverse) {
+        addPart(taken.step, inverse);
+        if (keepBytes()) changed();
+      }
       return;
     }
     if (source === 'open' || change.reset === true) {
@@ -197,15 +237,18 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     if (!inverse) return;
     taken = null;
     if (open) {
-      open.parts.push(inverse);
+      addPart(open, inverse);
+      if (keepBytes()) changed();
     } else {
-      open = { label: commit?.label, commit: commit?.id, parts: [inverse] };
+      open = { label: commit?.label, commit: commit?.id, parts: [], bytes: 0 };
+      addPart(open, inverse);
       undoSteps.push(open);
       while (undoSteps.length > maxSteps) {
         const dropped = undoSteps.shift();
         if (dropped) release(dropped);
       }
       dropAll(redoSteps);
+      keepBytes();
       changed();
     }
     if (!store.slicedWritePending) open = null;
@@ -243,9 +286,12 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         }
         release(step);
         // Its parts in the order they were told: taken back from the last one, as a step is
-        const reversed: Step = { label: step.label, commit: id, parts };
+        let bytes = 0;
+        if (maxBytes !== undefined) for (const part of parts) bytes += inverseBytes(store, part);
+        const reversed: Step = { label: step.label, commit: id, parts, bytes };
         (direction === 'undo' ? redoSteps : undoSteps).push(reversed);
         taken = { direction, step: reversed };
+        keepBytes();
         changed();
         // A step of many rows is written over several tasks: it settles once its last rows are
         // written, so that what reads after it reads them
@@ -309,6 +355,53 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
 // ============================================================================
 // What takes a notification back
 // ============================================================================
+
+/**
+ * An estimate of the bytes a part of a step keeps: its features, layers, groups, files and
+ * metadata as values, the values of its rows and their handles, and the rows it deleted, which
+ * the Store keeps for it (as many bytes as a row of the document takes, on average)
+ */
+function inverseBytes(store: Store, inverse: Inverse): number {
+  const { token, ...kept } = inverse;
+  let n = valueBytes(kept);
+  const before = inverse.rowsBefore;
+  if (token !== undefined && before) {
+    let deleted = before.rows.length;
+    if (before.deleted) {
+      deleted = 0;
+      for (const flag of before.deleted) if (flag !== 0) deleted++;
+    }
+    const size = featureTablesInternals(store.tables)?.size();
+    const positions = size && size.rows > 0 ? size.positions / size.rows : 0;
+    const { jsPerFeature, jsPerPosition } = MEMORY_FACTORS.rows;
+    n += Math.round(deleted * (jsPerFeature + positions * jsPerPosition));
+  }
+  return n;
+}
+
+/**
+ * An estimate of the bytes a value takes in the heap: 8 for a number and the like, 2 for each
+ * character of a string, the bytes of a typed array, and the sum of the members of an array, a
+ * map and an object (with their keys)
+ */
+function valueBytes(value: unknown): number {
+  if (typeof value === 'string') return 16 + value.length * 2;
+  if (value === null || typeof value !== 'object') return 8;
+  if (ArrayBuffer.isView(value)) return value.byteLength;
+  let n = 16;
+  if (Array.isArray(value)) {
+    for (const item of value) n += valueBytes(item);
+    return n;
+  }
+  if (value instanceof Map) {
+    for (const [key, item] of value) n += valueBytes(key) + valueBytes(item);
+    return n;
+  }
+  for (const key in value) {
+    n += valueBytes(key) + valueBytes((value as Record<string, unknown>)[key]);
+  }
+  return n;
+}
 
 /** The first value of each ID: what it was before its first write of the notification */
 function firstOf<T>(entries: readonly { id: string; previous: T }[] | undefined): Map<string, T> {

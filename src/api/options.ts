@@ -419,6 +419,20 @@ export interface AutoNameOptions {
  * option but `defaultMode`, `store`, `initDefaultLayer` and `generateId`.
  */
 export interface RuntimeOptions {
+  /**
+   * False refuses every write of the document with `notEditable`; the selection and what this
+   * client shows go on. The same value as `draw.setReadOnly` sets (`editable: false` is
+   * `setReadOnly(true)`), read as it is now; true when it is left out
+   */
+  editable?: boolean;
+  /**
+   * False stops the edits that start from the input of the user: a drawing mode goes back to
+   * select, and the features cannot be dragged nor their handles taken. The selection and the
+   * writes of the API go on. The same value as `draw.setInteractionLocked` sets
+   * (`userEditing: false` is `setInteractionLocked(true)`), read as it is now; true when it is
+   * left out
+   */
+  userEditing?: boolean;
   /** Replaces the words the library shows */
   messages?: Partial<Messages>;
   /** The names of new features; `false` turns them off */
@@ -514,9 +528,11 @@ export interface DrawOptions extends RuntimeOptions {
    * let go of first (100 when left out). With 0 there is no local undo: give it when the document
    * is taken back elsewhere (the history of the backend that keeps the Store in step); nothing of
    * the commits is kept for it, and the rows a deletion deleted stay with the Store until it is
-   * cleared, for what takes the deletion back
+   * cleared, for what takes the deletion back. `maxBytes` is the bytes the steps to take back
+   * and to make again keep, as one budget (an estimate of what they keep in the memory): past it,
+   * the oldest steps are let go of first, the last one kept; no limit when it is left out
    */
-  history?: { maxSteps?: number };
+  history?: { maxSteps?: number; maxBytes?: number };
   /**
    * Diagnostics for the development of an application or an extension; only at creation
    *

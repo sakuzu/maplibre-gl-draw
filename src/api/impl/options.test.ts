@@ -424,6 +424,12 @@ describe('toAppliedDefaults', () => {
 
 describe('draw.options of createDraw', () => {
   let draw: Draw;
+  const point = { type: 'Point' as const, coordinates: [0, 0] };
+  /** A new instance in place of one, destroyed */
+  const recreate = (old: Draw, given: DrawOptions): Draw => {
+    old.destroy();
+    return createDraw(createMapStub().map, given);
+  };
 
   afterEach(() => draw.destroy());
 
@@ -432,6 +438,49 @@ describe('draw.options of createDraw', () => {
     expect(draw.options.get().snapping?.enabled).toBe(false);
     draw.options.update({ snapping: { enabled: true } });
     expect(draw.options.get().snapping?.enabled).toBe(true);
+  });
+
+  it('reads and sets editable as setReadOnly does, at creation too', async () => {
+    draw = createDraw(createMapStub().map, { editable: false });
+    expect(draw.isReadOnly()).toBe(true);
+    expect(draw.options.value.editable).toBe(false);
+    expect(draw.status.value.editable).toBe(false);
+    await expect(
+      draw.write((tx) => tx.features.create({ type: 'Feature', geometry: point, properties: {} })),
+    ).rejects.toMatchObject({ code: 'notEditable' });
+    const told: (boolean | undefined)[] = [];
+    const stop = draw.options.subscribe((value) => told.push(value.editable));
+    draw.options.update({ editable: true });
+    expect(draw.isReadOnly()).toBe(false);
+    await draw.write((tx) =>
+      tx.features.create({ type: 'Feature', geometry: point, properties: {} }),
+    );
+    expect(draw.features.count()).toBe(1);
+    // setReadOnly sets the same value, and the options tell it
+    draw.setReadOnly(true);
+    expect(draw.options.get().editable).toBe(false);
+    stop();
+    expect(told[0]).toBe(false);
+    expect(told.includes(true)).toBe(true);
+    expect(told[told.length - 1]).toBe(false);
+  });
+
+  it('reads and sets userEditing as setInteractionLocked does, back to select', () => {
+    draw = createDraw(createMapStub().map);
+    expect(draw.options.value.userEditing).toBe(true);
+    draw.mode.set('drawLine');
+    draw.options.update({ userEditing: false });
+    expect(draw.isInteractionLocked()).toBe(true);
+    expect(draw.mode.value).toBe('select');
+    // The writes of the API go on
+    writesOf(draw).features.create({ type: 'Point', geometry: point });
+    expect(draw.features.count()).toBe(1);
+    draw.setInteractionLocked(false);
+    expect(draw.options.value.userEditing).toBe(true);
+    draw = recreate(draw, { userEditing: false });
+    expect(draw.isInteractionLocked()).toBe(true);
+    expect(() => draw.options.update({ editable: 'no' as unknown as boolean })).toThrow(DrawError);
+    expect(() => draw.options.update({ userEditing: 1 as unknown as boolean })).toThrow(DrawError);
   });
 
   it('gives the colors of the style option in getAppliedStyle as they were given', () => {
