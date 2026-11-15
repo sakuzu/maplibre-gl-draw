@@ -104,7 +104,7 @@ describe('the rows dragged', () => {
     states.setTransform(BULK_MOVE_SET, { kind: 'rotate', center: [139, 35], angleDegrees: 15 });
     const dragged = draggedRowsOf(tables);
     if (!dragged) throw new Error('no row dragged');
-    const rotationOf = (value: unknown): unknown =>
+    const rotationOf = (value: number | string | null): unknown =>
       draggedFeatureOf(
         { ...point('a', 139), properties: { 'maplibre-gl-draw:rotation': value } },
         tables,

@@ -173,7 +173,7 @@ describe('BatchManager Point batches', () => {
 
   it('gives the markers the value of the rotation as the feature holds it, and none to a type it does not know', () => {
     const { manager, calls } = createManager();
-    const at = (id: string, x: number, rotation: unknown): Feature => ({
+    const at = (id: string, x: number, rotation: number | string | null): Feature => ({
       ...makePoint(id, [x, x]),
       properties: { 'maplibre-gl-draw:rotation': rotation },
     });
