@@ -24,6 +24,7 @@ import { type ImageErrorFn, ImageRenderer } from '../renderers/image.js';
 import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import { PointShapeRenderer } from '../renderers/point/point-shape.js';
+import type { PointSpriteSheets } from '../renderers/point/point-sprites.js';
 import { PolygonBatchRenderer } from '../renderers/polygon/batch.js';
 import { FillShaderManager } from '../renderers/polygon/fill.js';
 import { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
@@ -92,6 +93,8 @@ export interface InitRenderersDeps {
    * drawn (`RowsCopies`; false by default: it keeps nothing)
    */
   keepCopies?: boolean;
+  /** The sheets of pictures of the built-in points, which the points drawn at once are drawn with */
+  pointSprites?: PointSpriteSheets;
 }
 
 /**
@@ -249,6 +252,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     sdfPolygonRenderer,
     rowsRenderer,
     terrain,
+    ...(deps.pointSprites && { pointSprites: deps.pointSprites }),
   });
 
   return {

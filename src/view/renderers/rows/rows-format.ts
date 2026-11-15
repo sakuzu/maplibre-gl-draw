@@ -494,3 +494,41 @@ export interface RowSpriteSource {
    */
   readonly premultipliedAlpha?: boolean;
 }
+
+/** The distance scales already told in the console as ones the library cannot read */
+const unreadSpriteScales = new WeakSet<readonly RowSpriteScaleStop[]>();
+
+/**
+ * Writes the stops of a distance scale into `out` (2 floats each), and returns how many the
+ * shader reads: 0 for none, and for stops it cannot read, which are told once in the console
+ *
+ * @internal
+ */
+export function writeSpriteScaleStops(
+  stops: readonly RowSpriteScaleStop[] | undefined,
+  out: Float32Array,
+): number {
+  out.fill(0);
+  if (!stops || stops.length === 0) return 0;
+  let readable = stops.length <= ROW_SPRITE_SCALE_MAX_STOPS;
+  for (let i = 0; readable && i < stops.length; i++) {
+    const stop = stops[i];
+    if (!Number.isFinite(stop.distanceRatio) || !Number.isFinite(stop.scale)) readable = false;
+    else if (i > 0 && !(stop.distanceRatio > stops[i - 1].distanceRatio)) readable = false;
+  }
+  if (!readable) {
+    if (!unreadSpriteScales.has(stops)) {
+      unreadSpriteScales.add(stops);
+      console.warn(
+        `The distanceScale of the pictures of a renderer has stops the library cannot read (${JSON.stringify(stops)}): ` +
+          `from 1 to ${ROW_SPRITE_SCALE_MAX_STOPS} finite stops in ascending order of distanceRatio; the pictures are drawn at the same size everywhere`,
+      );
+    }
+    return 0;
+  }
+  for (let i = 0; i < stops.length; i++) {
+    out[i * 2] = stops[i].distanceRatio;
+    out[i * 2 + 1] = stops[i].scale;
+  }
+  return stops.length;
+}

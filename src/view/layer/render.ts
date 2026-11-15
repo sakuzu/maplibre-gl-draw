@@ -126,7 +126,7 @@ export function renderLayers(
       ? r.batchManager.getRetainedRenderers()
       : undefined;
 
-  if (useRetained) storeRetained.beginFrame(companions);
+  if (useRetained) storeRetained.beginFrame(companions, pointSprites);
 
   // The range used to thin the retained chunks and the chunks of the datasets.
   // It does not depend on the number of features, so once per frame is enough (it is computed

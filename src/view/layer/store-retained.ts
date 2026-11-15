@@ -46,6 +46,7 @@ import type { Store } from '../../store/store.js';
 import type { Feature, Layer, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
+import type { PointSpriteSheets } from '../renderers/point/point-sprites.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import { boundsCenter, rebasedOriginOf } from '../shaders/retained-origin.js';
 import { TerrainContext } from '../terrain/context.js';
@@ -112,6 +113,8 @@ export class StoreRetainedCache {
 
   /** The number of the current frame (counted by beginFrame) */
   private frame = 0;
+  /** The generation of the answers of the sheets of pictures the features were classified with */
+  private spritesGeneration = 0;
 
   constructor(
     store: Store,
@@ -132,15 +135,23 @@ export class StoreRetainedCache {
    *
    * It detects a change of the local visibility (the Store updates the same Set in place, so a
    * reference comparison is impossible) and discards the memo within the frame.
+   *
+   * @param pointSprites The sheets of pictures of the built-in points: the features are
+   *   classified again when their answers change
    */
-  beginFrame(companions: FeatureCompanionRegistry): void {
+  beginFrame(companions: FeatureCompanionRegistry, pointSprites?: PointSpriteSheets): void {
     this.frame++;
     this.featuresByLayer = null;
     // Every watch is advanced on every frame (no short circuit), so each keeps its snapshot
     const hiddenChanged = this.watch.locallyHiddenChanged(this.store.listHidden());
     const companionsChanged = this.watch.companionsChanged(companions);
     const terrainChanged = this.watch.terrainChanged(this.terrain);
-    if (hiddenChanged || companionsChanged || terrainChanged) this.invalidateAll();
+    const spritesGeneration = pointSprites?.generation() ?? 0;
+    const spritesChanged = spritesGeneration !== this.spritesGeneration;
+    this.spritesGeneration = spritesGeneration;
+    if (hiddenChanged || companionsChanged || terrainChanged || spritesChanged) {
+      this.invalidateAll();
+    }
   }
 
   /**
@@ -471,6 +482,7 @@ export class StoreRetainedCache {
         deps.customRenderers,
         deps.companions,
         layer,
+        deps.pointSprites,
       );
 
       if (
@@ -524,8 +536,14 @@ export class StoreRetainedCache {
       const feature = this.shapes.shown(id);
       if (!feature) return 'mismatch';
       if (
-        classifyFeature(feature, styles, deps.customRenderers, deps.companions, layer) !==
-        chunk.kind
+        classifyFeature(
+          feature,
+          styles,
+          deps.customRenderers,
+          deps.companions,
+          layer,
+          deps.pointSprites,
+        ) !== chunk.kind
       ) {
         return 'mismatch';
       }

@@ -51,6 +51,11 @@ import {
   TABLE_ROWS_GLSL,
 } from '../row-state.js';
 import {
+  ROW_SPRITE_SCALE_MAX_STOPS,
+  type RowSpritePictures,
+  writeSpriteScaleStops,
+} from '../rows/rows-format.js';
+import {
   disableDepthForBillboards,
   drawBillboardsWithoutDepth,
   restoreDepthAfterBillboards,
@@ -132,6 +137,65 @@ export interface PointInstanceDataFull {
    * so it is not set there either.
    */
   ghost?: number;
+}
+
+/**
+ * A point drawn at once with a picture of a sheet, in the place of its marker
+ *
+ * @internal
+ */
+export interface PointSpriteInstance {
+  coord: [number, number]; // [lng, lat]
+  /** The rectangle of the picture in the texture, `[u0, v0, u1, v1]` (the top left first) */
+  uv: readonly [number, number, number, number];
+  /** The half width and the half height of the picture on screen (CSS px) */
+  halfWidth: number;
+  halfHeight: number;
+  /**
+   * The value of `maplibre-gl-draw:rotation` the picture turns by, as a marker does (read by
+   * `pointAngleSteps`); omitted for a picture that stays upright on screen
+   */
+  rotation?: unknown;
+  /** Ground elevation of the anchor (meters), as {@link PointInstanceDataFull.elevationMeters} */
+  elevationMeters?: number;
+  /** Opacity factor used when the point is occluded by the terrain, as for a marker */
+  ghost?: number;
+}
+
+/** The unit the texture of the pictures drawn at once is bound to */
+const UNIT_SPRITES = 4;
+
+/**
+ * Builds the instances of the pictures drawn at once, in the layout of the markers: the offset,
+ * the rectangle of the picture where the fill color is, the ghost where the stroke color is, the
+ * half size (device pixels) where the radius and the stroke width are, the elevation, and the
+ * steps of the rotation where the code of the marker is (0 for an upright picture)
+ *
+ * @internal
+ */
+export function buildPointSpriteInstanceData(
+  points: readonly PointSpriteInstance[],
+  origin: [number, number],
+  pixelRatio?: PixelRatioInput,
+  terrain?: TerrainContext,
+): Float32Array {
+  const dpr = resolvePixelRatio(pixelRatio);
+  const data = new Float32Array(points.length * INSTANCE_STRIDE);
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const offset = i * INSTANCE_STRIDE;
+    const lngLatOffset = calculateLngLatOffset(p.coord, origin);
+    data[offset] = lngLatOffset[0];
+    data[offset + 1] = lngLatOffset[1];
+    for (let k = 0; k < 4; k++) data[offset + 2 + k] = p.uv[k];
+    data[offset + 6] = p.ghost ?? 1;
+    data[offset + 10] = p.halfWidth * dpr;
+    data[offset + 11] = p.halfHeight * dpr;
+    data[offset + 12] =
+      p.elevationMeters ?? (terrain ? anchorElevationMeters(terrain, p.coord[0], p.coord[1]) : 0);
+    data[offset + INSTANCE_SHAPE] = pointAngleSteps(p.rotation);
+  }
+  return data;
 }
 
 /** Point data for instanced rendering with coordinates only (the style is given as arguments) */
@@ -576,6 +640,17 @@ export class PointInstanceRenderer {
   private rowStateUniforms: RowStateUniforms | null = null;
   /** The shader data the programs were made with (the variant of the rows is made from it) */
   private shaderData: ShaderData | null = null;
+  /** The program that draws the pictures of the points drawn at once (made on its first use) */
+  private spriteProgram: WebGLProgram | null = null;
+  /** Its uniforms besides those of the projection and the factors */
+  private spriteLocations: {
+    readonly sprites: WebGLUniformLocation | null;
+    readonly premultiplied: WebGLUniformLocation | null;
+    readonly cameraToCenterW: WebGLUniformLocation | null;
+    readonly scaleStops: WebGLUniformLocation | null;
+    readonly scaleCount: WebGLUniformLocation | null;
+  } | null = null;
+  private readonly spriteScaleStops = new Float32Array(ROW_SPRITE_SCALE_MAX_STOPS * 2);
 
   /**
    * The vertices of the billboard, one buffer shared by the VAOs of the immediate mode and every
@@ -682,6 +757,170 @@ export class PointInstanceRenderer {
     );
     this.rowStateUniforms = new RowStateUniforms(this.gl, this.rowProgram);
     return true;
+  }
+
+  /**
+   * Creates the program of the pictures drawn at once: a quad of the half size of the picture
+   * centered on the point, read from the texture of its sheet, turned as a marker turns when it
+   * has a rotation, its size following the distance as the pictures of the rows do
+   */
+  private createSpriteProgram(prelude: string, define: string): WebGLProgram {
+    const projTransitionUniform = getProjectionTransitionUniform(prelude);
+    const vertexSource = `#version 300 es
+${prelude}
+${define}
+${projTransitionUniform}${OFFSET_MODE_GLSL}${TABLE_ROWS_GLSL}
+layout(location = 0) in vec2 a_quad;
+layout(location = 1) in vec2 a_instance_lnglat_offset;
+layout(location = 2) in vec4 a_instance_fill_color;     // the rectangle of the picture
+layout(location = 3) in vec4 a_instance_stroke_color;   // x: the ghost
+layout(location = 4) in float a_instance_size;          // half width (device px)
+layout(location = 5) in float a_instance_stroke_width;  // half height (device px)
+layout(location = 6) in float a_instance_elevation_m;
+layout(location = 7) in float a_instance_shape;         // the steps of the rotation (0: upright)
+
+uniform vec2 u_pixel_to_clip;
+uniform float u_size_scale;
+uniform float u_bearing;
+// The clip w of the center of the screen, and the stops of the size by the distance
+uniform float u_camera_to_center_w;
+uniform vec2 u_sprite_scale_stops[${ROW_SPRITE_SCALE_MAX_STOPS}];
+uniform int u_sprite_scale_count;
+
+out vec2 v_uv;
+flat out float v_ink;
+${POINT_TURN_GLSL}
+float spriteDistanceScale(float distanceRatio) {
+    vec2 first = u_sprite_scale_stops[0];
+    if (distanceRatio <= first.x) return first.y;
+    for (int i = 1; i < ${ROW_SPRITE_SCALE_MAX_STOPS}; i++) {
+        if (i >= u_sprite_scale_count) break;
+        vec2 next = u_sprite_scale_stops[i];
+        if (distanceRatio <= next.x) {
+            vec2 previous = u_sprite_scale_stops[i - 1];
+            return mix(previous.y, next.y, (distanceRatio - previous.x) / max(next.x - previous.x, 1e-9));
+        }
+    }
+    return u_sprite_scale_stops[u_sprite_scale_count - 1].y;
+}
+
+void main() {
+    g_anchor_elevation_m = a_instance_elevation_m;
+    g_anchor_elevation_on = 1.0;
+    vec4 centerClip = project_position_to_clipspace_from_offset(a_instance_lnglat_offset, u_projection_matrix);
+    float ratio = 1.0;
+    if (u_sprite_scale_count > 0 && u_camera_to_center_w > 0.0 && centerClip.w > 0.0) {
+        ratio = spriteDistanceScale(u_camera_to_center_w / centerClip.w);
+        ratio = mix(ratio, 1.0, u_projection_transition);
+    }
+    vec2 halfPx = vec2(a_instance_size, a_instance_stroke_width) * u_size_scale * ratio;
+    // A picture smaller than a pixel is drawn a pixel wide, fainter by the ratio of the areas
+    float extentPx = 2.0 * max(halfPx.x, halfPx.y);
+    float ink = 1.0;
+    if (extentPx < 1.0) {
+        ink = extentPx * extentPx;
+        halfPx /= max(extentPx, 1e-6);
+    }
+    // Pixels with y up: the top of the picture (v0) is at the top of the quad
+    vec2 offsetPx = a_quad * halfPx;
+    int angleSteps = int(a_instance_shape + 0.5);
+    if (angleSteps > 0) {
+        // Counterclockwise by the rotation and the bearing, as a marker shows its shape
+        offsetPx = pointTurnOffset(offsetPx, -(pointAngleDegrees(angleSteps) + u_bearing));
+    }
+    gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, centerClip.z / centerClip.w, 1.0);
+    vec4 uv = a_instance_fill_color;
+    v_uv = vec2(mix(uv.x, uv.z, a_quad.x * 0.5 + 0.5), mix(uv.w, uv.y, a_quad.y * 0.5 + 0.5));
+    v_ink = ink * a_instance_stroke_color.x;
+}`;
+
+    const fragmentSource = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+flat in float v_ink;
+uniform sampler2D u_sprites;
+uniform float u_sprite_premultiplied;
+uniform float u_opacity;
+out vec4 fragColor;
+
+void main() {
+    vec4 texel = texture(u_sprites, v_uv);
+    if (u_sprite_premultiplied > 0.5 && texel.a > 0.0) texel.rgb /= texel.a;
+    // Blending is non-premultiplied, so the factors are applied to the alpha only
+    fragColor = vec4(texel.rgb, texel.a * u_opacity * v_ink);
+}`;
+
+    return createProgram(this.gl, vertexSource, fragmentSource);
+  }
+
+  /**
+   * Draws points at once with the pictures of a sheet, in their order (nothing while the sheet
+   * has no texture)
+   *
+   * @param factors The draw-time factors (the opacity and the size of the layer being drawn)
+   */
+  drawSprites(
+    points: readonly PointSpriteInstance[],
+    pictures: RowSpritePictures,
+    factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+  ): void {
+    const texture = pictures.texture;
+    if (points.length === 0 || !texture || !this.projectionData) return;
+    const shaderData = this.shaderData;
+    if (!shaderData) return;
+    const gl = this.gl;
+    if (!this.spriteProgram) {
+      this.spriteProgram = this.createSpriteProgram(
+        shaderData.vertexShaderPrelude,
+        shaderData.define,
+      );
+      const at = (name: string) => gl.getUniformLocation(this.spriteProgram as WebGLProgram, name);
+      this.spriteLocations = {
+        sprites: at('u_sprites'),
+        premultiplied: at('u_sprite_premultiplied'),
+        cameraToCenterW: at('u_camera_to_center_w'),
+        scaleStops: at('u_sprite_scale_stops'),
+        scaleCount: at('u_sprite_scale_count'),
+      };
+    }
+    const program = this.spriteProgram;
+    const locations = this.spriteLocations;
+    if (!program || !locations) return;
+
+    const centerLngLat: [number, number] = this.offsetUniforms?.centerLngLat ?? [0, 0];
+    const instanceData = buildPointSpriteInstanceData(
+      points,
+      centerLngLat,
+      this.pixelRatio,
+      this.terrain,
+    );
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.instanceBuffer, 'points', 'buffer', instanceData.byteLength);
+
+    this.run.useProgram(program);
+    this.setProjectionUniforms(program);
+    this.setDrawFactors(program, factors);
+    // Drawn at once, outside a run of retained draws: every value is written
+    if (locations.sprites) gl.uniform1i(locations.sprites, UNIT_SPRITES);
+    if (locations.premultiplied) {
+      gl.uniform1f(locations.premultiplied, pictures.premultipliedAlpha === true ? 1 : 0);
+    }
+    if (locations.cameraToCenterW) {
+      gl.uniform1f(locations.cameraToCenterW, this.offsetUniforms?.projectionCenter[3] ?? 0);
+    }
+    const count = writeSpriteScaleStops(pictures.distanceScale, this.spriteScaleStops);
+    if (locations.scaleStops) gl.uniform2fv(locations.scaleStops, this.spriteScaleStops);
+    if (locations.scaleCount) gl.uniform1i(locations.scaleCount, count);
+    gl.activeTexture(gl.TEXTURE0 + UNIT_SPRITES);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.activeTexture(gl.TEXTURE0);
+
+    gl.bindVertexArray(this.getVAO(program));
+    drawBillboardsWithoutDepth(gl, () => {
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, QUAD_VERTEX_COUNT, points.length);
+    });
+    gl.bindVertexArray(null);
   }
 
   /**
@@ -1328,6 +1567,11 @@ void main() {
       gl.deleteProgram(this.rowProgram);
       this.rowProgram = null;
       this.rowStateUniforms = null;
+    }
+    if (this.spriteProgram) {
+      gl.deleteProgram(this.spriteProgram);
+      this.spriteProgram = null;
+      this.spriteLocations = null;
     }
 
     // The uniform locations and the record of the values written last are tied to the program,

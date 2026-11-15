@@ -30,8 +30,9 @@ import {
   RowsPalette,
   readRowsInstance,
   writeRowsInstance,
+  writeSpriteScaleStops,
 } from './rows-format.js';
-import { RowsRenderer, writeSpriteScaleStops } from './rows-renderer.js';
+import { RowsRenderer } from './rows-renderer.js';
 import { buildRowsFragmentSource, buildRowsVertexSource } from './rows-shader.js';
 
 const SHADER_DATA: ShaderData = { vertexShaderPrelude: '', define: '', variantName: 'mercator' };

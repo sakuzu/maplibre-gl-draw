@@ -33,9 +33,11 @@ import {
   type PointInstanceDataFull,
   type PointInstanceRenderer,
   type PointShape,
+  type PointSpriteInstance,
   toInstancedPointShape,
 } from './point/point-instance.js';
 import type { PointStyle } from './point/point-shape.js';
+import type { PointSpriteSheetSource, PointSpriteSheets } from './point/point-sprites.js';
 import type { PolygonBatchData, PolygonBatchRenderer } from './polygon/batch.js';
 import type { SDFPolygonBatchData, SDFPolygonRenderer } from './polygon/sdf-polygon.js';
 import type { RetainedRendererSet } from './retained.js';
@@ -71,6 +73,11 @@ export interface BatchManagerDeps {
   rowsRenderer?: RowsRenderer;
   /** The terrain state of the draw instance (occlusion of the points; flat when omitted) */
   terrain?: TerrainContext;
+  /**
+   * The sheets of pictures of the built-in points: a point a sheet gives a picture is drawn with
+   * it in the place of its marker (every point keeps its marker when omitted)
+   */
+  pointSprites?: PointSpriteSheets;
 }
 
 /**
@@ -224,6 +231,11 @@ export class BatchManager {
   // Point batch management (the key is the shape only)
   private pointBatches: Map<InstancingShape, PointBatch> = new Map();
   private currentPointBatchKey: InstancingShape | null = null;
+  /** The sheets of pictures of the built-in points (none: every point keeps its marker) */
+  private readonly pointSprites: PointSpriteSheets | undefined;
+  /** The points drawn with the pictures of one sheet, in their order (null for none) */
+  private spriteBatch: { sheet: PointSpriteSheetSource; points: PointSpriteInstance[] } | null =
+    null;
 
   // LineString batch management (the key is the shape parameters only; the color is held
   // by the item)
@@ -264,6 +276,7 @@ export class BatchManager {
     this.sdfPolygonRenderer = deps.sdfPolygonRenderer;
     this.rowsRenderer = deps.rowsRenderer;
     this.terrain = deps.terrain ?? new TerrainContext();
+    this.pointSprites = deps.pointSprites;
   }
 
   /**
@@ -409,6 +422,25 @@ export class BatchManager {
     }
     this.currentBatchType = 'point';
 
+    // A point a sheet gives a picture is drawn with it, in its order among the markers
+    const match = this.pointSprites?.ofFeature(feature);
+    if (match) {
+      if (this.pointBatches.size > 0) this.flushPointBatches();
+      if (this.spriteBatch && this.spriteBatch.sheet !== match.sheet) this.flushSpriteBatch();
+      this.spriteBatch ??= { sheet: match.sheet, points: [] };
+      const sprite = match.sprite;
+      this.spriteBatch.points.push({
+        coord,
+        uv: sprite.uv,
+        halfWidth: sprite.halfWidth,
+        halfHeight: sprite.halfHeight,
+        ...(sprite.rotates && { rotation: feature.properties?.[DRAW_PROPERTY_KEYS.rotation] }),
+        ghost: anchorGhostOpacity(this.terrain, coord[0], coord[1]),
+      });
+      return;
+    }
+    if (this.spriteBatch) this.flushSpriteBatch();
+
     const style = this.featureDrawer.getPointStyle(feature, this.layer);
 
     const instancedShape = toInstancedPointShape(style.shape);
@@ -445,6 +477,13 @@ export class BatchManager {
       });
       this.currentPointBatchKey = batchKey;
     }
+  }
+
+  private flushSpriteBatch(): void {
+    const batch = this.spriteBatch;
+    this.spriteBatch = null;
+    if (!batch || batch.points.length === 0) return;
+    this.pointInstanceRenderer.drawSprites(batch.points, batch.sheet, this.factors);
   }
 
   private flushPointBatches(): void {
@@ -814,6 +853,7 @@ export class BatchManager {
     if (this.pointBatches.size > 0) {
       this.flushPointBatches();
     }
+    if (this.spriteBatch) this.flushSpriteBatch();
     if (this.polygonFillBatch.length > 0) {
       this.flushPolygonFillBatch();
     }

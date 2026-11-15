@@ -14,6 +14,7 @@ import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { toInstancedPointShape } from '../renderers/point/point-instance.js';
+import type { PointSpriteSheets } from '../renderers/point/point-sprites.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 
 /**
@@ -49,6 +50,8 @@ export function customRendererOf<R>(
  *
  * @param customTypes Renderers of the custom feature types (a registered type is drawn at once)
  * @param layer The layer it belongs to (used to evaluate the style rules)
+ * @param pointSprites The sheets of pictures of the built-in points (a point given a picture is
+ *   drawn at once, where the BatchManager draws it with its picture)
  */
 export function classifyFeature(
   feature: Feature,
@@ -56,6 +59,7 @@ export function classifyFeature(
   customTypes: ReadonlyMap<string, unknown>,
   companions: FeatureCompanionRegistry,
   layer?: Layer,
+  pointSprites?: PointSpriteSheets,
 ): RunKind {
   // A custom type is drawn immediately (it cannot go on a core batch)
   if (customRendererOf(customTypes, feature)) return 'immediate';
@@ -69,6 +73,7 @@ export function classifyFeature(
   switch (feature.type) {
     case 'Point':
     case 'MultiPoint': {
+      if (pointSprites?.ofFeature(feature)) return 'immediate';
       const shape = toInstancedPointShape(styles.getPointStyle(feature, layer).shape);
       // A shape without instancing support is drawn immediately, one point at a time
       return shape ? 'point' : 'immediate';

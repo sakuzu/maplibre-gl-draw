@@ -739,6 +739,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         scope: renderScope,
         onImageError: deps.onImageError,
         keepCopies: deps.keepDrawnCopies === true,
+        pointSprites,
       }),
     );
 
