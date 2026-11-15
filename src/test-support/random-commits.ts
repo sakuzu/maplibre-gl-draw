@@ -108,8 +108,7 @@ export function storedOf(document: StoredDocument) {
   return {
     layers: byKey(document.layers).map((id) => {
       const layer = document.layers.get(id) as NonNullable<ReturnType<typeof document.layers.get>>;
-      // A group with no member stands nowhere in the order (a Store of rows keeps one a refusal
-      // took its members out of, as the storage does)
+      // A group with no member stands nowhere in the order (it is not shown, see `kept.ts`)
       const items: [string, { key: string }][] = [
         ...[...document.groups].filter(
           ([gid, g]) => g.layerId === id && g.parentId === null && members.has(gid),

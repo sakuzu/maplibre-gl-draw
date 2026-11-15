@@ -263,6 +263,10 @@ export function createStoredDocument(): StoredDocument {
  * - `delete` does not mind an ID there is no record of. It removes the records named only: the
  *   commit that deletes a layer or a group names what it held as well
  *
+ * What it leaves may not fit in one tree (a member whose layer key is not the layer of its group,
+ * a feature whose layer or group is gone, a group with no member): such a document is read by the
+ * rules the entry `extend` describes, not written to fit them.
+ *
  * @returns The IDs it skipped, once each, in the order they were met
  */
 export function applyOperations(

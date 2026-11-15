@@ -23,6 +23,7 @@ import { createEngine } from '../impl/engine.js';
 import { toEngineOptions } from '../impl/options.js';
 import type { FeatureInput } from '../model.js';
 import type { Answer, Backend } from './backend.js';
+import { readStoredDocument } from './kept.js';
 import type { StoredDocument, ValueBatch } from './values.js';
 
 let draw: Draw | undefined;
@@ -123,17 +124,75 @@ async function started(kind: () => Store, refuse: (batch: ValueBatch) => boolean
   return { d, storage };
 }
 
+/**
+ * The seeds of the random runs: a range, and the seeds that found the shapes of what went wrong
+ * while the take-out was made (the same keys under one parent, a create the storage left out, a row
+ * deleted read after it was made again and written, records that no longer fit in one tree)
+ */
+const SEEDS = [
+  ...Array.from({ length: 100 }, (_, i) => i + 1),
+  120,
+  136,
+  209,
+  238,
+  280,
+  306,
+  307,
+  311,
+  323,
+  331,
+  428,
+  432,
+  500,
+  546,
+  594,
+  706,
+  833,
+  893,
+];
+
+/**
+ * Whether the document of a storage has records that do not fit in one tree: a member whose layer
+ * key is not the layer of its group, a feature or a group whose container is gone, a group with no
+ * member (read by the rules of `kept.ts`)
+ */
+function outOfTree(document: StoredDocument): boolean {
+  const members = new Set<string>();
+  for (const record of document.features.values()) {
+    const layerId = record.properties['maplibre-gl-draw:layerId'] as string;
+    const groupId = record.properties['maplibre-gl-draw:groupId'] as string | undefined;
+    if (groupId === undefined) {
+      if (!document.layers.has(layerId)) return true;
+      continue;
+    }
+    const group = document.groups.get(groupId);
+    if (!group || group.layerId !== layerId) return true;
+    members.add(groupId);
+  }
+  for (const [id, group] of document.groups) {
+    if (!document.layers.has(group.layerId) || !members.has(id)) return true;
+  }
+  return false;
+}
+
+/** What the storage shows, by the rules every client reads its document with */
+function shownOf(document: StoredDocument) {
+  return storedOf(readStoredDocument(document).shown);
+}
+
 describe('the commits a storage refuses', () => {
   for (const [kind, makeStore] of KINDS) {
     for (const atOnce of kind === 'rows' ? [undefined, 0] : [undefined]) {
       const how = atOnce === 0 ? ', the rows read over several tasks' : '';
+      // The documents are compared with `toEqual`: the order of the keys of an object is not
+      // compared (the properties of a feature come in the order they were written), the order of
+      // the items of a layer or a group is
       it(`leave this client with the document of the storage (${kind}${how})`, async () => {
         let refused = 0;
-        for (const seed of [41, 42, 43, 44, 45, 46]) {
+        let outside = 0;
+        for (const seed of SEEDS) {
           const next = random(seed);
           const pick = random(seed + 100);
-          // The commits of the user are refused now and then; those the sender makes to settle a
-          // take-out (no change of the user tells them) are not
           const made = new Set<string>();
           const storage = refusing((batch) => made.has(batch.commit) && pick() < 0.15);
           draw = drawWith(makeStore(), storage.backend, atOnce);
@@ -146,15 +205,18 @@ describe('the commits a storage refuses', () => {
             await tx.layers.create({ id: 'b', name: 'B' });
           });
           const ids = { feature: 0, layer: 0, group: 0 };
+          let seen = false;
           for (let i = 0; i < 70; i++) {
             // Now and then the answers wait: the commits after one refused are made before it is
             if (pick() < 0.3) storage.hold();
             await step(d, next, ids);
             await step(d, next, ids);
             storage.release();
+            if (outOfTree(storage.backend.document)) seen = true;
             if (i % 10 === 9) {
               await settled(d);
-              expect({ seed, i, stored: storedOf(storage.backend.document) }).toEqual({
+              if (outOfTree(storage.backend.document)) seen = true;
+              expect({ seed, i, stored: shownOf(storage.backend.document) }).toEqual({
                 seed,
                 i,
                 stored: writtenOf(d.document.toJSON()),
@@ -162,17 +224,20 @@ describe('the commits a storage refuses', () => {
             }
           }
           await settled(d);
-          expect({ seed, stored: storedOf(storage.backend.document) }).toEqual({
+          expect({ seed, stored: shownOf(storage.backend.document) }).toEqual({
             seed,
             stored: writtenOf(d.document.toJSON()),
           });
           refused += d.backend.refusals.value.length;
+          if (seen) outside++;
           expect(d.status.value.saving.refused).toBe(d.backend.refusals.value.length);
           draw.destroy();
           draw = undefined;
         }
-        expect(refused).toBeGreaterThan(20);
-      });
+        expect(refused).toBeGreaterThan(400);
+        // The runs whose storage came to hold records out of one tree are read by the rules too
+        expect(outside).toBeGreaterThan(10);
+      }, 60_000);
     }
 
     it(`keep a value a later commit wrote again (${kind})`, async () => {
@@ -184,7 +249,7 @@ describe('the commits a storage refuses', () => {
       await settled(d);
       expect(d.features.get('f1')?.properties.n).toBe(2);
       expect(storage.backend.document.features.get('f1')?.properties.n).toBe(2);
-      expect(storedOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
     });
 
     it(`take a value back to the one before both commits when both are refused (${kind})`, async () => {
@@ -199,7 +264,7 @@ describe('the commits a storage refuses', () => {
         ['one', 'rules'],
         ['two', 'rules'],
       ]);
-      expect(storedOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
     });
 
     it(`delete what a refused commit created, and bring back what it deleted (${kind})`, async () => {
@@ -247,7 +312,52 @@ describe('the commits a storage refuses', () => {
         'rules',
         'dependsOnRefused',
       ]);
-      expect(storedOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+    });
+  }
+
+  for (const [kind, makeStore] of KINDS) {
+    it(`keep what a refused commit brings back into a layer deleted after it, and show it with the layer (${kind})`, async () => {
+      const { d, storage } = await started(makeStore, (batch) => batch.label === 'refused');
+      storage.hold();
+      await d.write((tx) => tx.features.delete(['f2']), { label: 'refused' });
+      // The deletion of the layer names what it holds here (f2 is not there)
+      await d.write((tx) => tx.layers.delete('a'));
+      storage.release();
+      await settled(d);
+      // The storage still has f2, in no layer: kept, and shown by neither
+      expect(storage.backend.document.features.has('f2')).toBe(true);
+      expect(storage.backend.document.layers.has('a')).toBe(false);
+      expect(d.features.get('f2')).toBeUndefined();
+      expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      // Made again, the layer comes back with what the storage kept in it
+      await d.undo();
+      await settled(d);
+      expect([...d.layers.listItems('a')]).toEqual(['f1', 'f2', 'f3']);
+      expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+    });
+
+    it(`keep a member a refused commit brings back into a group moved after it, in the layer of the group (${kind})`, async () => {
+      const { d, storage } = await started(makeStore, (batch) => batch.label === 'refused');
+      await d.write((tx) => tx.groups.create({ id: 'g', name: 'G', members: ['f1', 'f2'] }));
+      await settled(d);
+      storage.hold();
+      await d.write((tx) => tx.features.place(['f2'], { layerId: 'a' }), { label: 'refused' });
+      // The move names the members here (f2 is not one)
+      await d.write((tx) => tx.groups.place('g', { layerId: 'b' }));
+      storage.release();
+      await settled(d);
+      const stored = storage.backend.document.features.get('f2')?.properties;
+      expect(stored?.['maplibre-gl-draw:layerId']).toBe('a');
+      expect(stored?.['maplibre-gl-draw:groupId']).toBe('g');
+      // A member is in the layer of its group
+      expect(d.features.get('f2')?.properties['maplibre-gl-draw:layerId']).toBe('b');
+      expect(d.groups.get('g')?.layerId).toBe('b');
+      expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      // The group deleted alone, its member goes to the layer its keys say
+      await d.write((tx) => tx.groups.delete('g', { members: 'keep' }));
+      await settled(d);
+      expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
     });
   }
 
@@ -343,7 +453,7 @@ describe('the commits a storage refuses', () => {
     expect(d.features.get('f1')?.properties.n).toBe(3);
     expect(d.features.get('g1')).toBeDefined();
     expect(d.features.get('f2')?.properties.n).toBeUndefined();
-    expect(storedOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
+    expect(shownOf(storage.backend.document)).toEqual(writtenOf(d.document.toJSON()));
   });
 
   it('save every commit, and connect again after the storage closed', async () => {
@@ -380,12 +490,13 @@ describe('the commits a storage refuses', () => {
  * The reference storage giving the features it is sent to create IDs of its own (`n…` becomes
  * `s…`), as a storage that decides the IDs does
  */
-function renaming() {
+function renaming(gate: { wait: Promise<void> | null } = { wait: null }) {
   const reference = createReferenceBackend();
   const backend: Backend & { readonly document: StoredDocument } = {
     document: reference.document,
     load: (task) => reference.load(task),
     async send(batch, task): Promise<Answer> {
+      if (gate.wait) await gate.wait;
       const reassigned: Record<string, string> = {};
       const operations = batch.operations.map((operation) => {
         if (operation.type !== 'create' || operation.kind !== 'feature') return operation;
@@ -404,6 +515,68 @@ function renaming() {
 
 describe('the IDs a storage gives', () => {
   for (const [kind, makeStore] of KINDS) {
+    it(`go on with a feature deleted here before the answer came (${kind})`, async () => {
+      const gate = { wait: null as Promise<void> | null };
+      let open = (): void => {};
+      const backend = renaming(gate);
+      draw = drawWith(makeStore(), backend);
+      const d = draw;
+      await d.write((tx) => tx.layers.create({ id: 'a', name: 'A' }));
+      await d.backend.save();
+      gate.wait = new Promise((resolve) => {
+        open = resolve;
+      });
+      await d.write((tx) => tx.features.create([point('n1', 'a')]));
+      await d.write((tx) => tx.features.delete(['n1']));
+      gate.wait = null;
+      open();
+      await settled(d);
+      // The deletion not sent names the ID the storage gave
+      expect([...backend.document.features.keys()]).toEqual([]);
+      expect(d.features.list({}, { limit: 10 })).toEqual([]);
+      // The undo makes it again under its new ID
+      await d.undo();
+      await settled(d);
+      expect([...backend.document.features.keys()]).toEqual(['s1']);
+      expect(d.features.list({}, { limit: 10 }).map((feature) => feature.id)).toEqual(['s1']);
+    });
+
+    it(`go on with the sketches of the features (${kind})`, async () => {
+      const gate = { wait: null as Promise<void> | null };
+      let open = (): void => {};
+      const backend = renaming(gate);
+      draw = drawWith(makeStore(), backend);
+      const d = draw;
+      await d.write((tx) => tx.layers.create({ id: 'a', name: 'A' }));
+      await d.backend.save();
+      gate.wait = new Promise((resolve) => {
+        open = resolve;
+      });
+      const created = d.write((tx) => tx.features.create([point('n1', 'a'), point('n2', 'a')]));
+      await created;
+      const sketch = d.sketches.add({
+        edits: [
+          { kind: 'translate', target: { featureIds: ['n1', 'n2'] }, from: [0, 0], to: [1, 1] },
+        ],
+      });
+      gate.wait = null;
+      open();
+      await created.save();
+      const now = d.sketches.get(sketch?.id as string);
+      expect(now?.edits).toEqual([
+        { kind: 'translate', target: { featureIds: ['s1', 's2'] }, from: [0, 0], to: [1, 1] },
+      ]);
+      // Committed, it moves the features under their new IDs
+      d.sketches.commit(sketch?.id as string);
+      await d.backend.save();
+      const moved = d.features.get('s1');
+      if (moved?.geometry.type !== 'Point') throw new Error('s1 is no point');
+      const [x, y] = moved.geometry.coordinates;
+      expect(x).toBeCloseTo(2, 2);
+      expect(y).toBeCloseTo(3, 2);
+      expect(shownOf(backend.document)).toEqual(writtenOf(d.document.toJSON()));
+    });
+
     it(`go on with the selection, what is hidden, the undo and the commits after (${kind})`, async () => {
       const backend = renaming();
       draw = drawWith(makeStore(), backend);
@@ -431,14 +604,14 @@ describe('the IDs a storage gives', () => {
       expect(d.hidden.has('s2')).toBe(true);
       expect([...d.layers.listItems('a')]).toEqual(['s1', 's2']);
       expect(backend.document.features.get('s1')?.properties.n).toBe(3);
-      expect(storedOf(backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      expect(shownOf(backend.document)).toEqual(writtenOf(d.document.toJSON()));
       // The steps of undo name the features by their new IDs
       await d.undo();
       expect(d.features.get('s1')?.properties.n).toBeUndefined();
       await d.undo();
       expect(d.features.get('s1')).toBeUndefined();
       await d.backend.save();
-      expect(storedOf(backend.document)).toEqual(writtenOf(d.document.toJSON()));
+      expect(shownOf(backend.document)).toEqual(writtenOf(d.document.toJSON()));
     });
   }
 });

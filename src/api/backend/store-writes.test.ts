@@ -117,3 +117,51 @@ describe('writeOperations', () => {
     });
   }
 });
+
+describe('the keys of the order', () => {
+  for (const [kind, makeStore] of KINDS) {
+    it(`let an item go between two of the same key, the one above given a key of its own (${kind})`, async () => {
+      const store = makeStore();
+      draw = createDraw(createMapStub().map, { store, initDefaultLayer: false });
+      const d = draw;
+      await d.write((tx) => tx.layers.create({ id: 'a', name: 'A' }));
+      const values = new CommitValues(store);
+      let sent: ValueOperation[] = [];
+      const stop = store.subscribe((changes) => {
+        const own = changes.source !== 'refused';
+        const reading = values.readChange(changes, Number.POSITIVE_INFINITY, own);
+        reading?.step(Number.POSITIVE_INFINITY);
+        if (own && reading) sent = reading.operations();
+        reading?.release();
+      });
+      const feature = (id: string, key: string): ValueOperation => ({
+        type: 'create',
+        kind: 'feature',
+        id,
+        record: {
+          geometry: { type: 'Point', coordinates: [0, 0] },
+          properties: { 'maplibre-gl-draw:layerId': 'a' },
+          key,
+        },
+      });
+      // Two of the same key, as a storage can hold them (ordered by their IDs)
+      store.transact(
+        () =>
+          writeOperations(store, values, [feature('q', 'V'), feature('p', 'V'), feature('x', 'W')]),
+        'refused',
+      );
+      expect([...d.layers.listItems('a')]).toEqual(['p', 'q', 'x']);
+      await d.write((tx) => tx.features.place(['x'], { above: 'q' }));
+      expect([...d.layers.listItems('a')]).toEqual(['p', 'x', 'q']);
+      const keys = ['p', 'x', 'q'].map((id) => values.placeOf('feature', id)?.key as string);
+      expect([...keys].sort()).toEqual(keys);
+      expect(new Set(keys).size).toBe(3);
+      // The one above is sent with its key
+      const placed = sent.filter((operation) => operation.type === 'place');
+      expect(
+        placed.flatMap((operation) => (operation.type === 'place' ? operation.ids : [])).sort(),
+      ).toEqual(['q', 'x']);
+      stop();
+    });
+  }
+});

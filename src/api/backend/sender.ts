@@ -25,7 +25,6 @@
 
 import { DrawError } from '../../shared/draw-error.js';
 import type { Refusal } from '../../shared/refusal.js';
-import { createId } from '../../shared/utils/id.js';
 import type { Store } from '../../store/store.js';
 import { rowRenamesOf } from '../../store/table-memory.js';
 import type { StoreChange } from '../../store/types.js';
@@ -43,7 +42,7 @@ import type { Answer, Backend, Task } from './backend.js';
 import { type ChangeReading, CommitValues } from './commit-values.js';
 import { createObservable } from './observable.js';
 import { batchesInSteps } from './parts.js';
-import { writeOperations } from './store-writes.js';
+import { followCommit, writeOperations } from './store-writes.js';
 import { type CommitOperations, dependentsOf, takeOut } from './take-out.js';
 import type { ValueBatch, ValueOperation } from './values.js';
 
@@ -161,8 +160,6 @@ export class Sender {
   #refusals: RefusedCommit[] = [];
   readonly #refusalsValue = createObservable<readonly Refusal[]>(Object.freeze([]));
   #nextRefusal = 1;
-  /** The groups the Store deleted in the take-out under way, left empty by it */
-  #emptied: string[] | null = null;
 
   constructor(store: Store, backend: Backend, options: SenderOptions) {
     this.#store = store;
@@ -331,9 +328,6 @@ export class Sender {
     // A notification from elsewhere, or of the take-out of refused commits, is read for the places
     // only: it is not sent
     const remote = changes.source === 'remote' || changes.source === 'refused';
-    if (changes.source === 'refused' && this.#emptied) {
-      for (const group of changes.groups?.deleted ?? []) this.#emptied.push(group.id);
-    }
     const reading = this.#values.readChange(changes, this.#options.rowsReadAtOnce, !remote);
     if (reading === null) {
       // The whole document replaced: nothing of it is sent
@@ -450,7 +444,28 @@ export class Sender {
     entry.inverse = inverses.reverse().flat();
     for (const ids of entry.renames ?? []) this.#renameEntry(entry, ids);
     entry.renames = undefined;
+    this.#followKept(entry);
     return entry.operations;
+  }
+
+  /**
+   * Shows what the storage shows once it applies a commit read, should something be kept (see
+   * `kept.ts`), in a transaction from elsewhere: the features it made whose IDs the storage keeps
+   * are not deleted by taking it back
+   */
+  #followKept(entry: Entry): void {
+    if (this.#values.kept.empty || !entry.operations) return;
+    const operations = entry.operations;
+    const kept = this.#store.transact(
+      () => followCommit(this.#store, this.#values, operations),
+      'remote',
+    );
+    if (kept.size === 0) return;
+    entry.inverse = entry.inverse.flatMap((operation) => {
+      if (operation.type !== 'delete' || operation.kind !== 'feature') return [operation];
+      const ids = operation.ids.filter((id) => !kept.has(id));
+      return ids.length > 0 ? [{ ...operation, ids }] : [];
+    });
   }
 
   /** The batches of a commit, cut a step a task */
@@ -627,8 +642,7 @@ export class Sender {
       (i) => later[i],
     );
     const refused = [entry, ...dependents];
-    this.#emptied = [];
-    const { failed, unplaced, uncreated } = this.#store.transact(
+    const { failed } = this.#store.transact(
       () =>
         takeOut(
           this.#store,
@@ -638,7 +652,6 @@ export class Sender {
         ),
       'refused',
     );
-    this.#sendSettled(refused, unplaced, uncreated);
     if (failed.length > 0) {
       this.#options.onSkipped({
         error: new DrawError(
@@ -679,79 +692,11 @@ export class Sender {
   }
 
   /**
-   * Sends what a take-out settled the Store on that the storage does not have, after the commits
-   * not sent, as a commit of the sender's own that has no step of undo: where the items stay that
-   * it did not put back under a parent a later commit deleted, and the deletion of the groups the
-   * Store deleted because the take-out left them empty (a Store holds no group without a member)
-   */
-  #sendSettled(
-    refused: readonly Entry[],
-    unplaced: ReadonlyArray<{ readonly kind: 'feature' | 'group'; readonly id: string }>,
-    uncreated: ReadonlyArray<{ readonly kind: 'feature' | 'group'; readonly id: string }>,
-  ): void {
-    const emptied = this.#emptied ?? [];
-    this.#emptied = null;
-    // What the refused commits created goes with them: the storage never had it
-    const made = new Set<string>();
-    for (const one of refused) {
-      for (const operation of one.operations ?? []) {
-        if (operation.type === 'create') made.add(operation.id);
-      }
-    }
-    // And the groups a take-out created again that the Store did not keep
-    for (const one of refused) {
-      for (const operation of one.inverse) {
-        if (operation.type === 'create' && operation.kind === 'group') emptied.push(operation.id);
-      }
-    }
-    const ids = [...new Set(emptied)].filter((id) => !made.has(id) && !this.#store.getGroup(id));
-    const operations: ValueOperation[] = [];
-    const places = new Map<string, { kind: 'feature' | 'group'; ids: string[]; keys: string[] }>();
-    for (const { kind, id } of unplaced) {
-      const place = this.#values.placeOf(kind, id);
-      if (!place || place.parentId === null) continue;
-      const at = `${kind}\u0000${place.parentId}`;
-      const list = places.get(at) ?? { kind, ids: [], keys: [] };
-      places.set(at, list);
-      if (list.ids.includes(id)) continue;
-      list.ids.push(id);
-      list.keys.push(place.key);
-    }
-    for (const kind of ['group', 'feature'] as const) {
-      for (const [at, list] of places) {
-        if (list.kind !== kind) continue;
-        const parentId = at.slice(at.indexOf('\u0000') + 1);
-        operations.push({ type: 'place', kind, ids: list.ids, parentId, keys: list.keys });
-      }
-    }
-    // What it did not create again under a layer gone: the storage still has it there
-    const gone = (kind: 'feature' | 'group') =>
-      uncreated.filter((one) => one.kind === kind && !made.has(one.id)).map((one) => one.id);
-    const features = [...new Set(gone('feature'))].filter((id) => !this.#store.getFeature(id));
-    if (features.length > 0) operations.push({ type: 'delete', kind: 'feature', ids: features });
-    const groups = [...new Set([...ids, ...gone('group')])].filter(
-      (id) => !this.#store.getGroup(id),
-    );
-    if (groups.length > 0) operations.push({ type: 'delete', kind: 'group', ids: groups });
-    if (operations.length === 0) return;
-    this.#entries.push({
-      commit: createId(),
-      label: undefined,
-      writtenAtMilliseconds: Date.now(),
-      readings: [],
-      open: false,
-      stage: 'local',
-      waiters: [],
-      operations,
-      inverse: [],
-    });
-  }
-
-  /**
    * Gives features the IDs the storage gave them (`Answer.accepted.reassigned`): the rows keep
    * their references (`changeIds`), the features of objects are created again under their new IDs
-   * where they are and deleted under the old. What this client holds of them, the steps of undo
-   * and the commits not sent go on with them
+   * where they are and deleted under the old. What this client holds of them, the steps of undo,
+   * the commits not sent and the refusals go on with them, those deleted here before the answer
+   * came included (only the Store has nothing to write of them)
    */
   #reassign(given: Readonly<Record<string, string>>): void {
     const store = this.#store;
@@ -759,28 +704,41 @@ export class Sender {
     const taken = new Set<string>();
     for (const [from, to] of Object.entries(given)) {
       if (typeof to !== 'string' || from === to || taken.has(to)) continue;
-      if (!store.getFeature(from) || store.getFeature(to)) continue;
+      // An ID a feature here has already is given to none
+      if (store.getFeature(to)) continue;
       pairs.set(from, to);
       taken.add(to);
     }
     if (pairs.size === 0) return;
-    const values = this.#values;
-    const renameRows = rowRenamesOf(store);
-    store.reassign(pairs, (follow) => {
-      if (renameRows) {
-        renameRows([...pairs]);
+    // What is kept of them goes on under their new IDs
+    const kept = this.#values.kept;
+    const placements = new Map(
+      [...pairs].map(([from, to]) => [to, kept.placements.get(from)] as const),
+    );
+    const there = new Map([...pairs].filter(([from]) => store.getFeature(from) !== undefined));
+    if (there.size > 0) {
+      const values = this.#values;
+      const renameRows = rowRenamesOf(store);
+      store.reassign(there, (follow) => {
+        if (renameRows) {
+          renameRows([...there]);
+          follow();
+          return;
+        }
+        const created: ValueOperation[] = [];
+        for (const [from, to] of there) {
+          const record = values.recordOf('feature', from);
+          if (record) created.push({ type: 'create', kind: 'feature', id: to, record });
+        }
+        writeOperations(store, values, created);
         follow();
-        return;
-      }
-      const created: ValueOperation[] = [];
-      for (const [from, to] of pairs) {
-        const record = values.recordOf('feature', from);
-        if (record) created.push({ type: 'create', kind: 'feature', id: to, record });
-      }
-      writeOperations(store, values, created);
-      follow();
-      writeOperations(store, values, [{ type: 'delete', kind: 'feature', ids: [...pairs.keys()] }]);
-    });
+        writeOperations(store, values, [
+          { type: 'delete', kind: 'feature', ids: [...there.keys()] },
+        ]);
+      });
+    }
+    kept.rename(pairs);
+    for (const [to, keys] of placements) if (keys) kept.placements.set(to, keys);
     for (const entry of this.#entries) {
       if (entry.operations === null) entry.renames = [...(entry.renames ?? []), pairs];
       else this.#renameEntry(entry, pairs);

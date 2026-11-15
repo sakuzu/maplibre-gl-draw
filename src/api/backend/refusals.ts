@@ -18,6 +18,7 @@ import { writeOf } from '../impl/saving.js';
 import { queueCommit } from '../impl/write.js';
 import type { BackendResource, Refusals, RefusalTarget } from '../status.js';
 import type { SaveOptions, TaskOptions, Write, WriteOptions } from '../write.js';
+import { KeptRecords } from './kept.js';
 import { createObservable } from './observable.js';
 import type { RefusedCommit, Sender } from './sender.js';
 import { writeOperations } from './store-writes.js';
@@ -189,7 +190,12 @@ function retryOf(
           { id, label: options?.label, undo: options?.undo ?? true },
           'local',
           () => {
-            for (const { operations } of refused) writeOperations(store, values, operations, false);
+            // A commit of this client: what it cannot show (under a container not there) is left
+            // out, not kept as the storage would keep it
+            const none = new KeptRecords();
+            for (const { operations } of refused) {
+              writeOperations(store, values, operations, false, none);
+            }
           },
         );
         sender.dismiss(refused);

@@ -1881,7 +1881,55 @@ export class TableContractStore implements StoreContract {
     const { below, above } = this.#placeBetween(to, group, moving);
     const keyOf = (code: number | null): string | null =>
       code === null ? null : this.#keyOfCode(code);
-    return keysBetween(keyOf(below), keyOf(above), n);
+    const low = keyOf(below);
+    const high = keyOf(above);
+    if (low === null || high === null || compareKeys(high, low) > 0) {
+      return keysBetween(low, high, n);
+    }
+    // The items above of the same key (ordered by their IDs) leave no key between them: they
+    // take keys of their own after the ones made, written with them
+    const walk = this.#walk(to.layerId);
+    const container = group ? this.#internals.groups.handleOfId(group.id) : -1;
+    const passed = new Set(moving);
+    const after: number[] = [];
+    let next: number | null = above;
+    while (walk && next !== null && compareKeys(this.#keyOfCode(next), low) <= 0) {
+      after.push(next);
+      passed.add(next);
+      next = walk.above(next, container, passed);
+    }
+    const keys = keysBetween(low, keyOf(next), n + after.length);
+    this.#writeKeys(after, keys.slice(n));
+    return keys.slice(0, n);
+  }
+
+  /** Writes the keys of items of the order (rows by their codes, groups by theirs) */
+  #writeKeys(codes: readonly number[], keys: readonly string[]): void {
+    const rows: number[] = [];
+    const rowKeys: string[] = [];
+    const groups: number[] = [];
+    const groupKeys: string[] = [];
+    codes.forEach((code, i) => {
+      if ((code & 1) === 1) {
+        groups.push(code >> 1);
+        groupKeys.push(keys[i]);
+      } else {
+        rows.push(code >> 1);
+        rowKeys.push(keys[i]);
+      }
+    });
+    if (rows.length > 0) {
+      this.#writer.writeRows({
+        rows: Int32Array.from(rows),
+        fields: new Map<RowField, unknown[]>([['key', rowKeys]]),
+      });
+    }
+    if (groups.length > 0) {
+      this.#writer.writeGroups({
+        groups: Int32Array.from(groups),
+        fields: new Map<TableGroupField, unknown[]>([['key', groupKeys]]),
+      });
+    }
   }
 
   /**

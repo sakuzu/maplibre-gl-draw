@@ -217,6 +217,42 @@ export function withoutFeatures(
 }
 
 /**
+ * The edits with the features they name given other IDs (from the old to the new): the IDs a
+ * storage gave them. Null when they name none of them
+ *
+ * @internal
+ */
+export function withFeatureIds(
+  edits: readonly SketchEdit[],
+  ids: ReadonlyMap<string, string>,
+): SketchEdit[] | null {
+  let renamed = false;
+  const out = edits.map((edit): SketchEdit => {
+    if (edit.kind === 'create') {
+      const below = edit.below;
+      if (typeof below !== 'string' || !ids.has(below)) return edit;
+      renamed = true;
+      return { ...edit, below: ids.get(below) as string };
+    }
+    if (isSelectionEdit(edit)) return edit;
+    if (!isTransformEdit(edit)) {
+      const to = ids.get(edit.featureId);
+      if (to === undefined) return edit;
+      renamed = true;
+      return { ...edit, featureId: to } as SketchEdit;
+    }
+    const featureIds = (edit.target as { featureIds: readonly string[] }).featureIds;
+    if (!featureIds.some((id) => ids.has(id))) return edit;
+    renamed = true;
+    return {
+      ...edit,
+      target: { featureIds: featureIds.map((id) => ids.get(id) ?? id) },
+    } as SketchEdit;
+  });
+  return renamed ? out : null;
+}
+
+/**
  * The edits with the vertices of a feature that `keep` leaves out taken away: a vertex moved or
  * deleted goes from its edit (the edit left out once it names none), and a vertex inserted next
  * to a vertex left out is left out. Each vertex left out counts once

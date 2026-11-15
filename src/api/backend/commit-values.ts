@@ -43,6 +43,7 @@ import type { Change } from '../events.js';
 import { toChange } from '../impl/events.js';
 import { orientedGeometry, toFeature } from '../impl/feature-shape.js';
 import type { Feature, JsonObject, JsonValue, StyleRule } from '../model.js';
+import { KeptRecords, placementOf, withPlacement } from './kept.js';
 import type {
   FeatureRecord,
   FileRecord,
@@ -76,6 +77,94 @@ export interface ItemPlace {
   readonly key: string;
 }
 
+/** Where items are, by their IDs (undefined: nowhere known) */
+type PlaceList = Map<string, ItemPlace | undefined>;
+
+/**
+ * The `set` of a feature from one record to another: its geometry when it changed, the keys of
+ * its properties that changed (the keys of its style one by one) and those it no longer has; its
+ * layer and group are its place
+ */
+function recordSet(
+  now: FeatureRecord,
+  was: FeatureRecord,
+): { set: { geometry?: Geometry; properties?: JsonObject }; unset?: UnsetKeys } | null {
+  const set: { geometry?: Geometry; properties?: JsonObject } = {};
+  if (!sameJson(now.geometry, was.geometry)) set.geometry = was.geometry;
+  const properties: Record<string, JsonValue> = {};
+  const unsetProperties: string[] = [];
+  let unsetStyle: string[] = [];
+  for (const key of new Set([...Object.keys(now.properties), ...Object.keys(was.properties)])) {
+    if (key === LAYER_KEY || key === GROUP_KEY) continue;
+    const inNow = hasKey(now.properties, key);
+    const inWas = hasKey(was.properties, key);
+    if (key === STYLE_KEY) {
+      const style = styleChange(
+        inNow ? (now.properties[key] as JsonObject) : {},
+        inWas ? (was.properties[key] as JsonObject) : {},
+      );
+      if (style.set) setOwnProperty(properties, key, style.set);
+      unsetStyle = style.unset;
+      continue;
+    }
+    if (!inWas) unsetProperties.push(key);
+    else if (!inNow || !sameJson(now.properties[key], was.properties[key])) {
+      setOwnProperty(properties, key, was.properties[key] as JsonValue);
+    }
+  }
+  if (Object.keys(properties).length > 0) set.properties = properties;
+  const unset: { properties?: string[]; style?: string[] } = {};
+  if (unsetProperties.length > 0) unset.properties = unsetProperties;
+  if (unsetStyle.length > 0) unset.style = unsetStyle;
+  const hasUnset = Object.keys(unset).length > 0;
+  if (Object.keys(set).length === 0 && !hasUnset) return null;
+  return hasUnset ? { set, unset } : { set };
+}
+
+/** A feature as the document of the storage had it before a write */
+interface FeatureBefore {
+  readonly record: FeatureRecord;
+  /** Whether the group its record names was there */
+  readonly groupThere: boolean;
+  /** Whether the layer its record names was there */
+  readonly layerThere: boolean;
+}
+
+/** A group as the document of the storage had it before a write */
+type GroupBefore = GroupRecord;
+
+/** A layer or a group as it was before a write */
+interface ContainerBefore<T, R> {
+  readonly item: T;
+  readonly record: R;
+  readonly place: ItemPlace | undefined;
+}
+
+/**
+ * What operations name, as it was before they were written (null: it was not there), read by
+ * `CommitValues.namedBefore`
+ *
+ * @internal
+ */
+export interface NamedBefore {
+  readonly features: ReadonlyMap<string, FeatureBefore | null>;
+  readonly layers: ReadonlyMap<string, ContainerBefore<Layer, LayerRecord> | null>;
+  readonly groups: ReadonlyMap<string, GroupBefore | null>;
+  readonly files: ReadonlyMap<string, FileData | null>;
+  readonly document: { readonly title: string; readonly description: string } | null;
+}
+
+/** Whether two places are the same */
+function samePlace(a: ItemPlace | undefined, b: ItemPlace | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.parentId === b.parentId && a.key === b.key;
+}
+
+/** The record a `create` makes */
+function recordOfOperation(operation: ValueOperation): unknown {
+  return operation.type === 'create' ? operation.record : undefined;
+}
+
 /** The most rows of a notification read where it goes out: more are read over several tasks */
 const ROWS_READ_AT_ONCE = 2048;
 
@@ -102,12 +191,27 @@ export interface ChangeReading {
   release(): void;
 }
 
+/** A row a notification deleted, whose record before it is read for the inverse */
+interface DeletedRow {
+  readonly id: string;
+  readonly handle: number;
+  /** Its key before the notification */
+  key: string;
+  /** Its feature before the notification, once read (undefined: not read yet) */
+  before: Feature | null | undefined;
+  /** Reads its feature before the notification (while it is the one the tables keep) */
+  read(): Feature | undefined;
+}
+
 /** The rows of a notification whose values are still to be read, and how far they are read */
 interface RowsToRead {
   /** The rows created, with their keys */
   readonly created: { readonly id: string; readonly key: string }[];
-  /** The rows deleted, and their handles: what makes them again is read for the inverse */
-  readonly deleted: { readonly id: string; readonly handle: number }[];
+  /**
+   * The rows deleted, their handles and their keys before the notification: what makes them again
+   * is read for the inverse
+   */
+  readonly deleted: DeletedRow[];
   /** The rows updated, and their handles where the notification went out */
   updated: readonly string[];
   handles: ArrayLike<number>;
@@ -117,14 +221,14 @@ interface RowsToRead {
   readonly index: Map<number, number>;
   /** How many of the values before are in `index` */
   indexed: number;
-  /** Where the rows were before the notification, read once for the rows deleted */
-  placesBefore?: Map<number, Place>;
 }
 
 /** What the groups of a notification moved, for the features */
 interface GroupsMoved {
   readonly moved: ReadonlySet<string>;
   readonly relayered: readonly Group[];
+  /** The groups told as put in a place, or as created */
+  readonly told: ReadonlySet<string>;
 }
 
 /** The operations of one notification, by what they do, in the order they are applied */
@@ -135,6 +239,11 @@ interface Operations {
   readonly createdFeatures: ValueOperation[];
   readonly set: ValueOperation[];
   readonly placed: ValueOperation[];
+  /**
+   * The features deleted and made again as they were, where no place gives them back their keys
+   * (after the places)
+   */
+  readonly placeKeys: ValueOperation[];
   readonly deletedFeatures: string[];
   readonly deletedGroups: string[];
   readonly deletedLayers: string[];
@@ -148,6 +257,8 @@ interface Operations {
  * @internal
  */
 export class CommitValues {
+  /** What the storage has that the Store does not show (see `kept.ts`) */
+  readonly kept = new KeptRecords();
   /** The places of the layers, and of the items of the layers of objects */
   readonly #places = new Map<string, Place>();
   /**
@@ -155,6 +266,11 @@ export class CommitValues {
    * while one whose inverse is read is
    */
   #before: Map<string, Place | null> | null = null;
+  /**
+   * The rows deleted by notifications read over several tasks, not read yet, by their IDs: one
+   * made again (an undo) is read when it comes back, before it can be written again
+   */
+  readonly #unreadDeleted = new Map<string, DeletedRow>();
 
   constructor(private readonly store: Store) {
     this.#placeDocument();
@@ -248,9 +364,19 @@ export class CommitValues {
   ): ChangeReading | null {
     if (changes.reset === true) {
       this.#placeDocument();
+      this.kept.clear();
       return null;
     }
     const change = toChange(changes, this.store);
+    if (change && this.#unreadDeleted.size > 0) {
+      for (const id of change.features.created) {
+        const row = this.#unreadDeleted.get(id);
+        if (!row) continue;
+        this.#unreadDeleted.delete(id);
+        // As it was before it was deleted: what it is made again with
+        row.before = row.read() ?? null;
+      }
+    }
     const out = emptyOperations();
     if (!change) return readingOf(out, null, null);
     // The inverse is read of a notification of this client only
@@ -263,6 +389,7 @@ export class CommitValues {
       const groups = this.#groups(change, changes, out, inv);
       rows = this.#features(change, changes, out, inv, groups);
       this.#document(changes, out, inv);
+      if (inv) this.#placementsBack(change, inv);
     } finally {
       this.#before = null;
     }
@@ -274,9 +401,15 @@ export class CommitValues {
       this.#readRows(rows, out, inv, change, changes, null, Number.POSITIVE_INFINITY);
       return readingOf(out, inv, null);
     }
+    for (const row of rows.deleted) this.#unreadDeleted.set(row.id, row);
     return readingOf(out, inv, {
       step: (deadline) => this.#readRows(rows, out, inv, change, changes, lasting, deadline),
-      release: () => lasting.release(),
+      release: () => {
+        lasting.release();
+        for (const row of rows.deleted) {
+          if (this.#unreadDeleted.get(row.id) === row) this.#unreadDeleted.delete(row.id);
+        }
+      },
     });
   }
 
@@ -350,6 +483,262 @@ export class CommitValues {
         return group && (made(createGroup(group, key)) as GroupRecord);
       }
     }
+  }
+
+  /**
+   * What operations name, as the document of the storage has it before they are written to the
+   * Store (what is shown, and what is kept): what takes the write back is read from it once they
+   * are written ({@link inverseSince}). The groups the features named are in are named too (a
+   * group a write leaves with no member is no longer shown)
+   */
+  namedBefore(operations: readonly ValueOperation[]): NamedBefore {
+    const store = this.store;
+    const features = new Set<string>();
+    const layers = new Set<string>();
+    const groups = new Set<string>();
+    const files = new Set<string>();
+    let document = false;
+    const add = (kind: 'feature' | 'layer' | 'group' | 'file', id: string): void => {
+      (kind === 'feature'
+        ? features
+        : kind === 'layer'
+          ? layers
+          : kind === 'group'
+            ? groups
+            : files
+      ).add(id);
+    };
+    for (const operation of operations) {
+      switch (operation.type) {
+        case 'create': {
+          add(operation.kind, operation.id);
+          if (operation.kind === 'feature') {
+            const group = operation.record.properties[GROUP_KEY];
+            if (typeof group === 'string') groups.add(group);
+          }
+          break;
+        }
+        case 'set':
+          if (operation.kind === 'document') document = true;
+          else for (const id of operation.ids) add(operation.kind, id);
+          break;
+        case 'place':
+          for (const id of operation.ids) add(operation.kind, id);
+          if (operation.kind !== 'layer' && operation.parentId !== null) {
+            groups.add(operation.parentId);
+          }
+          break;
+        case 'delete':
+          for (const id of operation.ids) add(operation.kind, id);
+          break;
+      }
+    }
+    const records = this.#featureRecords([...features]);
+    for (const record of records.values()) {
+      const group = record?.properties[GROUP_KEY];
+      if (typeof group === 'string') groups.add(group);
+    }
+    for (const id of features) {
+      const group = store.getFeature(id)?.groupId;
+      if (group !== undefined) groups.add(group);
+    }
+    const groupsBefore = new Map<string, GroupBefore | null>();
+    for (const id of groups) {
+      const record = this.#groupRecord(id);
+      if (record) groupsBefore.set(id, record);
+      else if (!store.getLayer(id)) groupsBefore.set(id, null);
+    }
+    const featuresBefore = new Map<string, FeatureBefore | null>();
+    for (const [id, record] of records) {
+      if (!record) {
+        featuresBefore.set(id, null);
+        continue;
+      }
+      const keys = placementOf(record);
+      const group = keys.groupId === undefined ? undefined : this.#groupRecord(keys.groupId);
+      featuresBefore.set(id, {
+        record,
+        groupThere: group !== undefined,
+        layerThere: store.getLayer(keys.layerId) !== undefined,
+      });
+    }
+    const layersBefore = new Map<string, ContainerBefore<Layer, LayerRecord> | null>();
+    for (const id of layers) {
+      const layer = store.getLayer(id);
+      const place = layer && this.placeOf('layer', id);
+      layersBefore.set(
+        id,
+        layer
+          ? {
+              item: layer,
+              record: recordOfOperation(createLayer(layer, place?.key ?? '')) as LayerRecord,
+              place,
+            }
+          : null,
+      );
+    }
+    const filesBefore = new Map<string, FileData | null>();
+    for (const id of files) filesBefore.set(id, store.getFile(id) ?? null);
+    const metadata = store.getMetadata();
+    const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+    return {
+      features: featuresBefore,
+      layers: layersBefore,
+      groups: groupsBefore,
+      files: filesBefore,
+      document: document
+        ? { title: text(metadata.title), description: text(metadata.description) }
+        : null,
+    };
+  }
+
+  /**
+   * The operations that take the document of the storage back to what {@link namedBefore} read,
+   * once the operations it was read for are written: what they created deleted, what they deleted
+   * created again where it was, the values they wrote put back, the things they put elsewhere put
+   * back (by the keys of its place written again when no place there is to put it in)
+   */
+  inverseSince(before: NamedBefore): ValueOperation[] {
+    const store = this.store;
+    const out = emptyOperations();
+    const records = this.#featureRecords([...before.features.keys()]);
+    const placed = new Map<string, { ids: string[]; keys: string[] }>();
+    const place = (parentId: string, id: string, key: string): void => {
+      const list = placed.get(parentId) ?? { ids: [], keys: [] };
+      placed.set(parentId, list);
+      list.ids.push(id);
+      list.keys.push(key);
+    };
+    for (const [id, was] of before.features) {
+      const now = records.get(id);
+      if (!was) {
+        if (now) out.deletedFeatures.push(id);
+        continue;
+      }
+      if (!now) {
+        out.createdFeatures.push({ type: 'create', kind: 'feature', id, record: was.record });
+        continue;
+      }
+      const set = recordSet(now, was.record);
+      if (set) out.set.push({ type: 'set', kind: 'feature', ids: [id], ...set });
+      const keys = placementOf(was.record);
+      const nowKeys = placementOf(now);
+      if (
+        keys.layerId === nowKeys.layerId &&
+        keys.groupId === nowKeys.groupId &&
+        was.record.key === now.key
+      ) {
+        continue;
+      }
+      // Put back in its group, or else in its layer, when it was there and that place gives it
+      // the keys it had; else deleted and made again as it was (a place under a parent not there
+      // is left out)
+      const group = keys.groupId === undefined ? undefined : before.groups.get(keys.groupId);
+      if (keys.groupId !== undefined && was.groupThere && group?.layerId === keys.layerId) {
+        place(keys.groupId, id, was.record.key);
+      } else if (keys.groupId === undefined && was.layerThere) {
+        place(keys.layerId, id, was.record.key);
+      } else {
+        out.placeKeys.push(
+          { type: 'delete', kind: 'feature', ids: [id] },
+          { type: 'create', kind: 'feature', id, record: was.record },
+        );
+      }
+    }
+    const layersBack: PlaceList = new Map();
+    for (const [id, was] of before.layers) {
+      const now = store.getLayer(id);
+      if (!was) {
+        if (now) out.deletedLayers.push(id);
+        continue;
+      }
+      if (!now) {
+        out.createdLayers.push({ type: 'create', kind: 'layer', id, record: was.record });
+        continue;
+      }
+      const set = layerSet(now, was.item);
+      if (set) out.set.push({ type: 'set', kind: 'layer', ids: [id], set });
+      if (!samePlace(this.placeOf('layer', id), was.place)) layersBack.set(id, was.place);
+    }
+    const groupsBack: Array<{ id: string; layerId: string; key: string }> = [];
+    for (const [id, was] of before.groups) {
+      const now = this.#groupRecord(id);
+      if (!was) {
+        if (now) out.deletedGroups.push(id);
+        continue;
+      }
+      if (!now) {
+        out.createdGroups.push({ type: 'create', kind: 'group', id, record: was });
+        continue;
+      }
+      const set: { name?: string; visible?: boolean; locked?: boolean } = {};
+      if (now.name !== was.name) set.name = was.name;
+      if (now.visible !== was.visible) set.visible = was.visible;
+      if (now.locked !== was.locked) set.locked = was.locked;
+      if (Object.keys(set).length > 0) out.set.push({ type: 'set', kind: 'group', ids: [id], set });
+      if (now.layerId !== was.layerId || now.key !== was.key) {
+        groupsBack.push({ id, layerId: was.layerId, key: was.key });
+      }
+    }
+    this.#pushPlaces(out, 'layer', [...layersBack.keys()], (id) => {
+      const at = layersBack.get(id);
+      return at && { parent: LAYERS, key: at.key };
+    });
+    for (const { id, layerId, key } of groupsBack) {
+      out.placed.push({ type: 'place', kind: 'group', ids: [id], parentId: layerId, keys: [key] });
+    }
+    for (const [parentId, list] of placed) {
+      out.placed.push({ type: 'place', kind: 'feature', ids: list.ids, parentId, keys: list.keys });
+    }
+    for (const [id, was] of before.files) {
+      const now = store.getFile(id);
+      if (!was && now) out.deletedFiles.push(id);
+      else if (was && !now) out.createdFiles.push(createFile(was));
+    }
+    if (before.document) {
+      const metadata = store.getMetadata();
+      const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+      const set: { title?: string; description?: string } = {};
+      if (text(metadata.title) !== before.document.title) set.title = before.document.title;
+      if (text(metadata.description) !== before.document.description) {
+        set.description = before.document.description;
+      }
+      if (set.title !== undefined || set.description !== undefined) out.document = set;
+    }
+    return listOf(out);
+  }
+
+  /**
+   * The records of features as the document of the storage has them (null: it has none): those
+   * the Store shows with the keys of the place the storage has (see `KeptRecords.placements`), the
+   * rows read at once, and those kept
+   */
+  #featureRecords(ids: readonly string[]): Map<string, FeatureRecord | null> {
+    const store = this.store;
+    const out = new Map<string, FeatureRecord | null>();
+    const rows: string[] = [];
+    for (const id of ids) {
+      if (this.#isRow(id)) rows.push(id);
+    }
+    const rowPlaces = this.#rowPlaces(rows);
+    for (const id of ids) {
+      const stored = store.getFeature(id);
+      if (!stored) {
+        out.set(id, this.kept.features.get(id) ?? null);
+        continue;
+      }
+      const key = rowPlaces.get(id)?.key ?? this.#places.get(id)?.key ?? '';
+      const record = recordOfOperation(createFeature(stored, key)) as FeatureRecord;
+      const keys = this.kept.placements.get(id);
+      out.set(id, keys ? withPlacement(record, keys) : record);
+    }
+    return out;
+  }
+
+  /** The record of a group as the document of the storage has it (shown or kept) */
+  #groupRecord(id: string): GroupRecord | undefined {
+    if (this.store.getGroup(id)) return this.recordOf('group', id);
+    return this.kept.groups.get(id);
   }
 
   /** Changes the place of an item, noting the one it had before (see `#before`) */
@@ -478,6 +867,12 @@ export class CommitValues {
         placed.push(id);
       }
     }
+    // The groups of objects given other keys where they stand (those of the same key above an item
+    // put between them)
+    for (const id of moved) {
+      const group = store.getGroup(id);
+      if (group && group.kind !== 'table' && !created.has(id)) placed.push(id);
+    }
     this.#pushPlaces(out, 'group', unique(placed), (id) => this.#places.get(id) as Place);
     if (inv) this.#pushPlaces(inv, 'group', unique(placed), (id) => this.#placeBefore(id));
     for (const id of ids.created) {
@@ -503,7 +898,7 @@ export class CommitValues {
       const group = store.getGroup(id);
       if (group && group.layerId !== layerId) relayered.push(group);
     }
-    return { moved, relayered };
+    return { moved, relayered, told: new Set([...placed, ...created]) };
   }
 
   #features(
@@ -517,7 +912,7 @@ export class CommitValues {
     const ids = change.features;
     // The rows deleted, by their IDs: what makes them again is read with the values of the rows
     const rowsDeleted = inv ? rowsDeletedOf(changes, store) : null;
-    const deletedRows: { id: string; handle: number }[] = [];
+    const deletedRows: DeletedRow[] = [];
     // The lists of the layers and groups of objects features were put in, made in or deleted from
     const touched = new Set<string>();
     for (const id of ids.deleted) {
@@ -525,13 +920,28 @@ export class CommitValues {
       if (was) touched.add(was.parent);
       const handle = rowsDeleted?.get(id);
       if (handle !== undefined) {
-        deletedRows.push({ id, handle });
+        deletedRows.push({
+          id,
+          handle,
+          key: '',
+          before: undefined,
+          read: () => change.previous(id),
+        });
       } else if (inv) {
         const before = change.previous(id);
         if (before) inv.createdFeatures.push(createShownFeature(id, before, was?.key ?? ''));
       }
       this.#setPlace(id, undefined);
       out.deletedFeatures.push(id);
+    }
+    if (deletedRows.length > 0) {
+      // The keys of the rows deleted, read now: a row made again later and put elsewhere has
+      // another key after
+      const keys = this.#rowPlacesOf(deletedRows.map(({ handle }) => handle));
+      const before = rowPlacesBefore(changes);
+      for (const row of deletedRows) {
+        row.key = before.get(row.handle)?.key ?? keys.get(row.handle) ?? '';
+      }
     }
     const rows: string[] = [];
     for (const id of [...ids.created, ...ids.placed]) {
@@ -545,6 +955,16 @@ export class CommitValues {
       if (feature) touched.add(feature.groupId ?? feature.layerId);
     }
     const moved = new Set([...groups.moved, ...this.#placeContainers(touched)]);
+    // The groups of objects given other keys where they stand by the features put among them
+    const regrouped = [...moved].filter((id) => {
+      if (groups.told.has(id)) return false;
+      const group = store.getGroup(id);
+      return group !== undefined && group.kind !== 'table';
+    });
+    if (regrouped.length > 0) {
+      this.#pushPlaces(out, 'group', regrouped, (id) => this.#places.get(id) as Place);
+      if (inv) this.#pushPlaces(inv, 'group', regrouped, (id) => this.#placeBefore(id));
+    }
     // The members of a group put in another layer are put there: their layer is written
     for (const group of groups.relayered) {
       for (const id of this.#membersOf(group)) {
@@ -694,20 +1114,52 @@ export class CommitValues {
     }
     if (inv && rows.at < created.length + updated.length + deleted.length) {
       // The rows deleted, as they were: kept by the tables while their deletion can be undone, at
-      // the key they had before the notification (a row put elsewhere before it was deleted)
+      // the key they had before the notification (a row put elsewhere before it was deleted), or
+      // as read when they were made again (see `#unreadDeleted`)
       const from = rows.at - created.length - updated.length;
-      const places = this.#rowPlacesOf(deleted.slice(from).map(({ handle }) => handle));
-      rows.placesBefore ??= rowPlacesBefore(changes);
       for (let i = from; i < deleted.length; i++) {
         rows.at++;
-        const { id, handle } = deleted[i];
-        const before = change.previous(id);
-        const key = rows.placesBefore.get(handle)?.key ?? places.get(handle) ?? '';
-        if (before) inv.createdFeatures.push(createShownFeature(id, before, key));
+        const row = deleted[i];
+        const before = row.before !== undefined ? row.before : change.previous(row.id);
+        if (this.#unreadDeleted.get(row.id) === row) this.#unreadDeleted.delete(row.id);
+        if (before) inv.createdFeatures.push(createShownFeature(row.id, before, row.key));
         if (late()) return false;
       }
     }
     return true;
+  }
+
+  /**
+   * The keys of the place the storage has of the features a commit of this client puts elsewhere
+   * or deletes, where they are not where the features are shown (see `KeptRecords.placements`):
+   * what takes the commit back writes them again, after it puts the features back. The commit
+   * writes the keys of where it puts them: they are where they are shown after it
+   */
+  #placementsBack(change: Change, inv: Operations): void {
+    const placements = this.kept.placements;
+    if (placements.size === 0) return;
+    const named = new Set([...change.features.placed, ...change.features.deleted]);
+    for (const operation of inv.placed) {
+      if (operation.type === 'place' && operation.kind === 'feature') {
+        for (const id of operation.ids) named.add(id);
+      }
+    }
+    for (const [id, keys] of placements) {
+      if (!named.has(id)) continue;
+      inv.placeKeys.push({
+        type: 'set',
+        kind: 'feature',
+        ids: [id],
+        set: {
+          properties: {
+            [LAYER_KEY]: keys.layerId,
+            ...(keys.groupId !== undefined && { [GROUP_KEY]: keys.groupId }),
+          },
+        },
+        ...(keys.groupId === undefined && { unset: { properties: [GROUP_KEY] } }),
+      });
+      placements.delete(id);
+    }
   }
 
   #document(changes: StoreChange, out: Operations, inv: Operations | null): void {
@@ -865,9 +1317,18 @@ export class CommitValues {
         i++;
         continue;
       }
-      // A run of items with no key kept, up to the next kept one
+      // A run of items with no key kept, up to the next kept one. Items of the same key (ordered
+      // by their IDs) leave no key between them: those above take keys of their own too
       let end = i;
       while (end < items.length && !kept.has(end)) end++;
+      while (
+        below !== null &&
+        end < items.length &&
+        compareKeys((places.get(items[end]) as Place).key, below) <= 0
+      ) {
+        end++;
+        while (end < items.length && !kept.has(end)) end++;
+      }
       const above = end < items.length ? (places.get(items[end]) as Place).key : null;
       const keys = keysBetween(below, above, end - i);
       for (let k = i; k < end; k++) {
@@ -985,6 +1446,7 @@ function emptyOperations(): Operations {
     createdFeatures: [],
     set: [],
     placed: [],
+    placeKeys: [],
     deletedFeatures: [],
     deletedGroups: [],
     deletedLayers: [],
@@ -1005,6 +1467,7 @@ function listOf(out: Operations): ValueOperation[] {
     ...out.createdFeatures,
     ...out.set,
     ...out.placed,
+    ...out.placeKeys,
   ];
   const deleted = (kind: 'feature' | 'group' | 'layer' | 'file', ids: readonly string[]): void => {
     if (ids.length > 0) list.push({ type: 'delete', kind, ids: unique(ids) });

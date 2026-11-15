@@ -83,6 +83,7 @@ import {
   vertexFeatureIds,
   vertexShapeOf,
   verticesOf,
+  withFeatureIds,
   withoutFeatures,
   withoutVertices,
 } from './sketch-edits.js';
@@ -963,6 +964,8 @@ export class SketchController {
         }
         return;
       }
+      // The features given the IDs a storage gave them: the sketches name them by their new IDs
+      if (changes.reassigned && changes.reassigned.size > 0) this.#followIds(changes.reassigned);
       // The moves of the arrow keys are written once the selection changes, before the sketches
       // follow it
       const nudged = this.#nudged;
@@ -1002,6 +1005,28 @@ export class SketchController {
         this.#dirty = true;
       }
     });
+  }
+
+  /**
+   * Names the features given other IDs (from the old to the new) by their new IDs in the sketches
+   * and in what is kept of them
+   */
+  #followIds(ids: ReadonlyMap<string, string>): void {
+    const renamed = <T>(map: Map<string, T>): Map<string, T> =>
+      new Map([...map].map(([id, value]) => [ids.get(id) ?? id, value]));
+    for (const entry of this.#entries.values()) {
+      const edits = withFeatureIds(entry.sketch.edits, ids);
+      if (!edits) continue;
+      entry.sketch = sketchOf(entry.sketch.id, edits, entry.sketch);
+      entry.shapes = renamed(entry.shapes);
+      if (entry.dragVertices) entry.dragVertices = renamed(new Map(entry.dragVertices));
+      this.#queue('sketch.updated', { sketch: entry.sketch, dropped: 0 });
+    }
+    this.#draggedSelected = this.#draggedSelected.map((id) => ids.get(id) ?? id);
+    this.#applied = renamed(this.#applied);
+    this.#basis = renamed(this.#basis);
+    this.#marks = renamed(this.#marks);
+    this.#dirty = true;
   }
 
   /**
