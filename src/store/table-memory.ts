@@ -79,7 +79,7 @@ import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
-import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
+import { compareKeys, idsBetween, keyAfter, keysBetween } from './order-keys.js';
 import {
   type Containers,
   HeldSnapshot,
@@ -1095,7 +1095,14 @@ export class TableContractStore implements StoreContract {
     if (to.groupId !== undefined && !group) {
       throw new Error(`Group with id "${to.groupId}" not found`);
     }
-    const keys = this.#keysAt(to, group, moving, placed.length);
+    const ids = placed.map((handle) => this.tables.getRowId(handle));
+    const keys = this.#keysAt(
+      to,
+      group,
+      moving,
+      placed.length,
+      ids.every((id) => id !== undefined) ? (ids as string[]) : undefined,
+    );
     return { parent: group?.id ?? to.layerId, keys };
   }
 
@@ -1141,7 +1148,7 @@ export class TableContractStore implements StoreContract {
         return code;
       });
       if (codes.length === 0) return;
-      const keys = this.#keysAt(to, group, new Set(codes), codes.length);
+      const keys = this.#keysAt(to, group, new Set(codes), codes.length, ids);
       // The groups (the members of a group that goes to another layer go there with it)
       const groupWrites: Array<{ handle: number; key: string; group: TableGroup }> = [];
       codes.forEach((code, k) => {
@@ -1840,6 +1847,12 @@ export class TableContractStore implements StoreContract {
     return group >= 0 ? group * 2 + 1 : -1;
   }
 
+  /** The ID of an item by its code (a row, or a group) */
+  #idOfCode(code: number): string | undefined {
+    if ((code & 1) === 1) return this.#internals.groups.idOf(code >> 1);
+    return this.tables.getRowId(code >> 1);
+  }
+
   /** The walk of the items of a layer (null for a layer that holds no row) */
   #walk(layerId: string): ItemWalk | null {
     return this.#internals.walkItems(layerId);
@@ -1877,6 +1890,7 @@ export class TableContractStore implements StoreContract {
     group: TableGroup | undefined,
     moving: ReadonlySet<number>,
     n: number,
+    ids?: readonly string[],
   ): string[] {
     const { below, above } = this.#placeBetween(to, group, moving);
     const keyOf = (code: number | null): string | null =>
@@ -1886,8 +1900,17 @@ export class TableContractStore implements StoreContract {
     if (low === null || high === null || compareKeys(high, low) > 0) {
       return keysBetween(low, high, n);
     }
-    // The items above of the same key (ordered by their IDs) leave no key between them: they
-    // take keys of their own after the ones made, written with them
+    // Between two items of the same key (ordered by their IDs), the items put there whose IDs fall
+    // between theirs take that key: nothing else is written
+    if (ids !== undefined && ids.length === n && compareKeys(high, low) === 0) {
+      const lowId = this.#idOfCode(below as number);
+      const highId = this.#idOfCode(above as number);
+      if (lowId !== undefined && highId !== undefined && idsBetween(lowId, ids, highId)) {
+        return ids.map(() => low);
+      }
+    }
+    // Else the items above of the same key leave no key between them: they take keys of their own
+    // after the ones made, written with them
     const walk = this.#walk(to.layerId);
     const container = group ? this.#internals.groups.handleOfId(group.id) : -1;
     const passed = new Set(moving);

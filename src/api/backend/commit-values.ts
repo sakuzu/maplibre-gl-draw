@@ -27,7 +27,7 @@ import { featureWithFields } from '../../feature-table/feature-fields.js';
 import { longestRisingRun } from '../../shared/utils/item-moves.js';
 import { setOwnProperty } from '../../shared/utils/own-property.js';
 import { featuresInOrder } from '../../store/feature-stream.js';
-import { compareKeys, keysBetween } from '../../store/order-keys.js';
+import { compareKeys, idsBetween, keysBetween } from '../../store/order-keys.js';
 import type { LastingSnapshot } from '../../store/read-snapshot.js';
 import type { Store } from '../../store/store.js';
 import type {
@@ -1353,9 +1353,24 @@ export class CommitValues {
         continue;
       }
       // A run of items with no key kept, up to the next kept one. Items of the same key (ordered
-      // by their IDs) leave no key between them: those above take keys of their own too
+      // by their IDs) leave no key between them: the run takes their key when its IDs fall
+      // between theirs (nothing else is written), else those above take keys of their own too
       let end = i;
       while (end < items.length && !kept.has(end)) end++;
+      if (
+        below !== null &&
+        i > 0 &&
+        end < items.length &&
+        compareKeys((places.get(items[end]) as Place).key, below) === 0 &&
+        idsBetween(items[i - 1], items.slice(i, end), items[end])
+      ) {
+        for (let k = i; k < end; k++) {
+          this.#setPlace(items[k], { parent, key: below });
+          moved.add(items[k]);
+        }
+        i = end;
+        continue;
+      }
       while (
         below !== null &&
         end < items.length &&

@@ -201,3 +201,18 @@ export function compareKeys(a: string, b: string): number {
   }
   return a.length - b.length;
 }
+
+/**
+ * Whether IDs rise from an ID to another, each between the one before and the one after: items of
+ * one key put between two items of that key stand in their order there
+ *
+ * @internal
+ */
+export function idsBetween(below: string, ids: readonly string[], above: string): boolean {
+  let last = below;
+  for (const id of ids) {
+    if (!(last < id)) return false;
+    last = id;
+  }
+  return last < above;
+}

@@ -163,5 +163,54 @@ describe('the keys of the order', () => {
       ).toEqual(['q', 'x']);
       stop();
     });
+
+    it(`let an item whose ID falls between two of the same key take their key, writing no other (${kind})`, async () => {
+      const store = makeStore();
+      draw = createDraw(createMapStub().map, { store, initDefaultLayer: false });
+      const d = draw;
+      await d.write((tx) => tx.layers.create({ id: 'a', name: 'A' }));
+      const values = new CommitValues(store);
+      let sent: ValueOperation[] = [];
+      const stop = store.subscribe((changes) => {
+        const own = changes.source !== 'refused';
+        const reading = values.readChange(changes, Number.POSITIVE_INFINITY, own);
+        reading?.step(Number.POSITIVE_INFINITY);
+        if (own && reading) sent = reading.operations();
+        reading?.release();
+      });
+      const feature = (id: string, key: string): ValueOperation => ({
+        type: 'create',
+        kind: 'feature',
+        id,
+        record: {
+          geometry: { type: 'Point', coordinates: [0, 0] },
+          properties: { 'maplibre-gl-draw:layerId': 'a' },
+          key,
+        },
+      });
+      store.transact(
+        () =>
+          writeOperations(store, values, [
+            feature('r', 'V'),
+            feature('p', 'V'),
+            feature('x', 'W'),
+            feature('q', 'X'),
+          ]),
+        'refused',
+      );
+      expect([...d.layers.listItems('a')]).toEqual(['p', 'r', 'x', 'q']);
+      await d.write((tx) => tx.features.place(['q'], { below: 'p' }));
+      expect([...d.layers.listItems('a')]).toEqual(['p', 'q', 'r', 'x']);
+      expect(['p', 'q', 'r'].map((id) => values.placeOf('feature', id)?.key)).toEqual([
+        'V',
+        'V',
+        'V',
+      ]);
+      // Only the item put there is sent: the ones next to it keep their places
+      expect(sent).toEqual([
+        { type: 'place', kind: 'feature', ids: ['q'], parentId: 'a', keys: ['V'] },
+      ]);
+      stop();
+    });
   }
 });
