@@ -140,7 +140,8 @@ export class StoreRetainedCache {
     const hiddenChanged = this.watch.locallyHiddenChanged(this.store.listHidden());
     const companionsChanged = this.watch.companionsChanged(companions);
     const terrainChanged = this.watch.terrainChanged(this.terrain);
-    if (hiddenChanged || companionsChanged || terrainChanged) this.invalidateAll();
+    const typesChanged = this.watch.typesChanged(this.shapes.typesRevision?.() ?? 0);
+    if (hiddenChanged || companionsChanged || terrainChanged || typesChanged) this.invalidateAll();
   }
 
   /**

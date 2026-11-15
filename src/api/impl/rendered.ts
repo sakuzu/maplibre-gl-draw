@@ -98,7 +98,8 @@ export function createRendered(deps: RenderedDeps): {
    */
   function boxOf(id: string, margin: number): Footprint | null {
     const feature = shapes.get(id);
-    if (!feature) return null;
+    // A feature of a type the instance does not know is not drawn, and has no box
+    if (!feature || !shapes.knows(feature)) return null;
     const box = selectionBoxOf(
       feature,
       createCoordinateTransform(map),

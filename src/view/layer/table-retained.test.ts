@@ -27,6 +27,7 @@ import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
   featureRowDataBuilder as createPageDataBuilder,
   createTestDrawer,
+  definingTypes,
   feature,
   orderKey,
   rowOfFeature,
@@ -607,11 +608,19 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
       internals.states.setByValues(Int32Array.of(handles[0]), true);
       internals.states.setTransform(2, transform);
       internals.states.setTranslation(2, 0.5, -0.25);
+      // The custom types of the instance: the sign declares its rotation and its scale
+      const types = definingTypes(['Marker']);
+      types.register('Sign', {
+        angleDegreesKey: 'maplibre-gl-draw:rotation',
+        scaleKey: 'maplibre-gl-draw:scale',
+        uniformScale: true,
+      });
       const renderer = new TableLayerRenderer({
         ledger: new GpuLedger(),
         gl: createGL(),
         terrain,
         requestRepaint: () => {},
+        transformFields: () => types,
       });
       renderer.beginFrame();
       renderer.drawLayer(

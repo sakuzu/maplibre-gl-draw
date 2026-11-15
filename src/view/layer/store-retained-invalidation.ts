@@ -5,8 +5,8 @@
  * Detection of the changes that invalidate every retained chunk
  *
  * Some inputs of the retained batches do not arrive as a change of the Store: the set of locally
- * hidden features (updated in place), the registry of companion drawing and the generations of
- * the terrain. They are checked once per frame, and any change discards the whole cache.
+ * hidden features (updated in place), the registry of companion drawing, the types the instance
+ * knows and the generations of the terrain. They are checked once per frame, and any change discards the whole cache.
  */
 
 import type { Layer, StoreChange } from '../../store/types.js';
@@ -32,6 +32,14 @@ export class RetainedInvalidationWatch {
    * cached classification is discarded whenever the generation changes.
    */
   private companionGeneration = -1;
+
+  /**
+   * Previous revision of the types the instance knows
+   *
+   * A feature of a type the instance does not know is not displayed, so the features of a type
+   * defined or no longer defined come into the chunks or leave them.
+   */
+  private typesRevision = -1;
 
   /**
    * Previous generation of the terrain subdivision
@@ -101,6 +109,18 @@ export class RetainedInvalidationWatch {
     // On the first time there is no cache at all, so nothing has to be discarded
     const first = this.companionGeneration === -1;
     this.companionGeneration = generation;
+    return !first;
+  }
+
+  /**
+   * Whether the types the instance knows changed (a custom type defined, or no longer)
+   *
+   * @param revision The revision of the types (`DrawnShapes.typesRevision`)
+   */
+  typesChanged(revision: number): boolean {
+    if (revision === this.typesRevision) return false;
+    const first = this.typesRevision === -1;
+    this.typesRevision = revision;
     return !first;
   }
 

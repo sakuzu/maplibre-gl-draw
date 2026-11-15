@@ -81,6 +81,28 @@ export function knownTypeJudge(
   };
 }
 
+/**
+ * The features of the types the instance knows, in their order: the same list when it knows every
+ * one (nothing is made then)
+ *
+ * @param registry The custom types of the instance
+ * @internal
+ */
+export function featuresOfKnownTypes<F extends { readonly type: string }>(
+  features: F[],
+  registry: TransformFieldsRegistry | null | undefined,
+): F[] {
+  const known = knownTypeJudge(registry);
+  let first = 0;
+  while (first < features.length && known(features[first].type)) first++;
+  if (first === features.length) return features;
+  const out = features.slice(0, first);
+  for (let i = first + 1; i < features.length; i++) {
+    if (known(features[i].type)) out.push(features[i]);
+  }
+  return out;
+}
+
 /** The judgment of the names of the types of a page, as made last */
 let judged: {
   column: PageValues;

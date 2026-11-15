@@ -268,16 +268,16 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   };
 
   /**
-   * The rows a hit leaves out besides their state: the rows of a group hidden by this client, and
-   * what the drag of this client edits (undefined when it leaves out none)
+   * The rows a hit leaves out besides their state: the rows of a type the instance does not know,
+   * the rows of a group hidden by this client, and what the drag of this client edits
    */
   const rowsLeftOut = (
     tables: FeatureTablesInternals,
   ): ((group: RowGroup, row: number) => boolean) | undefined => {
     const hidden = store.listHidden();
     const dragged = shapes.hitRowsLeftOut();
-    if (hidden.size === 0 && !dragged) return undefined;
     return (group, row) => {
+      if (!shapes.knowsRow(group.data, row)) return true;
       if (dragged?.(group.data.rows[row] as number)) return true;
       if (hidden.size === 0) return false;
       const groupHandle = group.data.groups[row];
@@ -730,6 +730,8 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
         const { group, row } = found[k];
         if ((group.state[row] & STATE_UNHIT_MASK) !== 0) continue;
         const data = group.data;
+        // A row of a type the instance does not know is not hit
+        if (!shapes.knowsRow(data, row)) continue;
         const groupHandle = data.groups[row];
         const groupId = groupHandle >= 0 ? tables.groups.idOf(groupHandle) : undefined;
         if (groupId !== undefined && hidden.has(groupId)) continue;

@@ -26,7 +26,8 @@
  *
  * What the drawing reads of the shapes it reads from `drawn` (`DrawnShapes`): the shapes as they
  * are seen (`RenderedShapes`) behind these two switches. An image of the map leaves the shape
- * being drawn out, and a document shown in place has no edit under way.
+ * being drawn out, and a document shown in place has no edit under way. A feature of a type the
+ * instance does not know is neither shown nor displayed (`feature-types.ts`).
  */
 
 import type { TentativeState } from '../../shared/types/model.js';
@@ -79,10 +80,18 @@ const EDITING_READS: ReadonlyMap<PropertyKey, unknown> = new Map<PropertyKey, un
 export interface DrawnShapes {
   /** A feature as it is seen */
   get(id: string): Feature | undefined;
-  /** A feature as it is seen, when it is shown (undefined when hidden, here or for everyone) */
+  /**
+   * A feature as it is seen, when it is shown (undefined when hidden, here or for everyone, and
+   * for a type the instance does not know)
+   */
   shown(id: string): Feature | undefined;
   /** The features shown, as they are seen, in the stacking order */
   displayed(): Feature[];
+  /**
+   * A number that changes whenever the types the instance knows change, which `shown` and
+   * `displayed` follow (none: they never change)
+   */
+  typesRevision?(): number;
   /** The shapes being drawn, in the order they are drawn */
   drawings(): readonly TentativeState[];
 }
@@ -165,9 +174,12 @@ export function createShownStore(
     get: (id) => (shown === null ? shapes.get(id) : (shown.getFeature(id) as Feature | undefined)),
     shown(id) {
       const feature = drawn.get(id);
-      return feature?.visible && !isLocallyHidden(feature, store) ? feature : undefined;
+      return feature?.visible && !isLocallyHidden(feature, store) && shapes.knows(feature)
+        ? feature
+        : undefined;
     },
-    displayed: () => getDisplayFeatures(store),
+    displayed: () => shapes.ofKnownTypes(getDisplayFeatures(store)),
+    typesRevision: () => shapes.typesRevision,
     drawings: () => (shown === null && !editingHidden ? shapes.drawings() : NO_DRAWINGS),
   };
   return {

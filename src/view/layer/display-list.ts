@@ -30,17 +30,28 @@ const SORT_SHARE_LIMIT = 0.25;
  * @internal
  */
 export class DisplayListCache {
-  private readonly shapes: Pick<DrawnShapes, 'displayed'>;
+  private readonly shapes: Pick<DrawnShapes, 'displayed' | 'typesRevision'>;
   private list: Feature[] | null = null;
   /** featureId → position in the list (built when first needed) */
   private rank: Map<string, number> | null = null;
+  /** The revision of the types the instance knows the list was built at */
+  private typesRevision = 0;
 
-  constructor(shapes: Pick<DrawnShapes, 'displayed'>) {
+  constructor(shapes: Pick<DrawnShapes, 'displayed' | 'typesRevision'>) {
     this.shapes = shapes;
   }
 
-  /** The features to display, in draw order (`DrawnShapes.displayed`) */
+  /**
+   * The features to display, in draw order (`DrawnShapes.displayed`): built again as well once
+   * the types the instance knows change
+   */
   features(): Feature[] {
+    const typesRevision = this.shapes.typesRevision?.() ?? 0;
+    if (typesRevision !== this.typesRevision) {
+      this.typesRevision = typesRevision;
+      this.list = null;
+      this.rank = null;
+    }
     if (!this.list) this.list = this.shapes.displayed();
     return this.list;
   }

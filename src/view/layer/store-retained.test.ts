@@ -22,6 +22,7 @@ import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
+import { defineTypesOf } from '../../test-utils.js';
 import {
   createFeatureCompanionRegistry,
   type FeatureCompanionRegistry,
@@ -441,6 +442,8 @@ function createHarness(
   const paintLog: string[] = [];
   const immediate = createImmediateProbe(paintLog);
 
+  // The custom types of the instance, each drawn by a renderer that records it
+  defineTypesOf(stub.store, options.customTypes ?? []);
   const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
   for (const type of options.customTypes ?? []) {
     customRenderers.set(type, {

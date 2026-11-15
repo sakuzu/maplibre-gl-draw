@@ -26,6 +26,7 @@ import type {
   Layer,
   TentativeState,
 } from '../store/types.js';
+import { defineTypesOf } from '../test-utils.js';
 import { createSnapTargetsRegistry, type SnapTargetsRegistry } from './custom-targets.js';
 import { degreesPerPixel } from './geometry.js';
 import type { GuideSnapProviderDeps, GuideSnapProviderOptions } from './providers/guide.js';
@@ -169,6 +170,8 @@ function shapesOf(store: MemoryStore): RenderedShapes {
 beforeEach(() => {
   drawn = null;
   store = new MemoryStore();
+  // The custom type of this draw instance
+  defineTypesOf(store, ['Marker']);
   spatialIndex = new RBushSpatialIndex();
   store.createLayer(makeLayer('l1'));
   // The snapping candidates of the custom types of this draw instance

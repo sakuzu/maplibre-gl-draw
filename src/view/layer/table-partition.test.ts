@@ -17,13 +17,9 @@ import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
-import { BUILT_IN_FEATURE_TYPES } from '../../store/feature-types.js';
-import {
-  createTransformFieldsRegistry,
-  type TransformFieldsRegistry,
-} from '../../store/transform-roles.js';
+import { createTransformFieldsRegistry } from '../../store/transform-roles.js';
 import { geometryColumnOf } from '../../table/feature-row-columns.js';
-import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
+import { createTestDrawer, definingTypes, feature, tablesOfFeatures } from '../../test-utils.js';
 import {
   createFeatureCompanionRegistry,
   type FeatureCompanionProvider,
@@ -43,18 +39,6 @@ const square = [
     [0, 0],
   ],
 ];
-
-/**
- * The custom types of an instance that defines every type of the features (an instance registers
- * each type it defines, and a row of a type it does not know draws nothing)
- */
-function definingTypesOf(features: readonly Feature[]): TransformFieldsRegistry {
-  const registry = createTransformFieldsRegistry();
-  for (const type of new Set(features.map((f) => f.type))) {
-    if (!BUILT_IN_FEATURE_TYPES.has(type)) registry.register(type, {});
-  }
-  return registry;
-}
 
 /** Features of every type and of the styles that decide the kind of their run */
 function variety(): Feature[] {
@@ -136,7 +120,7 @@ function kinds(
     companions,
     featureOf: (g: typeof group, row: number) => rowFeature(internals.readContext, 'layer', g, row),
     layer: options.layer,
-    transformFields: definingTypesOf(features),
+    transformFields: definingTypes(features.map((f) => f.type)),
   };
   return {
     rows: features.map((_, row) => classifyRow(group, row, context)),
@@ -228,7 +212,7 @@ describe('classifyRow', () => {
             made.push(f.type);
             return f;
           },
-          transformFields: definingTypesOf(features),
+          transformFields: definingTypes(features.map((f) => f.type)),
         });
       }
       return [...made];
@@ -280,7 +264,7 @@ describe('classifyRow', () => {
           return rowFeature(internals.readContext, 'layer', g, r);
         },
         view,
-        transformFields: definingTypesOf(features),
+        transformFields: definingTypes(features.map((f) => f.type)),
       }),
     );
     expect(rows).toEqual(
@@ -312,7 +296,7 @@ describe('classifyRow', () => {
           return rowFeature(internals.readContext, 'layer', g, r);
         },
         view: internals.view('layer'),
-        transformFields: definingTypesOf(features),
+        transformFields: definingTypes(features.map((f) => f.type)),
       }),
     );
     expect(made).toBe(features.length);
@@ -475,7 +459,7 @@ describe('the classification and the chunks of the drawing in one draw', () => {
       featureOf: (g: typeof group, row: number) =>
         rowFeature(internals.readContext, 'layer', g, row),
       oneDraw: true,
-      transformFields: definingTypesOf(features),
+      transformFields: definingTypes(features.map((f) => f.type)),
       onSprite: (row: number, s: RowSpriteSource) => sprites.set(row, s),
       onGpuRows: (row: number, s: GpuRowsSource) => gpuRows.set(row, s),
     };

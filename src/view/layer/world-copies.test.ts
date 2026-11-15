@@ -27,6 +27,7 @@ import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
+import { defineTypesOf } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { createSelectionScope } from '../ui/selection-scope.js';
 import { createCustomLayer } from './custom-layer.js';
@@ -208,6 +209,8 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
   const { gl } = createGlStub();
   const map = createMapStub(center, halfWidth);
   const store = new MemoryStore();
+  // The custom type of the instance
+  defineTypesOf(store, ['Probe']);
   store.createLayer({
     id: 'l1',
     name: 'l1',

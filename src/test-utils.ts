@@ -68,9 +68,15 @@ import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import { RenderedShapes } from './sketches/rendered-shapes.js';
 import { SketchController } from './sketches/sketch-controller.js';
 import type { SnapResult } from './snapping/types.js';
+import { BUILT_IN_FEATURE_TYPES } from './store/feature-types.js';
 import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
+import {
+  createTransformFieldsRegistry,
+  setTransformFieldsOfStore,
+  type TransformFieldsRegistry,
+} from './store/transform-roles.js';
 import { circleRowRings } from './table/circle-rings.js';
 import {
   type FeatureRowInput,
@@ -1321,4 +1327,29 @@ export const STORE_KINDS: ReadonlyArray<readonly [string, () => Store]> = [
  */
 export function gpuOf(gl: WebGL2RenderingContext, ledger = new GpuLedger()): GpuResources {
   return new GpuResources({ gl, ledger, owner: 'test' });
+}
+
+/**
+ * The custom types of an instance that defines these types (every one that is not built in, with
+ * no field), as an instance registers each type it defines: a feature of a type it does not know
+ * is not drawn, hit nor framed
+ */
+export function definingTypes(types: Iterable<string>): TransformFieldsRegistry {
+  const registry = createTransformFieldsRegistry();
+  for (const type of new Set(types)) {
+    if (!BUILT_IN_FEATURE_TYPES.has(type)) registry.register(type, {});
+  }
+  return registry;
+}
+
+/**
+ * Gives a Store of no instance the custom types of an instance that defines these types
+ * (`definingTypes`), as an instance gives its Store the types it defines
+ *
+ * @returns The custom types, to define more of them
+ */
+export function defineTypesOf(store: object, types: Iterable<string>): TransformFieldsRegistry {
+  const registry = definingTypes(types);
+  setTransformFieldsOfStore(store, store, registry);
+  return registry;
 }

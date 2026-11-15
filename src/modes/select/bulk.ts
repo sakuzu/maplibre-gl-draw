@@ -43,7 +43,7 @@ export { BULK_MOVE_SET };
  * @internal
  */
 export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): TableSelection {
-  const { store, boxSelectionRegistry } = context;
+  const { store, shapes, boxSelectionRegistry } = context;
   const tables = store.tables;
   const internals = featureTablesInternals(tables);
   if (!tables || !internals) return TableSelection.empty;
@@ -74,6 +74,8 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
         const flags = data.flags[row];
         if ((flags & (ROW_FLAG_DELETED | ROW_FLAG_LOCKED)) !== 0) continue;
         if ((group.state[row] & STATE_UNHIT_MASK) !== 0) continue;
+        // A row of a type the instance does not know is not hit (`feature-types.ts`)
+        if (!shapes.knowsRow(group.data, row)) continue;
         if (!layerOpen(place.table.tableId)) continue;
         const featureGroup = data.groups[row];
         if (featureGroup >= 0) {

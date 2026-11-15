@@ -39,6 +39,7 @@ import { styleColumnOf } from '../../table/feature-row-columns.js';
 import { FEATURE_CACHES } from '../../table/fill-triangles.js';
 import {
   createTestDrawer,
+  definingTypes,
   feature,
   seededRandom,
   tablesOfFeatures,
@@ -283,13 +284,17 @@ function setup(
     customRendererContext: {} as never,
     companions: createFeatureCompanionRegistry(),
   };
+  // The custom types of the instance: those given, or every type a renderer is given for (an
+  // instance registers each type it defines)
+  const transformFields =
+    options.transformFields ?? definingTypes(options.customRenderers?.keys() ?? []);
   const renderer = new TableLayerRenderer({
     gl: mock.gl,
     terrain,
     ledger,
     requestRepaint: () => {},
     buildBudgetMs: options.buildBudgetMs ?? Number.POSITIVE_INFINITY,
-    ...(options.transformFields && { transformFields: () => options.transformFields ?? null }),
+    transformFields: () => transformFields,
     ...(options.extensions && { extensions: options.extensions }),
   });
   /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
@@ -326,6 +331,7 @@ function setup(
     ledger,
     deps,
     mock,
+    transformFields,
   };
 }
 
@@ -1371,11 +1377,13 @@ describe('the rows an extension holds on the GPU', () => {
 
   it('cuts a range where another source holds the rows', () => {
     const features = [feature('a', 'Ribbon', [0, 0]), feature('b', 'Other', [0.1, 0])];
-    const { frame, customRenderers, type, made } = layer(features);
+    const { frame, customRenderers, type, made, transformFields } = layer(features);
     const other = ribbons(
       () => ({ createBuffer: () => ({}) }) as never,
       () => new GpuLedger(),
     );
+    // The type is defined, as an instance registers it
+    transformFields.register('Other', {});
     customRenderers.set('Other', type('Other', other.source));
     frame();
     const { record } = frame();

@@ -24,6 +24,7 @@
  * in every frame.
  */
 
+import type { PageData } from '@sakuzu/kasane/render';
 import type { DraggedRows } from '../feature-table/dragged-rows.js';
 import {
   draggedFeatureOf,
@@ -36,8 +37,10 @@ import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { forEachSnapRow, type SnapRow } from '../feature-table/snap-rows.js';
 import type { EnuEdit } from '../geometry/enu-transforms.js';
 import type { BBox } from '../geometry/types.js';
+import { featuresOfKnownTypes, isKnownFeatureType, rowTypeKnown } from '../store/feature-types.js';
 import { getDisplayFeatures } from '../store/local-visibility.js';
 import type { Store } from '../store/store.js';
+import { transformFieldsOfStore } from '../store/transform-roles.js';
 import type { DragTargets, Feature } from '../store/types.js';
 import type { DraggedFeatures } from './sketch-controller.js';
 import type { ShapeBeingDrawn, SketchView } from './sketch-view.js';
@@ -287,6 +290,36 @@ export class RenderedShapes {
   }
 
   // ==========================================================================
+  // The types the instance knows
+  // ==========================================================================
+
+  /**
+   * A number that changes whenever the types the instance knows change (a custom type defined,
+   * or no longer): what is kept of the features drawn, hit and framed follows it
+   */
+  get typesRevision(): number {
+    return transformFieldsOfStore(this.#store)?.revision ?? 0;
+  }
+
+  /**
+   * Whether the instance knows the type of a feature: a feature of a type it does not know is not
+   * drawn, hit, snapped to nor framed (`feature-types.ts`)
+   */
+  knows(feature: Feature): boolean {
+    return isKnownFeatureType(feature.type, transformFieldsOfStore(this.#store));
+  }
+
+  /** Whether the instance knows the type of a row of a page (as `knows`) */
+  knowsRow(data: PageData, row: number): boolean {
+    return rowTypeKnown(data, row, transformFieldsOfStore(this.#store));
+  }
+
+  /** The features of the types the instance knows, in their order (the same list for all) */
+  ofKnownTypes(features: Feature[]): Feature[] {
+    return featuresOfKnownTypes(features, transformFieldsOfStore(this.#store));
+  }
+
+  // ==========================================================================
   // What the drawing of a Store of objects draws
   // ==========================================================================
 
@@ -329,18 +362,21 @@ export class RenderedShapes {
 
   /**
    * A feature as a hit reads it: the value of the Store. What a sketch with an owner moves is hit
-   * where the document has it, and the rows moved by their state where they are written
+   * where the document has it, and the rows moved by their state where they are written. A
+   * feature of a type the instance does not know is not hit
    */
   hitFeature(id: string): Feature | undefined {
-    return this.#store.getFeature(id);
+    const feature = this.#store.getFeature(id);
+    return feature && this.knows(feature) ? feature : undefined;
   }
 
   /**
    * The features a hit tests, in the stacking order: those shown, each as `hitFeature` reads it,
-   * without what the drag of this client edits
+   * without what the drag of this client edits, nor the features of a type the instance does not
+   * know
    */
   hitFeatures(): Feature[] {
-    const features = getDisplayFeatures(this.#store);
+    const features = this.ofKnownTypes(getDisplayFeatures(this.#store));
     const dragged = this.#sketches?.dragged();
     return dragged ? features.filter((feature) => !dragged.hasFeature(feature.id)) : features;
   }
@@ -348,10 +384,10 @@ export class RenderedShapes {
   /**
    * The features shown of the layers of objects, in the stacking order, as the document has them,
    * what the drag of this client edits included: a pick reads the ones a sketch edits as they are
-   * seen (`get`)
+   * seen (`get`). Not the features of a type the instance does not know
    */
   shownFeatures(): Feature[] {
-    return getDisplayFeatures(this.#store);
+    return this.ofKnownTypes(getDisplayFeatures(this.#store));
   }
 
   /** The rows a hit tests, read where they are written and left out by their state */
@@ -370,10 +406,13 @@ export class RenderedShapes {
 
   /**
    * The features of these IDs the handles of the selection are grabbed on: as they are seen, so
-   * that a handle is grabbed where it is drawn
+   * that a handle is grabbed where it is drawn. A feature of a type the instance does not know
+   * has no handle
    */
   handleFeatures(ids: readonly string[]): Feature[] {
-    return this.getMany(ids).filter((feature) => feature !== undefined);
+    return this.getMany(ids).filter(
+      (feature): feature is Feature => feature !== undefined && this.knows(feature),
+    );
   }
 
   /** What this client drags, which the hit tests of the extensions leave out */
@@ -398,7 +437,7 @@ export class RenderedShapes {
 
   /**
    * Calls `visit` with every row the snapping reads whose bbox meets a box: shown, not held as a
-   * feature, not left out by `shown` and `skip`
+   * feature, of a type the instance knows, not left out by `shown` and `skip`
    *
    * @param shown Whether the rows of a layer and a group are shown
    * @param skip Whether a row is left out, by its ID
@@ -409,7 +448,10 @@ export class RenderedShapes {
     skip: (id: string) => boolean,
     visit: (row: SnapRow) => void,
   ): void {
-    forEachSnapRow(this.#store.tables, bbox, shown, skip, visit);
+    const types = transformFieldsOfStore(this.#store);
+    forEachSnapRow(this.#store.tables, bbox, shown, skip, (row) => {
+      if (isKnownFeatureType(row.type, types)) visit(row);
+    });
   }
 
   /**

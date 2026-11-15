@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import type { FrameDrawContext } from '../../extension/index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
+import { defineTypesOf } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import { createShownStore } from './shown-store.js';
@@ -34,6 +35,8 @@ function setup(features: Feature[], hidden: string[] = []) {
     isHidden: (id: string) => hidden.includes(id),
     listHidden: () => new Set(hidden),
   } as unknown as Store;
+  // The custom type of the instance
+  defineTypesOf(store, ['Custom']);
   let restored = 0;
   const deps: StoreRetainedDrawDeps = {
     renderers: {} as RetainedRendererSet,
