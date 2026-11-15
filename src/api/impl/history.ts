@@ -56,8 +56,8 @@ export interface History {
    */
   drop(commits: ReadonlySet<string>, written?: ReadonlyMap<string, StepWrite | null>): void;
   /**
-   * The commit whose step an undo or a redo took (the commit it takes back, or makes again),
-   * while a step it is part of is kept; undefined for any other commit
+   * The commit whose step the last undo or redo took (the commit it takes back, or makes again),
+   * asked for by its ID in its notifications; undefined for any other commit
    */
   originOf(commit: string): string | undefined;
   /** Gives the features of the steps the IDs the storage gave them, from the old to the new */
@@ -137,11 +137,6 @@ interface Step {
    * stay, for what they keep of the Store until the step goes)
    */
   written?: StepWrite;
-  /**
-   * The commits of the steps taken before this one was made, the first commit of this client
-   * first: an undo of a step makes the step that redoes it, and so on
-   */
-  readonly origins: readonly string[];
 }
 
 /**
@@ -160,6 +155,8 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
   // The step the last undo or redo made, which a notification of it told after its commit (a
   // write of many rows the Store tells later) joins
   let taken: { direction: 'undo' | 'redo'; step: Step } | null = null;
+  // The last undo or redo, and the commit of the step it takes
+  let taking: { readonly id: string; readonly origin: string | undefined } | null = null;
 
   const release = (step: Step): void => {
     const tables = store.tables;
@@ -228,7 +225,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     if (open) {
       open.parts.push(inverse);
     } else {
-      open = { label: commit?.label, commit: commit?.id, parts: [inverse], origins: [] };
+      open = { label: commit?.label, commit: commit?.id, parts: [inverse] };
       undoSteps.push(open);
       while (undoSteps.length > maxSteps) {
         const dropped = undoSteps.shift();
@@ -261,6 +258,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         }
         const parts: Inverse[] = [];
         applying = { direction, parts };
+        taking = { id, origin: step.commit };
         try {
           runCommit(store, { id, label: step.label, undo: false }, direction, () =>
             withLocksIgnored(store, () => {
@@ -274,8 +272,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         }
         release(step);
         // Its parts in the order they were told: taken back from the last one, as a step is
-        const origins = step.commit === undefined ? step.origins : [...step.origins, step.commit];
-        const reversed: Step = { label: step.label, commit: id, parts, origins };
+        const reversed: Step = { label: step.label, commit: id, parts };
         (direction === 'undo' ? redoSteps : undoSteps).push(reversed);
         taken = { direction, step: reversed };
         changed();
@@ -322,14 +319,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
       if (dropped) changed();
     },
     originOf(commit) {
-      for (const steps of [undoSteps, redoSteps]) {
-        for (const step of steps) {
-          if (step.commit === commit) return step.origins[step.origins.length - 1];
-          const at = step.origins.indexOf(commit);
-          if (at > 0) return step.origins[at - 1];
-        }
-      }
-      return undefined;
+      return taking?.id === commit ? taking.origin : undefined;
     },
     rename(ids) {
       if (ids.size === 0) return;

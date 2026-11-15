@@ -128,9 +128,9 @@ describe('the take-out of a refused commit', () => {
 
       it('writes a large move behind a small refused commit in one write of the places', async () => {
         const count = 1500;
-        const store = kind === 'rows' ? createTableStore() : null;
-        const objects = kind === 'objects' ? new MemoryStore() : null;
-        const { d, storage } = started(store?.store ?? (objects as MemoryStore), 1 << 20);
+        const rows = kind === 'rows' ? createTableStore() : null;
+        const objects = new MemoryStore();
+        const { d, storage } = started(rows ? rows.store : objects, 1 << 20);
         const ids = Array.from({ length: count }, (_, i) => `p${i}`);
         await d.write(async (tx) => {
           await tx.layers.create({ id: 'a', name: 'A' });
@@ -141,14 +141,12 @@ describe('the take-out of a refused commit', () => {
         storage.hold();
         await d.write((tx) => tx.features.create([point('x1', 'a')]), { label: 'refused' });
         await d.write((tx) => tx.features.place(ids, { layerId: 'b' }));
-        const writes = store
-          ? vi.spyOn(store.writer, 'writeRows')
-          : vi.spyOn(objects as MemoryStore, 'moveItems');
+        const writes = rows ? vi.spyOn(rows.writer, 'writeRows') : vi.spyOn(objects, 'moveItems');
         storage.release();
         await settled(d);
         // Taken back to `a`, then written again in `b`: one write each (and the deletion of the
         // refused feature, a write of the rows)
-        expect(writes.mock.calls.length).toBe(store ? 3 : 2);
+        expect(writes.mock.calls.length).toBe(rows ? 3 : 2);
         expect(d.layers.countItems('b')).toBe(count);
         expect(
           storage.backend.document.features.get('p0')?.properties['maplibre-gl-draw:layerId'],

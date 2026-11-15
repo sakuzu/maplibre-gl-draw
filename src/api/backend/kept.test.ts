@@ -161,4 +161,95 @@ describe('the document of a storage, read by the rules', () => {
     applyOperations(document, [feature('f5', 'a', 'X', 'g')]);
     expect(readOf(document).groups).toEqual(['g']);
   });
+
+  it('skips a move of a feature in a layer that is gone, which comes back with the layer', () => {
+    const document = documentOf();
+    const a = document.layers.get('a');
+    if (!a) throw new Error('no layer a');
+    // B deletes `a` naming `f1`, `f2`, `g` only: `f3` was made at the same time by A
+    applyOperations(document, [
+      { type: 'delete', kind: 'feature', ids: ['f1', 'f2'] },
+      { type: 'delete', kind: 'group', ids: ['g'] },
+      { type: 'delete', kind: 'layer', ids: ['a'] },
+    ]);
+    // A, who has not seen the deletion, moves `f3` to `b`: it is not live, the move is skipped
+    const { skipped } = applyOperations(document, [
+      { type: 'place', kind: 'feature', ids: ['f3'], parentId: 'b', keys: ['V'] },
+    ]);
+    expect(skipped).toEqual(['f3']);
+    expect(readOf(document)).toEqual({
+      features: {},
+      groups: [],
+      kept: { features: ['f3'], groups: [] },
+    });
+    applyOperations(document, [{ type: 'create', kind: 'layer', id: 'a', record: a }]);
+    expect(readOf(document).features).toEqual({ f3: ['a', undefined] });
+  });
+
+  it('skips a move of a group in a layer that is gone, which comes back with its members', () => {
+    const document = documentOf();
+    const a = document.layers.get('a');
+    if (!a) throw new Error('no layer a');
+    applyOperations(document, [{ type: 'delete', kind: 'layer', ids: ['a'] }]);
+    const { skipped } = applyOperations(document, [
+      { type: 'place', kind: 'group', ids: ['g'], parentId: 'b', keys: ['V'] },
+    ]);
+    expect(skipped).toEqual(['g']);
+    expect(readOf(document)).toEqual({
+      features: {},
+      groups: [],
+      kept: { features: ['f1', 'f2', 'f3'], groups: ['g'] },
+    });
+    applyOperations(document, [{ type: 'create', kind: 'layer', id: 'a', record: a }]);
+    expect(readOf(document).features).toEqual({
+      f1: ['a', 'g'],
+      f2: ['a', 'g'],
+      f3: ['a', undefined],
+    });
+  });
+
+  it('skips a move into a layer that is gone, or into a group whose layer is gone', () => {
+    const document = documentOf();
+    applyOperations(document, [
+      layer('c', 'X'),
+      group('h', 'c', 'V'),
+      feature('f4', 'c', 'V', 'h'),
+      { type: 'delete', kind: 'layer', ids: ['c'] },
+    ]);
+    const { skipped } = applyOperations(document, [
+      { type: 'place', kind: 'feature', ids: ['f3'], parentId: 'c', keys: ['V'] },
+      { type: 'place', kind: 'feature', ids: ['f2'], parentId: 'h', keys: ['V'] },
+      { type: 'place', kind: 'group', ids: ['g'], parentId: 'c', keys: ['V'] },
+    ]);
+    expect(skipped).toEqual(['f3', 'f2', 'g']);
+    expect(readOf(document).features).toEqual({
+      f1: ['a', 'g'],
+      f2: ['a', 'g'],
+      f3: ['a', undefined],
+    });
+  });
+
+  it('moves a feature whose group is gone, shown in its own layer', () => {
+    const document = documentOf();
+    // A deletes `g` with `f1` (members: delete); B moves `f3` into `g` at the same time
+    applyOperations(document, [
+      { type: 'delete', kind: 'feature', ids: ['f1'] },
+      { type: 'delete', kind: 'group', ids: ['g'] },
+    ]);
+    expect(readOf(document).features).toEqual({ f2: ['a', undefined], f3: ['a', undefined] });
+    // A move into the group is skipped (its parent is not there); a move of `f2`, live in its
+    // own layer, is not
+    const { skipped } = applyOperations(document, [
+      { type: 'place', kind: 'feature', ids: ['f3'], parentId: 'g', keys: ['V'] },
+      { type: 'place', kind: 'feature', ids: ['f2'], parentId: 'b', keys: ['V'] },
+    ]);
+    expect(skipped).toEqual(['f3']);
+    // A feature made in the group at the same time is shown in its own layer
+    applyOperations(document, [feature('f5', 'a', 'X', 'g')]);
+    expect(readOf(document).features).toEqual({
+      f2: ['b', undefined],
+      f3: ['a', undefined],
+      f5: ['a', undefined],
+    });
+  });
 });

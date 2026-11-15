@@ -136,6 +136,8 @@ interface Entry {
   inverse: ValueOperation[];
   /** The IDs the storage gave features after it was made, to give its operations once read */
   renames?: ReadonlyMap<string, string>[];
+  /** For an undo or a redo, the commit whose step it took */
+  readonly origin?: string;
 }
 
 /**
@@ -361,8 +363,10 @@ export class Sender {
         unread.readings.push(reading);
         return;
       }
+      const taken = change.source === 'undo' || change.source === 'redo';
       entry = {
         commit: change.commit,
+        ...(taken && { origin: this.#options.originOf?.(change.commit) }),
         label: change.label,
         writtenAtMilliseconds: Date.now(),
         readings: [],
@@ -660,7 +664,6 @@ export class Sender {
           this.#values,
           [entry, ...later] as CommitOperations[],
           new Set<CommitOperations>(refused as CommitOperations[]),
-          { originOf: this.#options.originOf },
         ),
       'refused',
     );

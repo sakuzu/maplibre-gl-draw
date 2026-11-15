@@ -47,6 +47,8 @@ const DOCUMENT = '\u0000document';
 export interface CommitOperations {
   /** The ID of the commit (none in the tests that write operations only) */
   readonly commit?: string;
+  /** For an undo or a redo, the commit whose step it took (see `History.originOf`) */
+  readonly origin?: string;
   operations: readonly ValueOperation[];
   inverse: ValueOperation[];
 }
@@ -83,7 +85,6 @@ export function dependentsOf(
  * @param refused - Which of them are refused
  * @param options.every - True to take back and write again every commit, not only those that
  *   touch what the refused ones touched (for the tests, which compare both)
- * @param options.originOf - The commit whose step an undo or a redo took (see `History.originOf`)
  * @returns What the Store refused to write (the rest is written), and the commits not refused
  *   written again, in their order (their inverse read again)
  * @internal
@@ -93,10 +94,7 @@ export function takeOut(
   values: CommitValues,
   commits: readonly CommitOperations[],
   refused: ReadonlySet<CommitOperations>,
-  options: {
-    readonly every?: boolean;
-    readonly originOf?: (commit: string) => string | undefined;
-  } = {},
+  options: { readonly every?: boolean } = {},
 ): { readonly failed: readonly unknown[]; readonly written: readonly CommitOperations[] } {
   const touched = options.every ? null : touching(commits, refused);
   const again =
@@ -117,8 +115,7 @@ export function takeOut(
   for (const i of again) {
     const commit = commits[i];
     if (refused.has(commit)) continue;
-    const origin = commit.commit === undefined ? undefined : options.originOf?.(commit.commit);
-    const from = origin === undefined ? undefined : taken.get(origin);
+    const from = commit.origin === undefined ? undefined : taken.get(commit.origin);
     if (from) commit.operations = refused.has(from) ? [] : from.inverse;
     const before = values.namedBefore(commit.operations);
     failed.push(...writeOperations(store, values, commit.operations).failed);

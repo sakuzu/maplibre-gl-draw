@@ -429,7 +429,8 @@ export class CommitValues {
       const row = this.#unreadDeleted.get(from);
       if (!row || this.#unreadDeleted.has(to)) continue;
       this.#unreadDeleted.set(to, row);
-      (row.names ??= []).push(to);
+      if (row.names) row.names.push(to);
+      else row.names = [to];
     }
   }
 
