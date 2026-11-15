@@ -37,9 +37,11 @@ import type {
   SaveStage,
   SaveState,
 } from '../status.js';
+import type { StepWrite } from '../impl/history.js';
 import type { Progress, SaveOptions } from '../write.js';
 import type { Answer, Backend, Task } from './backend.js';
 import { type ChangeReading, CommitValues } from './commit-values.js';
+import { KeptRecords } from './kept.js';
 import { createObservable } from './observable.js';
 import { batchesInSteps } from './parts.js';
 import { followCommit, writeOperations } from './store-writes.js';
@@ -82,8 +84,17 @@ export interface SenderOptions {
   readonly rowsReadAtOnce?: number;
   /** The wait before the try `attempt` (from 1) of a batch sent again (ms) */
   readonly retryDelay?: (attempt: number) => number;
-  /** Called once commits are taken out of the document, refused (their steps of undo go) */
-  readonly onTakenOut?: (commits: ReadonlySet<string>) => void;
+  /**
+   * Called once commits are taken out of the document, refused (their steps of undo go): with
+   * what takes back each commit written again by the take-out as it is written now, by its ID
+   * (null: one that changes nothing now)
+   */
+  readonly onTakenOut?: (
+    commits: ReadonlySet<string>,
+    written: ReadonlyMap<string, StepWrite | null>,
+  ) => void;
+  /** The commit whose step an undo or a redo took (see `History.originOf`) */
+  readonly originOf?: (commit: string) => string | undefined;
   /** Called once features take the IDs the storage gave them, from the old to the new */
   readonly onReassigned?: (ids: ReadonlyMap<string, string>) => void;
 }
@@ -642,13 +653,14 @@ export class Sender {
       (i) => later[i],
     );
     const refused = [entry, ...dependents];
-    const { failed } = this.#store.transact(
+    const { failed, written } = this.#store.transact(
       () =>
         takeOut(
           this.#store,
           this.#values,
           [entry, ...later] as CommitOperations[],
           new Set<CommitOperations>(refused as CommitOperations[]),
+          { originOf: this.#options.originOf },
         ),
       'refused',
     );
@@ -687,8 +699,27 @@ export class Sender {
       one.inverse = [];
     }
     this.#refusalsValue.set(Object.freeze(this.#refusals.map((one) => one.refusal)));
-    this.#options.onTakenOut?.(new Set(refused.map((one) => one.commit)));
+    const steps = new Map<string, StepWrite | null>();
+    for (const one of written) {
+      if (one.commit === undefined) continue;
+      steps.set(one.commit, one.inverse.length > 0 ? this.#stepWrite(one.inverse) : null);
+    }
+    this.#options.onTakenOut?.(new Set(refused.map((one) => one.commit)), steps);
     this.#changed();
+  }
+
+  /**
+   * What writes operations that take a commit back, as a step of undo: a commit of this client
+   * (as a retry), whose items take keys of their own, and whose writes under a container not there
+   * are left out, not kept as the storage would keep them
+   */
+  #stepWrite(operations: readonly ValueOperation[]): StepWrite {
+    return {
+      write: () => {
+        writeOperations(this.#store, this.#values, operations, false, new KeptRecords());
+      },
+      renamed: (ids) => this.#stepWrite(renamedOperations(operations, ids)),
+    };
   }
 
   /**

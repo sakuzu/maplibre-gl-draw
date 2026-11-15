@@ -16,6 +16,10 @@
  * - Only the commits that touch what a refused commit touched, or what one of those touched, are
  *   taken back and written again: the others name other things, and give the same document
  *   whatever comes before them
+ * - A refused commit is as if it was never made: an undo or a redo of a commit written again
+ *   writes what takes that commit back now (or nothing, when that commit is refused), and the
+ *   steps of undo of the commits written again take them back as they are written now (the
+ *   caller gives them what takes each back)
  *
  * @internal
  */
@@ -38,7 +42,9 @@ const DOCUMENT = '\u0000document';
  * @internal
  */
 export interface CommitOperations {
-  readonly operations: readonly ValueOperation[];
+  /** The ID of the commit (none in the tests that write operations only) */
+  readonly commit?: string;
+  operations: readonly ValueOperation[];
   inverse: ValueOperation[];
 }
 
@@ -72,9 +78,11 @@ export function dependentsOf(
  *
  * @param commits - The commits not sent, in their order (the first refused among them)
  * @param refused - Which of them are refused
- * @param every - True to take back and write again every commit, not only those that touch what
- *   the refused ones touched (for the tests, which compare both)
- * @returns What the Store refused to write (the rest is written)
+ * @param options.every - True to take back and write again every commit, not only those that
+ *   touch what the refused ones touched (for the tests, which compare both)
+ * @param options.originOf - The commit whose step an undo or a redo took (see `History.originOf`)
+ * @returns What the Store refused to write (the rest is written), and the commits not refused
+ *   written again, in their order (their inverse read again)
  * @internal
  */
 export function takeOut(
@@ -82,21 +90,35 @@ export function takeOut(
   values: CommitValues,
   commits: readonly CommitOperations[],
   refused: ReadonlySet<CommitOperations>,
-  every = false,
-): { readonly failed: readonly unknown[] } {
-  const again = every ? commits.map((_, i) => i) : touching(commits, refused);
+  options: {
+    readonly every?: boolean;
+    readonly originOf?: (commit: string) => string | undefined;
+  } = {},
+): { readonly failed: readonly unknown[]; readonly written: readonly CommitOperations[] } {
+  const again = options.every ? commits.map((_, i) => i) : touching(commits, refused);
   const failed: unknown[] = [];
   for (let k = again.length - 1; k >= 0; k--) {
     failed.push(...writeOperations(store, values, commits[again[k]].inverse).failed);
   }
+  // The commits taken back, by their IDs: what an undo or a redo of one of them writes now
+  const taken = new Map<string, CommitOperations>();
+  for (const i of again) {
+    const id = commits[i].commit;
+    if (id !== undefined) taken.set(id, commits[i]);
+  }
+  const written: CommitOperations[] = [];
   for (const i of again) {
     const commit = commits[i];
     if (refused.has(commit)) continue;
+    const origin = commit.commit === undefined ? undefined : options.originOf?.(commit.commit);
+    const from = origin === undefined ? undefined : taken.get(origin);
+    if (from) commit.operations = refused.has(from) ? [] : from.inverse;
     const before = values.namedBefore(commit.operations);
     failed.push(...writeOperations(store, values, commit.operations).failed);
     commit.inverse = values.inverseSince(before);
+    written.push(commit);
   }
-  return { failed };
+  return { failed, written };
 }
 
 /**

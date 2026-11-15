@@ -224,7 +224,8 @@ export function createDrawOnEngine(
     sender = new Sender(store, options.backend, {
       ...senderOptions,
       onChange: () => status.changed(),
-      onTakenOut: (commits) => history.drop(commits),
+      onTakenOut: (commits, written) => history.drop(commits, written),
+      originOf: (commit) => history.originOf(commit),
       onReassigned: (ids) => history.rename(ids),
       onSkipped: (skipped) => status.problem({ type: 'skipped', ...skipped }),
     });

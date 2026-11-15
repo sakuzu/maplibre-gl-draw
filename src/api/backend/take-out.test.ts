@@ -93,7 +93,7 @@ async function takenOut(makeStore: () => Store, seed: number, every: boolean) {
     ...dependentsOf(unsent[0], unsent.slice(1)).map((i) => unsent[i + 1]),
   ]);
   const again = touching(unsent, refused).length;
-  store.transact(() => takeOut(store, values, unsent, refused, every), 'refused');
+  store.transact(() => takeOut(store, values, unsent, refused, { every }), 'refused');
   for (const commit of unsent) {
     if (!refused.has(commit)) applyOperations(storage, commit.operations);
   }
