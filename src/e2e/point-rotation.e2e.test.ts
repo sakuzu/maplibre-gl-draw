@@ -238,7 +238,8 @@ async function drawScene(
         await read();
         return read();
       };
-      const captured = (w.captured ??= {}) as Record<string, Uint8Array>;
+      w.captured ??= {};
+      const captured = w.captured as Record<string, Uint8Array>;
 
       let pixels: Uint8Array;
       if (writes !== null) {
