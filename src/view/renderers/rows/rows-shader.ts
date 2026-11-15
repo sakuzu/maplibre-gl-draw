@@ -365,7 +365,10 @@ void drawPoint(int style, int angleSteps) {
         radius *= grow;
         outer = ${glslFloat(POINT_MIN_OUTER_PX)};
     }
-    vec2 offsetPx = quadCorner() * (outer + ${glslFloat(POINT_AA_PADDING_PX)});
+    // The billboard is widened for a turned marker as far as its shape reaches
+    float extent = outer + ${glslFloat(POINT_AA_PADDING_PX)};
+    if (angleSteps > 0) extent *= pointTurnReach(size.z);
+    vec2 offsetPx = quadCorner() * extent;
     gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
     v_color = rowsStyle(style, 0);
     v_color2 = rowsStyle(style, 1);

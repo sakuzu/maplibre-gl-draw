@@ -855,9 +855,13 @@ which is feature order.
   one draw holds it in the fourth float of the texel of its style. The
   vertex shader turns the offset the fragment reads by the rotation plus the
   bearing of the map, and while a drag turns the row, by the angle of its
-  moving set (`rowStateRotation`). The billboard is not turned: every shape
-  is inscribed in the circle it covers. A marker without a rotation stays
-  upright on screen
+  moving set (`rowStateRotation`). The billboard is not turned. The circle,
+  the triangle and the star are inscribed in the circle of the outer radius,
+  which the billboard covers at any angle; the square, half its side the
+  outer radius, reaches its corners at √2 times it, so the billboard of a
+  turned marker is widened by `pointTurnReach` (√2 for the square, 1 for the
+  others). A marker without a rotation stays upright on screen, with the
+  billboard it had
 
 An instance is 12 floats: relative coordinates 2, fill color 4, stroke
 color 4, radius 1, stroke width 1. The order is exactly the input order;

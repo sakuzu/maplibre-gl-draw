@@ -9,9 +9,10 @@
  * its vertices by sampling `pointShapeSdf`, which is the same formula written in TypeScript. The
  * two copies are kept side by side so that a change to one is a change to the other.
  *
- * Every shape is inscribed in the circle of radius `r` (the circumradius equals the radius of the
- * circle shape), so a point of a given size occupies the same circle whatever its shape, and the
- * hit area (the circumcircle) covers it. The distance is negative inside, zero on the edge and
+ * The circle, the triangle and the star are inscribed in the circle of radius `r` (the
+ * circumradius equals the radius of the circle shape), so a point of a given size occupies the same
+ * circle whatever its shape, and the hit area (that circle) covers it. The square has half its
+ * side `r`: it fills the square the circle is inscribed in, and its corners reach `r√2`. The distance is negative inside, zero on the edge and
  * positive outside, in the units of the input (device pixels in the shader). The fill and the
  * stroke are separated by a band of this distance: the stroke is the band `-strokeWidth < d <= 0`
  * inside the outer edge.
@@ -186,6 +187,20 @@ export function pointMarkerCode(shapeCode: number, angleSteps: number): number {
 }
 
 /**
+ * How far a shape turned by any angle reaches along either axis of the screen, in units of the
+ * reach of the upright shape: the circle, the triangle and the star are inscribed in the circle of
+ * the outer radius, which no angle takes beyond the billboard of the upright shape (1); the
+ * square, half its side the outer radius, reaches its corners at √2 times the outer radius when
+ * turned by 45 degrees
+ *
+ * @param shapeCode The code of the shape ({@link POINT_SHAPE_CODE})
+ * @internal
+ */
+export function pointTurnReach(shapeCode: number): number {
+  return shapeCode === POINT_SHAPE_CODE.square ? Math.SQRT2 : 1;
+}
+
+/**
  * GLSL that turns a marker by its rotation
  *
  * - `float pointAngleDegrees(int steps)`: the rotation of steps of {@link pointAngleSteps} (1 or
@@ -194,11 +209,17 @@ export function pointMarkerCode(shapeCode: number, angleSteps: number): number {
  *   of a marker turned counterclockwise by `degrees` on screen, as the offset of the upright
  *   shape `pointShapeSdf` reads (+y up)
  *
+ * - `float pointTurnReach(float shape)`: {@link pointTurnReach}, for the code of a shape
+ *
  * A marker turned on the map by its rotation is turned on screen by it plus the bearing of the
- * map. The billboard is not turned: every shape is inscribed in the circle of its outer radius,
- * which the billboard covers whatever the angle.
+ * map. The billboard is not turned: it is widened by `pointTurnReach` for a turned marker, so it
+ * covers the shape whatever the angle. A marker that is not turned keeps the billboard it had.
  */
 export const POINT_TURN_GLSL = `
+float pointTurnReach(float shape) {
+    return abs(shape - ${POINT_SHAPE_CODE.square.toFixed(1)}) < 0.5 ? ${Math.SQRT2} : 1.0;
+}
+
 float pointAngleDegrees(int steps) {
     return float(steps - 1) * ${(1 / POINT_ANGLE_STEPS_PER_DEGREE).toFixed(2)};
 }

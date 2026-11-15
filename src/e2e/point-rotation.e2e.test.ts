@@ -382,6 +382,31 @@ describe('the markers of the points with a rotation', () => {
     expect(await differing(page, 'zero', 'upright-north-up', 0)).toBe(0);
   });
 
+  for (const way of ['one-draw', 'by-kind', 'store'] as const) {
+    it(`draws a turned square whole, its corners beyond the billboard of the upright one, drawn ${way}`, {
+      timeout: browserTimeout(90_000),
+    }, async () => {
+      const name = `whole-${way}`;
+      const options: SceneOptions = {
+        form: way === 'store' ? 'store' : 'rows',
+        byKind: way === 'by-kind',
+      };
+      // Half its side is its outer radius, 16 pixels: turned by 45 degrees, its corners reach
+      // 16√2 (22.6) pixels to the left and to the right, beyond the 17 of the billboard upright
+      const square = (rotation: number) => [point('p', 0, 0, 'square', rotation)];
+      const upright = await drawScene(page, `${name}-0`, square(0), options);
+      const turned = await drawScene(page, `${name}-45`, square(45), options);
+      const corners = await reach(page, `${name}-45`);
+      console.log(
+        `[point rotation] a square turned by 45 degrees: ${turned} pixels drawn against ${upright}, reaching ${JSON.stringify(corners)}`,
+      );
+      expect(corners.left).toBeGreaterThanOrEqual(21);
+      expect(corners.right).toBeGreaterThanOrEqual(21);
+      // The same area, but for the band of its edge
+      expect(Math.abs(turned - upright)).toBeLessThanOrEqual(upright * 0.03);
+    });
+  }
+
   for (const bearing of [0, 40]) {
     it(`draws the markers at the same angles in the three ways, at a bearing of ${bearing}`, {
       timeout: browserTimeout(90_000),

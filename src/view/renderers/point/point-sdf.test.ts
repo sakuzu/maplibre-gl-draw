@@ -6,13 +6,17 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { POINT_AA_PADDING_PX } from './point-instance.js';
 import {
   POINT_ANGLE_STEPS,
   POINT_SDF_GLSL,
   POINT_SHAPE_CODE,
+  POINT_TURN_GLSL,
   pointAngleSteps,
   pointMarkerCode,
   pointShapeSdf,
+  pointTurnReach,
+  type SdfPointShape,
   STAR_INNER_RATIO,
   samplePointShapeRings,
 } from './point-sdf.js';
@@ -143,5 +147,63 @@ describe('the rotation of a marker (pointAngleSteps, pointMarkerCode)', () => {
       expect(marker >> 3, shape).toBe(27_151);
       expect(pointMarkerCode(code, 0), shape).toBe(code);
     }
+  });
+});
+
+describe('the billboard of a turned marker (pointTurnReach)', () => {
+  /** The band of the edge the fragment shader still draws, outside the shape (half a pixel) */
+  const AA = 0.5;
+
+  /**
+   * The share of a marker turned on screen by `degrees` that falls outside its billboard: the
+   * places of a grid around it where the distance the fragment shader reads (at the offset turned
+   * as `pointTurnOffset` turns it) is within the band of its edge, and the share of them beyond
+   * the billboard of half its side `extent`
+   */
+  function clipped(shape: SdfPointShape, outer: number, degrees: number, extent: number): number {
+    const a = (degrees * Math.PI) / 180;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const step = 0.2;
+    const far = outer * 2 + 2;
+    let inside = 0;
+    let out = 0;
+    for (let x = -far; x <= far; x += step) {
+      for (let y = -far; y <= far; y += step) {
+        if (pointShapeSdf(shape, c * x + s * y, c * y - s * x, outer) >= AA) continue;
+        inside++;
+        if (Math.abs(x) > extent || Math.abs(y) > extent) out++;
+      }
+    }
+    return out / inside;
+  }
+
+  const shapes = Object.keys(POINT_SHAPE_CODE) as SdfPointShape[];
+
+  it('leaves no part of a marker of any shape outside its billboard, at any angle', () => {
+    for (const shape of shapes) {
+      for (const outer of [0.5, 7, 16]) {
+        const extent = (outer + POINT_AA_PADDING_PX) * pointTurnReach(POINT_SHAPE_CODE[shape]);
+        for (let degrees = 0; degrees < 360; degrees += 5) {
+          expect(clipped(shape, outer, degrees, extent), `${shape} ${outer} ${degrees}`).toBe(0);
+        }
+      }
+    }
+  });
+
+  it('widens the billboard of the square only, whose corners a turn takes beyond it', () => {
+    expect(shapes.map((shape) => pointTurnReach(POINT_SHAPE_CODE[shape]))).toEqual([
+      1,
+      Math.SQRT2,
+      1,
+      1,
+    ]);
+    // The billboard of the upright square cuts its corners once it is turned
+    expect(clipped('square', 16, 45, 16 + POINT_AA_PADDING_PX)).toBeGreaterThan(0.1);
+    expect(clipped('square', 16, 0, 16 + POINT_AA_PADDING_PX)).toBe(0);
+  });
+
+  it('is in the GLSL with the same value', () => {
+    expect(POINT_TURN_GLSL).toContain(`? ${Math.SQRT2} : 1.0`);
   });
 });

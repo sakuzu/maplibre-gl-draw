@@ -68,7 +68,10 @@ import {
 /** Color type */
 export type Color = [number, number, number, number];
 
-/** Point shape (every shape is inscribed in the circle of the outer radius) */
+/**
+ * Point shape (the circle, the triangle and the star are inscribed in the circle of the outer
+ * radius, and the square has half its side the outer radius)
+ */
 export type PointShape = SdfPointShape;
 
 /**
@@ -752,9 +755,14 @@ void main() {
         radius *= grow;
         outer = ${POINT_MIN_OUTER_PX.toFixed(1)};
     }
+    int markerCode = int(a_instance_shape + 0.5);
+    float shape = float(pointMarkerShape(markerCode));
+    int angleSteps = pointMarkerSteps(markerCode);
     // The billboard is sized as the outer radius plus the antialiasing padding
-    // (so that the edge is not clipped)
-    vec2 offsetPx = a_quad * (outer + ${POINT_AA_PADDING_PX.toFixed(1)});
+    // (so that the edge is not clipped), widened for a turned marker as far as its shape reaches
+    float extent = outer + ${POINT_AA_PADDING_PX.toFixed(1)};
+    if (angleSteps > 0) extent *= pointTurnReach(shape);
+    vec2 offsetPx = a_quad * extent;
 
     gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, centerClip.z / centerClip.w, 1.0);
 
@@ -763,11 +771,9 @@ void main() {
     v_offset_px = offsetPx;
     v_radius_px = radius;
     v_outer_px = outer;
-    int markerCode = int(a_instance_shape + 0.5);
-    v_shape = float(pointMarkerShape(markerCode));
+    v_shape = shape;
     // A marker with a rotation keeps its direction on the map: turned by it and the bearing (and
     // while its row is turned by a drag, by the angle written once let go)
-    int angleSteps = pointMarkerSteps(markerCode);
     if (angleSteps > 0) {
         float degrees = pointAngleDegrees(angleSteps) + u_bearing;
 #ifdef TABLE_ROWS
