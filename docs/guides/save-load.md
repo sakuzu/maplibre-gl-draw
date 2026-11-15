@@ -416,6 +416,92 @@ await draw.write(
 );
 ```
 
+## A storage
+
+`createDraw(map, { backend })` sends each commit to a storage of your own
+(`Backend`, in `@sakuzu/maplibre-gl-draw/extend`), one at a time in their
+order, and `draw.open()`, given no source, reads the document from it:
+
+```ts
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Backend } from '@sakuzu/maplibre-gl-draw/extend';
+
+const backend: Backend = {
+  load: ({ signal }) =>
+    fetch('/api/maps/1', { signal }).then((response) => response.text()),
+  async send(batch, { signal }) {
+    const response = await fetch('/api/maps/1/batches', {
+      method: 'POST',
+      body: JSON.stringify(batch),
+      signal,
+    });
+    // Thrown: sent again later. Refused: taken out of the document here
+    if (response.status >= 500) throw new Error(`for a while: ${response.status}`);
+    if (!response.ok) return { status: 'refused', reason: 'rules' };
+    return { status: 'accepted' };
+  },
+  async connect(context) {
+    const events = new EventSource('/api/maps/1/events');
+    events.onmessage = (event) => {
+      const operations = JSON.parse(event.data);
+      void context.receive({ source: 'remote', operations });
+    };
+    return () => events.close();
+  },
+};
+
+const mapped = createDraw(map, { backend });
+await mapped.open();
+```
+
+- While it opens, `status.document` is `opening`, the reads give the
+  document before it, `status.editable` is false, and `draw.write` waits.
+  The document `load` gives is any source `draw.open(source)` takes; it is
+  written as it is, even while the instance is read-only, and not sent
+  back. Then the storage is connected (`connect`), and the promise
+  resolves. A load that fails leaves the document as it was, and
+  `status.document` is `failed`
+- A document read from a string, a file or GeoJSON carries no keys of the
+  order of its items: the keys here are made from its order
+- `context.receive(result)` writes what the storage decided (the commits
+  made elsewhere) in their order, as values (`ValueOperation`). A large one
+  is written over several tasks: the reads give the document before it
+  until it is written, and `change` arrives once, with the source
+  `'remote'`. It is written even while the instance is read-only, and not
+  sent back. A value received after a commit of this client that the
+  storage then refuses stays
+- `context.replace(source)` replaces the whole document as the storage
+  holds it. `context.report({ connection, editable, transfer })` tells
+  `status.connection`, `status.editable` and `status.saving.sending`.
+  `context.advance(commit, stage)` brings a commit to a stage told later
+  (`durable`), and `context.key(id)` gives the key of the order of an item
+  here
+
+### Closing
+
+```ts
+const { unsent, refused, kept } = await draw.close({ unsent: 'keep' });
+if (unsent + refused > 0 && !kept) console.warn('edits lost');
+```
+
+- `draw.close(options)` disconnects the storage and empties the document;
+  `draw.write` fails with `invalidState` until `draw.open()` opens it
+  again. `unsent` says what becomes of the commits not accepted yet:
+  `wait` (the default) waits until they are, `keep` keeps them on the
+  device, `discard` drops them. A signal that stops the wait does not
+  close. The result tells how many commits were not accepted, how many
+  refusals were not dismissed, and whether both are kept
+- A storage with an `outbox` (`Outbox`) keeps on the device each commit
+  once it is read (the stage `stored`), until it is accepted, and each
+  refusal with what it did, until it is dismissed. `keep` needs it. The
+  next `draw.open()` writes the commits kept again over the document it
+  reads, sends them on, and gives the refusals back
+- `draw.open(source)` with commits not sent or refusals not dismissed fails
+  with `unsentWrites` and changes nothing, unless `unsent` says what becomes
+  of them (`keep` needs an outbox too)
+- `draw.remove()` destroys the instance without waiting: the commits not
+  sent that the outbox does not hold are lost, which `kept` tells
+
 ## A store of your own
 
 To keep the drawing in a database or on a server, following the changes
@@ -575,6 +661,10 @@ caller that adds many keeps the draws going by adding a few at a time, as
 or a file): it reads it into a store of rows of its own and shows it;
 `draw.view.preview(null)` shows the document again. A source given while
 another is read replaces it.
+
+<!-- docs-check:
+declare const pastVersion: import('@sakuzu/maplibre-gl-draw').DrawDocument;
+-->
 
 ```ts
 await draw.view.preview(pastVersion); // a document of the library

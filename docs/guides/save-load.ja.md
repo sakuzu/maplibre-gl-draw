@@ -401,6 +401,86 @@ await draw.write(
 );
 ```
 
+## 保存先
+
+`createDraw(map, { backend })` は、確定を 1 つずつ順に自前の保存先
+(`@sakuzu/maplibre-gl-draw/extend` の `Backend`) へ送ります。`source` を
+渡さない `draw.open()` は、文書を保存先から読みます。
+
+```ts
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Backend } from '@sakuzu/maplibre-gl-draw/extend';
+
+const backend: Backend = {
+  load: ({ signal }) =>
+    fetch('/api/maps/1', { signal }).then((response) => response.text()),
+  async send(batch, { signal }) {
+    const response = await fetch('/api/maps/1/batches', {
+      method: 'POST',
+      body: JSON.stringify(batch),
+      signal,
+    });
+    // 投げると後で送り直す。断るとこの端末の文書から取り除く
+    if (response.status >= 500) throw new Error(`一時の失敗: ${response.status}`);
+    if (!response.ok) return { status: 'refused', reason: 'rules' };
+    return { status: 'accepted' };
+  },
+  async connect(context) {
+    const events = new EventSource('/api/maps/1/events');
+    events.onmessage = (event) => {
+      const operations = JSON.parse(event.data);
+      void context.receive({ source: 'remote', operations });
+    };
+    return () => events.close();
+  },
+};
+
+const mapped = createDraw(map, { backend });
+await mapped.open();
+```
+
+- 開く間は `status.document` が `opening` で、読みは前の文書を返し、
+  `status.editable` は false になり、`draw.write` は開き終わるまで待ちます。
+  `load` が返す文書は `draw.open(source)` が受ける物なら何でもよく、
+  読み取り専用の間もそのまま書き込まれ、送り返されません。その後に保存先を
+  つなぎ (`connect`)、Promise が解けます。`load` が失敗すると文書は前のままで、
+  `status.document` は `failed` になります
+- 文字列、ファイル、GeoJSON から読んだ文書は、物の並びの鍵を持ちません。
+  この端末の鍵は、その並びから作ります
+- `context.receive(result)` は、保存先が決めた物 (よそで行った確定) を
+  順に値 (`ValueOperation`) で書き込みます。大きな物は何回かのタスクに
+  分けて書き、書き終えるまで読みは前の文書を返し、`change` は 1 回だけ
+  `'remote'` の出どころで届きます。読み取り専用の間も書き込まれ、
+  送り返されません。この端末の確定が後で断られても、その後に受けた値は残ります
+- `context.replace(source)` は、文書の全部を保存先が持つ形に置き換えます。
+  `context.report({ connection, editable, transfer })` は
+  `status.connection`、`status.editable`、`status.saving.sending` に伝わります。
+  `context.advance(commit, stage)` は後で知らされた段階 (`durable`) へ確定を
+  進め、`context.key(id)` はこの端末での物の並びの鍵を返します
+
+### 閉じる
+
+```ts
+const { unsent, refused, kept } = await draw.close({ unsent: 'keep' });
+if (unsent + refused > 0 && !kept) console.warn('編集が失われました');
+```
+
+- `draw.close(options)` は保存先との接続を切り、文書を空にします。
+  `draw.open()` で開き直すまで、`draw.write` は `invalidState` で失敗します。
+  まだ受け取られていない確定の扱いは `unsent` で決めます。`wait` (既定) は
+  受け取られるまで待ち、`keep` は端末に残し、`discard` は捨てます。待つ間に
+  `signal` で止めると閉じません。結果は、受け取られていなかった確定の数、
+  片付いていない断りの数、その 2 つを残したかを返します
+- `outbox` (`Outbox`) を持つ保存先は、読み終えた確定を受け取られるまで
+  (段階は `stored`)、断りをその中身と一緒に片付けられるまで端末に残します。
+  `keep` にはこれが要ります。次の `draw.open()` は、残した確定を読んだ文書に
+  書き直してから続きを送り、断りを戻します
+- 未送信の確定か片付いていない断りがある時に `draw.open(source)` を呼ぶと、
+  `unsent` で扱いを決めない限り `unsentWrites` で失敗し、何も変わりません
+  (`keep` には `outbox` が要ります)
+- `draw.remove()` は待たずにインスタンスを外します。`outbox` に残って
+  いない未送信の確定は失われ、`kept` でそれが分かります
+
 ## 自前のストア
 
 描いたものをデータベースやサーバーに保つだけなら、インスタンスの
@@ -552,6 +632,10 @@ draw.document.setShown(null);
 `draw.open` と同じく読みます (ライブラリーの文書、GeoJSON、JSON の文字列、
 ファイル)。自分の行のストアに読み込んで見せ、`draw.view.preview(null)` で
 文書に戻ります。読んでいる途中に別の `source` を渡すと、後の物を見せます。
+
+<!-- docs-check:
+declare const pastVersion: import('@sakuzu/maplibre-gl-draw').DrawDocument;
+-->
 
 ```ts
 await draw.view.preview(pastVersion); // ライブラリーの文書
