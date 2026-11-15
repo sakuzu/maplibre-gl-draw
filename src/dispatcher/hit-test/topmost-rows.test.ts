@@ -629,3 +629,57 @@ describe('the hit testing of the points of the rows on the terrain', () => {
     }
   });
 });
+
+describe('the hit testing of the points of the rows drawn with a picture', () => {
+  /** The deps of a tester whose sheets give the row `flag` a picture reaching 20 px */
+  function pictureDeps() {
+    const service = new HitTestServiceImpl(store, new RBushSpatialIndex());
+    return {
+      store,
+      hitTestService: service,
+      unproject,
+      toleranceLngLat: () => 0.5,
+      getZoom: () => 3,
+      pointSpriteReachPx: (_layerId: string, row: number) =>
+        tables.tables.getRowId(row) === 'flag' ? 20 : null,
+      maxPointSpriteReachPx: () => 20,
+    };
+  }
+  // 20 px at zoom 3 is 360 / 4096 × 20 ≈ 1.76 degrees
+  const nearPicture = 1.2;
+
+  it('hits a point anywhere on its picture, and a point without one on its marker', () => {
+    layer('l');
+    adopt('l', [feature('flag', 'Point', [0, 0]), feature('plain', 'Point', [10, 0])]);
+    const hitTester = createTopmostHitTester(pictureDeps());
+    expect(rowId(hitTester(at(nearPicture, 0)))).toBe('flag');
+    expect(hitTester(at(3, 0))).toBeNull();
+    expect(hitTester(at(10 + nearPicture, 0))).toBeNull();
+    expect(rowId(hitTester(at(10.2, 0)))).toBe('plain');
+  });
+
+  it('picks a point on its picture as the click does', () => {
+    layer('l');
+    adopt('l', [feature('flag', 'Point', [0, 0]), feature('plain', 'Point', [10, 0])]);
+    const pick = createFeaturePicker(pictureDeps());
+    expect(pick(at(nearPicture, 0)).map((f) => f.id)).toEqual(['flag']);
+    expect(pick(at(10 + nearPicture, 0))).toEqual([]);
+  });
+
+  it('hits a point on its picture where it is drawn on the screen', () => {
+    layer('l');
+    adopt('l', [feature('flag', 'Point', [0, 0]), feature('plain', 'Point', [10, 0])]);
+    const anchors: TopmostAnchorProjector = {
+      project: (lng, lat) => at(lng, lat),
+      searchBoxes: () => [-5, -5, 15, 5],
+    };
+    const hitTester = createTopmostHitTester({
+      ...pictureDeps(),
+      anchors,
+      clickTolerancePx: 3,
+    });
+    // 15 px on the screen: within the picture of `flag`, beyond the tolerance for `plain`
+    expect(rowId(hitTester(at(1.5, 0)))).toBe('flag');
+    expect(hitTester(at(11.5, 0))).toBeNull();
+  });
+});

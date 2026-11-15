@@ -38,8 +38,11 @@ export interface TableHitInput {
   readonly coordinate: Coordinate;
   /** How far from the click a candidate may be (degrees; the reach of the largest marker) */
   readonly reach: number;
-  /** The tolerance a row of a type and a style is tested with (degrees) */
-  toleranceOf(type: FeatureType, style: FeatureStyle): number;
+  /**
+   * The tolerance a row of a type and a style is tested with (degrees; the row is given for a
+   * point drawn with a picture, hit as far as its picture)
+   */
+  toleranceOf(type: FeatureType, style: FeatureStyle, group: RowGroup, row: number): number;
   /**
    * Whether the shape of a row of a type is hit at a coordinate with a tolerance (null when the
    * test of its type reads a feature)
@@ -81,8 +84,11 @@ export interface TableScreenHit {
    * drawn; null where it is not drawn (behind the camera)
    */
   distancePx(lng: number, lat: number): number | null;
-  /** How far from the click on the screen a point of a style is hit (CSS px) */
-  reachPx(style: FeatureStyle): number;
+  /**
+   * How far from the click on the screen a point of a style is hit (CSS px; the row is given for
+   * a point drawn with a picture, hit as far as its picture)
+   */
+  reachPx(style: FeatureStyle, group: RowGroup, row: number): number;
 }
 
 /** The types whose rows are hit on the screen when {@link TableHitInput.onScreen} is given */
@@ -154,11 +160,11 @@ export function hitTestLayerTable(
     const style = internals.styles.get(
       (group.data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row],
     );
-    const tolerance = input.toleranceOf(type, style);
+    const tolerance = input.toleranceOf(type, style, group, row);
     if (onScreen && SCREEN_TYPES.has(type)) {
       // A point is hit where its anchor is drawn, never at the coordinate
       const distance = rowScreenDistancePx(group, row, onScreen);
-      if (distance !== null && distance <= onScreen.reachPx(style)) {
+      if (distance !== null && distance <= onScreen.reachPx(style, group, row)) {
         const shape = rowHitShape(group, row);
         return { group, row, type, tolerance, shape, feature: null, screenDistancePx: distance };
       }

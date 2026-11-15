@@ -2888,13 +2888,14 @@ export class TableLayerRenderer {
    * Draws the frames of the rows marked as selected in bulk, of every layer, one draw per row
    * group holding one (the groups whose textures of the state are written)
    *
-   * @param revision Changes with every change of the rows (the extents are read again)
+   * @param revision Changes with every change of the rows, or of the pictures of their points (the
+   *   extents are read again)
    */
   drawBulkFrames(
     renderer: BulkFramesRenderer,
     projectionData: ProjectionData,
     config: SelectionUIConfig,
-    revision: number,
+    revision: number | string,
     pointExtent: PointFrameExtent,
   ): void {
     const drawn = new Set<number>();

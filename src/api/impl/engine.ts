@@ -262,6 +262,14 @@ export function createEngine(
     companions: featureCompanions,
     // A point of a layer held as rows is hit on its marker, as the points of the Store are
     pointMarkerReachPx: (style) => pointMarkerReachPx(style, featureStyle.point.point),
+    // A point of a layer held as rows given a picture by a sheet is hit on its picture
+    pointSpriteReachPx: (layerId, row) => {
+      const sheets = context.pointSprites;
+      const view = sheets.any() ? store.tables?.get(layerId) : undefined;
+      const picture = view ? sheets.ofRow(view, row)?.sprite : undefined;
+      return picture ? Math.max(picture.halfWidth, picture.halfHeight) : null;
+    },
+    maxPointSpriteReachPx: () => (context.pointSprites.any() ? context.pointSprites.reachPx() : 0),
     // On the terrain a point of a layer held as rows is hit where it is drawn on the screen,
     // with the anchor projection of this map, as the points of the Store are
     anchors: {

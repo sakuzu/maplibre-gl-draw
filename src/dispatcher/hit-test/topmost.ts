@@ -185,6 +185,17 @@ export interface TopmostHitTestDeps {
    */
   pointMarkerReachPx?(style: FeatureStyle | undefined): number;
   /**
+   * How far the picture a sheet gives a point of the rows reaches from it (screen px; null for a
+   * point drawn with its marker): such a point is hit anywhere on its picture, in the place of
+   * its marker
+   *
+   * @param layerId The layer of the row
+   * @param row The handle of the row
+   */
+  pointSpriteReachPx?(layerId: string, row: number): number | null;
+  /** The reach of the largest picture the sheets gave a point so far (screen px; 0 for none) */
+  maxPointSpriteReachPx?(): number;
+  /**
    * The anchor projection of the points (terrain aware), for the rows held as columns: their
    * points are drawn without a depth test, so they are hit where they are drawn on the screen,
    * as the points of the Store are (`AnchorScreenProjector` of the HitTestService). When
@@ -301,10 +312,15 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     // A point is hit anywhere on its marker: the candidates are looked for as far as the
     // largest marker of the styles of the rows reaches
     const degreesPerPixel = 360 / (512 * 2 ** (deps.getZoom?.() ?? 0));
-    const toleranceOf = (type: FeatureType, style: FeatureStyle): number =>
-      getStyleRuleChannel(type) === 'point' && deps.pointMarkerReachPx
-        ? Math.max(tolerance, deps.pointMarkerReachPx(style) * degreesPerPixel)
-        : tolerance;
+    const toleranceOf = (
+      type: FeatureType,
+      style: FeatureStyle,
+      group: RowGroup,
+      row: number,
+    ): number => {
+      const reachPx = pointReachPx(deps, tables, type, style, group, row);
+      return reachPx === null ? tolerance : Math.max(tolerance, reachPx * degreesPerPixel);
+    };
     // A type that registered an extra reach (a picture around a point) is looked for as far, its
     // pixels measured as the features are (from the tolerance of the click)
     const extraReach = hitTestService.maxCandidateReachPx?.() ?? 0;
@@ -745,15 +761,14 @@ export function createFeaturePicker(deps: TopmostHitTestDeps): PickFeatures {
         if (onScreen && isScreenHitType(type)) {
           // A point is hit where its anchor is drawn, never at the coordinate (as a click)
           const distance = rowScreenDistancePx(group, row, onScreen);
-          if (distance !== null && distance <= onScreen.reachPx(style)) {
+          if (distance !== null && distance <= onScreen.reachPx(style, group, row)) {
             picked.push(tables.featureCache.featureOf(table.tableId, group, row));
           }
           continue;
         }
+        const pointReach = pointReachPx(deps, tables, type, style, group, row);
         const within =
-          getStyleRuleChannel(type) === 'point' && deps.pointMarkerReachPx
-            ? Math.max(tolerance, deps.pointMarkerReachPx(style) * degreesPerPixel)
-            : tolerance;
+          pointReach === null ? tolerance : Math.max(tolerance, pointReach * degreesPerPixel);
         const shape = rowHitShape(group, row);
         let feature: Feature | null = null;
         const hit = copies.some((copy) => {
@@ -781,10 +796,10 @@ function screenHitOf(
   const anchors = deps.anchors;
   if (!anchors) return undefined;
   const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;
-  const markerReach = deps.pointMarkerReachPx;
-  // As far as at the coordinate: the tolerance of the click, or the marker where it is larger
-  const reachPx = (style: FeatureStyle): number =>
-    markerReach ? Math.max(clickPx, markerReach(style)) : clickPx;
+  // As far as at the coordinate: the tolerance of the click, or the marker (or the picture of the
+  // point) where it is larger
+  const reachPx = (style: FeatureStyle, group: RowGroup, row: number): number =>
+    Math.max(clickPx, pointReachPx(deps, tables, rowType(group.data, row), style, group, row) ?? 0);
   const boxes = anchors.searchBoxes(point, Math.max(clickPx, maxMarkerReach(tables, deps)), near);
   if (!boxes) return undefined;
   return {
@@ -797,6 +812,29 @@ function screenHitOf(
   };
 }
 
+/**
+ * How far a point of the rows is hit from it on the screen (CSS px): its picture where a sheet
+ * gives it one, its marker otherwise (null for a row that is not a point, or without the reach
+ * of the markers)
+ */
+function pointReachPx(
+  deps: Pick<TopmostHitTestDeps, 'pointMarkerReachPx' | 'pointSpriteReachPx'>,
+  tables: FeatureTablesInternals,
+  type: FeatureType,
+  style: FeatureStyle,
+  group: RowGroup,
+  row: number,
+): number | null {
+  if (getStyleRuleChannel(type) !== 'point') return null;
+  if (deps.pointSpriteReachPx && (type === 'Point' || type === 'MultiPoint')) {
+    const handle = group.data.rows[row];
+    const layerId = tables.placeOf(handle)?.table.tableId;
+    const picture = layerId === undefined ? null : deps.pointSpriteReachPx(layerId, handle);
+    if (picture !== null) return picture;
+  }
+  return deps.pointMarkerReachPx ? deps.pointMarkerReachPx(style) : null;
+}
+
 /** The reach of the largest marker among the styles of the rows (screen px), by table */
 const MARKER_REACH = new WeakMap<FeatureTablesInternals, { revision: number; reach: number }>();
 
@@ -806,6 +844,16 @@ const MARKER_REACH = new WeakMap<FeatureTablesInternals, { revision: number; rea
  * style again
  */
 function maxMarkerReach(
+  tables: FeatureTablesInternals,
+  deps: Pick<TopmostHitTestDeps, 'pointMarkerReachPx' | 'maxPointSpriteReachPx'>,
+): number {
+  // The pictures of the points reach as far as the largest given so far
+  const pictures = deps.maxPointSpriteReachPx?.() ?? 0;
+  return Math.max(pictures, maxStyleMarkerReach(tables, deps));
+}
+
+/** The reach of the largest marker of the styles of the rows (screen px), kept by table */
+function maxStyleMarkerReach(
   tables: FeatureTablesInternals,
   deps: Pick<TopmostHitTestDeps, 'pointMarkerReachPx'>,
 ): number {

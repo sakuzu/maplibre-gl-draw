@@ -69,7 +69,7 @@ const DEFAULT_POINT_HALF = 6;
 /** The instances of the rows of a group */
 interface GroupFrames {
   readonly data: RowGroup['data'];
-  readonly revision: number;
+  readonly revision: number | string;
   readonly buffer: WebGLBuffer;
   readonly vao: WebGLVertexArrayObject;
   readonly origin: [number, number];
@@ -176,13 +176,13 @@ export class BulkFramesRenderer {
    * Draws the frames of the rows of a group marked as selected in bulk
    *
    * @param revision Changes with every change of the extents of the rows (their instances are
-   *   made again)
+   *   made again): of the rows, or of the pictures the points are drawn with
    * @param pointExtent The extent of the marker of a row of one position
    */
   drawGroup(
     group: RowGroup,
     binding: RowStateBinding,
-    revision: number,
+    revision: number | string,
     projectionData: ProjectionData,
     config: SelectionUIConfig,
     pointExtent: PointFrameExtent,
@@ -235,7 +235,7 @@ export class BulkFramesRenderer {
   /** The instances of the rows of a group (made again with new rows or new extents) */
   private framesOf(
     group: RowGroup,
-    revision: number,
+    revision: number | string,
     pointExtent: PointFrameExtent,
   ): GroupFrames | null {
     const known = this.frames.get(group.handle);

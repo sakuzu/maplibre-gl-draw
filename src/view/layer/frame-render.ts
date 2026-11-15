@@ -436,7 +436,10 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
         r.bulkFramesRenderer,
         copy.projectionData,
         r.selectionUIRenderer.config,
-        tables.revision,
+        // The frames of the points drawn with pictures follow the answers of the sheets
+        deps.pointSprites?.any()
+          ? `${tables.revision}:${deps.pointSprites.generation()}`
+          : tables.revision,
         pointExtent,
       );
       f.restoreBlendState();
@@ -516,17 +519,26 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
 }
 
 /**
- * The extent of the marker of a row of one position, for its frame: what the selection UI reads
- * for a point of its type and style (read once per type and style)
+ * The extent of the marker of a row of one position, for its frame: the picture a sheet gives a
+ * point, or what the selection UI reads for a point of its type and style (read once per type
+ * and style)
  */
 function pointFrameExtentOf(
   deps: FrameRenderDeps,
   tables: FeatureTablesInternals,
 ): PointFrameExtent {
   const known = new Map<string, readonly [number, number] | null>();
+  const sheets = deps.pointSprites;
   return (group, row) => {
     const data = group.data;
     const type = rowType(data, row);
+    if (sheets?.any() && (type === 'Point' || type === 'MultiPoint')) {
+      const handle = data.rows[row];
+      const layerId = tables.placeOf(handle)?.table.tableId;
+      const view = layerId === undefined ? undefined : tables.view(layerId);
+      const picture = view ? sheets.ofRow(view, handle)?.sprite : undefined;
+      if (picture) return [picture.halfWidth, picture.halfHeight];
+    }
     const styleNumber = (data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row];
     const key = `${type}\u0000${styleNumber}`;
     let extent = known.get(key);
