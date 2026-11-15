@@ -135,9 +135,10 @@ function rowOfCoord(coordFirst: Int32Array, rows: number, coord: number): number
 /**
  * What a row of packed arrays draws, as text: its instances and the instances of its points in
  * order, each with its kind, its row, the values of its coordinates and the rest of it (the ones
- * that draw nothing left out), and, when it draws something, its created zoom and the values of
- * its style. Two packings of a row that draw the same give the same text, however their places
- * and their coordinates are numbered
+ * that draw nothing left out), and, when it draws something, its created zoom, the rotation of
+ * its markers (the fourth float of the texel of its style) and the values of its style. Two
+ * packings of a row that draw the same give the same text, however their places and their
+ * coordinates are numbered
  *
  * @param local The row in the arrays
  * @param values The values of the styles the row names (by its number)
@@ -167,6 +168,7 @@ export function drawnRowText(data: RowsChunkData, local: number, values: Float32
     instances,
     points,
     createdZoom: data.rowStyles[at + 2] !== 0 ? data.rowStyles[at + 1] : null,
+    angleSteps: data.rowStyles[at + 3],
     style:
       style >= 0 && styleAt + ROWS_STYLE_FLOATS <= values.length
         ? Array.from(values.subarray(styleAt, styleAt + ROWS_STYLE_FLOATS))

@@ -665,6 +665,29 @@ const DRAWN_EDITS: Readonly<
       () => draw.sketches.commit(id),
     ];
   },
+  'points with a rotation given a color, moved, turned and without one': (draw, layerId) => {
+    const rotation = 'maplibre-gl-draw:rotation';
+    const [a, b] = [0, 1].map(
+      (i) =>
+        writesOf(draw).features.create({
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [0.2 + i * 0.3, 0.2] },
+          layerId,
+          style: { pointShape: i === 0 ? 'triangle' : 'square' },
+          properties: { [rotation]: 30 + i * 45 },
+        })!.id,
+    );
+    return [
+      () => writesOf(draw).features.update(a, { style: { pointColor: '#00aa44' } }),
+      () =>
+        writesOf(draw).features.update(b, {
+          geometry: { type: 'Point', coordinates: [0.6, 0.3] },
+          properties: { [rotation]: 120 },
+        }),
+      () => writesOf(draw).features.update(a, { properties: { [rotation]: -10 } }),
+      () => writesOf(draw).features.update(b, { properties: { [rotation]: undefined } }),
+    ];
+  },
   'features hidden here, shown again and deleted': (draw, layerId) => {
     const a = writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
     const b = writesOf(draw).features.create({
@@ -941,6 +964,31 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
         writesOf(draw).features.update(p.id, {
           geometry: { type: 'Point', coordinates: [0.3, 0.3] },
         });
+    });
+    expect(failed).toEqual(['drawingRebuild', 'drawingWrites']);
+  });
+
+  it('drawingWrites: a write of the style of a point row in place loses the rotation of its markers', () => {
+    const patchRowStyle = RowsRenderer.prototype.patchRowStyle;
+    vi.spyOn(RowsRenderer.prototype, 'patchRowStyle').mockImplementation(function (
+      this: RowsRenderer,
+      chunk,
+      row,
+      style,
+      createdZoom,
+    ) {
+      // The rotation of the markers is not written with the style
+      patchRowStyle.call(this, chunk, row, style, createdZoom);
+    });
+    const failed = failedAfter((draw, layerId) => {
+      const p = writesOf(draw).features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [0.2, 0.2] },
+        layerId,
+        style: { pointShape: 'triangle' },
+        properties: { 'maplibre-gl-draw:rotation': 30 },
+      })!;
+      return () => writesOf(draw).features.update(p.id, { style: { pointColor: '#00aa44' } });
     });
     expect(failed).toEqual(['drawingRebuild', 'drawingWrites']);
   });
