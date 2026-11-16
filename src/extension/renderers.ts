@@ -21,6 +21,7 @@ import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from '../view/renderers/point/point-shape.js';
 import type { FillShaderManager } from '../view/renderers/polygon/fill.js';
 import type { RowSpriteSource } from '../view/renderers/rows/rows-format.js';
+import type { RowQuadType } from '../view/renderers/rows/rows-quads.js';
 import type { TerrainContext } from '../view/terrain/context.js';
 
 /**
@@ -177,6 +178,12 @@ export interface FeatureTypeRenderer {
    * `draw`
    */
   readonly rowSprites?: RowSpriteSource;
+
+  /**
+   * The quads it draws its rows with, for the layers held as rows: such a row is drawn with the
+   * other rows of its chunk, in their order and in their draw (a prototype)
+   */
+  readonly rowQuads?: RowQuadType;
 }
 
 /**

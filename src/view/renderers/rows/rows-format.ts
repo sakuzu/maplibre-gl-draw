@@ -22,6 +22,7 @@
  */
 
 import type { FeatureStyle as PublicFeatureStyle } from '../../../api/model.js';
+import type { LayerTableView } from '../../../api/tables.js';
 
 /** The floats of an instance */
 export const ROWS_INSTANCE_FLOATS = 8;
@@ -48,6 +49,12 @@ export const ROWS_KIND = {
    * pixel, for a polygon whose outline does not draw that edge itself (none, or dashed)
    */
   fringe: 6,
+  /**
+   * A quad an extension paints with a GLSL function of its own, one per row: its anchor (one
+   * coordinate), and its size, angle and values in the table of the quads of the chunk
+   * (`RowQuadSource`, prototype)
+   */
+  quad: 7,
 } as const;
 
 /**
@@ -124,6 +131,18 @@ export const ROWS_STYLE_FLOATS = ROWS_STYLE_TEXELS * 4;
 
 /** The floats of the style of a row (one texel) */
 export const ROWS_ROW_STYLE_FLOATS = 4;
+
+/**
+ * The floats of the quad of a row in the table of the quads of a chunk (two texels): the half
+ * width, the half height, the angle (degrees counterclockwise) and the flags (bit 0: the size is
+ * in meters on the ground, else in CSS px on screen; above it the slot of its source), then the
+ * four values its function reads
+ */
+export const ROWS_QUAD_FLOATS = 8;
+/** The texels of the quad of a row */
+export const ROWS_QUAD_TEXELS = 2;
+/** The widest texture of the quads of a chunk (texels per line, even: a row is on one line) */
+export const ROWS_QUAD_WIDTH = 1_024;
 
 /** The code of the pattern of a line: solid, dashed, dotted */
 export const ROWS_DASH = { solid: 0, dashed: 1, dotted: 2 } as const;
@@ -365,6 +384,8 @@ export interface RowsChunkLayout {
   readonly palette: RowsPalette;
   /** The pictures the sprites of the chunk are read from (null when it has none) */
   readonly sprites: RowSpriteSource | null;
+  /** Whether a row of the chunk is a quad (the chunk is drawn with the program of the quads) */
+  readonly hasQuads?: boolean;
 }
 
 /**
@@ -382,6 +403,8 @@ export interface RowsChunkData extends RowsChunkLayout {
   readonly coords: Float32Array;
   /** The style of each row, {@link ROWS_ROW_STYLE_FLOATS} floats per row */
   readonly rowStyles: Float32Array;
+  /** The quads of the rows, {@link ROWS_QUAD_FLOATS} floats per row (null: no row is a quad) */
+  readonly quads?: Float32Array | null;
 }
 
 /**
@@ -465,4 +488,85 @@ export interface RowSpriteSource {
    * drawing of the layer is. Straight alpha when omitted
    */
   readonly premultipliedAlpha?: boolean;
+}
+
+/**
+ * The quad of a row, as a source of quads answers it (`RowQuadSource.quad`): written into an
+ * object the library gives and reuses
+ *
+ * @experimental
+ */
+export interface RowQuadOut {
+  /** Half the width and half the height of the quad */
+  halfWidth: number;
+  halfHeight: number;
+  /** True: the size is in meters on the ground; false: in CSS px on screen */
+  meters: boolean;
+  /**
+   * The angle of the quad, in degrees counterclockwise seen from above (the quad turns with the
+   * map on screen too)
+   */
+  angleDegrees: number;
+  /** The four values the function of the source reads for the row */
+  readonly values: Float32Array;
+}
+
+/**
+ * The most sources of quads drawn in one draw at once (each has a texture unit of its own)
+ *
+ * @internal
+ */
+export const ROW_QUAD_MAX_SOURCES = 4;
+
+/** The largest side of the texture of a source of quads */
+export const ROW_QUAD_TEXTURE_MAX = 2_048;
+
+/**
+ * What an extension paints each row of its type with, drawn among the other rows of the layer in
+ * their order and in the draw of their chunk: one quad per row, around its point, painted by a
+ * GLSL function the extension gives (a prototype)
+ *
+ * `glsl` is GLSL ES 3.00, put into the fragment shader of the drawing of the rows. It defines the
+ * function named `entry`:
+ *
+ * ```glsl
+ * vec4 entry(vec2 uv, vec2 sizePx, vec4 values, sampler2D tex)
+ * ```
+ *
+ * - `uv`: the position in the quad, (0, 0) at its top left and (1, 1) at its bottom right
+ * - `sizePx`: the size of the quad on screen, in CSS px
+ * - `values`: the four values `quad` gave for the row
+ * - `tex`: the texture of the source (a transparent texel without one)
+ * - it returns the color with its alpha premultiplied (`vec4(rgb * a, a)`)
+ *
+ * Give every name `glsl` declares a prefix of its own. A function that does not compile leaves the
+ * rows of the type to `render`, one by one; the other rows are drawn as they are.
+ *
+ * @experimental
+ */
+export interface RowQuadSource {
+  /** The GLSL of the function (and of what it needs) */
+  readonly glsl: string;
+  /** The name of the function */
+  readonly entry: string;
+  /**
+   * The picture the function reads (RGBA, 8 bits per channel, the rows from the top, at most
+   * 2048 on a side); none when omitted
+   */
+  readonly texture?: {
+    readonly width: number;
+    readonly height: number;
+    readonly data: Uint8Array;
+  };
+  /**
+   * The keys of the values of a row `quad` reads: a write of one of them packs the row again
+   * (every key when omitted)
+   */
+  readonly keys?: readonly string[];
+  /**
+   * The quad of a row of the type
+   *
+   * @returns false for a row that draws nothing
+   */
+  quad(view: LayerTableView, handle: number, out: RowQuadOut): boolean;
 }

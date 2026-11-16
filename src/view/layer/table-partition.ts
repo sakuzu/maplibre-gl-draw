@@ -30,6 +30,7 @@ import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
+import type { RowQuadType } from '../renderers/rows/rows-quads.js';
 import type { RunKind } from './store-retained-classify.js';
 import type { RowStyleSlots } from './table-collect.js';
 
@@ -100,6 +101,7 @@ interface CustomTypeOfRow {
   appliesToRow?: (view: LayerTableView, handle: number) => boolean;
   rowSprites?: RowSpriteSource;
   gpuRows?: GpuRowsSource;
+  rowQuads?: RowQuadType;
 }
 
 /**
@@ -174,7 +176,9 @@ export function classifyRow(
     oneDraw &&
     renderer?.rowSprites !== undefined &&
     context.transformFields?.of(type)?.scaleKey === undefined;
-  if (custom && !sprites && !gpuRows) return 'immediate';
+  // A type drawn as quads, once the program of its quads is ready (a prototype)
+  const quads = oneDraw && renderer?.rowQuads?.state === 'ready';
+  if (custom && !sprites && !gpuRows && !quads) return 'immediate';
 
   // A feature with a companion is drawn at once (the companion is drawn right before it)
   if (rowHasCompanion(context.companions, view, group, row, featureOf)) return 'immediate';
@@ -183,6 +187,10 @@ export function classifyRow(
   if (custom && gpuRows) {
     context.onGpuRows?.(row, gpuRows);
     return 'extension';
+  }
+  if (custom && quads) {
+    // A quad around a point (a row of another geometry is drawn at once)
+    return geometryAt(group, row)?.reader?.type === 'Point' ? 'rows' : 'immediate';
   }
   if (custom) {
     // A point drawn with a picture of its extension (a style without one is drawn at once)

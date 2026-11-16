@@ -50,10 +50,14 @@ import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import { bindRowState, type RowStateBinding, RowStateUniforms } from '../row-state.js';
 import type { RowsCopies } from './rows-copies.js';
 import {
+  ROW_QUAD_MAX_SOURCES,
+  ROW_QUAD_TEXTURE_MAX,
   ROW_SPRITE_SCALE_MAX_STOPS,
   ROWS_COORD_WIDTH,
   ROWS_INSTANCE_BYTES,
   ROWS_INSTANCE_FLOATS,
+  ROWS_QUAD_TEXELS,
+  ROWS_QUAD_WIDTH,
   ROWS_ROW_STYLE_FLOATS,
   ROWS_ROW_STYLE_WIDTH,
   ROWS_STYLE_TEXELS,
@@ -64,12 +68,14 @@ import {
   type RowsPalette,
   writeCollapsedInstance,
 } from './rows-format.js';
+import type { RowQuadType } from './rows-quads.js';
 import {
   buildRowsFragmentSource,
   buildRowsVertexSource,
   ROWS_MITER_LIMIT,
   ROWS_VARIANTS,
   type RowsFragmentVariant,
+  type RowsQuadFunction,
   type RowsVariant,
   rowsProjectionPrelude,
   rowsVariantOf,
@@ -89,6 +95,10 @@ const UNIT_HEIGHTS = 5;
 const UNIT_GROUND_DEPTH = 7;
 const UNIT_GROUND_TILES = 9;
 const UNIT_GROUND_BLOCKS = 10;
+/** The unit of the table of the quads of a chunk (the program of the quads) */
+const UNIT_QUADS = 8;
+/** The unit of the texture of the source of quads of slot 1 (slot k: this plus k - 1) */
+const UNIT_QUAD_TEXTURES = 11;
 
 /** The slots of tiles the tables of the ground are first made with */
 const GROUND_FIRST_SLOTS = 64;
@@ -137,6 +147,8 @@ export interface RowsChunk {
   heightValues: Float32Array | null;
   /** The texture of the elevations (null before they are written) */
   heights: SizedTexture | null;
+  /** The table of the quads of its rows (null when it has no quad) */
+  quads: SizedTexture | null;
   /** The instance the instance attributes of its vertex array point at */
   pointedFirst: number;
   /** The writes in place since the last upload (null before the first) */
@@ -155,6 +167,7 @@ export interface RowsChunkWrites {
   readonly points: TexelWrites;
   readonly coords: TexelWrites;
   readonly rowStyles: TexelWrites;
+  readonly quads: TexelWrites;
 }
 
 /** The uniforms of the program that are not the projection */
@@ -191,6 +204,10 @@ interface RowsUniformLocations {
   readonly groundTiles: WebGLUniformLocation | null;
   readonly groundBlocks: WebGLUniformLocation | null;
   readonly groundCount: WebGLUniformLocation | null;
+  readonly quads: WebGLUniformLocation | null;
+  readonly quadWidth: WebGLUniformLocation | null;
+  /** The samplers of the textures of the sources of quads, by slot from 1 (index 0 unused) */
+  readonly quadTextures: readonly (WebGLUniformLocation | null)[];
 }
 
 /**
@@ -229,6 +246,45 @@ interface RowsProgram {
   memo: RowsUniformMemo;
 }
 
+/** A source of quads registered with the renderer: its slot and its texture */
+interface QuadEntry {
+  readonly type: RowQuadType;
+  /** Its slot, from 1 (0: none, the source failed) */
+  readonly slot: number;
+  texture: WebGLTexture | null;
+}
+
+/** The programs of the quads of a set of sources, by projection variant */
+interface QuadProgramSet {
+  readonly entries: readonly QuadEntry[];
+  readonly programs: Map<RowsVariant, RowsProgram>;
+  /** When their compile started (`performance.now`) */
+  readonly started: number;
+}
+
+/**
+ * What the renderer did with the sources of quads, for the measurements
+ *
+ * @internal
+ */
+export interface RowsQuadStats {
+  /** The sources registered, ready, and failed */
+  readonly types: number;
+  readonly ready: number;
+  readonly failed: number;
+  /**
+   * The time from the start of the compile of the last set of programs of the quads to the poll
+   * that found them linked (ms; a multiple of the frames waited where the context compiles in
+   * parallel), NaN before any
+   */
+  readonly compileMs: number;
+  /** The time the last checks of the functions alone took (ms; NaN before any) */
+  readonly checkMs: number;
+  /** The chunks alive, and those of them with quads */
+  readonly chunks: number;
+  readonly quadChunks: number;
+}
+
 /** The values last written to the uniforms of a program */
 interface RowsUniformMemo {
   frame: number;
@@ -238,6 +294,7 @@ interface RowsUniformMemo {
   coordWidth: number;
   rowBase: number;
   rowStyleWidth: number;
+  quadWidth: number;
   /** The stops of the distance scale written (null before any) */
   spriteScale: readonly RowSpriteScaleStop[] | undefined | null;
   spritePremultiplied: number;
@@ -256,6 +313,7 @@ function emptyMemo(): RowsUniformMemo {
     coordWidth: Number.NaN,
     rowBase: Number.NaN,
     rowStyleWidth: Number.NaN,
+    quadWidth: Number.NaN,
     spriteScale: null,
     spritePremultiplied: Number.NaN,
     ghostCenter: null,
@@ -358,6 +416,21 @@ export class RowsRenderer {
   private readonly scratch = new Float32Array(ROWS_INSTANCE_FLOATS);
   /** The bytes written to the GPU by the uploads so far (buffers and textures) */
   uploadedBytes = 0;
+  /** The sources of quads registered, by their wrapper */
+  private readonly quadTypes = new Map<RowQuadType, QuadEntry>();
+  /** The programs of the quads the chunks with quads are drawn with (null before any links) */
+  private quadSet: QuadProgramSet | null = null;
+  /** The programs of the quads being compiled for the sources registered now */
+  private quadCandidate: QuadProgramSet | null = null;
+  /**
+   * Draws every chunk with the program of the quads (a hook of the measurements: the cost of
+   * the functions in the program, without a quad)
+   */
+  quadForAll = false;
+  private quadCompileMs = Number.NaN;
+  private quadCheckMs = Number.NaN;
+  private chunkCount = 0;
+  private quadChunkCount = 0;
   private bearingFrame = -1;
   private bearing = 0;
 
@@ -434,6 +507,262 @@ export class RowsRenderer {
     return program !== null && !this.poll(program) && program.state === 'compiling';
   }
 
+  // === Quads (a prototype) ===
+
+  /** Whether a program of the quads is being compiled (frames are asked for until it is done) */
+  get quadsCompiling(): boolean {
+    return this.quadCandidate !== null;
+  }
+
+  /**
+   * Registers the sources of quads of the custom types given and lets go of the ones no type
+   * has any more, then looks whether the programs of the quads being compiled are done. A new
+   * set of sources starts the compile of a program of the quads with them (the chunks are drawn
+   * with the program of the sources before it until it links). Called before the layers are
+   * drawn, once a frame
+   */
+  syncQuadTypes(renderers: ReadonlyMap<string, unknown>): void {
+    let seen: Set<RowQuadType> | null = null;
+    for (const renderer of renderers.values()) {
+      const type = (renderer as { rowQuads?: RowQuadType }).rowQuads;
+      if (!type) continue;
+      seen ??= new Set();
+      seen.add(type);
+    }
+    let changed = false;
+    for (const [type, entry] of this.quadTypes) {
+      if (seen?.has(type)) continue;
+      this.releaseQuadEntry(entry);
+      this.quadTypes.delete(type);
+      type.owner = null;
+      type.slot = 0;
+      type.setState('pending');
+      changed = true;
+    }
+    for (const type of seen ?? []) {
+      if (this.quadTypes.has(type)) continue;
+      // A source registered with another renderer (a context lost and back) starts again
+      type.owner = this;
+      type.setState('pending');
+      const entry = this.makeQuadEntry(type);
+      type.slot = entry.slot;
+      this.quadTypes.set(type, entry);
+      changed = true;
+    }
+    if (changed) this.startQuadCandidate();
+    this.pollQuads();
+  }
+
+  /** What the renderer did with the sources of quads */
+  quadStats(): RowsQuadStats {
+    let ready = 0;
+    let failed = 0;
+    for (const type of this.quadTypes.keys()) {
+      if (type.state === 'ready') ready++;
+      else if (type.state === 'failed') failed++;
+    }
+    return {
+      types: this.quadTypes.size,
+      ready,
+      failed,
+      compileMs: this.quadCompileMs,
+      checkMs: this.quadCheckMs,
+      chunks: this.chunkCount,
+      quadChunks: this.quadChunkCount,
+    };
+  }
+
+  /** The slot and the texture of a source newly registered (a failed one has neither) */
+  private makeQuadEntry(type: RowQuadType): QuadEntry {
+    const used = new Set<number>();
+    for (const entry of this.quadTypes.values()) used.add(entry.slot);
+    let slot = 0;
+    for (let k = 1; k <= ROW_QUAD_MAX_SOURCES; k++) {
+      if (!used.has(k)) {
+        slot = k;
+        break;
+      }
+    }
+    if (slot === 0) {
+      console.error(
+        `The drawing of the rows holds ${ROW_QUAD_MAX_SOURCES} sources of quads at most: the rows of another are drawn one by one`,
+      );
+      type.setState('failed');
+      return { type, slot: 0, texture: null };
+    }
+    const picture = type.source.texture;
+    if (!picture) return { type, slot, texture: null };
+    const { width, height, data } = picture;
+    if (
+      !Number.isInteger(width) ||
+      !Number.isInteger(height) ||
+      width < 1 ||
+      height < 1 ||
+      width > ROW_QUAD_TEXTURE_MAX ||
+      height > ROW_QUAD_TEXTURE_MAX ||
+      data.length !== width * height * 4
+    ) {
+      console.error(
+        `The texture of a source of quads is not ${ROW_QUAD_TEXTURE_MAX} texels on a side at most with 4 bytes per texel: its rows are drawn one by one`,
+      );
+      type.setState('failed');
+      return { type, slot: 0, texture: null };
+    }
+    const gl = this.gl;
+    const texture = gl.createTexture();
+    if (!texture) {
+      type.setState('failed');
+      return { type, slot: 0, texture: null };
+    }
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height));
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    this.ledger.record(texture, LEDGER_OWNER, 'texture', textureBytes(width, height, 4));
+    this.uploadedBytes += width * height * 4;
+    return { type, slot, texture };
+  }
+
+  /** Releases the texture of a source no type has any more */
+  private releaseQuadEntry(entry: QuadEntry): void {
+    if (!entry.texture) return;
+    this.ledger.release(entry.texture);
+    this.gl.deleteTexture(entry.texture);
+    entry.texture = null;
+  }
+
+  /**
+   * Starts the compile of the programs of the quads for the sources registered and not failed
+   * (none when they are those of the programs drawn with, or when there is none: the programs
+   * drawn with stay, for the chunks built with them until they are built again)
+   */
+  private startQuadCandidate(): void {
+    if (this.quadCandidate) this.disposeQuadSet(this.quadCandidate);
+    this.quadCandidate = null;
+    const entries = [...this.quadTypes.values()].filter(
+      (entry) => entry.slot > 0 && entry.type.state !== 'failed',
+    );
+    if (entries.length === 0) return;
+    const drawn = this.quadSet?.entries;
+    if (drawn && drawn.length === entries.length && drawn.every((e, i) => e === entries[i])) {
+      for (const entry of entries) entry.type.setState('ready');
+      return;
+    }
+    const functions = entries.map((entry) => ({
+      slot: entry.slot,
+      glsl: entry.type.source.glsl,
+      entry: entry.type.source.entry,
+    }));
+    const programs = new Map<RowsVariant, RowsProgram>();
+    for (const variant of ROWS_VARIANTS) {
+      programs.set(variant, this.startProgram(variant, 'color', functions));
+    }
+    this.quadCandidate = { entries, programs, started: performance.now() };
+  }
+
+  /**
+   * Looks whether the programs of the quads being compiled are done: linked, they are the ones
+   * drawn with and their sources are ready; failed, the function of each source is compiled
+   * alone, the ones that do not compile fail, and the others are compiled again without them
+   */
+  private pollQuads(): void {
+    const candidate = this.quadCandidate;
+    if (!candidate) return;
+    let linked = true;
+    let failed = false;
+    for (const program of candidate.programs.values()) {
+      if (this.poll(program)) continue;
+      linked = false;
+      if (program.state === 'failed') failed = true;
+    }
+    if (failed) {
+      this.quadCandidate = null;
+      this.disposeQuadSet(candidate);
+      const started = performance.now();
+      let found = false;
+      for (const entry of candidate.entries) {
+        if (entry.type.state === 'ready') continue;
+        if (this.quadFunctionCompiles(entry)) continue;
+        entry.type.setState('failed');
+        found = true;
+      }
+      // A failure of the functions together, none failing alone: the new ones fail
+      if (!found) {
+        for (const entry of candidate.entries) {
+          if (entry.type.state !== 'ready') entry.type.setState('failed');
+        }
+      }
+      this.quadCheckMs = performance.now() - started;
+      this.startQuadCandidate();
+      return;
+    }
+    if (!linked) return;
+    this.quadCompileMs = performance.now() - candidate.started;
+    if (this.quadSet) this.disposeQuadSet(this.quadSet);
+    this.quadSet = candidate;
+    this.quadCandidate = null;
+    for (const entry of candidate.entries) entry.type.setState('ready');
+  }
+
+  /** Whether the function of a source compiles alone in the fragment shader of the quads */
+  private quadFunctionCompiles(entry: QuadEntry): boolean {
+    const gl = this.gl;
+    const shader = gl.createShader(gl.FRAGMENT_SHADER);
+    if (!shader) return false;
+    const functions: RowsQuadFunction[] = [
+      { slot: entry.slot, glsl: entry.type.source.glsl, entry: entry.type.source.entry },
+    ];
+    gl.shaderSource(shader, withSamplerPrecision(buildRowsFragmentSource('color', functions)));
+    gl.compileShader(shader);
+    const compiles = gl.getShaderParameter(shader, gl.COMPILE_STATUS) === true;
+    if (!compiles) {
+      console.error(
+        `The function of a source of quads (${entry.type.source.entry}) does not compile: its rows are drawn one by one\n${gl.getShaderInfoLog(shader) ?? ''}`,
+      );
+    }
+    gl.deleteShader(shader);
+    return compiles;
+  }
+
+  private disposeQuadSet(set: QuadProgramSet): void {
+    const gl = this.gl;
+    for (const program of set.programs.values()) {
+      if (program.vertex) gl.deleteShader(program.vertex);
+      if (program.fragment) gl.deleteShader(program.fragment);
+      gl.deleteProgram(program.program);
+    }
+    set.programs.clear();
+  }
+
+  /**
+   * Binds the table of the quads of a chunk and the textures of the sources of quads to their
+   * units, then the unit 0 active again
+   */
+  private bindQuadTextures(program: RowsProgram, chunk: RowsChunk): void {
+    const gl = this.gl;
+    const locations = program.locations as RowsUniformLocations;
+    gl.activeTexture(gl.TEXTURE0 + UNIT_QUADS);
+    gl.bindTexture(gl.TEXTURE_2D, chunk.quads?.texture ?? this.emptyHeights);
+    const width = chunk.quads?.width ?? 1;
+    if (locations.quadWidth && program.memo.quadWidth !== width) {
+      gl.uniform1i(locations.quadWidth, width);
+      program.memo.quadWidth = width;
+    }
+    const bySlot: (WebGLTexture | null)[] = [];
+    for (const entry of this.quadTypes.values()) {
+      if (entry.slot > 0) bySlot[entry.slot] = entry.texture;
+    }
+    for (let k = 1; k <= ROW_QUAD_MAX_SOURCES; k++) {
+      gl.activeTexture(gl.TEXTURE0 + UNIT_QUAD_TEXTURES + k - 1);
+      gl.bindTexture(gl.TEXTURE_2D, bySlot[k] ?? this.emptySprites);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
   // === Chunks ===
 
   /**
@@ -452,10 +781,13 @@ export class RowsRenderer {
       rowStyles: null,
       heightValues: null,
       heights: null,
+      quads: null,
       pointedFirst: -1,
       writes: null,
       disposed: false,
     };
+    this.chunkCount++;
+    if (chunk.data.hasQuads) this.quadChunkCount++;
     data.palette.refs++;
     this.palettes.add(data.palette);
     this.queued.add(chunk);
@@ -526,6 +858,8 @@ export class RowsRenderer {
     if (chunk.disposed || fromRow < 0 || toRow > data.rows || patch.palette !== data.palette) {
       return false;
     }
+    // A quad written into a chunk without the table of the quads: the chunk is built again
+    if (patch.quads && !data.hasQuads) return false;
     for (let r = 0; r < patch.rows; r++) {
       const row = fromRow + r;
       if (
@@ -590,6 +924,17 @@ export class RowsRenderer {
         this.writeTexel(chunk, 'coords', c + shift, patch.coords, c * 2);
       }
       this.writeTexel(chunk, 'rowStyles', row, patch.rowStyles, r * ROWS_ROW_STYLE_FLOATS);
+      if (patch.quads) {
+        for (let k = 0; k < ROWS_QUAD_TEXELS; k++) {
+          this.writeTexel(
+            chunk,
+            'quads',
+            row * ROWS_QUAD_TEXELS + k,
+            patch.quads,
+            (r * ROWS_QUAD_TEXELS + k) * 4,
+          );
+        }
+      }
       // The row takes the style the patch counted, and stops counting the one it had
       const old = data.rowStyle[row];
       if (old >= 0) data.palette.release(old);
@@ -650,7 +995,7 @@ export class RowsRenderer {
    */
   private writeTexel(
     chunk: RowsChunk,
-    target: 'instances' | 'points' | 'coords' | 'rowStyles',
+    target: 'instances' | 'points' | 'coords' | 'rowStyles' | 'quads',
     texel: number,
     source: ArrayLike<number>,
     at = 0,
@@ -665,12 +1010,15 @@ export class RowsRenderer {
             ? packed.points
             : target === 'coords'
               ? packed.coords
-              : packed.rowStyles;
+              : target === 'quads'
+                ? packed.quads
+                : packed.rowStyles;
+      if (!array) return;
       const floats =
         target === 'coords'
           ? 2
-          : target === 'rowStyles'
-            ? ROWS_ROW_STYLE_FLOATS
+          : target === 'rowStyles' || target === 'quads'
+            ? 4
             : ROWS_INSTANCE_FLOATS;
       for (let k = 0; k < floats; k++) array[texel * floats + k] = source[at + k];
       return;
@@ -680,6 +1028,7 @@ export class RowsRenderer {
       points: new TexelWrites(ROWS_INSTANCE_FLOATS),
       coords: new TexelWrites(2),
       rowStyles: new TexelWrites(ROWS_ROW_STYLE_FLOATS),
+      quads: new TexelWrites(4),
     };
     chunk.writes[target].write(texel, source, at);
     this.patched.add(chunk);
@@ -689,6 +1038,8 @@ export class RowsRenderer {
   disposeChunk(chunk: RowsChunk): void {
     if (chunk.disposed) return;
     chunk.disposed = true;
+    this.chunkCount--;
+    if (chunk.data.hasQuads) this.quadChunkCount--;
     this.copies?.disposed(chunk);
     this.queued.delete(chunk);
     this.patched.delete(chunk);
@@ -700,11 +1051,12 @@ export class RowsRenderer {
       this.ledger.release(buffer);
       gl.deleteBuffer(buffer);
     }
-    for (const texture of [chunk.coords, chunk.rowStyles, chunk.heights]) {
+    for (const texture of [chunk.coords, chunk.rowStyles, chunk.heights, chunk.quads]) {
       if (!texture) continue;
       this.ledger.release(texture.texture);
       gl.deleteTexture(texture.texture);
     }
+    chunk.quads = null;
     chunk.vao = null;
     chunk.instanceBuffer = null;
     chunk.pointBuffer = null;
@@ -779,12 +1131,18 @@ export class RowsRenderer {
     rowState: RowStateBinding,
     factors: RetainedDrawFactors,
   ): void {
-    const groundProgram =
-      !points && this.ground ? (this.groundPrograms.get(this.variant) ?? null) : null;
-    const reading = groundProgram !== null && this.poll(groundProgram);
-    const program = reading ? groundProgram : this.current;
-    if (!chunk.uploaded || !program || !this.poll(program)) return;
     const data = chunk.data;
+    // A chunk with quads is drawn with the program of the quads (the polygons and the lines of
+    // the chunk do not read the ground then), the others with the program they were drawn with
+    const quadProgram =
+      data.hasQuads || this.quadForAll ? (this.quadSet?.programs.get(this.variant) ?? null) : null;
+    const quads = quadProgram !== null && this.poll(quadProgram);
+    if (data.hasQuads && !quads) return;
+    const groundProgram =
+      !quads && !points && this.ground ? (this.groundPrograms.get(this.variant) ?? null) : null;
+    const reading = groundProgram !== null && this.poll(groundProgram);
+    const program = quads ? quadProgram : reading ? groundProgram : this.current;
+    if (!chunk.uploaded || !program || !this.poll(program)) return;
     const starts = points ? data.pointFirst : data.rowFirst;
     const first = starts[fromRow];
     const count = starts[toRow] - first;
@@ -815,6 +1173,7 @@ export class RowsRenderer {
       data.origin,
       camera ? camera.centerLngLat : data.origin,
     );
+    if (quads) this.bindQuadTextures(program, chunk);
     this.bindTextures(chunk);
 
     run.bindVertexArray(chunk.vao);
@@ -1000,6 +1359,16 @@ export class RowsRenderer {
     }
     this.programs.clear();
     this.groundPrograms.clear();
+    for (const set of [this.quadSet, this.quadCandidate]) if (set) this.disposeQuadSet(set);
+    this.quadSet = null;
+    this.quadCandidate = null;
+    for (const [type, entry] of this.quadTypes) {
+      this.releaseQuadEntry(entry);
+      type.owner = null;
+      type.slot = 0;
+      type.setState('pending');
+    }
+    this.quadTypes.clear();
     this.releaseGroundTables();
     this.current = null;
     for (const palette of this.palettes) this.deletePaletteTexture(palette);
@@ -1022,15 +1391,22 @@ export class RowsRenderer {
   private startProgram(
     variant: RowsVariant,
     fragmentVariant: RowsFragmentVariant = 'color',
+    quads: readonly RowsQuadFunction[] | null = null,
   ): RowsProgram {
     const gl = this.gl;
     const { prelude, define } = rowsProjectionPrelude(variant);
     const ground = fragmentVariant === 'ground';
     const vertex = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
-    gl.shaderSource(vertex, withSamplerPrecision(buildRowsVertexSource(prelude, define, ground)));
+    gl.shaderSource(
+      vertex,
+      withSamplerPrecision(buildRowsVertexSource(prelude, define, ground, quads !== null)),
+    );
     gl.compileShader(vertex);
     const fragment = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
-    gl.shaderSource(fragment, withSamplerPrecision(buildRowsFragmentSource(fragmentVariant)));
+    gl.shaderSource(
+      fragment,
+      withSamplerPrecision(buildRowsFragmentSource(fragmentVariant, quads)),
+    );
     gl.compileShader(fragment);
     const program = gl.createProgram() as WebGLProgram;
     gl.attachShader(program, vertex);
@@ -1119,6 +1495,11 @@ export class RowsRenderer {
       }
       if (locations.bearing) gl.uniform1f(locations.bearing, this.frameBearing());
       if (locations.heights) gl.uniform1i(locations.heights, UNIT_HEIGHTS);
+      if (locations.quads) gl.uniform1i(locations.quads, UNIT_QUADS);
+      for (let k = 1; k < locations.quadTextures.length; k++) {
+        const at = locations.quadTextures[k];
+        if (at) gl.uniform1i(at, UNIT_QUAD_TEXTURES + k - 1);
+      }
       const terrain = this.terrain;
       const terrainOn = terrain.renderState.active;
       // The back faces of the fills are discarded on the terrain (the fills cut on its mesh face
@@ -1447,6 +1828,16 @@ export class RowsRenderer {
       data.rows,
       ROWS_ROW_STYLE_WIDTH,
     );
+    if (data.quads) {
+      chunk.quads = this.uploadTexture(
+        gl.RGBA32F,
+        gl.RGBA,
+        4,
+        data.quads,
+        data.rows * ROWS_QUAD_TEXELS,
+        ROWS_QUAD_WIDTH,
+      );
+    }
 
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -1546,6 +1937,7 @@ export class RowsRenderer {
     };
     texture(chunk.coords, gl.RG, writes.coords);
     texture(chunk.rowStyles, gl.RGBA, writes.rowStyles);
+    texture(chunk.quads, gl.RGBA, writes.quads);
   }
 }
 
@@ -1564,6 +1956,7 @@ function layoutOf(data: RowsChunkData): RowsChunkLayout {
     rowStyle: data.rowStyle,
     palette: data.palette,
     sprites: data.sprites,
+    hasQuads: data.quads != null,
   };
 }
 
@@ -1624,6 +2017,12 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     groundTiles: at('u_ground_tiles'),
     groundBlocks: at('u_ground_blocks'),
     groundCount: at('u_ground_count'),
+    quads: at('u_quads'),
+    quadWidth: at('u_quad_width'),
+    quadTextures: [
+      null,
+      ...Array.from({ length: ROW_QUAD_MAX_SOURCES }, (_, k) => at(`u_quad_tex${k + 1}`)),
+    ],
   };
 }
 

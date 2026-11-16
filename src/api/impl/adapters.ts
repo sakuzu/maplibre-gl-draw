@@ -49,6 +49,7 @@ import type {
   FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
+import { rowQuadTypeOf } from '../../view/renderers/rows/rows-quads.js';
 import type {
   AuxiliaryHandle,
   AuxiliaryHandleProvider,
@@ -467,6 +468,10 @@ export function installFeatureType(
       ...adaptFeatureRender(type, render, deps),
       // The pictures of the points drawn with the rows, as the definition gives them
       ...(definition.rows?.sprites && { rowSprites: definition.rows.sprites }),
+      // The quads of the rows, as the definition gives them (a prototype)
+      ...(definition.rows?.quads && {
+        rowQuads: rowQuadTypeOf(deps.customLayer, definition.rows.quads),
+      }),
     };
     add(
       deps.customLayer.registerFeatureRenderer(

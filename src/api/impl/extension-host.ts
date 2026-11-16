@@ -28,6 +28,7 @@ import { createTransformFieldsRegistry } from '../../store/transform-roles.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
+import { rowQuadTypeOf } from '../../view/renderers/rows/rows-quads.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { PluginContext } from '../extension/context.js';
@@ -404,9 +405,14 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
             throw new DrawError('notFound', `There is no feature type ${featureType}`);
           }
           const part = gpuParts.add(definition, plugin.name);
+          // The quads of the rows of the type stay with the renderer of webgl (a prototype)
+          const quads = registries.featureTypes.get(featureType)?.rows?.quads;
+          const adapted = adaptGpuFeatureRenderer(featureType, part, adapterDeps);
           const remove = customLayer.registerFeatureRenderer(
             featureType,
-            adaptGpuFeatureRenderer(featureType, part, adapterDeps),
+            quads
+              ? Object.assign(adapted, { rowQuads: rowQuadTypeOf(customLayer, quads) })
+              : adapted,
           );
           added.push(() => {
             remove();

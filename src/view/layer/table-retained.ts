@@ -137,6 +137,7 @@ import {
   type RowsChunkData,
   RowsPalette,
 } from '../renderers/rows/rows-format.js';
+import type { RowQuadType } from '../renderers/rows/rows-quads.js';
 import type {
   RowsChunk as RowsGpuChunk,
   RowsGround,
@@ -1633,6 +1634,12 @@ export class TableLayerRenderer {
     const oneDrawUsable = rows?.ready === true;
     // The program compiles: frames are asked for until it is ready
     if (rows !== null && !oneDrawUsable && rows.compiling) this.pending = true;
+    // The sources of quads of the custom types (a prototype): a program of the quads compiling
+    // asks for frames, and a source ready or failed classifies its rows again
+    if (rows) {
+      rows.syncQuadTypes(deps.customRenderers);
+      if (rows.quadsCompiling) this.pending = true;
+    }
     const byKindUsable = canDrawRows(renderers);
     let drawing: Drawing;
     if (oneDrawUsable && !this.byKind) drawing = 'one-draw';
@@ -1653,11 +1660,23 @@ export class TableLayerRenderer {
       cache.context.slots !== slots ||
       cache.context.strings !== tables.strings
     ) {
+      const layerCache = cache;
+      const tableId = table.tableId;
       cache.context = {
         slots,
         strings: tables.strings,
         pixelRatio: this.options.pixelRatio,
         terrain: this.options.terrain,
+        quads: {
+          typeOf: (group, row) => {
+            const renderer = layerCache.deps?.customRenderers.get(rowType(group.data, row)) as
+              | { rowQuads?: RowQuadType }
+              | undefined;
+            const type = renderer?.rowQuads;
+            return type?.state === 'ready' ? type : undefined;
+          },
+          view: () => layerCache.tables?.view(tableId),
+        },
       };
     }
     if (rows) this.ensureRowsStyles(cache, rows, tables);
@@ -2335,7 +2354,24 @@ export class TableLayerRenderer {
   /** Whether a write changes what is drawn of a row (its geometry, its style, its rule color) */
   private writeIsDrawn(cache: LayerCache, write: PendingWrite): boolean {
     if ((write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STYLE)) !== 0) return true;
+    if ((write.what & ROW_WRITE_VALUES) !== 0 && this.quadKeyWritten(cache, write.keys)) {
+      return true;
+    }
     return this.ruleKeyWritten(cache, write.keys);
+  }
+
+  /**
+   * Whether a key a source of quads of a custom type reads is among the keys written (any type:
+   * a prototype, which packs a row of another type again too)
+   */
+  private quadKeyWritten(cache: LayerCache, keys: ReadonlySet<string> | null): boolean {
+    const renderers = cache.deps?.customRenderers;
+    if (!renderers) return false;
+    for (const renderer of renderers.values()) {
+      const type = (renderer as { rowQuads?: RowQuadType }).rowQuads;
+      if (type?.readsKeys(keys)) return true;
+    }
+    return false;
   }
 
   /** Whether an attribute the style rule of the layer reads is among the keys written */
@@ -2387,6 +2423,32 @@ export class TableLayerRenderer {
   }
 
   // === Hooks of tests and measurements ===
+
+  /** The renderer of the rows drawn in one draw, once a layer was drawn (a hook of measurements) */
+  rowsRenderer(): RowsRenderer | null {
+    return this.renderers?.rows ?? null;
+  }
+
+  /**
+   * The origin of the chunk drawn in one draw that holds each row of a layer, by the handle of the
+   * row (a hook of measurements: what the GPU takes the offsets of the row from)
+   */
+  oneDrawOrigins(layerId: string): Map<number, readonly [number, number]> {
+    const out = new Map<number, readonly [number, number]>();
+    const cache = this.layers.get(layerId);
+    if (!cache) return out;
+    for (const groupCache of [...cache.groups.values(), ...(cache.delta ? [cache.delta] : [])]) {
+      const rows = groupCache.group.data.rows;
+      for (const chunk of allChunks(groupCache)) {
+        if (chunk.type !== 'rows' || !chunk.batches) continue;
+        const origin = chunk.batches.data.origin;
+        for (let row = chunk.range.from; row < chunk.range.to; row++) {
+          out.set(rows[row] as number, origin);
+        }
+      }
+    }
+    return out;
+  }
 
   /**
    * Cuts the ranges drawn of every layer at `count` places spread over its rows in view (0 for
@@ -4470,6 +4532,9 @@ function spriteRevisionsOf(customTypes: ReadonlyMap<string, unknown>): string {
   for (const [type, renderer] of customTypes) {
     const source = (renderer as { rowSprites?: RowSpriteSource }).rowSprites;
     if (source) out += `${type}\u0000${source.revision}\u0000`;
+    // The state of the sources of quads, whose rows are classified by it (a prototype)
+    const quads = (renderer as { rowQuads?: RowQuadType }).rowQuads;
+    if (quads) out += `${type}\u0000q${quads.revision}\u0000`;
   }
   return out;
 }

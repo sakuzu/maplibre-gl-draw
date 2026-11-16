@@ -8,7 +8,7 @@
 
 import type { Geometry, Position } from 'geojson';
 import type { BBox } from '../../geometry/types.js';
-import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
+import type { RowQuadSource, RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch, FeatureStyle } from '../model.js';
 import type { LayerTableView, RowRef } from '../tables.js';
@@ -87,6 +87,13 @@ export interface FeatureTypeRows {
    * has none is drawn by `render`.
    */
   readonly sprites?: RowSpriteSource;
+  /**
+   * The quads it draws its points with: each row of the type is one quad around its point, drawn
+   * with the other rows of its layer, in their order and in their draw, painted by the function of
+   * the source. Until the function is compiled, and when it does not compile, the rows are drawn
+   * by `render` (a prototype)
+   */
+  readonly quads?: RowQuadSource;
   /**
    * Whether the definition takes the feature of a row: the answer `appliesTo` gives for the
    * feature of the row (the two must agree). It is read with `appliesTo` only, and as it, only in

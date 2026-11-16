@@ -10,6 +10,7 @@
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { type TableDrapeOrder, TableDrapePainter } from '../../view/layer/table-drape.js';
 import type { TableDrawRecord } from '../../view/layer/table-retained.js';
+import type { RowsQuadStats } from '../../view/renderers/rows/rows-renderer.js';
 import type { Draw } from '../draw.js';
 import type { Engine } from './engine.js';
 
@@ -91,6 +92,15 @@ export interface TableDiagnostics {
    * default; `each` and `each-near`, the references one row at a time on the drape of the rows)
    */
   setDrapeOrder(order: TableDrapeOrder): void;
+  /** What the drawing of the rows did with the sources of quads (a prototype; null before a draw) */
+  quadStats(): RowsQuadStats | null;
+  /**
+   * Draws every chunk with the program of the quads, also a chunk without a quad (true), to
+   * measure what the functions in the program cost
+   */
+  setQuadForAll(on: boolean): void;
+  /** The origin of the chunk drawn in one draw that holds each row of a layer, by its handle */
+  oneDrawOrigins(layerId: string): Map<number, readonly [number, number]>;
 }
 
 /**
@@ -270,6 +280,17 @@ function createTableDiagnostics(
         prerenderMs: drawing?.prerenderMs ?? 0,
         drawMs: drawing?.drawMs ?? 0,
       });
+    },
+    quadStats() {
+      return customLayer.getTableRenderer()?.rowsRenderer()?.quadStats() ?? null;
+    },
+    setQuadForAll(on) {
+      const rows = customLayer.getTableRenderer()?.rowsRenderer();
+      if (rows) rows.quadForAll = on;
+      repaint();
+    },
+    oneDrawOrigins(layerId) {
+      return customLayer.getTableRenderer()?.oneDrawOrigins(layerId) ?? new Map();
     },
     setVersionBudgetWhileMoving(ms) {
       customLayer.getTableRenderer()?.setVersionBudgetWhileMoving(ms);

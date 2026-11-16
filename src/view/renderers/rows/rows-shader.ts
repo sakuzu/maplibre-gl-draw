@@ -40,6 +40,7 @@
  * attributes at its first instance, so the place of an instance in a draw means nothing.
  */
 
+import { GPU_STATE_UNIFORM } from '../../../feature-table/feature-row-states.js';
 import { DEFAULT_TILE_SIZE, RENDERING_DEFAULTS } from '../../../shared/math/index.js';
 import { CENTER_PROJECTION_CONSTANTS, glslFloat32 } from '../../shaders/center-projection.js';
 import {
@@ -69,9 +70,25 @@ import {
   ROWS_KIND_SHIFT,
   ROWS_PAIR_EDGE_BITS,
   ROWS_PAIR_EDGES,
+  ROWS_QUAD_TEXELS,
   ROWS_ROW_MASK,
   ROWS_STYLE_TEXELS,
 } from './rows-format.js';
+
+/** The length of the equator of the Mercator plane, in meters (the WGS 84 semi-major axis) */
+const EARTH_CIRCUMFERENCE = 2 * Math.PI * 6378137;
+
+/**
+ * The function of a source of quads, as the program of the quads calls it: its GLSL and its
+ * name, and the slot of its source (its texture is the sampler `u_quad_tex<slot>`)
+ *
+ * @internal
+ */
+export interface RowsQuadFunction {
+  readonly slot: number;
+  readonly glsl: string;
+  readonly entry: string;
+}
 
 /** A float literal of GLSL */
 function glslFloat(value: number): string {
@@ -143,12 +160,17 @@ uniform mat4 u_projection_fallback_matrix;
  * @param define The defines of the projection variant
  * @internal
  */
-export function buildRowsVertexSource(prelude: string, define: string, ground = false): string {
+export function buildRowsVertexSource(
+  prelude: string,
+  define: string,
+  ground = false,
+  quads = false,
+): string {
   const dashed = DASH_COEFFICIENTS.dashed;
   const dotted = DASH_COEFFICIENTS.dotted;
   return `#version 300 es
 #define TABLE_ROWS
-${ground ? '#define ROWS_GROUND' : ''}
+${ground ? '#define ROWS_GROUND' : ''}${quads ? '\n#define ROWS_QUADS' : ''}
 ${prelude}
 ${define}
 ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${TABLE_ROWS_GLSL}${TERRAIN_OCCLUSION_GLSL}
@@ -429,6 +451,73 @@ void drawSprite(int style) {
     v_params = vec4(ink * rowsGhost(offset, elevation), 0.0, 0.0, 0.0);
     v_geom = vec4(mix(uv.xy, uv.zw, unit * 0.5 + 0.5), 0.0, 0.0);
 }
+
+#ifdef ROWS_QUADS
+// The quads of the rows of the chunk: two texels per row (its half size, its angle, its flags;
+// then its values)
+uniform sampler2D u_quads;
+uniform int u_quad_width;
+
+vec4 rowsQuadTexel(int local, int k) {
+    int i = local * ${ROWS_QUAD_TEXELS} + k;
+    return texelFetch(u_quads, ivec2(i % u_quad_width, i / u_quad_width), 0);
+}
+
+// A quad of an extension: its corners from its anchor, its half size and its angle (turned and
+// scaled by the moving set of its row as the write of the drag turns and scales it), its size on
+// screen and its values to the fragment
+void drawQuad(int local) {
+    vec2 offset = rowsCoord(a_head.x);
+    emitShadeOffset(offset);
+    float elevation = rowsAnchorElevation(a_head.x, offset);
+    vec4 centerClip = rowsProjectAnchor(offset, elevation);
+    if (rowsAnchorHidden(centerClip)) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    vec4 shape = rowsQuadTexel(local, 0);
+    int flags = int(shape.w + 0.5);
+    bool meters = (flags & 1) != 0;
+    // A row turned and scaled by its values while it is dragged (the bit of the rows that keep
+    // their shape) takes the angle and the factor of its moving set, as the write of the drag does
+    bool byValues = (g_row_state & ${GPU_STATE_UNIFORM}u) != 0u;
+    vec2 halfSize = shape.xy * (byValues ? rowStateScale(g_row_state) : 1.0);
+    // Counterclockwise seen from above
+    float angle = radians(shape.z + (byValues ? rowStateRotation(g_row_state) : 0.0));
+    float sinA = sin(angle);
+    float cosA = cos(angle);
+    vec2 unit = quadCorner();
+    vec2 sizeCss;
+    if (meters) {
+        // East and north of the corner, turned, then on the Mercator plane (its y to the south)
+        vec2 local2 = vec2(unit.x * halfSize.x, -unit.y * halfSize.y);
+        vec2 turned = vec2(local2.x * cosA - local2.y * sinA, local2.x * sinA + local2.y * cosA);
+        float latitude = offset.y + origin_shift().y + u_center_lnglat.y;
+        float perMeter = 1.0 / (${glslFloat(EARTH_CIRCUMFERENCE)} * max(cos(radians(latitude)), 1e-6));
+        vec2 anchor = project_offset(vec3(offset + origin_shift(), 0.0)).xy;
+        gl_Position = project_mercator_offset_to_clipspace(anchor + vec2(turned.x, -turned.y) * perMeter, u_projection_matrix);
+        // The size on screen: the device pixels of a meter east of the anchor
+        vec4 eastClip = project_mercator_offset_to_clipspace(anchor + vec2(perMeter, 0.0), u_projection_matrix);
+        float pxPerMeter = length(clipToScreen(eastClip) - clipToScreen(centerClip));
+        sizeCss = 2.0 * halfSize * pxPerMeter / max(u_screen_ratio, 1e-6);
+    } else {
+        vec2 halfPx = halfSize * u_size_scale;
+        // Y-down pixels: counterclockwise on screen by the angle and the bearing of the map
+        float screenAngle = angle + radians(u_bearing);
+        float s = sin(screenAngle);
+        float c = cos(screenAngle);
+        vec2 p = unit * halfPx;
+        vec2 pixelOffset = vec2(p.x * c + p.y * s, -p.x * s + p.y * c);
+        vec3 centerNdc = centerClip.xyz / centerClip.w;
+        vec2 offsetNdc = pixelOffset * u_screen_ratio * u_pixel_to_clip * vec2(1.0, -1.0);
+        gl_Position = vec4(centerNdc.xy + offsetNdc, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
+        sizeCss = 2.0 * halfPx;
+    }
+    v_color = rowsQuadTexel(local, 1);
+    v_params = vec4(sizeCss, rowsGhost(offset, elevation), float(flags >> 1));
+    v_geom = vec4(unit * 0.5 + 0.5, 0.0, 0.0);
+}
+#endif
 
 // The miter at an end of a segment where the line goes on: its normal and the factor of its
 // length, from the normal of the segment there and the direction of the line before or after it
@@ -1004,6 +1093,12 @@ void main() {
         return;
     }
 #endif
+#ifdef ROWS_QUADS
+    if (kind == ${ROWS_KIND.quad}) {
+        drawQuad(local);
+        return;
+    }
+#endif
     if (kind == ${ROWS_KIND.point}) {
         drawPoint(style);
     } else if (kind == ${ROWS_KIND.segment} || kind == ${ROWS_KIND.dashedOutline}) {
@@ -1025,14 +1120,17 @@ void main() {
  *   each pixel (terrain/drape/ground-depth.ts)
  * @internal
  */
-export function buildRowsFragmentSource(variant: RowsFragmentVariant = 'color'): string {
+export function buildRowsFragmentSource(
+  variant: RowsFragmentVariant = 'color',
+  quads: readonly RowsQuadFunction[] | null = null,
+): string {
   const defines: Record<RowsFragmentVariant, string> = {
     color: '',
     ground: '#define ROWS_GROUND',
   };
   return `#version 300 es
 precision highp float;
-${defines[variant]}
+${defines[variant]}${quads ? '\n#define ROWS_QUADS' : ''}
 
 flat in int v_kind;
 flat in vec4 v_color;
@@ -1199,6 +1297,11 @@ vec4 shadeSprite() {
     if (u_sprite_premultiplied > 0.5 && texel.a > 0.0) texel.rgb /= texel.a;
     return vec4(texel.rgb, texel.a * u_opacity * v_params.x);
 }
+
+#ifdef ROWS_QUADS
+// The functions of the sources of quads, and their textures by slot
+${quads ? quadFragmentGlsl(quads) : ''}
+#endif
 
 #ifdef ROWS_GROUND
 // The ground of each pixel read back from the depth of the terrain maplibre draws
@@ -1480,6 +1583,12 @@ void main() {
 }
 #else
 void main() {
+#ifdef ROWS_QUADS
+    if (v_kind == ${ROWS_KIND.quad}) {
+        fragColor = shadeQuad();
+        return;
+    }
+#endif
     if (v_kind == ${ROWS_KIND.point}) {
         fragColor = shadePoint();
     } else if (v_kind == ${ROWS_KIND.segment} || v_kind == ${ROWS_KIND.dashedOutline}) {
@@ -1493,6 +1602,31 @@ void main() {
     }
 }
 #endif`;
+}
+
+/**
+ * The GLSL of the functions of the sources of quads and of the shading of a quad: the samplers of
+ * their textures, their functions, and the branch on the slot of the quad
+ */
+function quadFragmentGlsl(quads: readonly RowsQuadFunction[]): string {
+  const samplers = quads.map((q) => `uniform sampler2D u_quad_tex${q.slot};`).join('\n');
+  const functions = quads.map((q) => q.glsl).join('\n');
+  const calls = quads
+    .map(
+      (q) =>
+        `    if (slot == ${q.slot}) color = ${q.entry}(v_geom.xy, v_params.xy, v_color, u_quad_tex${q.slot});`,
+    )
+    .join('\n');
+  return `${samplers}
+${functions}
+// A quad: the color its function gives (premultiplied), divided back and faded by the layer
+vec4 shadeQuad() {
+    int slot = int(v_params.w + 0.5);
+    vec4 color = vec4(0.0);
+${calls}
+    if (color.a <= 0.0) discard;
+    return vec4(color.rgb / color.a, color.a * u_opacity * v_params.z);
+}`;
 }
 
 /**

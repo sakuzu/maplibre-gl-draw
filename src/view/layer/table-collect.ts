@@ -27,6 +27,7 @@
 import type { PageDictionary, RowGroup, ShapeFormReader, StyleTable } from '@sakuzu/kasane/render';
 import { geometryAt, pageRowBox, type RowGeometryAt } from '@sakuzu/kasane/render';
 import type { ValueStringCache } from '@sakuzu/tabane';
+import type { LayerTableView } from '../../api/tables.js';
 import {
   rowHasGeometry,
   rowNumber,
@@ -74,6 +75,7 @@ import {
   ROWS_KIND,
   ROWS_PAIR_EDGE_BITS,
   ROWS_PAIR_EDGES,
+  ROWS_QUAD_FLOATS,
   ROWS_ROW_STYLE_FLOATS,
   ROWS_STYLE_FLOATS,
   type RowSprite,
@@ -84,6 +86,7 @@ import {
   writeCollapsedInstance,
   writeRowsInstance,
 } from '../renderers/rows/rows-format.js';
+import type { RowQuadType } from '../renderers/rows/rows-quads.js';
 import { applyRuleColor, evaluateStyleRuleValue, type StyleRuleChannel } from '../style-rule.js';
 import { anchorElevationMeters } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
@@ -332,6 +335,20 @@ export interface RowPackContext {
   readonly strings: ValueStringCache;
   readonly pixelRatio: PixelRatioInput | undefined;
   readonly terrain: TerrainContext;
+  /** The sources of quads of the rows of the custom types drawn as quads (none without them) */
+  readonly quads?: RowQuadPack;
+}
+
+/**
+ * The sources of quads the rows of a layer are packed with (a prototype)
+ *
+ * @internal
+ */
+export interface RowQuadPack {
+  /** The source of quads of a row whose type is drawn as quads, ready to draw (else undefined) */
+  typeOf(group: RowGroup, row: number): RowQuadType | undefined;
+  /** The rows of the layer, which the sources read */
+  view(): LayerTableView | undefined;
 }
 
 /**
@@ -1304,6 +1321,8 @@ export class RowsDraft {
   readonly rowFirst: Int32Array;
   readonly pointFirst: Int32Array;
   readonly coordFirst: Int32Array;
+  /** The quads of the rows, {@link ROWS_QUAD_FLOATS} floats per row (made with the first quad) */
+  quads: Float32Array | null = null;
   /**
    * Whether a row a surface cuts leaves room after it (a chunk being built); a row packed to be
    * written into its place in a chunk leaves none (it takes the room its place has)
@@ -1394,7 +1413,7 @@ export class RowsDraft {
       t0,
       t1,
     );
-    if (kind === ROWS_KIND.point || kind === ROWS_KIND.sprite) {
+    if (kind === ROWS_KIND.point || kind === ROWS_KIND.sprite || kind === ROWS_KIND.quad) {
       if ((this.pointCount + 1) * ROWS_INSTANCE_FLOATS > this.points.length) {
         this.points = grown(this.points, (this.pointCount + 1) * ROWS_INSTANCE_FLOATS);
       }
@@ -1446,7 +1465,15 @@ export class RowsDraft {
       coordFirst: this.coordFirst,
       palette,
       sprites,
+      quads: this.quads,
+      hasQuads: this.quads !== null,
     };
+  }
+
+  /** The quad of a row (the table made with the first) */
+  setQuad(i: number, values: ArrayLike<number>): void {
+    this.quads ??= new Float32Array(Math.max(this.rows, 1) * ROWS_QUAD_FLOATS);
+    this.quads.set(values, i * ROWS_QUAD_FLOATS);
   }
 }
 
@@ -1544,9 +1571,10 @@ export function collectRow(
         if (surface?.fill && draft.leavesRoom) draft.room(row, first, coordFirst, SURFACE_ROOM);
         break;
       default: {
-        // A custom type drawn with pictures holds points
+        // A custom type drawn with pictures holds points; one drawn as quads, a point
         if (context.spriteSourceOf(row))
           collectPointRow(group, row, styleAt, draft, origin, context);
+        else collectQuadRow(group, row, i, draft, origin, context);
         break;
       }
     }
@@ -1554,6 +1582,50 @@ export function collectRow(
   draft.rowFirst[i + 1] = draft.instanceCount;
   draft.pointFirst[i + 1] = draft.pointCount;
   draft.coordFirst[i + 1] = draft.coordCount;
+}
+
+/** The values of a quad as the table of the quads holds them */
+const QUAD_SCRATCH = new Float32Array(ROWS_QUAD_FLOATS);
+
+/**
+ * Packs a row of a custom type drawn as quads: its anchor (the first position of its point), one
+ * instance, and its quad as its source answers it (nothing for a row the source draws nothing of)
+ */
+function collectQuadRow(
+  group: RowGroup,
+  row: number,
+  i: number,
+  draft: RowsDraft,
+  origin: readonly [number, number],
+  context: RowsPackContext,
+): void {
+  const quads = context.quads;
+  const type = quads?.typeOf(group, row);
+  const view = quads?.view();
+  const geometry = geometryAt(group, row);
+  if (!type || !view || !geometry || geometry.reader.type !== 'Point') return;
+  const out = type.out;
+  if (!type.source.quad(view, group.data.rows[row] as number, out)) return;
+  const slot = type.slot;
+  if (slot <= 0) return;
+  const { reader, at } = geometry;
+  const v = reader.vertexStart(at);
+  const index = draft.coord(
+    reader.coords[v * reader.stride] - origin[0],
+    reader.coords[v * reader.stride + 1] - origin[1],
+    0,
+  );
+  draft.instance(ROWS_KIND.quad, row, index, -1, -1, -1);
+  const q = QUAD_SCRATCH;
+  q[0] = out.halfWidth;
+  q[1] = out.halfHeight;
+  q[2] = out.angleDegrees;
+  q[3] = (out.meters ? 1 : 0) | (slot << 1);
+  q[4] = out.values[0];
+  q[5] = out.values[1];
+  q[6] = out.values[2];
+  q[7] = out.values[3];
+  draft.setQuad(i, q);
 }
 
 /** Writes the style of a row: the number of its style, its created zoom and whether it has one */
