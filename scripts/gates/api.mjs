@@ -84,12 +84,17 @@ export function check(ctx) {
     found.add(d.key);
     if (!waiting.has(d.key)) out.errors.push(`${d.key}: ${d.text}`);
   }
+  const kindOf = new Map(
+    diffs.map((d) => [d.key.replace(/^(\w+):\w+:/, '$1:'), d.key.split(':')[1]]),
+  );
   for (const [key, item] of waiting) {
-    if (!found.has(key)) {
-      out.errors.push(
-        `${key} matches the fixed declaration now; remove it from change ${item} of scripts/gates/api-pending.json`,
-      );
-    }
+    if (found.has(key)) continue;
+    const now = kindOf.get(key.replace(/^(\w+):\w+:/, '$1:'));
+    out.errors.push(
+      now
+        ? `${key} differs in another way now (${now}); change its row in change ${item} of scripts/gates/api-pending.json`
+        : `${key} matches the fixed declaration now; remove it from change ${item} of scripts/gates/api-pending.json`,
+    );
   }
   if (out.errors.length === 0) {
     out.notes.push(`${waiting.size} differences wait in api-pending.json`);

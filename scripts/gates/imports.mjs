@@ -20,6 +20,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
+import { OWN_IMPORTS, recordsOfFixedFile } from './lib/declarations.mjs';
 import { isTestFile, readList, result, walk } from './lib/files.mjs';
 import { importsOf } from './lib/imports.mjs';
 import { loadTypeScript } from './lib/ts.mjs';
@@ -58,6 +59,15 @@ export function check(ctx) {
   const layersPending = new Set(readList(root, 'layers-pending.json').imports ?? []);
   const publicPending = new Set(readList(root, 'public-types-pending.json').imports ?? []);
   const publicTypes = layers.publicTypes.map(globToRegExp);
+  const fixedMain = join(root, 'api', 'core.main.d.ts');
+  let publicNames = null;
+  if (existsSync(fixedMain)) {
+    const records = recordsOfFixedFile(fixedMain);
+    publicNames = new Set([
+      ...Object.keys(records).map((k) => k.replace(/^export:/, '').split(/[.{#]/)[0]),
+      ...records[OWN_IMPORTS],
+    ]);
+  }
   const isPublicType = (src) => publicTypes.some((re) => re.test(src)) && !isTestFile(src);
 
   const areaOf = (src) => {
@@ -132,6 +142,20 @@ export function check(ctx) {
         if (publicPending.has(edge)) usedPublic.add(edge);
         else out.errors.push(`${at}: a file of the public types imports an internal type: ${edge}`);
       }
+      // Between two files of the public types, a type is public only when the fixed declarations
+      // of the main entry have it (a type of src/api/ that no entry shows is internal)
+      if (isPublicType(from) && isPublicType(to) && publicNames) {
+        for (const n of typeNamesOf(root, rel, imp, to)) {
+          if (publicNames.has(n)) continue;
+          const named = `${edge} (${n})`;
+          if (publicPending.has(named)) usedPublic.add(named);
+          else {
+            out.errors.push(
+              `${at}: a file of the public types imports a type the fixed declarations do not have: ${named}`,
+            );
+          }
+        }
+      }
     }
   };
 
@@ -186,6 +210,35 @@ function isTypeImport(root, rel, imp, to) {
           }))
         : [];
   return names.some((n) => n.type || declaresType(root, to, n.name, 0));
+}
+
+/** The names of the types an import brings, by the names the target declares them with */
+function typeNamesOf(root, rel, imp, to) {
+  const ts = loadTypeScript();
+  const node = imp.node;
+  if (ts.isImportTypeNode(node)) {
+    const q = node.qualifier;
+    return q ? [(ts.isQualifiedName(q) ? leftmost(ts, q) : q).text] : [];
+  }
+  const elements =
+    ts.isImportDeclaration(node) &&
+    node.importClause?.namedBindings &&
+    ts.isNamedImports(node.importClause.namedBindings)
+      ? node.importClause.namedBindings.elements
+      : ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)
+        ? node.exportClause.elements
+        : [];
+  const whole = imp.typeOnly || rel.endsWith('.d.ts');
+  return elements
+    .map((e) => ({ name: (e.propertyName ?? e.name).text, type: whole || e.isTypeOnly }))
+    .filter((e) => e.type || declaresType(root, to, e.name, 0))
+    .map((e) => e.name);
+}
+
+function leftmost(ts, q) {
+  let n = q;
+  while (ts.isQualifiedName(n)) n = n.left;
+  return n;
 }
 
 /** Whether a source file declares (or re-exports) a name as an interface or a type alias only */

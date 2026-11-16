@@ -88,6 +88,19 @@ describe('the gate of the import boundaries', () => {
     );
   });
 
+  it('fails when a file of the public types imports a type of src/api/ that the fixed declarations do not have', () => {
+    const root = layered();
+    write(root, {
+      'api/core.main.d.ts': "export interface Thing { mode: Mode }\nexport type Mode = 'select';\n",
+      'src/api/tables.ts': 'export interface LayerView { size: number }\n',
+      'src/api/extension/kind.ts':
+        "import type { LayerView } from '../tables.js';\nimport type { Mode } from '../state.js';\nexport interface Kind { view: LayerView; mode: Mode }\n",
+    });
+    const errors = check({ root }).errors.join('\n');
+    expect(errors).toContain('src/api/extension/kind.ts -> src/api/tables.ts (LayerView)');
+    expect(errors).not.toContain('(Mode)');
+  });
+
   it('fails when the row library is imported from a folder that is not listed, the drawing included', () => {
     const root = layered();
     write(root, {
