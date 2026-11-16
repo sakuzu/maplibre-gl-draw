@@ -586,6 +586,13 @@ export class RowsRenderer {
     }
     if (changed) this.startQuadCandidate();
     this.pollQuads();
+    // On the terrain and on the globe the rows of the sources are drawn one by one as before (the
+    // quads are a prototype of the flat map): a change classifies their rows again
+    const flat = this.variant === 'flat' && !this.terrain.renderState.active;
+    for (const entry of this.quadSet?.entries ?? []) {
+      if (entry.type.state === 'failed' || entry.type.owner !== this) continue;
+      entry.type.setState(flat ? 'ready' : 'pending');
+    }
   }
 
   /** What the renderer did with the sources of quads */
