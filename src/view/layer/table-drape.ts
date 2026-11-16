@@ -592,6 +592,8 @@ export class TableDrape {
    * @param keepGround Whether a frame is wanted out of the band too: rows packed for the ground
    *   are still drawn (they read it until they are cut again for the terrain, unless the frame
    *   draws the polygons and the lines flat)
+   * @param groundQuads Whether chunks hold quads of extensions, which read the ground too (a
+   *   prototype): they make a frame where no polygon or line is drawn
    * @returns The frame (null when the rows are drawn by their chunks as they are cut)
    */
   planFrame(
@@ -599,6 +601,7 @@ export class TableDrape {
     layers: readonly TableDrapeLayer[],
     input: TableDrapeFrameInput,
     keepGround = false,
+    groundQuads = false,
   ): TableDrapeFrame | null {
     const debug = this.debug;
     debug.built = 0;
@@ -632,8 +635,9 @@ export class TableDrape {
     // The band, as the drape of the other elements decides it; while many rows are dragged it
     // stays as it was when they were taken
     const band = input.rawZoom > TERRAIN_ANALYTIC_MIN_ZOOM || edges <= DRAPE_WIDE_EDGE_BUDGET;
-    let inBand = elements > 0 && (input.dragging ? this.usedLast : band);
-    let reason = elements === 0 ? 'no-drapeable-rows' : 'wide-zoom';
+    const drapeable = elements > 0 || (ground && groundQuads);
+    let inBand = drapeable && (input.dragging ? this.usedLast : band);
+    let reason = !drapeable ? 'no-drapeable-rows' : 'wide-zoom';
     if (inBand && !canDrape({ vertexCount: vertices })) {
       inBand = false;
       reason = 'vertex-budget';

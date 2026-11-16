@@ -1492,7 +1492,15 @@ export class TableLayerRenderer {
     }
     // Out of the band, a frame is planned while rows packed for the ground are drawn (they read
     // it until they are cut again for the terrain)
-    this.drapeFrame = this.drape.planFrame(tables, layers, input, this.groundDrawnLast);
+    // Chunks with quads read the ground too (a prototype)
+    const groundQuads = this.renderers?.rows?.hasQuadChunks ?? false;
+    this.drapeFrame = this.drape.planFrame(
+      tables,
+      layers,
+      input,
+      this.groundDrawnLast,
+      groundQuads,
+    );
     this.groundDrawnLast = false;
     this.drapeDraws = this.drapeFrameDraws;
     this.drapeBreaks = this.drapeFrameBreaks;

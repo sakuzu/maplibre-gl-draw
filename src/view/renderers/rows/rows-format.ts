@@ -585,7 +585,8 @@ export interface RowQuadTables {
  * function named `entry`:
  *
  * ```glsl
- * vec4 entry(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, T0 tex0, T1 tex1)
+ * vec4 entry(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, float shade, T0 tex0,
+ *     T1 tex1)
  * ```
  *
  * - `uv`: the position in the quad, (0, 0) at its top left and (1, 1) at its bottom right
@@ -593,6 +594,9 @@ export interface RowQuadTables {
  *   pixel), taken before any branch
  * - `sizePx`: the size of the quad on screen, in CSS px
  * - `values`: the four values `quad` gave for the row
+ * - `shade`: the factor of the shading of the terrain at the pixel, for a quad on the ground drawn
+ *   on the terrain (1 elsewhere): multiply the colors that are shaded by it, as the drape of the
+ *   terrain does
  * - `tex0`, `tex1`: the textures of the source, `sampler2D` or `usampler2D` as declared (a
  *   transparent texel of `sampler2D` for one not given)
  * - it returns the color with its alpha premultiplied (`vec4(rgb * a, a)`)

@@ -40,7 +40,7 @@ export const PIE_COLORS = Uint8Array.of(232, 89, 12, 255, 28, 126, 214, 255);
  * from the top clockwise over the share `values.x` of the turn, the second color over the rest
  */
 export const PIE_GLSL = `
-vec4 pie_color(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, sampler2D tex, sampler2D unused) {
+vec4 pie_color(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, float shade, sampler2D tex, sampler2D unused) {
     vec2 p = uv * 2.0 - 1.0;
     float r = length(p);
     float pixel = 2.0 / max(min(sizePx.x, sizePx.y), 1.0);
@@ -54,7 +54,7 @@ vec4 pie_color(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, sampler2
 
 /** A function that does not compile (to see the rows of the type drawn one by one then) */
 const BROKEN_GLSL = `
-vec4 pie_color(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, sampler2D tex, sampler2D unused) {
+vec4 pie_color(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, float shade, sampler2D tex, sampler2D unused) {
     return pie_missing(uv);
 }
 `;
@@ -112,7 +112,7 @@ uniform vec2 u_pie_size;
 uniform sampler2D u_pie_tex;
 ${PIE_GLSL}
 vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade) {
-    return pie_color(uv, uvDx, uvDy, u_pie_size, u_pie_values, u_pie_tex, u_pie_tex);
+    return pie_color(uv, uvDx, uvDy, u_pie_size, u_pie_values, shade, u_pie_tex, u_pie_tex);
 }
 `;
   }

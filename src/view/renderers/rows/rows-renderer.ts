@@ -286,6 +286,12 @@ interface QuadEntry {
 interface QuadProgramSet {
   readonly entries: readonly QuadEntry[];
   readonly programs: Map<RowsVariant, RowsProgram>;
+  /**
+   * The program of the quads that reads the ground seen at each pixel, on the flat map (made the
+   * first time the terrain is drawn with the set; the globe draws the rows of the sources one by
+   * one)
+   */
+  ground: RowsProgram | null;
   /** When their compile started (`performance.now`) */
   readonly started: number;
 }
@@ -315,6 +321,12 @@ export interface RowsQuadStats {
   readonly tableBytes: number;
   /** The bytes of the tables of the quads of the chunks (the values of their rows) */
   readonly chunkQuadBytes: number;
+  /**
+   * The program of the quads that reads the ground on the terrain: not made yet, compiling, linked
+   * or failed, and the time from the start of its compile to the poll that found it linked (ms)
+   */
+  readonly ground: 'none' | 'compiling' | 'linked' | 'failed';
+  readonly groundCompileMs: number;
 }
 
 /** The values last written to the uniforms of a program */
@@ -546,7 +558,7 @@ export class RowsRenderer {
 
   /** Whether a program of the quads is being compiled (frames are asked for until it is done) */
   get quadsCompiling(): boolean {
-    return this.quadCandidate !== null;
+    return this.quadCandidate !== null || this.quadGroundCompiling;
   }
 
   /**
@@ -586,13 +598,27 @@ export class RowsRenderer {
     }
     if (changed) this.startQuadCandidate();
     this.pollQuads();
-    // On the terrain and on the globe the rows of the sources are drawn one by one as before (the
-    // quads are a prototype of the flat map): a change classifies their rows again
-    const flat = this.variant === 'flat' && !this.terrain.renderState.active;
+    // On the globe the rows of the sources are drawn one by one as before (the quads are a
+    // prototype of the flat map, on the terrain too): a change classifies their rows again. On
+    // the terrain they wait for the program of the quads that reads the ground
+    let usable = this.variant === 'flat';
+    this.quadGroundCompiling = false;
+    if (usable && this.quadSet && this.terrain.renderState.active) {
+      usable = this.quadGroundReady();
+      this.quadGroundCompiling = !usable && this.quadSet.ground?.state === 'compiling';
+    }
     for (const entry of this.quadSet?.entries ?? []) {
       if (entry.type.state === 'failed' || entry.type.owner !== this) continue;
-      entry.type.setState(flat ? 'ready' : 'pending');
+      entry.type.setState(usable ? 'ready' : 'pending');
     }
+  }
+
+  /** Whether the program of the quads that reads the ground was compiling at the last sync */
+  private quadGroundCompiling = false;
+
+  /** Whether chunks with quads are alive */
+  get hasQuadChunks(): boolean {
+    return this.quadChunkCount > 0;
   }
 
   /** What the renderer did with the sources of quads */
@@ -616,6 +642,8 @@ export class RowsRenderer {
         0,
       ),
       chunkQuadBytes: this.chunkQuadBytes,
+      ground: this.quadSet?.ground?.state ?? 'none',
+      groundCompileMs: this.quadGroundCompileMs,
     };
   }
 
@@ -816,8 +844,30 @@ export class RowsRenderer {
     for (const variant of ROWS_VARIANTS) {
       programs.set(variant, this.startProgram(variant, 'color', functions));
     }
-    this.quadCandidate = { entries, programs, started: performance.now() };
+    this.quadCandidate = { entries, programs, ground: null, started: performance.now() };
   }
+
+  /**
+   * Whether the program of the quads that reads the ground can draw (its compile starts at the
+   * first call for the set drawn with). False before any set links, and for good when it fails
+   */
+  private quadGroundReady(): boolean {
+    const set = this.quadSet;
+    if (!set) return false;
+    if (!set.ground) {
+      set.ground = this.startProgram('flat', 'ground', set.entries.map(quadFunctionOf));
+      this.quadGroundStarted = performance.now();
+      this.quadGroundCompileMs = Number.NaN;
+    }
+    const linked = this.poll(set.ground);
+    if (linked && Number.isNaN(this.quadGroundCompileMs)) {
+      this.quadGroundCompileMs = performance.now() - this.quadGroundStarted;
+    }
+    return linked;
+  }
+
+  private quadGroundStarted = 0;
+  private quadGroundCompileMs = Number.NaN;
 
   /**
    * Looks whether the programs of the quads being compiled are done: linked, they are the ones
@@ -883,12 +933,13 @@ export class RowsRenderer {
 
   private disposeQuadSet(set: QuadProgramSet): void {
     const gl = this.gl;
-    for (const program of set.programs.values()) {
+    for (const program of [...set.programs.values(), ...(set.ground ? [set.ground] : [])]) {
       if (program.vertex) gl.deleteShader(program.vertex);
       if (program.fragment) gl.deleteShader(program.fragment);
       gl.deleteProgram(program.program);
     }
     set.programs.clear();
+    set.ground = null;
   }
 
   /**
@@ -1330,15 +1381,19 @@ export class RowsRenderer {
     factors: RetainedDrawFactors,
   ): void {
     const data = chunk.data;
-    // A chunk with quads is drawn with the program of the quads (the polygons and the lines of
-    // the chunk do not read the ground then), the others with the program they were drawn with
+    // A chunk with quads is drawn with the program of the quads: where the ground seen at each
+    // pixel is read, the one that reads it (its polygons and lines read it, and its quads on the
+    // ground are drawn on it), the others with the program they were drawn with
+    const groundQuads = data.hasQuads && !points && this.ground !== null && this.variant === 'flat';
     const quadProgram =
-      data.hasQuads || this.quadForAll ? (this.quadSet?.programs.get(this.variant) ?? null) : null;
+      data.hasQuads || this.quadForAll
+        ? ((groundQuads ? this.quadSet?.ground : this.quadSet?.programs.get(this.variant)) ?? null)
+        : null;
     const quads = quadProgram !== null && this.poll(quadProgram);
     if (data.hasQuads && !quads) return;
     const groundProgram =
       !quads && !points && this.ground ? (this.groundPrograms.get(this.variant) ?? null) : null;
-    const reading = groundProgram !== null && this.poll(groundProgram);
+    const reading = quads ? groundQuads : groundProgram !== null && this.poll(groundProgram);
     const program = quads ? quadProgram : reading ? groundProgram : this.current;
     if (!chunk.uploaded || !program || !this.poll(program)) return;
     const starts = points ? data.pointFirst : data.rowFirst;

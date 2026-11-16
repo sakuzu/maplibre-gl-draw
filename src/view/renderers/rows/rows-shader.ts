@@ -519,6 +519,19 @@ void drawQuad(int local) {
     v_params = vec4(sizeCss, rowsGhost(offset, elevation), float(flags >> 1));
     v_geom = vec4(unit * 0.5 + 0.5, 0.0, 0.0);
 }
+
+// The half axes of a quad on the ground on the Mercator plane (its y to the south): the step of
+// its corners for unit.x = 1 and for unit.y = 1. The corners of drawQuad are the anchor plus
+// unit.x times the first plus unit.y times the second: the same formula (east and north turned,
+// then on the Mercator plane by the meters of the latitude of the anchor), taken apart by unit
+void rowsQuadAxes(vec2 offset, vec2 halfSize, float angle, out vec2 axisX, out vec2 axisY) {
+    float sinA = sin(angle);
+    float cosA = cos(angle);
+    float latitude = offset.y + origin_shift().y + u_center_lnglat.y;
+    float perMeter = 1.0 / (${glslFloat(EARTH_CIRCUMFERENCE)} * max(cos(radians(latitude)), 1e-6));
+    axisX = vec2(halfSize.x * cosA, -halfSize.x * sinA) * perMeter;
+    axisY = vec2(halfSize.y * sinA, halfSize.y * cosA) * perMeter;
+}
 #endif
 
 // The miter at an end of a segment where the line goes on: its normal and the factor of its
@@ -881,6 +894,105 @@ void rowsEmitScreen() {
     gl_Position = vec4(quadCorner(), ${glslFloat(SYMBOL_DEPTH)}, 1.0);
 }
 
+// The lowest and the highest the ground may be in a box (Mercator offsets from the center, lo to
+// hi), for a quad (a prototype): over each block it meets, the plane of the block at the corners
+// of the block, within the reach of the plane (the coarser blocks for a box over many, the range
+// of the whole tile for a box over very many). A quad is far larger than the pair of triangles
+// of a fill: the planes of the blocks, taken out to its corners (rowsGroundBounds), would put its
+// ground hundreds of meters off. False when the box meets no tile
+bool rowsGroundRange(vec2 lo, vec2 hi, out float low, out float high) {
+    low = 1e9;
+    high = -1e9;
+    bool met = false;
+    for (int s = 0; s < u_ground_count; s++) {
+        vec4 box = texelFetch(u_ground_tiles, ivec2(0, s), 0);
+        float margin = box.z / 64.0;
+        if (hi.x < box.x - margin || lo.x > box.x + box.z + margin
+            || hi.y < box.y - margin || lo.y > box.y + box.z + margin) continue;
+        met = true;
+        vec2 from = (lo - box.xy) / box.z - 1.0 / 64.0;
+        vec2 to = (hi - box.xy) / box.z + 1.0 / 64.0;
+        int base = 0;
+        float n = ${glslFloat(DRAPE_GROUND_BLOCKS)};
+        ivec2 a = ivec2(clamp(floor(from * n), 0.0, n - 1.0));
+        ivec2 b = ivec2(clamp(floor(to * n), 0.0, n - 1.0));
+        ivec2 span = b - a + 1;
+        if (span.x * span.y > 64) {
+            base = ${DRAPE_GROUND_BLOCKS * DRAPE_GROUND_BLOCKS};
+            n = ${glslFloat(DRAPE_GROUND_COARSE_BLOCKS)};
+            a = ivec2(clamp(floor(from * n), 0.0, n - 1.0));
+            b = ivec2(clamp(floor(to * n), 0.0, n - 1.0));
+            span = b - a + 1;
+        }
+        if (span.x * span.y > 64) {
+            vec4 range = texelFetch(u_ground_tiles, ivec2(1, s), 0);
+            low = min(low, range.x);
+            high = max(high, range.y);
+            continue;
+        }
+        int width = int(n);
+        for (int k = 0; k < 64; k++) {
+            if (k >= span.x * span.y) break;
+            ivec2 at = a + ivec2(k % span.x, k / span.x);
+            vec4 plane = texelFetch(u_ground_blocks, ivec2(base + at.y * width + at.x, s), 0);
+            vec2 u = vec2(at) / n;
+            vec4 h = plane.x + plane.y * vec4(u.x, u.x + 1.0 / n, u.x, u.x + 1.0 / n)
+                + plane.z * vec4(u.y, u.y, u.y + 1.0 / n, u.y + 1.0 / n);
+            low = min(low, min(min(h.x, h.y), min(h.z, h.w)) - plane.w);
+            high = max(high, max(max(h.x, h.y), max(h.z, h.w)) + plane.w);
+        }
+    }
+    float pad = 0.5 + 0.0001 * (abs(low) + abs(high));
+    low -= pad;
+    high += pad;
+    return met;
+}
+
+// Emits the corner of the box on the screen that holds the ground of a quad between four corners
+// (Mercator offsets from the center), between the lowest and the highest it may be there: false
+// (the vertex hidden) when none of it is, else the step of the ground from a pixel to the next one
+// near it, at most (the steps of the ground across an edge of it are told apart by it)
+bool rowsEmitGroundBox(vec2 m0, vec2 m1, vec2 m2, vec2 m3, out float groundStep,
+        out float low, out float high) {
+    groundStep = 0.0;
+    vec2 lo = min(min(m0, m1), min(m2, m3));
+    vec2 hi = max(max(m0, m1), max(m2, m3));
+    if (!rowsGroundRange(lo, hi, low, high)) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return false;
+    }
+    vec2 slo = vec2(1e30);
+    vec2 shi = vec2(-1e30);
+    int behind = 0;
+    for (int k = 0; k < 8; k++) {
+        int c = k / 2;
+        vec2 m = c == 0 ? m0 : (c == 1 ? m1 : (c == 2 ? m2 : m3));
+        vec4 clip = rowsProjectMercator(m, (k & 1) == 0 ? low : high);
+        if (clip.w <= 1e-6) {
+            behind++;
+            continue;
+        }
+        vec2 at = clipToScreen(clip);
+        slo = min(slo, at);
+        shi = max(shi, at);
+    }
+    if (behind == 8) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return false;
+    }
+    if (behind > 0) {
+        // The whole screen, its steps taken as across an edge everywhere (as a fill takes them)
+        rowsEmitScreen();
+        return true;
+    }
+    slo -= 1.0;
+    shi += 1.0;
+    vec2 extent = hi - lo;
+    groundStep = max(extent.x, extent.y) / max(min(shi.x - slo.x, shi.y - slo.y) - 2.0, 1.0);
+    rowsEmitBox(slo, vec2(shi.x - slo.x, 0.0), vec2(0.0, shi.y - slo.y));
+    return true;
+}
+
 void drawGroundFill(int style) {
     vec2 m0 = shade_mercator_offset(rowsCoord(a_head.x));
     vec2 m1 = shade_mercator_offset(rowsCoord(a_head.y));
@@ -1045,6 +1157,60 @@ void drawGroundEdge(int kind, int style, float createdZoom, bool hasCreatedZoom)
 }
 #endif
 
+#if defined(ROWS_GROUND) && defined(ROWS_QUADS)
+// A quad of an extension where the ground seen at each pixel is read (a prototype). A quad on the
+// ground is drawn as a fill is: a box on the screen that holds its ground, each pixel finding
+// where its ground is in the quad (the fragment, v_ga, v_gb). Its corners are those of drawQuad,
+// the anchor moved and the quad turned and scaled by the moving set of its row. A quad on screen
+// stands at the elevation of its anchor, as drawQuad draws it (as a point does)
+void drawGroundQuad(int local) {
+    v_ga = vec4(0.0);
+    v_gb = vec4(0.0);
+    v_gc = vec4(0.0);
+    vec4 shape = rowsQuadTexel(local, 0);
+    int flags = int(shape.w + 0.5);
+    if ((flags & 1) == 0) {
+        drawQuad(local);
+        return;
+    }
+    vec2 offset = rowsCoord(a_head.x);
+    emitShadeOffset(offset);
+    bool byValues = (g_row_state & ${GPU_STATE_UNIFORM}u) != 0u;
+    vec2 halfSize = shape.xy * (byValues ? rowStateScale(g_row_state) : 1.0);
+    float angle = radians(shape.z + (byValues ? rowStateRotation(g_row_state) : 0.0));
+    vec2 axisX;
+    vec2 axisY;
+    rowsQuadAxes(offset, halfSize, angle, axisX, axisY);
+    vec2 anchor = shade_mercator_offset(offset);
+    float groundStep;
+    float low;
+    float high;
+    if (!rowsEmitGroundBox(anchor - axisX - axisY, anchor + axisX - axisY,
+            anchor - axisX + axisY, anchor + axisX + axisY, groundStep, low, high)) {
+        return;
+    }
+    // From a Mercator offset from the anchor to the place in the quad (-1 to 1 on each axis)
+    float det = axisX.x * axisY.y - axisY.x * axisX.y;
+    mat2 toQuad = abs(det) > 0.0 ? mat2(axisY.y, -axisX.y, -axisY.x, axisX.x) / det : mat2(0.0);
+    v_ga = vec4(anchor, toQuad[0]);
+    // The lowest and the highest its ground may be (meters): a pixel whose ray meets none of the
+    // quad between them reads no ground
+    v_gb = vec4(toQuad[1], low, high);
+    v_gc = vec4(groundStep, 1.0, 0.0, 0.0);
+    // The size on screen: the device pixels of a meter east of the anchor, at its elevation
+    float elevation = rowsAnchorElevation(a_head.x, offset);
+    vec4 centerClip = rowsProjectAnchor(offset, elevation);
+    float perMeter = length(axisX) / max(halfSize.x, 1e-9);
+    vec4 eastClip = project_mercator_offset_to_clipspace(anchor + vec2(perMeter, 0.0), u_projection_matrix);
+    float pxPerMeter = centerClip.w > 0.0 && eastClip.w > 0.0
+        ? length(clipToScreen(eastClip) - clipToScreen(centerClip)) : 0.0;
+    vec2 sizeCss = 2.0 * halfSize * pxPerMeter / max(u_screen_ratio, 1e-6);
+    v_color = rowsQuadTexel(local, 1);
+    v_params = vec4(sizeCss, 1.0, float(flags >> 1));
+    v_geom = vec4(0.0);
+}
+#endif
+
 void main() {
     int kind = int(a_tag >> ${ROWS_KIND_SHIFT}u);
     int row = int(a_tag & ${ROWS_ROW_MASK}u);
@@ -1079,6 +1245,12 @@ void main() {
     bool hasCreatedZoom = rowStyle.z > 0.5;
 
 #ifdef ROWS_GROUND
+#ifdef ROWS_QUADS
+    if (kind == ${ROWS_KIND.quad}) {
+        drawGroundQuad(local);
+        return;
+    }
+#endif
     if (kind == ${ROWS_KIND.fill}) {
         drawGroundFill(style);
         return;
@@ -1445,6 +1617,44 @@ float groundDashDistance(vec2 sa, vec2 sb, float start, float len, float dash, f
     return best;
 }
 
+#ifdef ROWS_QUADS
+// In the program of the quads (a prototype) the ground of the pixel is read once, at the start of
+// main, for whatever kind reads it (groundPixel): every reading of it written out again in the
+// program makes the program longer to compile. groundAndScreen gives what was read
+bool g_pixel_seen = false;
+vec2 g_pixel_q = vec2(0.0);
+mat2 g_pixel_to_screen = mat2(1.0);
+
+bool groundAndScreen(out vec2 q, out mat2 toScreen) {
+    q = g_pixel_q;
+    toScreen = g_pixel_to_screen;
+    return g_pixel_seen;
+}
+
+// Reads the ground of the pixel where \`read\` (elsewhere a place nothing has, so that a pixel next
+// to one takes its steps as across an edge), and the map from a displacement on it to one on the
+// screen, as groundAndScreen does without the quads: the steps of the quad of pixels, or across an
+// edge of the ground (steps longer than 8 times \`expected\`) those to the pixels next to it. Called
+// by every fragment (its derivatives are taken by all)
+void groundPixel(bool read, float expected) {
+    vec2 q = vec2(1e10);
+    bool seen = false;
+    if (read) seen = ground_at(gl_FragCoord.xy, q, g_ground_depth);
+    if (!seen) q = vec2(1e10);
+    vec2 stepX = dFdx(q);
+    vec2 stepY = dFdy(q);
+    g_pixel_q = q;
+    g_pixel_to_screen = groundToScreenOf(stepX, stepY);
+    g_pixel_seen = seen;
+    if (!seen) return;
+    float most = 8.0 * expected;
+    if (max(dot(stepX, stepX), dot(stepY, stepY)) > most * most) {
+        bool lone = false;
+        g_pixel_to_screen = groundToScreen(ivec2(gl_FragCoord.xy), q, lone);
+        if (lone) g_pixel_seen = false;
+    }
+}
+#else
 // The ground of the pixel and the map from a displacement on it to one on the screen (false for
 // a pixel where no ground is seen, or seen through a crack between two tiles)
 bool groundAndScreen(out vec2 q, out mat2 toScreen) {
@@ -1461,6 +1671,7 @@ bool groundAndScreen(out vec2 q, out mat2 toScreen) {
     }
     return true;
 }
+#endif
 
 // A pair of triangles of a fill: the pixels whose ground is in one of them, softened as the drape
 // softens the edge of a fill (half a pixel in and out of it) within its edges on the outline
@@ -1567,9 +1778,99 @@ vec4 shadeGroundEdge() {
 }
 #endif
 
+#if defined(ROWS_GROUND) && defined(ROWS_QUADS)
+// A quad on the ground (a prototype): the place in the quad of the ground of the pixel, from the
+// anchor and the inverse of the half axes of the quad (v_ga, v_gb), and its steps to the next
+// pixels from the steps of the ground (those of the quad of pixels, or across an edge of the ground
+// those to the pixels next to it on the side the ground goes on). The function is called for every
+// pixel of the box, as for a pixel of a quad drawn flat (its derivatives are taken by all of
+// them), and what is out of the quad or has no ground is discarded after it
+// The place on the ray of the pixel at an elevation (meters), as a Mercator offset from the center
+// (false where the ray does not reach it in front of the camera)
+bool rowsRayAt(vec2 ndc, float elevation, out vec2 place) {
+    vec4 a = u_ground_unproject * vec4(ndc, 0.0, 1.0);
+    vec4 b = u_ground_unproject[2];
+    float div = elevation * b.w - b.z;
+    if (div == 0.0) return false;
+    float z = (a.z - elevation * a.w) / div;
+    vec4 h = a + b * z;
+    if (h.w <= 0.0) return false;
+    place = h.xy / h.w;
+    return true;
+}
+
+// Whether the ray of the pixel may meet a quad on the ground: between the lowest and the highest
+// the ground may be (v_gb.zw), the ray goes along a segment of the Mercator plane, where its
+// ground is; true when that segment meets the quad (or the ray does not reach both elevations)
+bool rowsRayMeetsQuad(mat2 toQuad) {
+    vec2 ndc = gl_FragCoord.xy / u_viewport * 2.0 - 1.0;
+    vec2 a;
+    vec2 b;
+    if (!rowsRayAt(ndc, v_gb.z, a) || !rowsRayAt(ndc, v_gb.w, b)) return true;
+    // The segment in the quad (-1 to 1 on each axis), clipped to it (with a margin)
+    vec2 p = toQuad * (a - v_ga.xy);
+    vec2 d = toQuad * (b - v_ga.xy) - p;
+    float t0 = 0.0;
+    float t1 = 1.0;
+    const float edge = 1.001;
+    for (int k = 0; k < 2; k++) {
+        float o = k == 0 ? p.x : p.y;
+        float v = k == 0 ? d.x : d.y;
+        if (abs(v) < 1e-12) {
+            if (abs(o) > edge) return false;
+            continue;
+        }
+        float ta = (-edge - o) / v;
+        float tb = (edge - o) / v;
+        t0 = max(t0, min(ta, tb));
+        t1 = min(t1, max(ta, tb));
+    }
+    return t0 <= t1;
+}
+
+vec4 shadeGroundQuad() {
+    mat2 toQuad = mat2(v_ga.zw, v_gb.xy);
+    // The ground of the pixel, read at the start of main where the ray may meet the quad
+    vec2 q;
+    mat2 toScreen;
+    bool seen = groundAndScreen(q, toScreen);
+    // The steps of the ground to the next pixels (the inverse of the map to the screen)
+    mat2 steps = seen ? inverse(toScreen) : mat2(0.0);
+    // A pixel without ground takes a place out of the quad, far from it
+    vec2 uv = seen ? (toQuad * (q - v_ga.xy)) * 0.5 + 0.5 : vec2(-2.0);
+    vec2 uvDx = (toQuad * steps[0]) * 0.5;
+    vec2 uvDy = (toQuad * steps[1]) * 0.5;
+    int slot = int(v_params.w + 0.5);
+    // The shading of the terrain under the pixel, as the drape of the terrain shades
+    float shade = seen ? terrainShadeAt(q) : 1.0;
+    vec4 color = rowsQuadColor(slot, uv, uvDx, uvDy, v_params.xy, v_color, shade);
+    if (!seen || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))
+        || color.a <= 0.0) discard;
+    return vec4(color.rgb / color.a, color.a * u_opacity);
+}
+#endif
+
 #if defined(ROWS_GROUND)
 void main() {
     gl_FragDepth = gl_FragCoord.z;
+#ifdef ROWS_QUADS
+    // The ground of the pixel, once for every kind (a quad on the ground where its ray may meet it)
+    bool groundQuad = v_kind == ${ROWS_KIND.quad} && v_gc.y > 0.5;
+    bool reads = groundQuad || v_kind == ${ROWS_KIND.fill} || v_kind == ${ROWS_KIND.segment}
+        || v_kind == ${ROWS_KIND.dashedOutline} || v_kind == ${ROWS_KIND.outline}
+        || v_kind == ${ROWS_KIND.fringe};
+    groundPixel(reads && (!groundQuad || rowsRayMeetsQuad(mat2(v_ga.zw, v_gb.xy))),
+        groundQuad ? v_gc.x : v_params.y);
+    if (v_kind == ${ROWS_KIND.quad}) {
+        if (v_gc.y > 0.5) {
+            fragColor = shadeGroundQuad();
+            gl_FragDepth = groundFragDepth();
+        } else {
+            fragColor = shadeQuad();
+        }
+        return;
+    }
+#endif
     if (v_kind == ${ROWS_KIND.point}) {
         fragColor = shadePoint();
     } else if (v_kind == ${ROWS_KIND.fill}) {
@@ -1623,19 +1924,26 @@ function quadFragmentGlsl(quads: readonly RowsQuadFunction[]): string {
   const calls = quads
     .map(
       (q) =>
-        `    if (slot == ${q.slot}) color = ${q.entry}(v_geom.xy, uvDx, uvDy, v_params.xy, v_color, u_quad_s${q.slot}_0, u_quad_s${q.slot}_1);`,
+        `    if (slot == ${q.slot}) color = ${q.entry}(uv, uvDx, uvDy, sizePx, values, shade, u_quad_s${q.slot}_0, u_quad_s${q.slot}_1);`,
     )
     .join('\n');
   return `${samplers}
 ${functions}
+// The color the function of the source of a slot gives at a place in a quad (premultiplied)
+vec4 rowsQuadColor(int slot, vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values,
+        float shade) {
+    vec4 color = vec4(0.0);
+${calls}
+    return color;
+}
+
 // A quad: the color its function gives (premultiplied), divided back and faded by the layer. The
 // derivatives of its position are taken here, before the function branches
 vec4 shadeQuad() {
     vec2 uvDx = dFdx(v_geom.xy);
     vec2 uvDy = dFdy(v_geom.xy);
     int slot = int(v_params.w + 0.5);
-    vec4 color = vec4(0.0);
-${calls}
+    vec4 color = rowsQuadColor(slot, v_geom.xy, uvDx, uvDy, v_params.xy, v_color, 1.0);
     if (color.a <= 0.0) discard;
     return vec4(color.rgb / color.a, color.a * u_opacity * v_params.z);
 }`;
