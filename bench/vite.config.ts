@@ -57,6 +57,7 @@ export default defineConfig({
         bench: resolve(root, 'bench.html'),
         drape: resolve(root, 'drape.html'),
         table: resolve(root, 'table.html'),
+        quad: resolve(root, 'quad.html'),
       },
     },
   },

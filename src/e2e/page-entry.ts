@@ -28,6 +28,7 @@ import {
   type FeaturePageBuilderOptions,
 } from '../table/feature-row-blocks.js';
 import { prepareTable } from '../table/index.js';
+import { PIE_TYPE, piePlugin } from '../test-support/quad-pie.js';
 import { writesOf } from '../test-support/writes.js';
 import { GpuLedger } from '../view/gpu-ledger.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
@@ -56,6 +57,8 @@ installTestDem(maplibregl);
     createTableStore,
   },
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
+  // The pies of the prototype of the quads of the drawing of the rows
+  quadPie: { piePlugin, PIE_TYPE },
   internals: {
     DemAtlas,
     GpuLedger,

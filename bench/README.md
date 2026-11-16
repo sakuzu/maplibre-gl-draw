@@ -263,6 +263,38 @@ measurement and returns the results, `window.runTableEdit(op)` and
 `window.runTableStream(kind, rate)`, and `window.benchResult`, the results
 so far.
 
+## quad.html
+
+A prototype: custom types whose rows are drawn as quads among the other rows of their layer, in
+the draw of their chunk (`FeatureTypeRows.quads`). The quads are pies of two colors
+(`src/test-support/quad-pie.ts`), painted by a GLSL function the type gives; the same function
+draws them one by one where they are not drawn as quads. The rows are held by an in-memory Store
+of rows, on a map with a background layer only (no network, no terrain, not pitched), in a fixed
+1280 x 800 map, laid on a grid that fills the view.
+
+| Parameter | Meaning | Default |
+| --- | --- | --- |
+| `scene` | `alt` (`n` points and `n` pies in turn), `poly` (`n` squares), `drag` (`n` pies) | `alt` |
+| `n` | The number; a layer of more than 300,000 rows is refused | `1000` |
+| `mode` | `alt`: `single` (pies as quads), `each` (pies one by one), `baseline` (points for pies) | `single` |
+| `ext` | `poly`: `1` draws every chunk with the program of the quads, with no quad | `0` |
+| `op` | `drag`: `rotate`, `scale` or `move`, on the GPU, then written | `rotate` |
+| `unit` | `px` (the size of a pie on screen) or `m` (on the ground) | `px` |
+| `pan` | `1` moves the camera a little in every frame measured | `0` |
+| `zoom` | The zoom | `14` |
+| `bad` | `1` gives the pies a function that does not compile (drawn one by one) | `0` |
+| `select` | `drag`: `0` leaves the pies unselected | `1` |
+
+`window.__bench.ready` settles once the rows are drawn and the program of the quads is linked
+(or failed). `window.__bench.run(seconds)` (10 seconds at most) draws every frame with
+`map.triggerRepaint()` for that long and returns the time of the first frame, the median, the
+90th percentile and the longest interval of the frames after it, the draw calls of the WebGL
+context in a frame, the ranges of rows drawn in a frame (`recordDraws`), the chunks, the time the
+program of the quads took to compile, and for `drag` how far the pies jump when the drag is
+written: where the GPU drew them in the last frame (the motion of their moving set computed as
+the program computes it, in float32) against where the write puts them, in CSS px. Nothing is
+measured until it is called, and nothing is left running after it.
+
 ## Test data
 
 `npm run generate -w bench` writes native files of 1,000 and 10,000
