@@ -1,0 +1,21 @@
+{
+  "description": "The layers of src/, from the top: the public types and the implementation of the resources (api), the instance (dispatcher, modes, operations, snapping), the drawing (view) and the Store (store). dataset keeps its height, and geometry, shared, table and extension keep theirs. A file may import from a lower area only, or from its own area; nothing imports the webgl entry. The heights are those of scripts/check-layers.mjs. A new folder of src/ fails the gate until it is given a height here.",
+  "areas": {
+    "geometry": { "rank": 0 },
+    "shared": { "rank": 1 },
+    "table": { "rank": 1.2 },
+    "extension": { "rank": 1.5 },
+    "store": { "rank": 2, "layer": "store" },
+    "view": { "rank": 3, "layer": "drawing" },
+    "dataset": { "rank": 3.5 },
+    "operations": { "rank": 4, "layer": "instance" },
+    "snapping": { "rank": 4, "layer": "instance" },
+    "modes": { "rank": 5, "layer": "instance" },
+    "dispatcher": { "rank": 6, "layer": "instance" },
+    "api": { "rank": 8, "layer": "public types and resources" },
+    "entry": { "rank": 9 },
+    "webgl": { "rank": 9 }
+  },
+  "rootFiles": { "index.ts": "entry", "messages.ts": "shared" },
+  "publicTypes": ["src/api/*.ts", "src/api/extension/**"]
+}

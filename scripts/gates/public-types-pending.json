@@ -1,0 +1,4 @@
+{
+  "description": "The imports of internal types by the files of the public types that wait for a decision. A row that no longer matches an import fails the gate, so the list only gets shorter. Only the maintainer adds a row.",
+  "imports": []
+}

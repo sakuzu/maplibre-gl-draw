@@ -1,0 +1,70 @@
+{
+  "description": "The module state the library may have: the top-level values of the files the published version kept them in (the pool of ids, the frame being drawn, and the buffers of the triangulation). No other row is added.",
+  "state": [
+    {
+      "file": "src/shared/utils/id.ts",
+      "name": "pool",
+      "kind": "let"
+    },
+    {
+      "file": "src/shared/utils/id.ts",
+      "name": "cursor",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "steiners",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "EMPTY_STEINERS",
+      "kind": "new Set"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "filteredOut",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "indexActive",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "blockBBox",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "numBlocks",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "sortBuf",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "zArr",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "zBuf",
+      "kind": "let"
+    },
+    {
+      "file": "src/view/renderers/polygon/earcut-sliced.ts",
+      "name": "counts",
+      "kind": "new Uint32Array"
+    },
+    {
+      "file": "src/view/shaders/frame.ts",
+      "name": "renderFrame",
+      "kind": "let"
+    }
+  ]
+}

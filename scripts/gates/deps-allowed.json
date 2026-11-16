@@ -1,0 +1,12 @@
+{
+  "description": "The packages the library may depend on. A package of dependencies, peerDependencies or optionalDependencies of package.json that is not listed fails the gate. A package is added to the list only after the user accepted it (its license, maturity and risks); `@sakuzu/kasane` is listed for the Store that holds the rows, and is added to package.json with that Store.",
+  "dependencies": [
+    "@sakuzu/kasane",
+    "@types/geojson",
+    "earcut",
+    "polygon-clipping",
+    "rbush",
+    "ulid"
+  ],
+  "peerDependencies": ["maplibre-gl"]
+}

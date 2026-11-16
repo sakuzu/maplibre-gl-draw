@@ -1,0 +1,4 @@
+{
+  "description": "The test files a unit may change or delete: the path, the number of the change it follows from (or the work that names the internal module it deletes), and the unit. Only the maintainer adds a row, copied from the document of the unit.",
+  "allowed": []
+}

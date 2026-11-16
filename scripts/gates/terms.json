@@ -1,0 +1,169 @@
+{
+  "description": "Terms that the library must not contain. A term is a regular expression matched against the lower-case words of a text (see scripts/gates/lib/words.mjs), so `remoteClient`, `remote_client`, `remote-client` and \"Remote client\" are the same; a term with \"raw\": true is matched against the text itself. `declarations` is for the declarations of every entry the build emits, `mainEntry` only for the main entry outside its dataset and table declarations, `everywhere` for the declarations, the identifiers and comments of src/, the documents, the examples and the names of the tests, and `rowLibrary` for everywhere but the code of src/ (the description of the store entry and of createStore excepted). The names of products and extensions are not listed here: they are read from the local lists, which git does not keep.",
+  "declarations": [
+    {
+      "source": "\\bsync"
+    },
+    {
+      "source": "synchron"
+    },
+    {
+      "source": "\\bservers?"
+    },
+    {
+      "source": "\\bpeer"
+    },
+    {
+      "source": "\\bowner"
+    },
+    {
+      "source": "\\bwriters?\\b"
+    },
+    {
+      "source": "\\bauthor"
+    },
+    {
+      "source": "\\bbackend"
+    },
+    {
+      "source": "\\bstorage"
+    },
+    {
+      "source": "\\bsend"
+    },
+    {
+      "source": "\\bsent\\b"
+    },
+    {
+      "source": "\\bhistory"
+    },
+    {
+      "source": "\\bundo(?! vertex)"
+    },
+    {
+      "source": "\\bredo(?! vertex)"
+    },
+    {
+      "source": "collaborat"
+    },
+    {
+      "source": "presence"
+    },
+    {
+      "source": "\\bremote (client|user|side|party)"
+    },
+    {
+      "source": "\\bothers? (client|user)"
+    }
+  ],
+  "mainEntry": [
+    {
+      "source": "\\brows?\\b"
+    },
+    {
+      "source": "\\bcolumns?\\b"
+    },
+    {
+      "source": "\\bblocks?\\b"
+    },
+    {
+      "source": "\\bpages?\\b"
+    },
+    {
+      "source": "(?<!vertex )\\brefs?\\b"
+    },
+    {
+      "source": "\\brow ref"
+    },
+    {
+      "source": "\\bhandles? of (a|the) rows?"
+    }
+  ],
+  "everywhere": [
+    {
+      "source": "crdt"
+    },
+    {
+      "source": "\\bpro\\b"
+    },
+    {
+      "source": "tsuzuri"
+    },
+    {
+      "source": "tabane"
+    },
+    {
+      "source": "\\byjs\\b"
+    },
+    {
+      "source": "\\bservers?\\b"
+    },
+    {
+      "source": "\\bpeers?\\b(?! dependenc)"
+    },
+    {
+      "source": "\\bowners?\\b(?! document)"
+    },
+    {
+      "source": "\\bwriters?\\b"
+    },
+    {
+      "source": "\\bsync(ed|ing|s)?\\b"
+    },
+    {
+      "source": "\\bsynchroni[sz](e|es|ed|ing|ation)\\b"
+    },
+    {
+      "source": "\\bhistory"
+    },
+    {
+      "source": "\\b(undo|redo)\\b(?! vertex)"
+    },
+    {
+      "source": "(?<!非)同期(?!的)",
+      "raw": true
+    },
+    {
+      "source": "サーバー",
+      "raw": true
+    },
+    {
+      "source": "相手",
+      "raw": true
+    },
+    {
+      "source": "持ち主",
+      "raw": true
+    },
+    {
+      "source": "書き手",
+      "raw": true
+    },
+    {
+      "source": "履歴",
+      "raw": true
+    },
+    {
+      "source": "\\bS1\\d\\d\\b",
+      "raw": true,
+      "flags": ""
+    },
+    {
+      "source": "\\b\\d{2}-fix-\\d{3}\\b",
+      "raw": true
+    },
+    {
+      "source": "\\b\\d{2}-m\\d{2}-\\d{3}\\b",
+      "raw": true
+    },
+    {
+      "source": "(決め|台帳|ledger|decision) ?\\d{1,2}\\.\\d{2,3}\\b",
+      "raw": true
+    }
+  ],
+  "rowLibrary": [
+    {
+      "source": "kasane"
+    }
+  ]
+}

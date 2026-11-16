@@ -1,0 +1,4 @@
+{
+  "description": "The imports against the layers of scripts/gates/layers.json that wait for a decision. A row that no longer matches an import fails the gate, so the list only gets shorter. Only the maintainer adds a row.",
+  "imports": []
+}

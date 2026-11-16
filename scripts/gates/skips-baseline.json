@@ -1,0 +1,15 @@
+{
+  "description": "The baseline of scripts/gates/skips.mjs, by file: the marks that leave a test out or let it fail, the mentions of known failures, and the allowances of the end-to-end tests. Only the maintainer changes it, writing down which tests, why and until when.",
+  "marks": {
+    "ui/e2e/ui.e2e.test.ts": 1
+  },
+  "known": {
+    "src/geometry/robustness.test.ts": 1
+  },
+  "allowances": {
+    "src/e2e/draw.e2e.test.ts:TOLERANCE_DEG": 0.00002,
+    "src/e2e/terrain-dash.e2e.test.ts:SIDE_TOLERANCE": 0.75,
+    "src/e2e/terrain-occlusion.e2e.test.ts:SIGHT_MARGIN_M": 60,
+    "src/e2e/terrain.e2e.test.ts:GPU_TOLERANCE_M": 0.05
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "description": "The files brought from an old branch: the branch, the commit, the path there and the path here. A file of the working tree with the content of a file of an old branch that is not listed fails scripts/gates/branch.mjs.",
+  "files": [
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "scripts/check-entries.mjs",
+      "to": "scripts/gates/entries.mjs",
+      "note": "the check of the entries, with /store in place of /extend and run by npm run gates"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "scripts/check-layers.mjs",
+      "to": "scripts/gates/imports.mjs",
+      "note": "only the check that no relative import leaves src/; the areas that branch added are not brought"
+    }
+  ]
+}

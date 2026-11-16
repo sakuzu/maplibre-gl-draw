@@ -1,0 +1,884 @@
+{
+  "description": "The extension points of the published version: the members of the public declarations that a plugin or an application implements and gives to the library, or that the library gives to them (248 points; the list they were counted from had 249 rows, with ModeFactory twice). A point is the name of a declaration or of a member, as the records of scripts/gates/lib/declarations.mjs name it. The gate fails when a point is missing from the build or from the fixed declarations of api/. The 27 points with `removed` were taken out by the change given, and are not in api/: while `pending` is true they are still in the build, and the gate fails once the build has lost one of them, so that the unit that removed it clears its `pending`; after that the gate fails if one comes back.",
+  "points": [
+    {
+      "key": "Plugin.name"
+    },
+    {
+      "key": "Plugin.onAdd"
+    },
+    {
+      "key": "Plugin.onRemove"
+    },
+    {
+      "key": "Plugin.api"
+    },
+    {
+      "key": "Plugin.input"
+    },
+    {
+      "key": "Plugin.interaction"
+    },
+    {
+      "key": "Plugin.interaction.filterSelection"
+    },
+    {
+      "key": "Plugin.interaction.onFeatureClick"
+    },
+    {
+      "key": "Plugin.interaction.onFeatureDoubleClick"
+    },
+    {
+      "key": "Plugin.interaction.onDrawCommit"
+    },
+    {
+      "key": "Plugin.interaction.isBusy"
+    },
+    {
+      "key": "Plugin.interaction.finish"
+    },
+    {
+      "key": "Plugin.interaction.cancel"
+    },
+    {
+      "key": "Plugin.interaction.container"
+    },
+    {
+      "key": "ModeFactory"
+    },
+    {
+      "key": "ModeHandler.writes"
+    },
+    {
+      "key": "ModeHandler.snapPreference"
+    },
+    {
+      "key": "ModeHandler.onEnter"
+    },
+    {
+      "key": "ModeHandler.onExit"
+    },
+    {
+      "key": "ModeHandler.onCancel"
+    },
+    {
+      "key": "ModeHandler.onUndoVertex"
+    },
+    {
+      "key": "ModeHandler.onRedoVertex"
+    },
+    {
+      "key": "InputHandlers.onPointerDown"
+    },
+    {
+      "key": "InputHandlers.onPointerMove"
+    },
+    {
+      "key": "InputHandlers.onPointerUp"
+    },
+    {
+      "key": "InputHandlers.onPointerLeave"
+    },
+    {
+      "key": "InputHandlers.onClick"
+    },
+    {
+      "key": "InputHandlers.onDoubleClick"
+    },
+    {
+      "key": "InputHandlers.onDragStart"
+    },
+    {
+      "key": "InputHandlers.onDrag"
+    },
+    {
+      "key": "InputHandlers.onDragEnd"
+    },
+    {
+      "key": "InputHandlers.onDragCancel"
+    },
+    {
+      "key": "InputHandlers.onKeyDown"
+    },
+    {
+      "key": "InputHandlers.onKeyUp"
+    },
+    {
+      "key": "FeatureTypeDefinition.type"
+    },
+    {
+      "key": "FeatureTypeDefinition.geometry"
+    },
+    {
+      "key": "FeatureTypeDefinition.hitPaddingPx"
+    },
+    {
+      "key": "FeatureTypeDefinition.renderer"
+    },
+    {
+      "key": "FeatureTypeDefinition.appliesTo"
+    },
+    {
+      "key": "FeatureTypeDefinition.bbox"
+    },
+    {
+      "key": "FeatureTypeDefinition.hitTest"
+    },
+    {
+      "key": "FeatureTypeDefinition.boxSelect"
+    },
+    {
+      "key": "FeatureTypeDefinition.bounds"
+    },
+    {
+      "key": "FeatureTypeDefinition.outline"
+    },
+    {
+      "key": "FeatureTypeDefinition.handles"
+    },
+    {
+      "key": "FeatureTypeDefinition.onHandleDrag"
+    },
+    {
+      "key": "FeatureTypeDefinition.onHandleDragStart"
+    },
+    {
+      "key": "FeatureTypeDefinition.onHandleDragEnd"
+    },
+    {
+      "key": "FeatureTypeDefinition.snapCandidates"
+    },
+    {
+      "key": "FeatureRenderer.onAdd"
+    },
+    {
+      "key": "FeatureRenderer.draw"
+    },
+    {
+      "key": "FeatureRenderer.onRemove"
+    },
+    {
+      "key": "OverlayRenderer.name"
+    },
+    {
+      "key": "OverlayRenderer.order"
+    },
+    {
+      "key": "OverlayRenderer.onAdd"
+    },
+    {
+      "key": "OverlayRenderer.draw"
+    },
+    {
+      "key": "OverlayRenderer.drawForLayer"
+    },
+    {
+      "key": "OverlayRenderer.drawVertices"
+    },
+    {
+      "key": "OverlayRenderer.hasPendingWork"
+    },
+    {
+      "key": "OverlayRenderer.onRemove"
+    },
+    {
+      "key": "SnapProvider.name"
+    },
+    {
+      "key": "SnapProvider.candidates"
+    },
+    {
+      "key": "HandleProvider.name"
+    },
+    {
+      "key": "HandleProvider.handles"
+    },
+    {
+      "key": "HandleProvider.globalHandles"
+    },
+    {
+      "key": "HandleProvider.onDrag"
+    },
+    {
+      "key": "HandleProvider.onDragStart"
+    },
+    {
+      "key": "HandleProvider.onDragEnd"
+    },
+    {
+      "key": "CompanionProvider.name"
+    },
+    {
+      "key": "CompanionProvider.has"
+    },
+    {
+      "key": "CompanionProvider.draw"
+    },
+    {
+      "key": "CompanionProvider.hitTest"
+    },
+    {
+      "key": "CompanionProvider.onClick"
+    },
+    {
+      "key": "Store.createFeature",
+      "removed": {
+        "change": 107,
+        "why": "the features are written as rows"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.updateFeature",
+      "removed": {
+        "change": 107,
+        "why": "the features are written as rows"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.abortIntermediateUpdates",
+      "removed": {
+        "change": 107,
+        "why": "the features are written as rows"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.deleteFeature",
+      "removed": {
+        "change": 107,
+        "why": "the features are written as rows"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.createLayer"
+    },
+    {
+      "key": "Store.updateLayer"
+    },
+    {
+      "key": "Store.deleteLayer"
+    },
+    {
+      "key": "Store.setLayerOrder"
+    },
+    {
+      "key": "Store.reorderInLayer",
+      "removed": {
+        "change": 118,
+        "why": "the order is written as order keys"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.reorderInGroup",
+      "removed": {
+        "change": 118,
+        "why": "the order is written as order keys"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.createGroup"
+    },
+    {
+      "key": "Store.updateGroup"
+    },
+    {
+      "key": "Store.deleteGroup"
+    },
+    {
+      "key": "Store.createFile"
+    },
+    {
+      "key": "Store.deleteFile"
+    },
+    {
+      "key": "Store.setMetadata"
+    },
+    {
+      "key": "Store.setSelection",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.startEditing",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.endEditing",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.setSelectedVertices",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.setMode",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.setReadOnly",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.setInteractionLock",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.setLocallyHidden",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.getMaxNameNumber",
+      "removed": {
+        "change": 120,
+        "why": "the hooks of the name numbers are taken out"
+      },
+      "pending": true
+    },
+    {
+      "key": "Store.recordNameNumber",
+      "removed": {
+        "change": 120,
+        "why": "the hooks of the name numbers are taken out"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.getFeature",
+      "removed": {
+        "change": 106,
+        "why": "the features are read as rows"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.listFeatures",
+      "removed": {
+        "change": 106,
+        "why": "the features are read as rows"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.listFeaturesInOrder",
+      "removed": {
+        "change": 106,
+        "why": "the features are read as rows"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.getLayer"
+    },
+    {
+      "key": "StoreView.listLayers"
+    },
+    {
+      "key": "StoreView.getLayerOrder"
+    },
+    {
+      "key": "StoreView.getGroup"
+    },
+    {
+      "key": "StoreView.listGroups"
+    },
+    {
+      "key": "StoreView.getFile"
+    },
+    {
+      "key": "StoreView.listFiles"
+    },
+    {
+      "key": "StoreView.getMetadata"
+    },
+    {
+      "key": "StoreView.getSelection",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.getEditingIds",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.getVertexSelection",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.getMode",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.isReadOnly",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.isInteractionLocked",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.isHidden",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.listHidden",
+      "removed": {
+        "change": 119,
+        "why": "the state of the client is held by the instance"
+      },
+      "pending": true
+    },
+    {
+      "key": "StoreView.subscribe"
+    },
+    {
+      "key": "StoreView.transact"
+    },
+    {
+      "key": "Handle.id"
+    },
+    {
+      "key": "Handle.position"
+    },
+    {
+      "key": "Handle.kind"
+    },
+    {
+      "key": "Handle.cursor"
+    },
+    {
+      "key": "SnapCandidate.position"
+    },
+    {
+      "key": "SnapCandidate.kind"
+    },
+    {
+      "key": "SnapCandidate.priority"
+    },
+    {
+      "key": "SnapCandidate.source"
+    },
+    {
+      "key": "Hit.kind"
+    },
+    {
+      "key": "Hit.id"
+    },
+    {
+      "key": "Hit.featureId"
+    },
+    {
+      "key": "Hit.datasetId"
+    },
+    {
+      "key": "Hit.distancePx"
+    },
+    {
+      "key": "SnapPreference.prefer"
+    },
+    {
+      "key": "SnapPreference.unsnapped"
+    },
+    {
+      "key": "SnapResult.lngLat"
+    },
+    {
+      "key": "SnapResult.target"
+    },
+    {
+      "key": "SnapResult.target.kind"
+    },
+    {
+      "key": "SnapResult.target.featureId"
+    },
+    {
+      "key": "SnapResult.target.datasetId"
+    },
+    {
+      "key": "SnapResult.target.description"
+    },
+    {
+      "key": "SnapResult.target.vertex"
+    },
+    {
+      "key": "SnapResult.target.segment"
+    },
+    {
+      "key": "SnapResult.target.segment.start"
+    },
+    {
+      "key": "SnapResult.target.segment.end"
+    },
+    {
+      "key": "ExtensionContext.draw"
+    },
+    {
+      "key": "ExtensionContext.store"
+    },
+    {
+      "key": "ExtensionContext.on"
+    },
+    {
+      "key": "ExtensionContext.off"
+    },
+    {
+      "key": "ExtensionContext.once"
+    },
+    {
+      "key": "ExtensionContext.terrain"
+    },
+    {
+      "key": "ExtensionContext.names"
+    },
+    {
+      "key": "ExtensionContext.screen"
+    },
+    {
+      "key": "ExtensionContext.invalidate"
+    },
+    {
+      "key": "ExtensionContext.drawing"
+    },
+    {
+      "key": "PluginContext.extensions"
+    },
+    {
+      "key": "ModeContext.setMode"
+    },
+    {
+      "key": "ModeContext.hitTest"
+    },
+    {
+      "key": "ModeContext.snap"
+    },
+    {
+      "key": "ModeContext.commitFeature"
+    },
+    {
+      "key": "ModeContext.preview"
+    },
+    {
+      "key": "ModeContext.preview.set"
+    },
+    {
+      "key": "ModeContext.preview.clear"
+    },
+    {
+      "key": "ModeContext.cursor"
+    },
+    {
+      "key": "ModeContext.cursor.set"
+    },
+    {
+      "key": "ModeContext.cursor.reset"
+    },
+    {
+      "key": "ModeContext.selectionStyle"
+    },
+    {
+      "key": "ModeContext.writableLayer"
+    },
+    {
+      "key": "ModeContext.listTraceRows"
+    },
+    {
+      "key": "HitTestContext.point"
+    },
+    {
+      "key": "HitTestContext.lngLat"
+    },
+    {
+      "key": "HitTestContext.tolerancePx"
+    },
+    {
+      "key": "HitTestContext.screen"
+    },
+    {
+      "key": "SnapContext.point"
+    },
+    {
+      "key": "SnapContext.lngLat"
+    },
+    {
+      "key": "SnapContext.tolerancePx"
+    },
+    {
+      "key": "SnapContext.screen"
+    },
+    {
+      "key": "SnapContext.excludeIds"
+    },
+    {
+      "key": "ScreenContext.project"
+    },
+    {
+      "key": "ScreenContext.unproject"
+    },
+    {
+      "key": "ScreenContext.bounds"
+    },
+    {
+      "key": "ScreenContext.outline"
+    },
+    {
+      "key": "ScreenContext.zoom"
+    },
+    {
+      "key": "ScreenContext.pixelRatio"
+    },
+    {
+      "key": "RenderContext.gl"
+    },
+    {
+      "key": "RenderContext.shader"
+    },
+    {
+      "key": "RenderContext.offset"
+    },
+    {
+      "key": "RenderContext.projection"
+    },
+    {
+      "key": "RenderContext.zoom"
+    },
+    {
+      "key": "RenderContext.pixelRatio"
+    },
+    {
+      "key": "RenderContext.opacity"
+    },
+    {
+      "key": "RenderContext.terrain"
+    },
+    {
+      "key": "RenderContext.line"
+    },
+    {
+      "key": "RenderContext.fill"
+    },
+    {
+      "key": "RenderContext.point"
+    },
+    {
+      "key": "TerrainAnchors.project"
+    },
+    {
+      "key": "TerrainAnchors.elevation"
+    },
+    {
+      "key": "TerrainAnchors.ghostOpacity"
+    },
+    {
+      "key": "TerrainAnchors.generation"
+    },
+    {
+      "key": "NameGenerator.next"
+    },
+    {
+      "key": "PointRenderer.draw"
+    },
+    {
+      "key": "LineRenderer.draw"
+    },
+    {
+      "key": "FillRenderer.draw"
+    },
+    {
+      "key": "ShaderData.vertexShaderPrelude"
+    },
+    {
+      "key": "ShaderData.define"
+    },
+    {
+      "key": "ShaderData.variantName"
+    },
+    {
+      "key": "OffsetUniforms.centerLngLat"
+    },
+    {
+      "key": "OffsetUniforms.centerLngLat64"
+    },
+    {
+      "key": "OffsetUniforms.centerMercator"
+    },
+    {
+      "key": "OffsetUniforms.projectionCenter"
+    },
+    {
+      "key": "OffsetUniforms.unitsPerDegree"
+    },
+    {
+      "key": "OffsetUniforms.unitsPerDegree2"
+    },
+    {
+      "key": "DrawPointerEvent.point"
+    },
+    {
+      "key": "DrawPointerEvent.lngLat"
+    },
+    {
+      "key": "DrawPointerEvent.snapped"
+    },
+    {
+      "key": "DrawPointerEvent.modifiers"
+    },
+    {
+      "key": "DrawPointerEvent.pointerType"
+    },
+    {
+      "key": "DrawPointerEvent.original"
+    },
+    {
+      "key": "DrawPointerEvent.programmatic"
+    },
+    {
+      "key": "DrawKeyEvent.key"
+    },
+    {
+      "key": "DrawKeyEvent.modifiers"
+    },
+    {
+      "key": "DrawKeyEvent.original"
+    },
+    {
+      "key": "Modifiers.shift"
+    },
+    {
+      "key": "Modifiers.ctrl"
+    },
+    {
+      "key": "Modifiers.alt"
+    },
+    {
+      "key": "Modifiers.meta"
+    },
+    {
+      "key": "DrawOptions.generateId"
+    },
+    {
+      "key": "RuntimeOptions.isExternalEntry"
+    },
+    {
+      "key": "AutoNameOptions.formatter"
+    },
+    {
+      "key": "Messages.legendBelow"
+    },
+    {
+      "key": "Messages.legendAtLeast"
+    },
+    {
+      "key": "Messages.legendRange"
+    },
+    {
+      "key": "ParseOptions.generateId"
+    },
+    {
+      "key": "ToGeoJSONOptions.getFile"
+    },
+    {
+      "key": "DatasetOptions.zoomScale"
+    },
+    {
+      "key": "DatasetOptions.externalPointRender"
+    },
+    {
+      "key": "DatasetOptions.provider"
+    },
+    {
+      "key": "Draw.transact"
+    },
+    {
+      "key": "Draw.on"
+    },
+    {
+      "key": "Draw.off"
+    },
+    {
+      "key": "Draw.once"
+    },
+    {
+      "key": "Dataset.setZoomScale"
+    },
+    {
+      "key": "Dataset.setExternalPointRender"
+    },
+    {
+      "key": "Dataset.on"
+    },
+    {
+      "key": "Dataset.off"
+    },
+    {
+      "key": "ModesCollection.add"
+    },
+    {
+      "key": "DatasetProvider"
+    },
+    {
+      "key": "DatasetZoomScale"
+    }
+  ]
+}

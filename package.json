@@ -76,6 +76,7 @@
     "lint": "biome check src examples playground bench ui scripts docs/.vitepress/config.mts docs/.vitepress/theme && npm run check:layers && npm run check:terms && npm run check:spdx && node ui/scripts/check-imports.mjs",
     "check:layers": "node scripts/check-layers.mjs",
     "check:terms": "node scripts/check-terms.mjs",
+    "gates": "npm run build && node scripts/gates/run.mjs",
     "docs:api": "typedoc --options typedoc.site.json",
     "docs:check": "node scripts/docs-check.mjs",
     "docs:image": "node scripts/capture-readme-image.mjs",
