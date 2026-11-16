@@ -7,7 +7,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // The tests of the gates of scripts/gates/ run with the library's
+    include: ['src/**/*.test.ts', 'scripts/gates/**/*.test.mjs'],
     // The end-to-end tests start a browser and run separately (`npm run test:e2e`)
     exclude: [...configDefaults.exclude, 'src/e2e/**'],
     coverage: {
