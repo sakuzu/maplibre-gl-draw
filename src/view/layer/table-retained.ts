@@ -78,6 +78,7 @@ import {
 } from '@sakuzu/kasane/render';
 import type { ProjectionData } from 'maplibre-gl';
 import type { GpuRowBuffer } from '../../api/extension/webgl.js';
+import type { LayerTableView } from '../../api/tables.js';
 import type { FeatureTypeRenderer, GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
 import {
   GPU_STATE_BULK,
@@ -2640,6 +2641,7 @@ export class TableLayerRenderer {
     const gpuRows = new Map<number, GpuRowsSource>();
     const view = tables.view(table.tableId);
     const transformFields = this.options.transformFields?.() ?? null;
+    const quadReach = quadReachOf(group, view);
     const ranges = partitionRowGroup(
       group,
       (row) =>
@@ -2654,9 +2656,11 @@ export class TableLayerRenderer {
           transformFields,
           onSprite: (r, source) => sprites.set(r, source),
           onGpuRows: (r, source) => gpuRows.set(r, source),
+          onQuad: quadReach.onQuad,
         }),
       undefined,
       oneDraw ? (row) => sprites.get(row) ?? gpuRows.get(row) : undefined,
+      quadReach.widen,
     );
     if (oneDraw) groupCache.sprites = sprites;
     const next: GroupChunks<TableChunk> = held
@@ -2694,6 +2698,10 @@ export class TableLayerRenderer {
         kept.bounds = range.bounds;
         kept.extentsGeneration = -1;
         kept.index = null;
+      } else if (kept.type === 'rows' && range.bounds && range.widened) {
+        // The quads of its rows on the ground as they are now (a prototype)
+        kept.bounds = range.bounds;
+        (kept as { range: OrderedChunkRange }).range = range;
       }
       return [kept];
     });
@@ -3209,6 +3217,13 @@ export class TableLayerRenderer {
    */
   private seen(chunk: Extract<TableChunk, { bounds: BBox }>, bounds: BBox): boolean {
     if (meets(chunk.bounds, bounds)) return true;
+    // The quads on screen of its rows reach past their points (a prototype)
+    const reach = chunk.range.reachPx ?? 0;
+    if (reach > 0) {
+      const box = chunk.bounds;
+      const [lng, lat] = reachDegrees(reach, box[1], box[3], this.scaleFrame);
+      if (meets(widened(box, lng, lat), bounds)) return true;
+    }
     if (this.movedViews.length === 0) return false;
     if (!this.holdsMovedRows(chunk, this.pass.group as RowGroup)) return false;
     return this.movedViews.some((view) => meets(chunk.bounds, view));
@@ -4349,6 +4364,7 @@ export class TableLayerRenderer {
       const gpuRows = new Map<number, GpuRowsSource>();
       const view = tables.view(layerId);
       const transformFields = this.options.transformFields?.() ?? null;
+      const quadReach = quadReachOf(group, view);
       const ranges = partitionRowGroup(
         group,
         (row) =>
@@ -4363,9 +4379,11 @@ export class TableLayerRenderer {
             transformFields,
             onSprite: (r, source) => sprites.set(r, source),
             onGpuRows: (r, source) => gpuRows.set(r, source),
+            onQuad: quadReach.onQuad,
           }),
         DELTA_CHUNK_VERTICES,
         (row) => sprites.get(row) ?? gpuRows.get(row),
+        quadReach.widen,
       );
       deltaCache.sprites = sprites;
       const chunks = ranges.flatMap((range) => this.makeChunk(range)) as OneDrawChunk[];
@@ -4485,6 +4503,43 @@ function isAtOnce(chunk: TableChunk): chunk is AtOnceChunk {
  * Whether every chunk of a drawing that meets the view has its batches (the rows drawn at once
  * need none), and every extension in view was given its rows (or refused them)
  */
+/** Meters per degree of latitude (the reach of a quad on the ground, in degrees) */
+const QUAD_METERS_PER_DEGREE = 111_319.49079327357;
+
+/**
+ * What widens the bboxes of the rows of a group drawn as quads by their quads (a prototype): the
+ * rows classified as quads, each quad asked of its source, a quad on the ground widening the box
+ * of its row by its half diagonal, one on screen answered as its reach in CSS px
+ */
+function quadReachOf(
+  group: RowGroup,
+  view: LayerTableView | undefined,
+): {
+  onQuad: (row: number, type: RowQuadType) => void;
+  widen: (row: number, box: Float64Array) => number | null;
+} {
+  const quadRows = new Map<number, RowQuadType>();
+  return {
+    onQuad: (row, type) => quadRows.set(row, type),
+    widen: (row, box) => {
+      const type = quadRows.get(row);
+      if (!type || !view) return null;
+      const out = type.out;
+      if (!type.source.quad(view, group.data.rows[row] as number, out)) return null;
+      const half = Math.hypot(out.halfWidth, out.halfHeight);
+      if (!out.meters) return half;
+      const lat = Math.min(85, Math.max(Math.abs(box[1]), Math.abs(box[3])));
+      const dLat = half / QUAD_METERS_PER_DEGREE;
+      const dLng = dLat / Math.max(Math.cos((lat * Math.PI) / 180), 1e-6);
+      box[0] -= dLng;
+      box[1] -= dLat;
+      box[2] += dLng;
+      box[3] += dLat;
+      return 0;
+    },
+  };
+}
+
 function builtInView(chunks: readonly TableChunk[], bounds: BBox): boolean {
   for (const chunk of chunks) {
     if (chunk.type === 'immediate') continue;

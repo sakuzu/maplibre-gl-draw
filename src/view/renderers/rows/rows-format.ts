@@ -512,14 +512,69 @@ export interface RowQuadOut {
 }
 
 /**
- * The most sources of quads drawn in one draw at once (each has a texture unit of its own)
+ * The most sources of quads drawn in one draw at once (each has two texture units of its own)
  *
  * @internal
  */
-export const ROW_QUAD_MAX_SOURCES = 4;
+export const ROW_QUAD_MAX_SOURCES = 2;
 
-/** The largest side of the texture of a source of quads */
-export const ROW_QUAD_TEXTURE_MAX = 2_048;
+/** The textures a source of quads gives its function at most */
+export const ROW_QUAD_TEXTURES = 2;
+
+/** The largest side of a texture of a source of quads */
+export const ROW_QUAD_TEXTURE_MAX = 4_096;
+
+/**
+ * A table a source of quads gives the library to hold on the GPU, which the function reads
+ * (`RowQuadSource.textures`): RGBA, its lines from the top, `width * height * 4` values in `data`.
+ * The library makes the texture from it when the source is registered, writes the lines the
+ * source says it wrote (`RowQuadTables.write`) before the next draw of a quad, and makes it again
+ * whole when the source says it changed its size (`RowQuadTables.resized`, `height` and `data`
+ * read again). Integers (`rgba32ui`) are read with `usampler2D`, the others with `sampler2D`
+ *
+ * @experimental
+ */
+export interface RowQuadDataTexture {
+  readonly format: 'rgba8' | 'rgba32f' | 'rgba32ui';
+  readonly width: number;
+  /** The lines (at most 4096); read again on `resized` */
+  height: number;
+  /** The values; read on every upload, and again on `resized` */
+  data: Uint8Array | Float32Array | Uint32Array;
+  /** How a float table is filtered (`nearest` when omitted; an integer table is never filtered) */
+  readonly filter?: 'nearest' | 'linear';
+}
+
+/**
+ * A texture the source holds itself (in the same WebGL context), bound as it is for every draw of
+ * a chunk with quads: the library neither makes nor releases nor counts it
+ *
+ * @experimental
+ */
+export interface RowQuadExternalTexture {
+  /**
+   * The texture to bind (null: a transparent texel), asked for every draw, with the unit it is
+   * bound to active (the source may upload to it there)
+   */
+  external(): WebGLTexture | null;
+  /** How the function reads it: `float` (`sampler2D`, by default) or `uint` (`usampler2D`) */
+  readonly sampler?: 'float' | 'uint';
+}
+
+/** A texture a source of quads gives its function */
+export type RowQuadTexture = RowQuadDataTexture | RowQuadExternalTexture;
+
+/**
+ * What the library gives a source of quads to tell it the tables it holds changed (`attach`)
+ *
+ * @experimental
+ */
+export interface RowQuadTables {
+  /** The lines `[fromLine, toLine)` of the table `index` were written: uploaded before the next draw */
+  write(index: number, fromLine: number, toLine: number): void;
+  /** The table `index` has another `height` and `data`: the texture is made again whole */
+  resized(index: number): void;
+}
 
 /**
  * What an extension paints each row of its type with, drawn among the other rows of the layer in
@@ -530,13 +585,16 @@ export const ROW_QUAD_TEXTURE_MAX = 2_048;
  * function named `entry`:
  *
  * ```glsl
- * vec4 entry(vec2 uv, vec2 sizePx, vec4 values, sampler2D tex)
+ * vec4 entry(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, T0 tex0, T1 tex1)
  * ```
  *
  * - `uv`: the position in the quad, (0, 0) at its top left and (1, 1) at its bottom right
+ * - `uvDx`, `uvDy`: the derivatives of `uv` along the x and the y of the screen (one device
+ *   pixel), taken before any branch
  * - `sizePx`: the size of the quad on screen, in CSS px
  * - `values`: the four values `quad` gave for the row
- * - `tex`: the texture of the source (a transparent texel without one)
+ * - `tex0`, `tex1`: the textures of the source, `sampler2D` or `usampler2D` as declared (a
+ *   transparent texel of `sampler2D` for one not given)
  * - it returns the color with its alpha premultiplied (`vec4(rgb * a, a)`)
  *
  * Give every name `glsl` declares a prefix of its own. A function that does not compile leaves the
@@ -549,15 +607,14 @@ export interface RowQuadSource {
   readonly glsl: string;
   /** The name of the function */
   readonly entry: string;
+  /** The textures the function reads (two at most, each at most 4096 on a side) */
+  readonly textures?: readonly RowQuadTexture[];
   /**
-   * The picture the function reads (RGBA, 8 bits per channel, the rows from the top, at most
-   * 2048 on a side); none when omitted
+   * Called when the source is registered with the drawing of the rows of an instance, with what it
+   * tells the library about the writes of its tables, and with null when it is let go (the tables
+   * are released then)
    */
-  readonly texture?: {
-    readonly width: number;
-    readonly height: number;
-    readonly data: Uint8Array;
-  };
+  attach?(tables: RowQuadTables | null): void;
   /**
    * The keys of the values of a row `quad` reads: a write of one of them packs the row again
    * (every key when omitted)

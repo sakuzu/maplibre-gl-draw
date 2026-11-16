@@ -20,3 +20,13 @@ export type {
   RowSpriteScaleStop,
   RowSpriteSource,
 } from '../view/renderers/rows/rows-format.js';
+
+// Quads an extension paints its rows with, among the rows of their layer (a prototype)
+export type {
+  RowQuadDataTexture,
+  RowQuadExternalTexture,
+  RowQuadOut,
+  RowQuadSource,
+  RowQuadTables,
+  RowQuadTexture,
+} from '../view/renderers/rows/rows-format.js';

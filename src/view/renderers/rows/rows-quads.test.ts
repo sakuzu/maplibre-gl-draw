@@ -67,9 +67,9 @@ function recordingGL() {
 /** A source of quads whose function paints one color, with a texture of 4 by 4 texels */
 function source(entry: string, body = 'return vec4(values.rgb, 1.0);'): RowQuadSource {
   return {
-    glsl: `vec4 ${entry}(vec2 uv, vec2 sizePx, vec4 values, sampler2D tex) { ${body} }`,
+    glsl: `vec4 ${entry}(vec2 uv, vec2 uvDx, vec2 uvDy, vec2 sizePx, vec4 values, sampler2D tex, sampler2D unused) { ${body} }`,
     entry,
-    texture: { width: 4, height: 4, data: new Uint8Array(64) },
+    textures: [{ format: 'rgba8', width: 4, height: 4, data: new Uint8Array(64) }],
     quad: () => true,
   };
 }

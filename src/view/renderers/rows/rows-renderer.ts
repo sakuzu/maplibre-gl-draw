@@ -49,9 +49,11 @@ import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.
 import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import { bindRowState, type RowStateBinding, RowStateUniforms } from '../row-state.js';
 import type { RowsCopies } from './rows-copies.js';
+import type { RowQuadDataTexture, RowQuadTexture } from './rows-format.js';
 import {
   ROW_QUAD_MAX_SOURCES,
   ROW_QUAD_TEXTURE_MAX,
+  ROW_QUAD_TEXTURES,
   ROW_SPRITE_SCALE_MAX_STOPS,
   ROWS_COORD_WIDTH,
   ROWS_INSTANCE_BYTES,
@@ -97,7 +99,10 @@ const UNIT_GROUND_TILES = 9;
 const UNIT_GROUND_BLOCKS = 10;
 /** The unit of the table of the quads of a chunk (the program of the quads) */
 const UNIT_QUADS = 8;
-/** The unit of the texture of the source of quads of slot 1 (slot k: this plus k - 1) */
+/**
+ * The unit of the first texture of the source of quads of slot 1 (texture t of slot k: this plus
+ * 2 (k - 1) + t)
+ */
 const UNIT_QUAD_TEXTURES = 11;
 
 /** The slots of tiles the tables of the ground are first made with */
@@ -206,7 +211,9 @@ interface RowsUniformLocations {
   readonly groundCount: WebGLUniformLocation | null;
   readonly quads: WebGLUniformLocation | null;
   readonly quadWidth: WebGLUniformLocation | null;
-  /** The samplers of the textures of the sources of quads, by slot from 1 (index 0 unused) */
+  /**
+   * The samplers of the textures of the sources of quads: texture t of slot k at 2 (k - 1) + t
+   */
   readonly quadTextures: readonly (WebGLUniformLocation | null)[];
 }
 
@@ -246,12 +253,33 @@ interface RowsProgram {
   memo: RowsUniformMemo;
 }
 
-/** A source of quads registered with the renderer: its slot and its texture */
+/**
+ * A texture of a source of quads: a table the renderer holds (written by lines as the source says),
+ * or one the source holds itself
+ */
+interface QuadTextureEntry {
+  readonly source: RowQuadTexture;
+  /** How the function reads it */
+  readonly sampler: 'float' | 'uint';
+  /** The texture of a table (null for one the source holds, or before it is made) */
+  texture: WebGLTexture | null;
+  /** The size it was made with, and its bytes */
+  width: number;
+  height: number;
+  bytes: number;
+  /** The lines written since the last upload (`dirtyTo <= dirtyFrom`: none) */
+  dirtyFrom: number;
+  dirtyTo: number;
+  /** Whether it is made again whole before the next draw (the source changed its size) */
+  remake: boolean;
+}
+
+/** A source of quads registered with the renderer: its slot and its textures */
 interface QuadEntry {
   readonly type: RowQuadType;
   /** Its slot, from 1 (0: none, the source failed) */
   readonly slot: number;
-  texture: WebGLTexture | null;
+  readonly textures: QuadTextureEntry[];
 }
 
 /** The programs of the quads of a set of sources, by projection variant */
@@ -283,6 +311,10 @@ export interface RowsQuadStats {
   /** The chunks alive, and those of them with quads */
   readonly chunks: number;
   readonly quadChunks: number;
+  /** The bytes of the tables the renderer holds for the sources of quads */
+  readonly tableBytes: number;
+  /** The bytes of the tables of the quads of the chunks (the values of their rows) */
+  readonly chunkQuadBytes: number;
 }
 
 /** The values last written to the uniforms of a program */
@@ -431,6 +463,9 @@ export class RowsRenderer {
   private quadCheckMs = Number.NaN;
   private chunkCount = 0;
   private quadChunkCount = 0;
+  private chunkQuadBytes = 0;
+  /** The integer texel bound to the integer samplers of the quads without a texture */
+  private emptyUint: WebGLTexture | null = null;
   private bearingFrame = -1;
   private bearing = 0;
 
@@ -569,10 +604,15 @@ export class RowsRenderer {
       checkMs: this.quadCheckMs,
       chunks: this.chunkCount,
       quadChunks: this.quadChunkCount,
+      tableBytes: [...this.quadTypes.values()].reduce(
+        (sum, entry) => sum + entry.textures.reduce((s, t) => s + (t.texture ? t.bytes : 0), 0),
+        0,
+      ),
+      chunkQuadBytes: this.chunkQuadBytes,
     };
   }
 
-  /** The slot and the texture of a source newly registered (a failed one has neither) */
+  /** The slot and the textures of a source newly registered (a failed one has neither) */
   private makeQuadEntry(type: RowQuadType): QuadEntry {
     const used = new Set<number>();
     for (const entry of this.quadTypes.values()) used.add(entry.slot);
@@ -588,11 +628,70 @@ export class RowsRenderer {
         `The drawing of the rows holds ${ROW_QUAD_MAX_SOURCES} sources of quads at most: the rows of another are drawn one by one`,
       );
       type.setState('failed');
-      return { type, slot: 0, texture: null };
+      return { type, slot: 0, textures: [] };
     }
-    const picture = type.source.texture;
-    if (!picture) return { type, slot, texture: null };
-    const { width, height, data } = picture;
+    const given = type.source.textures ?? [];
+    if (given.length > ROW_QUAD_TEXTURES) {
+      console.error(
+        `A source of quads gives ${ROW_QUAD_TEXTURES} textures at most: its rows are drawn one by one`,
+      );
+      type.setState('failed');
+      return { type, slot: 0, textures: [] };
+    }
+    const textures: QuadTextureEntry[] = [];
+    for (const source of given) {
+      const external = 'external' in source;
+      const entry: QuadTextureEntry = {
+        source,
+        sampler: external
+          ? (source.sampler ?? 'float')
+          : source.format === 'rgba32ui'
+            ? 'uint'
+            : 'float',
+        texture: null,
+        width: 0,
+        height: 0,
+        bytes: 0,
+        dirtyFrom: 0,
+        dirtyTo: 0,
+        remake: false,
+      };
+      textures.push(entry);
+      if (!external && !this.makeQuadTable(entry)) {
+        for (const made of textures) this.releaseQuadTexture(made);
+        type.setState('failed');
+        return { type, slot: 0, textures: [] };
+      }
+    }
+    const entry: QuadEntry = { type, slot, textures };
+    type.source.attach?.({
+      write: (index, fromLine, toLine) => {
+        const t = entry.textures[index];
+        if (!t || toLine <= fromLine) return;
+        if (t.dirtyTo <= t.dirtyFrom) {
+          t.dirtyFrom = fromLine;
+          t.dirtyTo = toLine;
+        } else {
+          t.dirtyFrom = Math.min(t.dirtyFrom, fromLine);
+          t.dirtyTo = Math.max(t.dirtyTo, toLine);
+        }
+      },
+      resized: (index) => {
+        const t = entry.textures[index];
+        if (t) t.remake = true;
+      },
+    });
+    return entry;
+  }
+
+  /**
+   * Makes the texture of a table of a source of quads whole from its values (false, with an error
+   * in the console, for a table out of the limits)
+   */
+  private makeQuadTable(entry: QuadTextureEntry): boolean {
+    const table = entry.source as RowQuadDataTexture;
+    const { width, height, data, format } = table;
+    const channels = width * height * 4;
     if (
       !Number.isInteger(width) ||
       !Number.isInteger(height) ||
@@ -600,39 +699,92 @@ export class RowsRenderer {
       height < 1 ||
       width > ROW_QUAD_TEXTURE_MAX ||
       height > ROW_QUAD_TEXTURE_MAX ||
-      data.length !== width * height * 4
+      data.length !== channels
     ) {
       console.error(
-        `The texture of a source of quads is not ${ROW_QUAD_TEXTURE_MAX} texels on a side at most with 4 bytes per texel: its rows are drawn one by one`,
+        `A table of a source of quads is not ${ROW_QUAD_TEXTURE_MAX} texels on a side at most with 4 values per texel: its rows are drawn one by one`,
       );
-      type.setState('failed');
-      return { type, slot: 0, texture: null };
+      return false;
     }
     const gl = this.gl;
     const texture = gl.createTexture();
-    if (!texture) {
-      type.setState('failed');
-      return { type, slot: 0, texture: null };
-    }
+    if (!texture) return false;
+    const { internal, upload, type, bytesPerTexel } = quadTableFormat(gl, format);
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height));
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, internal, width, height));
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, upload, type, data);
+    const filter = format !== 'rgba32ui' && table.filter === 'linear' ? gl.LINEAR : gl.NEAREST;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    this.ledger.record(texture, LEDGER_OWNER, 'texture', textureBytes(width, height, 4));
-    this.uploadedBytes += width * height * 4;
-    return { type, slot, texture };
+    const bytes = textureBytes(width, height, bytesPerTexel);
+    this.ledger.record(texture, LEDGER_OWNER, 'texture', bytes);
+    this.uploadedBytes += width * height * bytesPerTexel;
+    entry.texture = texture;
+    entry.width = width;
+    entry.height = height;
+    entry.bytes = bytes;
+    entry.dirtyFrom = 0;
+    entry.dirtyTo = 0;
+    entry.remake = false;
+    return true;
   }
 
-  /** Releases the texture of a source no type has any more */
-  private releaseQuadEntry(entry: QuadEntry): void {
+  /**
+   * Brings the texture of a table of a source of quads up to its values, with the unit it is
+   * bound to active: made again whole when the source changed its size, or its lines written
+   * since the last upload (false: the table is out of the limits, and left as it was)
+   */
+  private updateQuadTable(entry: QuadTextureEntry): void {
+    const table = entry.source as RowQuadDataTexture;
+    const gl = this.gl;
+    if (entry.remake || table.width !== entry.width || table.height !== entry.height) {
+      const old = entry.texture;
+      if (old) {
+        this.ledger.release(old);
+        gl.deleteTexture(old);
+        entry.texture = null;
+      }
+      this.makeQuadTable(entry);
+      return;
+    }
+    if (!entry.texture || entry.dirtyTo <= entry.dirtyFrom) return;
+    const from = Math.max(0, entry.dirtyFrom);
+    const to = Math.min(entry.height, entry.dirtyTo);
+    entry.dirtyFrom = 0;
+    entry.dirtyTo = 0;
+    if (to <= from) return;
+    const { upload, type, bytesPerTexel } = quadTableFormat(gl, table.format);
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      from,
+      entry.width,
+      to - from,
+      upload,
+      type,
+      table.data,
+      from * entry.width * 4,
+    );
+    this.uploadedBytes += (to - from) * entry.width * bytesPerTexel;
+  }
+
+  /** Releases the texture of a table of a source of quads (none for a texture the source holds) */
+  private releaseQuadTexture(entry: QuadTextureEntry): void {
     if (!entry.texture) return;
     this.ledger.release(entry.texture);
     this.gl.deleteTexture(entry.texture);
     entry.texture = null;
+  }
+
+  /** Releases the tables of a source no type has any more, and lets the source go */
+  private releaseQuadEntry(entry: QuadEntry): void {
+    for (const texture of entry.textures) this.releaseQuadTexture(texture);
+    if (entry.slot > 0) entry.type.source.attach?.(null);
   }
 
   /**
@@ -652,11 +804,7 @@ export class RowsRenderer {
       for (const entry of entries) entry.type.setState('ready');
       return;
     }
-    const functions = entries.map((entry) => ({
-      slot: entry.slot,
-      glsl: entry.type.source.glsl,
-      entry: entry.type.source.entry,
-    }));
+    const functions = entries.map(quadFunctionOf);
     const programs = new Map<RowsVariant, RowsProgram>();
     for (const variant of ROWS_VARIANTS) {
       programs.set(variant, this.startProgram(variant, 'color', functions));
@@ -713,9 +861,7 @@ export class RowsRenderer {
     const gl = this.gl;
     const shader = gl.createShader(gl.FRAGMENT_SHADER);
     if (!shader) return false;
-    const functions: RowsQuadFunction[] = [
-      { slot: entry.slot, glsl: entry.type.source.glsl, entry: entry.type.source.entry },
-    ];
+    const functions: RowsQuadFunction[] = [quadFunctionOf(entry)];
     gl.shaderSource(shader, withSamplerPrecision(buildRowsFragmentSource('color', functions)));
     gl.compileShader(shader);
     const compiles = gl.getShaderParameter(shader, gl.COMPILE_STATUS) === true;
@@ -740,7 +886,7 @@ export class RowsRenderer {
 
   /**
    * Binds the table of the quads of a chunk and the textures of the sources of quads to their
-   * units, then the unit 0 active again
+   * units (the tables written since the last draw uploaded first), then the unit 0 active again
    */
   private bindQuadTextures(program: RowsProgram, chunk: RowsChunk): void {
     const gl = this.gl;
@@ -752,15 +898,57 @@ export class RowsRenderer {
       gl.uniform1i(locations.quadWidth, width);
       program.memo.quadWidth = width;
     }
-    const bySlot: (WebGLTexture | null)[] = [];
+    const bySlot: (QuadEntry | undefined)[] = [];
     for (const entry of this.quadTypes.values()) {
-      if (entry.slot > 0) bySlot[entry.slot] = entry.texture;
+      if (entry.slot > 0) bySlot[entry.slot] = entry;
     }
     for (let k = 1; k <= ROW_QUAD_MAX_SOURCES; k++) {
-      gl.activeTexture(gl.TEXTURE0 + UNIT_QUAD_TEXTURES + k - 1);
-      gl.bindTexture(gl.TEXTURE_2D, bySlot[k] ?? this.emptySprites);
+      const entry = bySlot[k];
+      for (let t = 0; t < ROW_QUAD_TEXTURES; t++) {
+        gl.activeTexture(gl.TEXTURE0 + UNIT_QUAD_TEXTURES + 2 * (k - 1) + t);
+        const texture = entry?.textures[t];
+        let bound: WebGLTexture | null = null;
+        if (texture) {
+          if ('external' in texture.source) bound = texture.source.external();
+          else {
+            this.updateQuadTable(texture);
+            bound = texture.texture;
+          }
+        }
+        const sampler = texture?.sampler ?? 'float';
+        gl.bindTexture(
+          gl.TEXTURE_2D,
+          bound ?? (sampler === 'uint' ? this.emptyUintTexture() : this.emptySprites),
+        );
+      }
     }
     gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /** The integer texel of one texel bound to an integer sampler without a texture (made once) */
+  private emptyUintTexture(): WebGLTexture | null {
+    if (this.emptyUint) return this.emptyUint;
+    const gl = this.gl;
+    const texture = gl.createTexture();
+    if (!texture) return null;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32UI, 1, 1));
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      1,
+      1,
+      gl.RGBA_INTEGER,
+      gl.UNSIGNED_INT,
+      new Uint32Array(4),
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    this.ledger.record(texture, LEDGER_OWNER, 'texture', 16);
+    this.emptyUint = texture;
+    return texture;
   }
 
   // === Chunks ===
@@ -1051,6 +1239,9 @@ export class RowsRenderer {
       this.ledger.release(buffer);
       gl.deleteBuffer(buffer);
     }
+    if (chunk.quads) {
+      this.chunkQuadBytes -= textureBytes(chunk.quads.width, chunk.quads.height, 16);
+    }
     for (const texture of [chunk.coords, chunk.rowStyles, chunk.heights, chunk.quads]) {
       if (!texture) continue;
       this.ledger.release(texture.texture);
@@ -1147,7 +1338,9 @@ export class RowsRenderer {
     const first = starts[fromRow];
     const count = starts[toRow] - first;
     const buffer = points ? chunk.pointBuffer : chunk.instanceBuffer;
-    if (count <= 0 || !buffer || !chunk.vao || !data.palette.gpu || !chunk.coords) return;
+    // A chunk of quads alone has no styles of its rows (none is uploaded)
+    if (count <= 0 || !buffer || !chunk.vao || !chunk.coords) return;
+    if (!data.palette.gpu && !data.hasQuads) return;
     if (!chunk.rowStyles) return;
 
     const gl = this.gl;
@@ -1377,13 +1570,14 @@ export class RowsRenderer {
       this.ledger.release(this.cornerBuffer);
       gl.deleteBuffer(this.cornerBuffer);
     }
-    for (const texture of [this.emptySprites, this.emptyHeights]) {
+    for (const texture of [this.emptySprites, this.emptyHeights, this.emptyUint]) {
       if (!texture) continue;
       this.ledger.release(texture);
       gl.deleteTexture(texture);
     }
     this.emptySprites = null;
     this.emptyHeights = null;
+    this.emptyUint = null;
   }
 
   // === Programs ===
@@ -1496,9 +1690,9 @@ export class RowsRenderer {
       if (locations.bearing) gl.uniform1f(locations.bearing, this.frameBearing());
       if (locations.heights) gl.uniform1i(locations.heights, UNIT_HEIGHTS);
       if (locations.quads) gl.uniform1i(locations.quads, UNIT_QUADS);
-      for (let k = 1; k < locations.quadTextures.length; k++) {
+      for (let k = 0; k < locations.quadTextures.length; k++) {
         const at = locations.quadTextures[k];
-        if (at) gl.uniform1i(at, UNIT_QUAD_TEXTURES + k - 1);
+        if (at) gl.uniform1i(at, UNIT_QUAD_TEXTURES + k);
       }
       const terrain = this.terrain;
       const terrainOn = terrain.renderState.active;
@@ -1607,7 +1801,9 @@ export class RowsRenderer {
     }
     const data = chunk.data;
     const rowStyles = (chunk.rowStyles as SizedTexture).texture;
-    const styles = (data.palette.gpu as SizedTexture).texture;
+    const styles = data.palette.gpu
+      ? (data.palette.gpu as SizedTexture).texture
+      : (this.emptySprites as WebGLTexture);
     // The unit of the pictures is always given one of this renderer's textures (also for a chunk
     // without pictures): a texture left there by other drawing could be the one drawn into
     const sprites = data.sprites?.texture ?? this.emptySprites;
@@ -1837,6 +2033,9 @@ export class RowsRenderer {
         data.rows * ROWS_QUAD_TEXELS,
         ROWS_QUAD_WIDTH,
       );
+      if (chunk.quads) {
+        this.chunkQuadBytes += textureBytes(chunk.quads.width, chunk.quads.height, 16);
+      }
     }
 
     const vao = gl.createVertexArray();
@@ -1942,6 +2141,35 @@ export class RowsRenderer {
 }
 
 /** What a chunk keeps of its packed arrays (not the arrays written to the GPU) */
+/** The function of a source of quads as the program of the quads calls it */
+function quadFunctionOf(entry: QuadEntry): RowsQuadFunction {
+  return {
+    slot: entry.slot,
+    glsl: entry.type.source.glsl,
+    entry: entry.type.source.entry,
+    samplers: [0, 1].map((t) => entry.textures[t]?.sampler ?? 'float'),
+  };
+}
+
+/** How a table of a source of quads is stored and uploaded */
+function quadTableFormat(
+  gl: WebGL2RenderingContext,
+  format: RowQuadDataTexture['format'],
+): { internal: number; upload: number; type: number; bytesPerTexel: number } {
+  if (format === 'rgba32ui') {
+    return {
+      internal: gl.RGBA32UI,
+      upload: gl.RGBA_INTEGER,
+      type: gl.UNSIGNED_INT,
+      bytesPerTexel: 16,
+    };
+  }
+  if (format === 'rgba32f') {
+    return { internal: gl.RGBA32F, upload: gl.RGBA, type: gl.FLOAT, bytesPerTexel: 16 };
+  }
+  return { internal: gl.RGBA8, upload: gl.RGBA, type: gl.UNSIGNED_BYTE, bytesPerTexel: 4 };
+}
+
 function layoutOf(data: RowsChunkData): RowsChunkLayout {
   return {
     origin: data.origin,
@@ -2019,10 +2247,9 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     groundCount: at('u_ground_count'),
     quads: at('u_quads'),
     quadWidth: at('u_quad_width'),
-    quadTextures: [
-      null,
-      ...Array.from({ length: ROW_QUAD_MAX_SOURCES }, (_, k) => at(`u_quad_tex${k + 1}`)),
-    ],
+    quadTextures: Array.from({ length: ROW_QUAD_MAX_SOURCES * ROW_QUAD_TEXTURES }, (_, i) =>
+      at(`u_quad_s${Math.floor(i / ROW_QUAD_TEXTURES) + 1}_${i % ROW_QUAD_TEXTURES}`),
+    ),
   };
 }
 

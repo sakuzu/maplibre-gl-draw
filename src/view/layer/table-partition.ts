@@ -87,6 +87,8 @@ export interface RowClassifyContext {
   readonly onSprite?: (row: number, source: RowSpriteSource) => void;
   /** Receives each row an extension holds on the GPU, with what makes what holds it */
   readonly onGpuRows?: (row: number, source: GpuRowsSource) => void;
+  /** Receives each row drawn as a quad of an extension, with its source (a prototype) */
+  readonly onQuad?: (row: number, type: RowQuadType) => void;
   /**
    * The fields the custom types declare: a row of a type that declares a scale field is drawn at
    * once, also where its renderer gives pictures (a picture is chosen by the style of a point,
@@ -190,7 +192,9 @@ export function classifyRow(
   }
   if (custom && quads) {
     // A quad around a point (a row of another geometry is drawn at once)
-    return geometryAt(group, row)?.reader?.type === 'Point' ? 'rows' : 'immediate';
+    if (geometryAt(group, row)?.reader?.type !== 'Point') return 'immediate';
+    context.onQuad?.(row, renderer?.rowQuads as RowQuadType);
+    return 'rows';
   }
   if (custom) {
     // A point drawn with a picture of its extension (a style without one is drawn at once)
@@ -247,8 +251,15 @@ export interface OrderedChunkRange {
   readonly to: number;
   /** The coordinates of its rows (the estimate of the work of a build) */
   readonly vertices: number;
-  /** The union of the bboxes of its rows (null when no row has one) */
+  /**
+   * The union of the bboxes of its rows (null when no row has one), widened by the quads of its
+   * rows on the ground
+   */
   readonly bounds: BBox | null;
+  /** How far the quads of its rows on screen reach past their points (CSS px; 0 for none) */
+  readonly reachPx?: number;
+  /** Whether a row of it is drawn as a quad whose extent widened its bounds */
+  readonly widened?: boolean;
   /** What makes what holds its rows on the GPU (a chunk of the kind `extension`) */
   readonly gpuRows?: GpuRowsSource;
 }
@@ -261,6 +272,9 @@ export interface OrderedChunkRange {
  *   chunk of its own)
  * @param sourceOf The source of the pictures a row is drawn with, or of what holds it on the GPU,
  *   if any: a chunk holds the rows of one source, and ends where a row needs another
+ * @param widen Widens the bbox of a row by what it draws past its positions (a quad on the ground)
+ *   and answers how far it reaches past them on screen (CSS px; null for a row it does not
+ *   widen), after `classify` read the row
  * @internal
  */
 export function partitionRowGroup(
@@ -268,6 +282,7 @@ export function partitionRowGroup(
   classify: (row: number) => TableRunKind | null,
   targetVertices = CHUNK_TARGET_VERTICES,
   sourceOf?: (row: number) => RowSpriteSource | GpuRowsSource | undefined,
+  widen?: (row: number, box: Float64Array) => number | null,
 ): OrderedChunkRange[] {
   const out: OrderedChunkRange[] = [];
   const b = new Float64Array(4);
@@ -275,6 +290,8 @@ export function partitionRowGroup(
   let from = 0;
   let vertices = 0;
   let box: [number, number, number, number] | null = null;
+  let reachPx = 0;
+  let widened = false;
   let source: RowSpriteSource | GpuRowsSource | undefined;
 
   const close = (to: number): void => {
@@ -286,12 +303,16 @@ export function partitionRowGroup(
         vertices,
         // A box made for this run (the next run makes its own)
         bounds: box,
+        ...(reachPx > 0 && { reachPx }),
+        ...(widened && { widened }),
         ...(kind === 'extension' && { gpuRows: source as GpuRowsSource }),
       });
     }
     from = to;
     vertices = 0;
     box = null;
+    reachPx = 0;
+    widened = false;
     source = undefined;
   };
 
@@ -314,6 +335,11 @@ export function partitionRowGroup(
     if (rowSource) source = rowSource;
     vertices += rowVertices;
     if (pageRowBox(group.data, row, b)) {
+      const reach = widen && rowKind !== null ? widen(row, b) : null;
+      if (reach !== null) {
+        widened = true;
+        reachPx = Math.max(reachPx, reach);
+      }
       if (!box) box = [b[0], b[1], b[2], b[3]];
       else {
         if (b[0] < box[0]) box[0] = b[0];

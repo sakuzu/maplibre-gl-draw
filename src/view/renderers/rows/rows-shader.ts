@@ -80,7 +80,8 @@ const EARTH_CIRCUMFERENCE = 2 * Math.PI * 6378137;
 
 /**
  * The function of a source of quads, as the program of the quads calls it: its GLSL and its
- * name, and the slot of its source (its texture is the sampler `u_quad_tex<slot>`)
+ * name, the slot of its source (its textures are the samplers `u_quad_s<slot>_0` and `_1`), and
+ * how each of its two textures is read
  *
  * @internal
  */
@@ -88,6 +89,7 @@ export interface RowsQuadFunction {
   readonly slot: number;
   readonly glsl: string;
   readonly entry: string;
+  readonly samplers: readonly ('float' | 'uint')[];
 }
 
 /** A float literal of GLSL */
@@ -1609,18 +1611,28 @@ void main() {
  * their textures, their functions, and the branch on the slot of the quad
  */
 function quadFragmentGlsl(quads: readonly RowsQuadFunction[]): string {
-  const samplers = quads.map((q) => `uniform sampler2D u_quad_tex${q.slot};`).join('\n');
+  const samplers = quads
+    .flatMap((q) =>
+      [0, 1].map(
+        (k) =>
+          `uniform ${q.samplers[k] === 'uint' ? 'highp usampler2D' : 'sampler2D'} u_quad_s${q.slot}_${k};`,
+      ),
+    )
+    .join('\n');
   const functions = quads.map((q) => q.glsl).join('\n');
   const calls = quads
     .map(
       (q) =>
-        `    if (slot == ${q.slot}) color = ${q.entry}(v_geom.xy, v_params.xy, v_color, u_quad_tex${q.slot});`,
+        `    if (slot == ${q.slot}) color = ${q.entry}(v_geom.xy, uvDx, uvDy, v_params.xy, v_color, u_quad_s${q.slot}_0, u_quad_s${q.slot}_1);`,
     )
     .join('\n');
   return `${samplers}
 ${functions}
-// A quad: the color its function gives (premultiplied), divided back and faded by the layer
+// A quad: the color its function gives (premultiplied), divided back and faded by the layer. The
+// derivatives of its position are taken here, before the function branches
 vec4 shadeQuad() {
+    vec2 uvDx = dFdx(v_geom.xy);
+    vec2 uvDy = dFdy(v_geom.xy);
     int slot = int(v_params.w + 0.5);
     vec4 color = vec4(0.0);
 ${calls}
