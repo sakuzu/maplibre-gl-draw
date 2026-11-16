@@ -138,7 +138,8 @@ async function drawRows(
       let pixels = await read();
       for (let i = 0; i < 400; i++) {
         const stats = diagnostics.quadStats();
-        const done = stats !== null && stats.types > 0 && stats.ready + stats.failed === stats.types;
+        const done =
+          stats !== null && stats.types > 0 && stats.ready + stats.failed === stats.types;
         if (done && !w.draw.hasPendingWork()) break;
         pixels = await read();
       }
@@ -180,7 +181,11 @@ async function colorAt(page: Page, key: string, x: number, y: number): Promise<n
 }
 
 /** The pixels of two pictures whose channels differ */
-async function differing(page: Page, a: string, b: string): Promise<{ drawn: number; differ: number }> {
+async function differing(
+  page: Page,
+  a: string,
+  b: string,
+): Promise<{ drawn: number; differ: number }> {
   return page.evaluate(
     ({ a, b }) => {
       const captured = (window as unknown as { captured: Record<string, Uint8Array> }).captured;
@@ -303,7 +308,9 @@ describe('the quads of the drawing of the rows (a prototype)', () => {
     const ranges = await drawRows(page, 'quad-program', rows, { quadForAll: true });
     expect(ranges.ready).toBe(1);
     const { drawn, differ } = await differing(page, 'rows', 'quad-program');
-    console.log(`[quads] the program of the quads without a quad: ${drawn} drawn, ${differ} differ`);
+    console.log(
+      `[quads] the program of the quads without a quad: ${drawn} drawn, ${differ} differ`,
+    );
     expect(drawn).toBeGreaterThan(0);
     expect(differ).toBe(0);
   });

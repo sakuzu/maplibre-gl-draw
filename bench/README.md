@@ -288,7 +288,9 @@ of rows, on a map with a background layer only (no network, no terrain, not pitc
 `window.__bench.ready` settles once the rows are drawn and the program of the quads is linked
 (or failed). `window.__bench.run(seconds)` (10 seconds at most) draws every frame with
 `map.triggerRepaint()` for that long and returns the time of the first frame, the median, the
-90th percentile and the longest interval of the frames after it, the draw calls of the WebGL
+90th percentile and the longest interval of the frames after it, the time each frame took to
+draw with the GPU waited for (`drawMs`: the drawing of the map, `map._render`, wrapped, and one
+pixel read back right after it; its median, 90th percentile and longest), the draw calls of the WebGL
 context in a frame, the ranges of rows drawn in a frame (`recordDraws`), the chunks, the time the
 program of the quads took to compile, and for `drag` how far the pies jump when the drag is
 written: where the GPU drew them in the last frame (the motion of their moving set computed as

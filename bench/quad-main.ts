@@ -193,6 +193,34 @@ function countDraws(gl: WebGL2RenderingContext): void {
   }
 }
 
+/**
+ * Watches the time each frame of the map takes to draw: its drawing (`map._render`) wrapped, one
+ * pixel read back right after it so the GPU is waited for, the time between the two kept. `stop`
+ * puts the drawing back and answers the times (ms)
+ */
+function watchDrawTimes(): { stop(): number[] } {
+  const target = map as unknown as { _render?: (...args: unknown[]) => unknown };
+  const own = Object.getOwnPropertyDescriptor(target, '_render') !== undefined;
+  const original = target._render as (...args: unknown[]) => unknown;
+  const gl = map.getCanvas().getContext('webgl2');
+  const pixel = new Uint8Array(4);
+  const times: number[] = [];
+  target._render = function (this: unknown, ...args: unknown[]): unknown {
+    const start = performance.now();
+    const result = original.apply(this, args);
+    gl?.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    times.push(performance.now() - start);
+    return result;
+  };
+  return {
+    stop() {
+      if (own) target._render = original;
+      else delete target._render;
+      return times;
+    },
+  };
+}
+
 /** The next frame drawn (the map asked to draw it), or an error after `timeoutMs` */
 function nextFrame(timeoutMs = 5_000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -456,6 +484,11 @@ interface RunResult {
   readonly firstFrameMs: number;
   /** The intervals of the frames after it (ms) */
   readonly frameMs: { median: number; p90: number; max: number };
+  /**
+   * The time each frame took to draw, the GPU waited for (`map._render` and one pixel read back
+   * after it; ms)
+   */
+  readonly drawMs: { median: number; p90: number; max: number };
   /** The draw calls of the WebGL context in a frame (maplibre's included) */
   readonly glDrawsPerFrame: { median: number; max: number };
   /** The ranges of rows drawn in one frame (`recordDraws`), by how they are drawn */
@@ -702,6 +735,8 @@ async function run(seconds = 3): Promise<RunResult> {
     };
     const intervals: number[] = [];
     const draws: number[] = [];
+    const drawTimes = watchDrawTimes();
+    let drawn: number[] = [];
     const measured = await new Promise<{ first: number; frames: number }>((resolve, reject) => {
       const start = performance.now();
       let last = start;
@@ -736,6 +771,8 @@ async function run(seconds = 3): Promise<RunResult> {
       map.on('render', onRender);
       step(0);
       map.triggerRepaint();
+    }).finally(() => {
+      drawn = drawTimes.stop();
     });
     const drag = sketchId ? await letGo(sketchId) : null;
     const stats = d.editStats();
@@ -750,6 +787,7 @@ async function run(seconds = 3): Promise<RunResult> {
       frames: measured.frames,
       firstFrameMs: measured.first,
       frameMs: summary(intervals),
+      drawMs: summary(drawn),
       glDrawsPerFrame: { median: drawSummary.median, max: drawSummary.max },
       ranges,
       quads: d.quadStats(),
@@ -772,6 +810,7 @@ function describe(result: RunResult): string {
     scene === 'alt' ? `mode=${mode}` : scene === 'poly' ? `ext=${ext ? 1 : 0}` : `op=${op}`,
     `frames=${result.frames} first=${f(result.firstFrameMs)} ms`,
     `frame median=${f(result.frameMs.median)} p90=${f(result.frameMs.p90)} max=${f(result.frameMs.max)} ms`,
+    `draw median=${f(result.drawMs.median)} p90=${f(result.drawMs.p90)} max=${f(result.drawMs.max)} ms`,
     `gl draws/frame median=${result.glDrawsPerFrame.median} max=${result.glDrawsPerFrame.max}`,
     `ranges ${JSON.stringify(result.ranges)}`,
     `rows cpu prerender=${f(result.rowsCpuMs.prerender)} draw=${f(result.rowsCpuMs.draw)} ms`,
