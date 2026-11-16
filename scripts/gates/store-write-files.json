@@ -1,5 +1,5 @@
 {
-  "description": "The files outside src/store/ that may call a writing method of the Store, and the writing methods (those of the Store of the published version and of the fixed declarations of api/). The list starts with the files that write to the Store in the published version; the units that move the writes change it.",
+  "description": "The files outside src/store/ that may call a writing method of the Store, and the writing methods (those of the Store of the published version and of the fixed declarations of api/). The list starts with the files that write to the Store in the published version; the work that moves the writes change it.",
   "methods": [
     "createFeature",
     "updateFeature",

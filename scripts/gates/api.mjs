@@ -11,7 +11,7 @@
 //
 // The differences the published version still has wait in the `declarations` of
 // scripts/gates/api-pending.json, under the number of the change that explains them. The gate fails
-// on a difference that is not listed, and on a listed one that is gone: the unit that makes the
+// on a difference that is not listed, and on a listed one that is gone: the change that makes the
 // build match removes its rows, so the list only gets shorter. The table and webgl entries have
 // no list: their fixed files are the declarations of the published version.
 

@@ -6,7 +6,7 @@
 // Type-checks every sample against the package as the build left it: the samples import the
 // package by its name, which resolves through the `exports` of package.json to dist/. A sample
 // that does not pass yet waits in the `samples` of scripts/gates/api-pending.json; a waiting
-// sample that passes fails the gate, so that the unit that made it pass removes its row.
+// sample that passes fails the gate, so that the change that made it pass removes its row.
 
 import { existsSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
