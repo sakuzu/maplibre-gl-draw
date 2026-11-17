@@ -43,7 +43,15 @@ const PORTS = {
 };
 
 /** Generated or third-party files that are not ours to label */
-const SKIP = [/^dist\//, /^site-dist\//, /\/dist\//, /^docs\/reference\/api\//, /\/public\//];
+const SKIP = [
+  /^dist\//,
+  /^site-dist\//,
+  /\/dist\//,
+  /^docs\/reference\/api\//,
+  /\/public\//,
+  // The fixed declarations are kept as written; the LICENSE of the repository covers them
+  /^api\//,
+];
 
 function header(file) {
   const license = PORTS[file] ? `${LICENSE} AND ${PORTS[file]}` : LICENSE;
