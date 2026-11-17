@@ -21,6 +21,7 @@ export default defineConfig({
         perf: resolve(root, 'perf.html'),
         bench: resolve(root, 'bench.html'),
         drape: resolve(root, 'drape.html'),
+        edit: resolve(root, 'edit.html'),
       },
     },
   },

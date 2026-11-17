@@ -58,6 +58,62 @@ the drape. Compare `style=dashed` with `style=solid` at the same number of
 edges, with a few edges (`edges=100`) as the cost of the frame without
 lines.
 
+## edit.html
+
+The scenes of an edit on a document of `n` features, run one at a time,
+on a map with a background layer only (no network), in a fixed 1280 x 800
+map. The features are made in the page (`edit-document.ts`), the same on
+every visit: one per cell of a square grid, half of them polygons (one in
+five a regular 24-gon), three in ten lines and the rest points, in one
+layer.
+
+| Parameter | Meaning | Default |
+| --- | --- | --- |
+| `n` | Number of features (1 to 250,000) | `1000` |
+
+The page links to 1,000, 10,000 and 100,000 features; start with the
+fewest. Nothing runs until a scene is asked for. A button, or
+`window.runEditBench(name)`, runs one scene once. The scene first puts
+the page in the state it starts from (the document opened, the selection
+made, the camera over the whole grid), which is not measured. Then it
+makes the edit while every frame is drawn (`triggerRepaint` in every
+animation frame), until the drawing has nothing left to do. A scene stops
+after 20 seconds, preparation included, and nothing runs after it.
+
+| Scene | What it does |
+| --- | --- |
+| `open` | `draw.document.load` of a document of the library, on an empty document |
+| `pan` | Pans the map 6 px a frame, 90 frames right and 90 back |
+| `selectAll` | Selects every feature with `draw.selection.set` |
+| `boxSelect` | Draws a box over the whole view with Shift, a move of the mouse a frame |
+| `drag` | Drags every feature selected from the middle of the map, a move a frame |
+| `delete` | Deletes every feature selected with `draw.selection.delete` |
+| `import` | `draw.document.load` of a GeoJSON `File` into the layer, on an empty document |
+| `export` | `draw.document.toJSON` and `JSON.stringify` of the document |
+
+The box and the drag are made with the events of the mouse sent to the
+canvas, as the select mode takes them from a hand. Each scene gives:
+
+- the longest task: the longest time the main thread could do nothing
+  else, the longest of the long tasks the browser reports (50 ms or more),
+  the calls the scene timed and the drawings of the frames
+- the frames: the median and the worst of their intervals, and of the time
+  the map took to draw each one, read until the GPU had finished it (a
+  pixel is read back after each drawing), which shows differences below
+  the refresh of the display
+- the calls timed (how many, the longest), and for an edit done in parts,
+  the number of parts and the longest one
+- what the scene noted (the features selected, loaded or left, the bytes
+  written)
+
+The result of the last run of each scene is shown on the page and kept in
+`window.editResults`, by the name of the scene. `window.editReady` settles
+once the map is loaded. A scene is a name and two functions in
+`edit-scenes.ts` (`prepare`, not measured, and `run`); a new scene is a
+new entry of its list. The parts of the page that run without a map (the
+documents and the list of the scenes) are tested with
+`npx vitest run --root bench`.
+
 ## Test data
 
 `npm run generate -w bench` writes native files of 1,000 and 10,000
