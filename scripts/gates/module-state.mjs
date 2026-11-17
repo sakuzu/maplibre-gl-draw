@@ -2,10 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // The gate of the state of the modules: a value at the top level of a file of the library that
-// two instances would share. Every top-level `let` and `var`, and every top-level `const` whose
-// value is made with `new` (`new Map`, `new Set`, `new WeakMap`, a typed array, an object of a
-// class) is a row of scripts/gates/module-state-allowed.json. A row that no longer matches fails,
-// so the list only holds what is there. Only the maintainer adds a row.
+// two instances would share. Every top-level `let` and `var`, and every top-level `const` that
+// makes a container that can be changed (`new Map`, `new Set`, `new WeakMap`, `new WeakSet`, a
+// typed array, an array, an object of a class) is a row of
+// scripts/gates/module-state-allowed.json, which holds what the published version has. A row that
+// no longer matches fails, so the list only gets shorter; no row is added.
+//
+// A table of constants is not state: a top-level `const` whose type annotation is
+// `ReadonlySet<...>`, `ReadonlyMap<...>`, `ReadonlyArray<...>` or `readonly ...[]` (the type keeps
+// it from being changed). A new table of constants is written with such an annotation.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -44,7 +49,9 @@ export function moduleState(root) {
         }
         let kind = null;
         if (!isConst) kind = st.declarationList.flags & ts.NodeFlags.Let ? 'let' : 'var';
+        else if (isReadonlyType(ts, d.type)) kind = null;
         else if (init && ts.isNewExpression(init)) kind = `new ${init.expression.getText(sf)}`;
+        else if (init && ts.isArrayLiteralExpression(init)) kind = 'array';
         if (!kind) continue;
         const line = sf.getLineAndCharacterOfPosition(d.getStart(sf)).line + 1;
         out.push({ file, name: d.name.getText(sf), kind, line });
@@ -53,6 +60,24 @@ export function moduleState(root) {
     sf.statements.forEach(visit);
   }
   return out;
+}
+
+const READONLY_CONTAINERS = new Set(['ReadonlySet', 'ReadonlyMap', 'ReadonlyArray']);
+
+/**
+ * Whether a type annotation keeps the value from being changed: `ReadonlySet<...>`,
+ * `ReadonlyMap<...>`, `ReadonlyArray<...>`, `readonly T[]` (and `readonly [A, B]`)
+ */
+function isReadonlyType(ts, type) {
+  if (!type) return false;
+  if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
+    return READONLY_CONTAINERS.has(type.typeName.text);
+  }
+  return (
+    ts.isTypeOperatorNode(type) &&
+    type.operator === ts.SyntaxKind.ReadonlyKeyword &&
+    (ts.isArrayTypeNode(type.type) || ts.isTupleTypeNode(type.type))
+  );
 }
 
 /** @param {{ root: string }} ctx */

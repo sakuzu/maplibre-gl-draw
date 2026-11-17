@@ -16,7 +16,7 @@ describe('the gate of the module state', () => {
       },
       'src/shared/utils/id.ts': 'let pool = 0;\nexport const next = () => ++pool;\n',
       'src/view/draw.ts':
-        "const KINDS = ['a', 'b'] as const;\nexport function draw() {\n  const cache = new Map();\n  return [KINDS, cache];\n}\n",
+        "const KINDS: readonly string[] = ['a', 'b'];\nexport function draw() {\n  const cache = new Map();\n  return [KINDS, cache];\n}\n",
       'src/view/draw.test.ts': 'const seen = new Set();\nexport { seen };\n',
     });
 
@@ -44,6 +44,46 @@ describe('the gate of the module state', () => {
     const e = checkState({ root }).errors.join('\n');
     expect(e).toContain('module state let total');
     expect(e).toContain('module state new Set instances');
+  });
+
+  it('fails on a top-level array, also one written as const, but not on an object or a string', () => {
+    const root = base();
+    write(root, {
+      'src/modes/order.ts':
+        "const order: string[] = [];\nconst NAMES = ['a', 'b'] as const;\nconst LOOK = { width: 1 };\nconst NAME = 'a';\nexport { order, NAMES, LOOK, NAME };\n",
+    });
+    const e = checkState({ root }).errors.join('\n');
+    expect(e).toContain('src/modes/order.ts:1: module state array order');
+    expect(e).toContain('src/modes/order.ts:2: module state array NAMES');
+    expect(e).not.toContain('LOOK');
+    expect(e).not.toMatch(/ NAME$/m);
+  });
+
+  it('passes on tables of constants whose type annotation is read-only', () => {
+    const root = base();
+    write(root, {
+      'src/shared/tables.ts': [
+        "const KINDS: ReadonlySet<string> = new Set(['a', 'b']);",
+        "const SIZES: ReadonlyMap<string, number> = new Map([['a', 1]]);",
+        "const ORDER: ReadonlyArray<string> = ['a', 'b'];",
+        "const EDGES: readonly string[] = ['top', 'left'];",
+        'export { KINDS, SIZES, ORDER, EDGES };',
+        '',
+      ].join('\n'),
+    });
+    expect(checkState({ root }).errors).toEqual([]);
+  });
+
+  it('still fails on a read-only annotation over a let, and on a mutable annotation over a const', () => {
+    const root = base();
+    write(root, {
+      'src/shared/tables.ts':
+        "let KINDS: ReadonlySet<string> = new Set(['a']);\nconst SIZES: Map<string, number> = new Map();\nconst SEEN = new Set<string>() as ReadonlySet<string>;\nexport { KINDS, SIZES, SEEN };\n",
+    });
+    const e = checkState({ root }).errors.join('\n');
+    expect(e).toContain('module state let KINDS');
+    expect(e).toContain('module state new Map SIZES');
+    expect(e).toContain('module state new Set SEEN');
   });
 
   it('fails on an allowed row that is no longer there', () => {
