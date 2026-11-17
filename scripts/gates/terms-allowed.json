@@ -1,1 +1,610 @@
-{ "allowed": [] }
+{
+  "allowed": [
+    {
+      "where": "CONTRIBUTING.ja.md",
+      "term": "サーバー",
+      "reason": "the development servers of the examples and of the site",
+      "hits": 2
+    },
+    {
+      "where": "CONTRIBUTING.ja.md",
+      "term": "履歴",
+      "reason": "the history of the work and of git, or the changelog",
+      "hits": 1
+    },
+    {
+      "where": "CONTRIBUTING.md",
+      "term": "\\bhistory",
+      "reason": "the history of the work and of git, or the changelog",
+      "hits": 1
+    },
+    {
+      "where": "CONTRIBUTING.md",
+      "term": "\\bservers?\\b",
+      "reason": "the development servers of the examples and of the site",
+      "hits": 2
+    },
+    {
+      "where": "README.ja.md",
+      "term": "サーバー",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 1
+    },
+    {
+      "where": "README.md",
+      "term": "\\bservers?\\b",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 1
+    },
+    {
+      "where": "SECURITY.md",
+      "term": "(local)",
+      "reason": "the address for reporting a security issue",
+      "hits": 1
+    },
+    {
+      "where": "declarations/table/PreparedTable",
+      "term": "\\bsent\\b",
+      "reason": "the fixed declarations of the table entry, those of the published version: the table is sent from a Worker to the main thread",
+      "hits": 1
+    },
+    {
+      "where": "declarations/table/Table",
+      "term": "\\bsent\\b",
+      "reason": "the fixed declarations of the table entry, those of the published version: the table is sent from a Worker to the main thread",
+      "hits": 1
+    },
+    {
+      "where": "declarations/table/prepareTable",
+      "term": "\\bsend",
+      "reason": "the fixed declarations of the table entry, those of the published version: the table is sent from a Worker to the main thread",
+      "hits": 1
+    },
+    {
+      "where": "declarations/table/transferList",
+      "term": "\\bsend",
+      "reason": "the fixed declarations of the table entry, those of the published version: the table is sent from a Worker to the main thread",
+      "hits": 1
+    },
+    {
+      "where": "docs/README.ja.md",
+      "term": "サーバー",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset); server-side rendering",
+      "hits": 2
+    },
+    {
+      "where": "docs/README.md",
+      "term": "\\bservers?\\b",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset); server-side rendering",
+      "hits": 2
+    },
+    {
+      "where": "docs/api-index.md",
+      "term": "\\bservers?\\b",
+      "reason": "the places the geometry functions run in (workers, servers, tests)",
+      "hits": 1
+    },
+    {
+      "where": "docs/examples/datasets.ja.md",
+      "term": "サーバー",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 3
+    },
+    {
+      "where": "docs/examples/datasets.md",
+      "term": "\\bservers?\\b",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 3
+    },
+    {
+      "where": "docs/guides/frameworks.ja.md",
+      "term": "サーバー",
+      "reason": "server-side rendering",
+      "hits": 6
+    },
+    {
+      "where": "docs/guides/frameworks.md",
+      "term": "\\bservers?\\b",
+      "reason": "server-side rendering",
+      "hits": 6
+    },
+    {
+      "where": "docs/guides/large-data.ja.md",
+      "term": "サーバー",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 3
+    },
+    {
+      "where": "docs/guides/large-data.md",
+      "term": "\\bservers?\\b",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 3
+    },
+    {
+      "where": "docs/guides/migrating.ja.md",
+      "term": "履歴",
+      "reason": "the history of the work and of git, or the changelog",
+      "hits": 2
+    },
+    {
+      "where": "docs/guides/migrating.md",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "says that the library has no undo",
+      "hits": 1
+    },
+    {
+      "where": "docs/guides/plugins.md",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "docs/guides/save-load.ja.md",
+      "term": "\\bservers?\\b",
+      "reason": "an application that keeps its document on a server of its own, or a copy kept in step by its listener",
+      "hits": 4
+    },
+    {
+      "where": "docs/guides/save-load.ja.md",
+      "term": "サーバー",
+      "reason": "an application that keeps its document on a server of its own, or a copy kept in step by its listener",
+      "hits": 1
+    },
+    {
+      "where": "docs/guides/save-load.ja.md",
+      "term": "履歴",
+      "reason": "says that the library keeps no history of changes",
+      "hits": 1
+    },
+    {
+      "where": "docs/guides/save-load.md",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "docs/guides/save-load.md",
+      "term": "\\bhistory",
+      "reason": "says that the library keeps no history of changes",
+      "hits": 1
+    },
+    {
+      "where": "docs/guides/save-load.md",
+      "term": "\\bservers?\\b",
+      "reason": "an application that keeps its document on a server of its own, or a copy kept in step by its listener",
+      "hits": 5
+    },
+    {
+      "where": "docs/internals/architecture.md",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the undo and redo of the vertices of the shape being drawn, a feature of the library",
+      "hits": 1
+    },
+    {
+      "where": "docs/internals/maplibre-coupling.md",
+      "term": "\\bpeers?\\b(?! dependenc)",
+      "reason": "the peer dependency on maplibre-gl",
+      "hits": 3
+    },
+    {
+      "where": "docs/internals/releasing.md",
+      "term": "\\bhistory",
+      "reason": "the history of the work and of git, or the changelog",
+      "hits": 3
+    },
+    {
+      "where": "docs/internals/releasing.md",
+      "term": "\\bpeers?\\b(?! dependenc)",
+      "reason": "the peer dependency on maplibre-gl",
+      "hits": 6
+    },
+    {
+      "where": "docs/internals/rendering.md",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "redo in the plain sense of doing a computation again",
+      "hits": 1
+    },
+    {
+      "where": "docs/internals/rendering.md",
+      "term": "\\bpeers?\\b(?! dependenc)",
+      "reason": "the peer dependency on maplibre-gl",
+      "hits": 1
+    },
+    {
+      "where": "docs/internals/rendering.md",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "docs/internals/test-design.md",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the first and the last vertex of a closed ring kept equal",
+      "hits": 1
+    },
+    {
+      "where": "docs/reference/events.md",
+      "term": "\\bhistory",
+      "reason": "says that the library keeps no history of changes",
+      "hits": 1
+    },
+    {
+      "where": "docs/reference/events.md",
+      "term": "\\bservers?\\b",
+      "reason": "an application that keeps its document on a server of its own, or a copy kept in step by its listener",
+      "hits": 1
+    },
+    {
+      "where": "examples/README.md",
+      "term": "\\bservers?\\b",
+      "reason": "the development servers of the examples and of the site",
+      "hits": 1
+    },
+    {
+      "where": "examples/datasets/data.ts",
+      "term": "\\bservers?\\b",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 7
+    },
+    {
+      "where": "examples/datasets/main.ts",
+      "term": "\\bservers?\\b",
+      "reason": "a server that answers the rows of a dataset for an extent (the provider of a dataset)",
+      "hits": 5
+    },
+    {
+      "where": "examples/vite.config.ts",
+      "term": "\\bservers?\\b",
+      "reason": "the development servers of the examples and of the site",
+      "hits": 1
+    },
+    {
+      "where": "src/api/document.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/api/extension/context.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the undo and redo of the vertices of the shape being drawn, a feature of the library",
+      "hits": 1
+    },
+    {
+      "where": "src/api/impl/geometry/buffer.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/api/impl/geometry/split.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/api/impl/layers.test.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "a key of metadata in the data of a test",
+      "hits": 1
+    },
+    {
+      "where": "src/api/impl/store-contract.test.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 2
+    },
+    {
+      "where": "src/api/model.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/dataset/chunk-set.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 5
+    },
+    {
+      "where": "src/dataset/dataset.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/dataset/dataset.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 11
+    },
+    {
+      "where": "src/dataset/manager.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 4
+    },
+    {
+      "where": "src/dataset/thinning.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/dataset/thinning.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/dataset/types.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 2
+    },
+    {
+      "where": "src/e2e/examples.e2e.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 2
+    },
+    {
+      "where": "src/e2e/harness.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 2
+    },
+    {
+      "where": "src/geometry/dependency.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document; the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/geometry/index.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 2
+    },
+    {
+      "where": "src/geometry/index.ts",
+      "term": "\\bservers?\\b",
+      "reason": "the places the geometry functions run in (workers, servers, tests)",
+      "hits": 1
+    },
+    {
+      "where": "src/modes/draw/drawing-input.test.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the undo and redo of the vertices of the shape being drawn, a feature of the library",
+      "hits": 1
+    },
+    {
+      "where": "src/modes/draw/vertex-drawing.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the undo and redo of the vertices of the shape being drawn, a feature of the library",
+      "hits": 8
+    },
+    {
+      "where": "src/modes/handler.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the undo and redo of the vertices of the shape being drawn, a feature of the library",
+      "hits": 2
+    },
+    {
+      "where": "src/modes/manager.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the undo and redo of the vertices of the shape being drawn, a feature of the library",
+      "hits": 2
+    },
+    {
+      "where": "src/modes/select/click-handler.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the feature a companion belongs to",
+      "hits": 3
+    },
+    {
+      "where": "src/operations/layer-operations.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/operations/vertex.test.ts",
+      "term": "\\bsynchroni[sz](e|es|ed|ing|ation)\\b",
+      "reason": "the first and the last vertex of a closed ring kept equal",
+      "hits": 8
+    },
+    {
+      "where": "src/operations/vertex.ts",
+      "term": "\\bsynchroni[sz](e|es|ed|ing|ation)\\b",
+      "reason": "the first and the last vertex of a closed ring kept equal",
+      "hits": 4
+    },
+    {
+      "where": "src/sample-geometry.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/shared/types/model.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/shared/types/model.ts",
+      "term": "\\bhistory",
+      "reason": "the published version describes the history kept by an extension here",
+      "hits": 2
+    },
+    {
+      "where": "src/shared/types/model.ts",
+      "term": "\\bsynchroni[sz](e|es|ed|ing|ation)\\b",
+      "reason": "the published version describes the sync of an outside store or of extension data here",
+      "hits": 1
+    },
+    {
+      "where": "src/store/memory.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/store/memory/change-bus.ts",
+      "term": "\\bhistory",
+      "reason": "the published version describes the history kept by an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/store/spatial/store-spatial-index.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the object that owns GPU resources or a state of an instance; not the owner of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/store/store.ts",
+      "term": "\\bhistory",
+      "reason": "the published version describes the history kept by an extension here",
+      "hits": 1
+    },
+    {
+      "where": "src/store/store.ts",
+      "term": "\\bsynchroni[sz](e|es|ed|ing|ation)\\b",
+      "reason": "the published version describes the sync of an outside store or of extension data here",
+      "hits": 1
+    },
+    {
+      "where": "src/table/index.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/view/cache/terrain-fill.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the object that owns GPU resources or a state of an instance; not the owner of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/view/cache/texture.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/view/feature-companion.test.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the feature a companion belongs to",
+      "hits": 2
+    },
+    {
+      "where": "src/view/layer/custom-layer.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 4
+    },
+    {
+      "where": "src/view/layer/depth-state.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 10
+    },
+    {
+      "where": "src/view/layer/depth-state.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/view/layer/drape-planner.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/view/layer/gl-state.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/view/layer/renderers.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the object that owns GPU resources or a state of an instance; not the owner of the document",
+      "hits": 8
+    },
+    {
+      "where": "src/view/layer/slot-manager.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 4
+    },
+    {
+      "where": "src/view/layer/slot-manager.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/view/renderers/point/point-shape.test.ts",
+      "term": "\\bhistory",
+      "reason": "the record of the calls a test fake keeps",
+      "hits": 1
+    },
+    {
+      "where": "src/view/renderers/point/point-shape.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 2
+    },
+    {
+      "where": "src/view/shaders/compile.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document; the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 2
+    },
+    {
+      "where": "src/view/terrain/anchor.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 3
+    },
+    {
+      "where": "src/view/terrain/context.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the object that owns GPU resources or a state of an instance; not the owner of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/view/terrain/detect.ts",
+      "term": "\\bpeers?\\b(?! dependenc)",
+      "reason": "the peer dependency on maplibre-gl",
+      "hits": 1
+    },
+    {
+      "where": "src/view/terrain/drape/bin-store.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 17
+    },
+    {
+      "where": "src/view/terrain/drape/quad.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the object that owns GPU resources or a state of an instance; not the owner of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/view/terrain/state.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the object that owns GPU resources or a state of an instance; not the owner of the document",
+      "hits": 1
+    },
+    {
+      "where": "src/view/ui/handle-thinning.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1
+    }
+  ]
+}
