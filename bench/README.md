@@ -82,17 +82,19 @@ after 20 seconds, preparation included, and nothing runs after it.
 
 | Scene | What it does |
 | --- | --- |
-| `open` | `draw.document.load` of a document of the library, on an empty document |
+| `open` | `draw.document.load` of a document of the library |
 | `pan` | Pans the map 6 px a frame, 90 frames right and 90 back |
 | `selectAll` | Selects every feature with `draw.selection.set` |
-| `boxSelect` | Draws a box over the whole view with Shift, a move of the mouse a frame |
-| `drag` | Drags every feature selected from the middle of the map, a move a frame |
+| `boxSelect` | Draws a box over the view with Shift, a move a frame |
+| `drag` | Drags every feature selected, a move a frame |
 | `delete` | Deletes every feature selected with `draw.selection.delete` |
-| `import` | `draw.document.load` of a GeoJSON `File` into the layer, on an empty document |
+| `import` | `draw.document.load` of a GeoJSON `File` into the layer |
 | `export` | `draw.document.toJSON` and `JSON.stringify` of the document |
 
-The box and the drag are made with the events of the mouse sent to the
-canvas, as the select mode takes them from a hand. Each scene gives:
+`open` and `import` start from a document with the layer and no
+features. The box and the drag are made with the events of the mouse sent
+to the canvas, as the select mode takes them from a hand; the drag starts
+in the middle of the map. Each scene gives:
 
 - the longest task: the longest time the main thread could do nothing
   else, the longest of the long tasks the browser reports (50 ms or more),
