@@ -1,0 +1,12 @@
+{
+  "description": "The type-only imports against the layers of scripts/gates/layers.json that the published version already has. They are allowed as they are; a row that no longer matches an import fails the gate, so the list only gets shorter. No row is added.",
+  "imports": [
+    "src/dataset/interaction.ts -> src/dispatcher/hit-test/topmost.ts",
+    "src/dataset/interaction.ts -> src/dispatcher/types.ts",
+    "src/snapping/indicator.ts -> src/view/renderers/line/sdf-line.ts",
+    "src/view/feature-companion.ts -> src/dispatcher/types.ts",
+    "src/view/layer/custom-layer.ts -> src/dataset/manager.ts",
+    "src/view/layer/render.ts -> src/dataset/manager.ts",
+    "src/view/ui/auxiliary-handles.ts -> src/dispatcher/types.ts"
+  ]
+}

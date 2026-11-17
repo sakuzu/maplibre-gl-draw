@@ -1,5 +1,5 @@
 {
-  "description": "The layers of src/, from the top: the public types and the implementation of the resources (api), the instance (dispatcher, modes, operations, snapping), the drawing (view) and the Store (store). dataset keeps its height, and geometry, shared, table and extension keep theirs. A file may import from a lower area only, or from its own area; nothing imports the webgl entry. The heights are those of scripts/check-layers.mjs. A new folder of src/ fails the gate until it is given a height here.",
+  "description": "The layers of src/, from the top: the public types and the implementation of the resources (api), the instance (dispatcher, modes, operations, snapping), the drawing (view) and the Store (store). dataset keeps its height, and geometry, shared, table and extension keep theirs. A file may import from a lower area only, or from its own area; nothing imports the webgl entry. A type-only import may also point into a file of the public types, between two areas of the same layer, and from extension into an area that uses it. The heights are those of scripts/check-layers.mjs. A new folder of src/ fails the gate until it is given a height here.",
   "areas": {
     "geometry": { "rank": 0 },
     "shared": { "rank": 1 },
