@@ -450,6 +450,11 @@
       "path": "ui/test/fake-draw.ts",
       "change": "CHANGES 37, 73 (the lines that read the length of hidden.list() and the ids of hidden.changed)",
       "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "the list of the scenes of the editing benchmark gains the scenes of selecting one feature and hiding on this client",
+      "unit": "the client state moved to the instance"
     }
   ]
 }

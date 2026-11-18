@@ -303,64 +303,56 @@
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.startEditing",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.endEditing",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.setSelectedVertices",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.setMode",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.setReadOnly",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.setInteractionLock",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.setLocallyHidden",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.getMaxNameNumber",
@@ -431,64 +423,56 @@
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.getEditingIds",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.getVertexSelection",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.getMode",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.isReadOnly",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.isInteractionLocked",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.isHidden",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.listHidden",
       "removed": {
         "change": 119,
         "why": "the state of the client is held by the instance"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.subscribe"
