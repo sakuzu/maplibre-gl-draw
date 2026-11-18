@@ -13,7 +13,7 @@
   },
   "declarations": {
     "1": {
-      "main:doc:(entry)": "72230deb7c8466472c279707803e7ba15cff0fb4b92be3ecdb403c92f5608855"
+      "main:doc:(entry)": "29ab2e4c690b728af274dcf08e697cc5c316c80bf2097c54be702b0b5b4ecb06"
     },
     "2": {
       "main:doc:createDraw": "fe951a5ea03201a46fc150c6079c9d0a0ed99c46a0c07b985b5fb29ee006ef5e"
@@ -57,7 +57,7 @@
       "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "14": {
-      "main:doc:Draw.destroy": "49ab5ee3fc1615a68faf7694cf2340972ba7c5eae9037d698ba69fd00b1e5c7a"
+      "main:doc:Draw.destroy": "4af9041a7ae56b6b60a8c0e5f19e5aeb546d1489331e2cd6839ec2ebed5b217b"
     },
     "15": {
       "main:doc:UpdateSource": "6e60e44086ce5845aa8bd9f957350c053895b87cb18021e957c27e0c01ee85ae"
@@ -76,7 +76,7 @@
       "main:doc:FeaturesCollection.updateMany": "81ae92828a76a7a55648c489cfa8a4192d995db2416c459c613fcb1825a36210"
     },
     "20": {
-      "main:sig:FeaturesCollection.deleteMany": "644b3931ffbc918da5dc16707025ec7770f59ae30140fd318ede2fa2566ecb11"
+      "main:sig:FeaturesCollection.deleteMany": "c679da1dea719c50fd8645606d7afacb0a0b43eb2f4df956a56e17f04b09cc58"
     },
     "21": {
       "main:added:FeaturesCollection.translate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -97,7 +97,7 @@
       "main:added:FeaturesCollection.releaseValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "27": {
-      "main:doc:FeaturesCollection.create": "fc1b87469014835bfdee47bf84435308c931d4b4054917e47b3e4c07982231b3"
+      "main:doc:FeaturesCollection.create": "85800f1e6240d947ccab20f2a7efcfaaceb3d76a6cc024e4ee96eb67fb7e8bba"
     },
     "28": {
       "main:added:LayersCollection.countItems": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -111,9 +111,9 @@
     },
     "31": {
       "main:doc:LayersCollection": "18d5bfbc804ca40e2e790c77185a46eda5a25988f6e77328ba5cde5c198164a1",
-      "main:doc:LayersCollection.create": "a09ff252a47f277437981f29111d312bc262d55be01c28568a7ea519d3f81513",
-      "main:sig:LayersCollection.delete": "2020fec827e6c8b081e4568899f582fc8fa7d3720bdb28ef6686627feb8f0791",
-      "main:sig:LayersCollection.deleteMany": "40559420d2932a433689f546fbd166c5ffee8f7718bf87a602b64737105c0e72"
+      "main:doc:LayersCollection.create": "c0130d3102dfefbdd6692ab036699b58463c0cc5a7c579e382ab3f67b599dee0",
+      "main:sig:LayersCollection.delete": "037380bbed9125ef01868f477a052edcab24276f09efea9a3ef03bbd1c30f6d5",
+      "main:sig:LayersCollection.deleteMany": "fc52394e2e5715bb3814534eb7b055d331327c3070af606329515347b3b07d2a"
     },
     "32": {
       "main:doc:GroupsCollection.list": "b66f33793d0e9332d88cab47f2cb483ef5f55826d7547c57f6460311cf23b342"
@@ -188,9 +188,9 @@
       "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
     },
     "41": {
-      "main:sig:SelectionResource.add": "0d6d6af9a70b80dca5a9c5c7a1fd80f8b7324cc4c10ff33e6a5b7d70b2567d47",
+      "main:sig:SelectionResource.add": "dbab4cbd4cd2f03045639835b77033d8c13cb7d1eccad4af3c39c81735c13b7b",
       "main:sig:SelectionResource.remove": "10f6e51e2aefb4404569788f630ef3ae41a0739ff71afbba1dda959bc708d387",
-      "main:sig:SelectionResource.set": "c8ff77df689199badfb650410b1225ec2e6f58c5ab8a05c57abec71a01187a9f"
+      "main:sig:SelectionResource.set": "d0766bc440d88c5935bd9ea744e3e515ec2cb87e14e9c8fd38a234bb19faf541"
     },
     "42": {
       "main:doc:SelectionResource.features": "82a883a363b740238c7618842518d0241fd0e8693b70f838e7b837cbc8566721"
@@ -230,12 +230,12 @@
       "main:doc:HandleProvider.onDrag": "00697b529f8315fbda3a2710df116639d4b78057518405f9d92ba25ddb323ce7"
     },
     "51": {
-      "main:doc:DocumentResource.load": "95653b3dfab2c24cd3c1653aa6f48d924cd7b040a12f53cf09d3697bc582dba5",
+      "main:doc:DocumentResource.load": "429593bfabd00fb8e39662737a3fc3eb45569721e245d2f19d7afadc75dee78e",
       "main:doc:LoadOptions.group": "81f30a0603f59c5ceafc904aacf8f4b0c3569e0da6e2cf298e741913329dd1eb",
-      "main:doc:LoadOptions.layer": "19b74f4dc6be91c58cb984a25e24062fc90c3b6424e2c95af584b18ae774b301"
+      "main:doc:LoadOptions.layer": "e20d924618793bc881bd336a8a229fa93c13e0c1212bba97e988bb796aed443b"
     },
     "52": {
-      "main:doc:DocumentResource.loadMany": "51880f4894d93dc6b85b16c490ca99c3e228ae1753ce40c748c08c7be3c09d7a"
+      "main:doc:DocumentResource.loadMany": "7d234ce92b555fb49b8189718a180a2e2f46055f289c28b6a26666692edb0535"
     },
     "53": {
       "main:added:DocumentResource.subscribe": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -408,7 +408,7 @@
       "main:doc:ModesCollection.get": "4bff4095651d2d3cec75843a95914b6b300179f719fd952ac7052018e8e26231",
       "main:doc:ModesCollection.has": "ed4ef94c0e3c8dafc2a2abdae025047c0f9adcf46649c791d8a9f3cd4cf9eb87",
       "main:doc:ModesCollection.list": "4725b2bbf2195216f840d28266fd4c8ca3d4c2367a5745bf4b24a1339c816384",
-      "main:doc:ModesCollection.remove": "dbebaea0baa712fe2c7adcfbacea1ae05e688ac8cec3d709df89b7c3d819df5a"
+      "main:doc:ModesCollection.remove": "9e34dfa15a14e58e9d40aefcd1c2f6c3e0bfc6877224ab981a1fc89033a9cdee"
     },
     "87": {
       "main:sig:ExtensionContext.store": "43625a59df07d09e439370d9cc09fbe60b0e6990fa3a90b7d3dcba8ebd121638"
@@ -440,7 +440,7 @@
       "main:added:FeatureCandidate.type": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "94": {
-      "main:doc:FeatureTypesCollection.override": "e4899d8d150baf66486cf8c1af4dd1cef7b6146b0526f5c41c2268f747f8fb7e"
+      "main:doc:FeatureTypesCollection.override": "92e332bc2fd74d7fdbf78a6e9c0abb6f28e7f90cfae98147776463ac090a0844"
     },
     "95": {
       "main:doc:ExtensionContext.drawing": "c03660d39649ddeba03d010593d07340fcc961f260379d05070f20559c7e15d8"
@@ -474,7 +474,7 @@
       "main:removed:Store.setMetadata": "912f767a4a777dee6e2054bba54f85c43f13fd56d949390e7088ba327755e899",
       "main:removed:Store.updateGroup": "8005c17de145d6da89a1d534ba718920549545a9872479fda119b22a9348a3bc",
       "main:removed:Store.updateLayer": "fbdfc954c5b654d9d99509ce742fd890d707080daff1416daebfddad8292c485",
-      "main:removed:StoreView": "7df2e44dbdfd9617da84bf63e10fa7f7e8b6d1167f22cd3933bff441e832f202",
+      "main:removed:StoreView": "dc8c656141f446b350b82894b7d5308ef4fda84c1e88f91c05173d5200f161b3",
       "main:removed:StoreView.getFile": "500aa118ee80bd7a360b7365026e8955dabe1a522f2b719dc6324c160f43abff",
       "main:removed:StoreView.getGroup": "464ba49e92125651e77109dd19304e34192483afcb41b9484363db1228ae867f",
       "main:removed:StoreView.getLayer": "e838d9e527f71f75dfb2aa9fa26bca07e31a5c5c9f7757b9613646f841c7e276",
@@ -830,7 +830,7 @@
       "main:added:Metadata.[index]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:doc:Metadata": "dd83b18ce737274f65647ede09ff7f5a10bfb2a3f3946ed2c0a4ef640ec0acac",
       "main:doc:MetadataResource.get": "e284ea27a2e4f162423e15313d968534c5c46991b856d4f9f00ab7a65124d709",
-      "main:doc:MetadataResource.update": "2c5831df74e2bdde46a96f28aa53190e516cec4e4ea3fc151f0d009ae69252aa"
+      "main:doc:MetadataResource.update": "733327115cc185b343deb9d31a6f5f9bf9ec976001d8b820bec98e76a2f85843"
     },
     "173": {
       "main:added:DocumentChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",

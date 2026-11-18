@@ -28,6 +28,125 @@
       "from": "src/view/layer/table-gl-calls.test.ts",
       "to": "src/test-utils.ts",
       "note": "only the GL that counts its calls by name, with the draw calls and the calls per draw read from it; the renderers of the rows of that branch and the frames built on them are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "docs/guides/terrain.ja.md",
+      "to": "docs/guides/terrain.ja.md",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "docs/guides/terrain.md",
+      "to": "docs/guides/terrain.md",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/api/impl/engine-context.test.ts",
+      "to": "src/api/impl/engine-context.test.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/api/impl/import-export/embedded-file.test.ts",
+      "to": "src/api/impl/import-export/embedded-file.test.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/api/impl/import-export/embedded-file.ts",
+      "to": "src/api/impl/import-export/embedded-file.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/api/impl/import-export/image-import.ts",
+      "to": "src/api/impl/import-export/image-import.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/errors.test.ts",
+      "to": "src/geometry/errors.test.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/errors.ts",
+      "to": "src/geometry/errors.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/geojson.ts",
+      "to": "src/geometry/geojson.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/public-bounds.ts",
+      "to": "src/geometry/public-bounds.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/public-combine.ts",
+      "to": "src/geometry/public-combine.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/public-create.ts",
+      "to": "src/geometry/public-create.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/public-predicates.ts",
+      "to": "src/geometry/public-predicates.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/geometry/public-repair.ts",
+      "to": "src/geometry/public-repair.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/modes/manager.test.ts",
+      "to": "src/modes/manager.test.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "src/store/read-only-and-visibility.test.ts",
+      "to": "src/store/read-only-and-visibility.test.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "8ad338c2abaa5e57273abcabb249ca19416d17c7",
+      "from": "ui/test/tools.test.ts",
+      "to": "ui/test/tools.test.ts",
+      "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
     }
   ]
 }
