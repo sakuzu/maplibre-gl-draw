@@ -4,9 +4,9 @@
   "samples": {
     "sample-follow-drag.ts": 4,
     "sample-main-usage.ts": 27,
-    "sample-persist-store.ts": 7,
+    "sample-persist-store.ts": 16,
     "sample-presence-events.ts": 20,
-    "sample-remote-changes.ts": 11,
+    "sample-remote-changes.ts": 25,
     "sample-save-on-change.ts": 5,
     "sample-undo-plugin.ts": 18
   },

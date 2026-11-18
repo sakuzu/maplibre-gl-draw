@@ -1119,6 +1119,12 @@
       "hits": 1,
       "why": "a file the gate did not read before",
       "lines": ["229"]
+    },
+    {
+      "where": "src/store/built-in/document.ts",
+      "term": "\\bwriters?\\b",
+      "reason": "the writing side of the tables of the rows, which @sakuzu/kasane names writer (createTables returns { tables, writer }); not a person who writes",
+      "hits": 1
     }
   ]
 }
