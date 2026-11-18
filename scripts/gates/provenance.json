@@ -21,6 +21,13 @@
       "from": "bench/table-measure.ts",
       "to": "bench/edit-measure.ts",
       "note": "only the recording of the frames, each drawn on request, and the median and worst of them; the heap and the GPU memory of that branch are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "e5a637bcce11fc816e2c824d01dd36e758005e97",
+      "from": "src/view/layer/table-gl-calls.test.ts",
+      "to": "src/test-utils.ts",
+      "note": "only the GL that counts its calls by name, with the draw calls and the calls per draw read from it; the renderers of the rows of that branch and the frames built on them are not brought"
     }
   ]
 }
