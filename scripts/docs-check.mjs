@@ -7,7 +7,8 @@
 // when any step reports an error. Warnings are printed and do not fail the run.
 //
 //   typedoc       the API reference builds with no warning (skipped when there is no typedoc
-//                 configuration)
+//                 configuration). A link that does not resolve to a name the fixed declarations
+//                 declare (api/*.d.ts) and the build does not have yet is listed, not an error
 //   snippets      the ```ts and ```js blocks of the README, getting started and guides
 //                 type-check against the built package
 //   links         relative links and heading anchors resolve (external URLs are not fetched)
@@ -49,6 +50,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, posix, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { default: config } = await import('./docs-check.config.mjs');
@@ -67,7 +69,10 @@ const STEPS = [
 // ---------------------------------------------------------------------------------------------
 // Command line
 
-const argv = process.argv.slice(2);
+/** Whether the script runs (rather than being imported by its tests) */
+const RUN =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const argv = RUN ? process.argv.slice(2) : [];
 const opts = { base: 'main', only: null, skip: new Set() };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -284,10 +289,96 @@ function stepTypedoc() {
     apiReference = { from: posix.normalize(configuredOut).replace(/\/$/, ''), to: out };
   const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
   const text = `${r.stdout}${r.stderr}`.replace(ansi, '');
-  const issues = text.split('\n').filter((l) => /\[(warning|error)\]/.test(l));
-  for (const l of issues) report.errors.push(l.trim());
-  if (r.status !== 0 && issues.length === 0)
+  const fixed = FILES.filter(matcher([cfg.fixedDeclarations ?? 'api/*.d.ts']));
+  const { errors, pending } = classifyTypedocIssues(
+    text.split('\n'),
+    declaredNames(fixed.map((f) => readText(f))),
+  );
+  for (const l of errors) report.errors.push(l);
+  if (pending.length > 0) {
+    report.notes.push(
+      `${pending.length} link(s) to declarations the build does not have yet: ${pending.join(', ')}`,
+    );
+  }
+  if (r.status !== 0 && errors.length === 0 && pending.length === 0)
     report.errors.push(`typedoc exited with ${r.status}\n${text}`);
+}
+
+/**
+ * The names declarations declare: every top-level name, and every member as `<name>.<member>`
+ * (the members of a member whose type is an object type as `<name>.<member>.<member>`), as a
+ * `{@link}` names them
+ *
+ * @param {string[]} texts The text of each declaration file
+ * @returns {Set<string>}
+ */
+export function declaredNames(texts) {
+  const names = new Set();
+  const addMembers = (prefix, members) => {
+    for (const m of members ?? []) {
+      if (!m.name || !(ts.isIdentifier(m.name) || ts.isStringLiteral(m.name))) continue;
+      const name = `${prefix}.${m.name.text}`;
+      names.add(name);
+      if (m.type && ts.isTypeLiteralNode(m.type)) addMembers(name, m.type.members);
+    }
+  };
+  for (const text of texts) {
+    const sf = ts.createSourceFile('fixed.d.ts', text, ts.ScriptTarget.Latest, true);
+    for (const st of sf.statements) {
+      if (ts.isVariableStatement(st)) {
+        for (const d of st.declarationList.declarations) {
+          if (ts.isIdentifier(d.name)) names.add(d.name.text);
+        }
+        continue;
+      }
+      if (!st.name || !ts.isIdentifier(st.name)) continue;
+      names.add(st.name.text);
+      if (ts.isInterfaceDeclaration(st) || ts.isClassDeclaration(st)) {
+        addMembers(st.name.text, st.members);
+      } else if (ts.isTypeAliasDeclaration(st) && ts.isTypeLiteralNode(st.type)) {
+        addMembers(st.name.text, st.type.members);
+      } else if (ts.isEnumDeclaration(st)) {
+        addMembers(st.name.text, st.members);
+      }
+    }
+  }
+  return names;
+}
+
+/**
+ * The issues typedoc printed, as errors and as links that wait: a link typedoc could not resolve
+ * (so the build does not have its target) to a name the fixed declarations declare waits for
+ * the work that adds the declaration; any other issue is an error. The count typedoc prints at the
+ * end is an error unless every warning it counts waits.
+ *
+ * @param {string[]} lines What typedoc printed, line by line, without colors
+ * @param {Set<string>} fixedNames The names of the fixed declarations (`declaredNames`)
+ * @returns {{ errors: string[], pending: string[] }} The errors, and the names the links that wait
+ *   point to (each once, in the order printed)
+ */
+export function classifyTypedocIssues(lines, fixedNames) {
+  const errors = [];
+  const pending = [];
+  let waiting = 0;
+  let summary = null;
+  for (const line of lines) {
+    if (!/\[(warning|error)\]/.test(line)) continue;
+    const l = line.trim();
+    const count = l.match(/Found (\d+) errors? and (\d+) warnings?/);
+    if (count) {
+      summary = { line: l, errors: Number(count[1]), warnings: Number(count[2]) };
+      continue;
+    }
+    const link = /^\[warning\] Failed to resolve link to "([^"]+)" in comment for /.exec(l);
+    if (link && fixedNames.has(link[1])) {
+      waiting += 1;
+      if (!pending.includes(link[1])) pending.push(link[1]);
+      continue;
+    }
+    errors.push(l);
+  }
+  if (summary && !(summary.errors === 0 && summary.warnings === waiting)) errors.push(summary.line);
+  return { errors, pending };
 }
 
 function newestMtime(files) {
@@ -700,28 +791,32 @@ const IMPL = {
 // ---------------------------------------------------------------------------------------------
 // Run
 
-let errors = 0;
-let warnings = 0;
-const selected = STEPS.filter((s) => (!opts.only || opts.only.has(s)) && !opts.skip.has(s));
-for (const [n, step] of selected.entries()) {
-  report.errors = [];
-  report.warnings = [];
-  report.notes = [];
-  const t0 = performance.now();
-  console.log(`[${n + 1}/${selected.length}] ${step}`);
-  IMPL[step]();
-  const secs = ((performance.now() - t0) / 1000).toFixed(1);
-  for (const e of report.errors) console.log(`  error: ${Array.isArray(e) ? e.join('\n') : e}`);
-  for (const w of report.warnings) console.log(`  warning: ${w}`);
-  const state = report.errors.length > 0 ? `${report.errors.length} error(s)` : 'ok';
-  const warn = report.warnings.length > 0 ? `, ${report.warnings.length} warning(s)` : '';
-  const note = report.notes.length > 0 ? ` - ${report.notes.join('; ')}` : '';
-  console.log(`  ${state}${warn} (${secs} s)${note}`);
-  errors += report.errors.length;
-  warnings += report.warnings.length;
+if (RUN) runSteps();
+
+function runSteps() {
+  let errors = 0;
+  let warnings = 0;
+  const selected = STEPS.filter((s) => (!opts.only || opts.only.has(s)) && !opts.skip.has(s));
+  for (const [n, step] of selected.entries()) {
+    report.errors = [];
+    report.warnings = [];
+    report.notes = [];
+    const t0 = performance.now();
+    console.log(`[${n + 1}/${selected.length}] ${step}`);
+    IMPL[step]();
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    for (const e of report.errors) console.log(`  error: ${Array.isArray(e) ? e.join('\n') : e}`);
+    for (const w of report.warnings) console.log(`  warning: ${w}`);
+    const state = report.errors.length > 0 ? `${report.errors.length} error(s)` : 'ok';
+    const warn = report.warnings.length > 0 ? `, ${report.warnings.length} warning(s)` : '';
+    const note = report.notes.length > 0 ? ` - ${report.notes.join('; ')}` : '';
+    console.log(`  ${state}${warn} (${secs} s)${note}`);
+    errors += report.errors.length;
+    warnings += report.warnings.length;
+  }
+  const skipped = STEPS.filter((s) => !selected.includes(s));
+  console.log(
+    `docs-check: ${errors} error(s), ${warnings} warning(s)${skipped.length ? `; skipped ${skipped.join(', ')}` : ''}`,
+  );
+  process.exit(errors > 0 ? 1 : 0);
 }
-const skipped = STEPS.filter((s) => !selected.includes(s));
-console.log(
-  `docs-check: ${errors} error(s), ${warnings} warning(s)${skipped.length ? `; skipped ${skipped.join(', ')}` : ''}`,
-);
-process.exit(errors > 0 ? 1 : 0);
