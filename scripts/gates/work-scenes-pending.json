@@ -1,0 +1,9 @@
+{
+  "description": "The scenes of WORK_SCENES (src/test-utils.ts) that have no test yet, each with the work that adds it. The work that adds the test of a scene removes its row; a row whose scene has a test fails scripts/gates/work-scenes.mjs, so the list only gets shorter.",
+  "scenes": {
+    "selectAll": "the work that keeps the selected ids in a set read without an array, and selects every feature of a layer or of a box",
+    "releasePart": "the work that shows a drag without writing the document and writes it in parts when the pointer is released",
+    "writeBack": "the work that writes the values kept from before a change back into the document",
+    "interleavedLayers": "the work that draws the features of a layer from their rows, in the order of the layer, with points, lines and polygons interleaved"
+  }
+}

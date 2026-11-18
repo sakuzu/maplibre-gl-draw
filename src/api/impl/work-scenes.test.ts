@@ -17,6 +17,7 @@ import {
   createSyntheticDrag,
   expectNotProportional,
   gridPoints,
+  storeWorkDuring,
   WORK_SCENES,
   workDuring,
 } from '../../test-utils.js';
@@ -135,5 +136,49 @@ describe(WORK_SCENES.deleteLayer, () => {
       const layer = instance.draw.layers.list()[0];
       return workDuring(instance.counts, () => instance.draw.layers.delete(layer.id)).notifications;
     }, 'the notifications');
+  });
+});
+
+// The features the instance reads and writes through its Store, counted by the Store it is given
+// (`createCountingStore`) whatever the marks of the library count. Only the amounts that do not
+// grow with the number of features today are here.
+
+describe(WORK_SCENES.dragFrame, () => {
+  const scene = measured((size) => {
+    const instance = instanceOf(size);
+    const at = pointOf(instance);
+    instance.input.click(at);
+    const drag = createSyntheticDrag(instance.engine);
+    drag.start(at);
+    drag.move([at[0] + 0.05, at[1]]);
+    const work = storeWorkDuring(instance.storeWork, () => drag.move([at[0] + 0.1, at[1]]));
+    if (work.featuresWritten === 0) throw new Error('the drag did not write the feature');
+    drag.end([at[0] + 0.1, at[1]]);
+    return work;
+  });
+
+  it('writes as many features through the Store for a move of one feature', () => {
+    expectNotProportional(
+      (size) => scene(size).featuresWritten,
+      'the features written through the Store',
+    );
+  });
+});
+
+describe(WORK_SCENES.receiveChange, () => {
+  const scene = measured((size) => {
+    const instance = instanceOf(size);
+    const id = instance.draw.features.list()[5].id;
+    // Written to the Store itself, not through the wrapper the instance was given
+    return storeWorkDuring(instance.storeWork, () =>
+      instance.store.updateFeature(id, { properties: { changed: true } }),
+    );
+  });
+
+  it('reads as many features through the Store for a change of one feature', () => {
+    expectNotProportional(
+      (size) => scene(size).featuresRead,
+      'the features read through the Store',
+    );
   });
 });

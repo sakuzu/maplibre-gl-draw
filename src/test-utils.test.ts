@@ -14,10 +14,14 @@ import { MemoryStore } from './store/memory.js';
 import {
   compareWork,
   countsOf,
+  createCountedInstance,
   createCountingGL,
+  createCountingStore,
   expectNotProportional,
   expectPartsWithin,
+  gridPoints,
   runInParts,
+  storeWorkDuring,
   WORK_SIZES,
   workDuring,
 } from './test-utils.js';
@@ -174,5 +178,90 @@ describe('the counting GL', () => {
     const second = createCountingGL();
     first.gl.drawArrays(first.gl.TRIANGLES, 0, 3);
     expect(second.draws()).toBe(0);
+  });
+});
+
+describe('the Store that counts', () => {
+  /** A counting wrapper over a Store of `size` points */
+  function countedStore(size: number) {
+    const target = new MemoryStore();
+    target.createLayer({
+      id: 'l1',
+      name: 'Layer',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
+    });
+    for (const [i, input] of gridPoints(size).entries()) {
+      target.createFeature({
+        id: `f${i}`,
+        type: 'Point',
+        geometry: input.geometry,
+        layerId: 'l1',
+        groupId: undefined,
+        properties: {},
+        locked: false,
+        visible: true,
+        style: {},
+      });
+    }
+    return { target, ...createCountingStore(target) };
+  }
+
+  it('counts the calls by name, the features given back and the features given to write', () => {
+    const { store, work } = countedStore(3);
+    expect(store.getFeature('f1')?.id).toBe('f1');
+    expect(store.getFeature('none')).toBeUndefined();
+    expect(store.listFeatures()).toHaveLength(3);
+    store.updateFeature('f1', { properties: { a: 1 } });
+    store.deleteFeature('f2');
+    expect(work.calls.get('getFeature')).toBe(2);
+    expect(work.calls.get('listFeatures')).toBe(1);
+    expect(work.featuresRead).toBe(4);
+    expect(work.featuresWritten).toBe(2);
+  });
+
+  it('stands for the Store: its class, its numbers and the writes on it', () => {
+    const { target, store } = countedStore(1);
+    expect(store).toBeInstanceOf(MemoryStore);
+    expect(countsOf(store)).toBe(countsOf(target));
+    store.updateFeature('f0', { properties: { b: 2 } });
+    expect(target.getFeature('f0')?.properties).toEqual({ b: 2 });
+  });
+
+  it('fails a scene whose click reads every feature through the Store', () => {
+    const readAll = (size: number): number => {
+      const { store, work } = countedStore(size);
+      // The click of the scene: one feature is hit, and every feature is read
+      return storeWorkDuring(work, () => {
+        store.getFeature('f5');
+        store.listFeatures();
+      }).featuresRead;
+    };
+    expect(() => expectNotProportional(readAll, 'the features read')).toThrow(
+      /the features read grows with the number of features: 1001 at 1000, 10001 at 10000/,
+    );
+  });
+
+  it('passes a scene whose click reads the feature it hits', () => {
+    const readOne = (size: number): number => {
+      const { store, work } = countedStore(size);
+      return storeWorkDuring(work, () => store.getFeature('f5')).featuresRead;
+    };
+    expect(expectNotProportional(readOne)).toEqual({ small: 1, large: 1, ratio: 1 });
+  });
+
+  it('counts what an instance reads through the Store it was given, without a mark', () => {
+    const readAll = (size: number): number => {
+      const instance = createCountedInstance();
+      instance.draw.features.createMany(gridPoints(size));
+      const read = storeWorkDuring(instance.storeWork, () => instance.draw.features.list());
+      instance.draw.destroy();
+      return read.featuresRead;
+    };
+    expect(() => expectNotProportional(readAll)).toThrow(/grows with the number of features/);
   });
 });

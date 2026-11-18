@@ -20,6 +20,7 @@ import * as skips from './skips.mjs';
 import * as storeWrites from './store-writes.mjs';
 import * as terms from './terms.mjs';
 import * as testChanges from './test-changes.mjs';
+import * as workScenes from './work-scenes.mjs';
 
 export const GATES = [
   api,
@@ -34,6 +35,7 @@ export const GATES = [
   branch,
   moduleState,
   storeWrites,
+  workScenes,
 ];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

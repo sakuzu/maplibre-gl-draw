@@ -548,6 +548,107 @@ export function expectNotProportional(
 }
 
 // ============================================================================
+// The Store that counts
+// ============================================================================
+
+/** The methods of the Store that give back one feature or a list of them */
+const FEATURE_READS: ReadonlyMap<string, 'one' | 'list'> = new Map([
+  ['getFeature', 'one'],
+  ['listFeatures', 'list'],
+  ['listFeaturesInOrder', 'list'],
+]);
+
+/** The methods of the Store that write one feature, or the features of a list of ids */
+const FEATURE_WRITES: ReadonlyMap<string, 'one' | 'ids'> = new Map([
+  ['createFeature', 'one'],
+  ['updateFeature', 'one'],
+  ['deleteFeature', 'one'],
+  ['abortIntermediateUpdates', 'ids'],
+]);
+
+/** What was read and written through a Store */
+export interface StoreWork {
+  /** The calls of each method of the Store, by name */
+  calls: Map<string, number>;
+  /** The features the methods of the Store gave back */
+  featuresRead: number;
+  /** The features the methods of the Store were given to write */
+  featuresWritten: number;
+}
+
+/**
+ * Wraps a Store so that what goes through it is counted, whatever the marks of the library count
+ *
+ * Every method called on the wrapper is counted by its name, with the features it gives back
+ * (`getFeature`, `listFeatures`, `listFeaturesInOrder`) and the features it is given to write
+ * (`createFeature`, `updateFeature`, `deleteFeature`, and the ids of
+ * `abortIntermediateUpdates`). The method runs on the Store itself, so what the Store calls on
+ * itself is not counted: only what its user asked for. Everything else (the prototype, the
+ * fields, the numbers of the marks) reads through to the Store, so the wrapper stands for it
+ * wherever the Store is given.
+ *
+ * Each call makes its own numbers, so two instances never share them.
+ */
+export function createCountingStore<S extends object>(
+  target: S,
+): { store: S; work: StoreWork; reset(): void } {
+  const work: StoreWork = { calls: new Map(), featuresRead: 0, featuresWritten: 0 };
+  const wrappers = new Map<string, (...args: unknown[]) => unknown>();
+  const wrap = (name: string, method: (...args: unknown[]) => unknown) => {
+    let wrapper = wrappers.get(name);
+    if (wrapper) return wrapper;
+    wrapper = (...args: unknown[]): unknown => {
+      work.calls.set(name, (work.calls.get(name) ?? 0) + 1);
+      const write = FEATURE_WRITES.get(name);
+      if (write === 'one') work.featuresWritten += 1;
+      else if (write === 'ids') work.featuresWritten += (args[0] as readonly unknown[]).length;
+      const result = method.apply(target, args);
+      const read = FEATURE_READS.get(name);
+      if (read === 'one' && result !== undefined) work.featuresRead += 1;
+      else if (read === 'list') work.featuresRead += (result as readonly unknown[]).length;
+      return result;
+    };
+    wrappers.set(name, wrapper);
+    return wrapper;
+  };
+  const store = new Proxy(target, {
+    get(t, prop) {
+      const value: unknown = Reflect.get(t, prop, t);
+      if (typeof prop !== 'string' || typeof value !== 'function') return value;
+      return wrap(prop, value as (...args: unknown[]) => unknown);
+    },
+  });
+  return {
+    store,
+    work,
+    /** Starts the numbers again from zero */
+    reset(): void {
+      work.calls.clear();
+      work.featuresRead = 0;
+      work.featuresWritten = 0;
+    },
+  };
+}
+
+/** The features read and written through a counting Store while `fn` ran */
+export function storeWorkDuring(
+  work: StoreWork,
+  fn: () => void,
+): { featuresRead: number; featuresWritten: number; calls: number } {
+  const before = {
+    featuresRead: work.featuresRead,
+    featuresWritten: work.featuresWritten,
+    calls: [...work.calls.values()].reduce((sum, n) => sum + n, 0),
+  };
+  fn();
+  return {
+    featuresRead: work.featuresRead - before.featuresRead,
+    featuresWritten: work.featuresWritten - before.featuresWritten,
+    calls: [...work.calls.values()].reduce((sum, n) => sum + n, 0) - before.calls,
+  };
+}
+
+// ============================================================================
 // The operations that run in parts
 // ============================================================================
 
@@ -847,14 +948,16 @@ export function createDrawingMapStub(gl: WebGL2RenderingContext) {
 /**
  * A draw instance over a Store of its own on a map stub that draws on a counting GL
  *
- * It is built as `createDraw` builds it (the engine is kept, for the synthetic input). Each
- * call makes a new Store, so the numbers of two instances never mix.
+ * It is built as `createDraw` builds it (the engine is kept, for the synthetic input), with the
+ * Store wrapped by `createCountingStore` (`storeWork`). Each call makes a new Store, so the
+ * numbers of two instances never mix.
  */
 export function createCountedInstance(options: DrawOptions = {}): {
   draw: Draw;
   engine: Engine;
   store: MemoryStore;
   counts: WorkCounts;
+  storeWork: StoreWork;
   gl: ReturnType<typeof createCountingGL>;
   map: ReturnType<typeof createDrawingMapStub>;
   input: ReturnType<typeof createSyntheticInput>;
@@ -862,7 +965,10 @@ export function createCountedInstance(options: DrawOptions = {}): {
   const gl = createCountingGL();
   const map = createDrawingMapStub(gl.gl);
   const store = new MemoryStore();
-  const drawOptions: DrawOptions = { ...options, store };
+  // The instance is given the counting wrapper; `store` stays the Store itself, for the writes
+  // a test makes from outside the instance
+  const counting = createCountingStore(store);
+  const drawOptions: DrawOptions = { ...options, store: counting.store };
   checkDrawOptions(drawOptions);
   const engine = createEngine(
     map.map as MapLibreMap,
@@ -878,6 +984,7 @@ export function createCountedInstance(options: DrawOptions = {}): {
     engine,
     store,
     counts: countsOf(store),
+    storeWork: counting.work,
     gl,
     map,
     input: createSyntheticInput(engine),
