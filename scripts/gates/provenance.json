@@ -210,6 +210,34 @@
       "from": "src/store/memory/change-bus.ts",
       "to": "src/store/built-in/changes.ts",
       "note": "only the values before and the token that keeps the deleted rows carried by the change of a transaction, one token of the tables per transaction; asked per listener and per transaction, given to each listener in a change of its own with a token of its own over one counted entry, and the name DeletedRowsToken in place of restoreToken"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/table/feature-row-blocks.ts",
+      "to": "src/store/built-in/pages.ts",
+      "note": "only the builder and the merge of the pages over those of the tables with the columns of the rows, their errors made errors of the library, the Worker of the application as the tables hand it their work, and a row the tables build given to it with its geometry as GeoJSON; named createRowPageBuilder, mergeRowPages and RowPageWorker, the groups named by their ids and their places in place of their handles, the checks of the values of the store entry before a row is added; the rings of the Circles, the triangles of the fills and the deleted rows given to the builder are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/table/pages.ts",
+      "to": "src/store/built-in/pages.ts",
+      "note": "only the list of the buffers of pages to transfer, named getRowPageTransferList; the tables of the table entry it also took are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/table/row-geometry.ts",
+      "to": "src/store/built-in/pages.ts",
+      "note": "only the depth of the shape of each of the six types of geometry; the reading of the positions into coordinates and the triangles of the fills are not brought (the builder of the tables reads the positions)"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "bench/table-worker-core.ts",
+      "to": "bench/store-page-worker.ts",
+      "note": "only a Worker that builds rows into pages and posts them with the transfer of their buffers, answering the request it is given; the reading of the files in parts, the batches, the rows picked at random and the rows of the edits are not brought, and the merges and builds a Store hands it are new"
     }
   ]
 }

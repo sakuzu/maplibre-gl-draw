@@ -69,8 +69,12 @@ export function fieldKind(field: string): 'plain' | 'style' | 'property' | null 
   return null;
 }
 
-/** Whether a value is a plain object (made by `{}`, or with no prototype) */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/**
+ * Whether a value is a plain object (made by `{}`, or with no prototype)
+ *
+ * @internal
+ */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
@@ -81,8 +85,12 @@ function isStyleValue(value: unknown): boolean {
   return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
 }
 
-/** Why a style is not one (null when it is): an object whose values are strings and finite numbers */
-function styleProblem(style: unknown): string | null {
+/**
+ * Why a style is not one (null when it is): an object whose values are strings and finite numbers
+ *
+ * @internal
+ */
+export function styleProblem(style: unknown): string | null {
   if (!isPlainObject(style)) return 'the style is not an object';
   // A plain object inherits no key it lists
   for (const key in style) {
@@ -99,8 +107,9 @@ function styleProblem(style: unknown): string | null {
  *
  * @param within - The arrays and objects the value is in, from the value of the attribute: a value
  *   that is in itself is not one JSON holds
+ * @internal
  */
-function jsonProblem(value: unknown, within: unknown[]): string | null {
+export function jsonProblem(value: unknown, within: unknown[]): string | null {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return null;
   if (typeof value === 'number') {
     return Number.isFinite(value) ? null : `${value} is not a finite number`;

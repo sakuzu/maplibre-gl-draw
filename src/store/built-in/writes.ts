@@ -59,6 +59,7 @@ import {
 import { dimensionsOfPositions, positionsOf, type StoreDocument } from './document.js';
 import { readRowValues } from './feature-tables.js';
 import { forgetKept, isKept, releaseToken } from './kept-rows.js';
+import { createRowsFromPagesOf } from './page-writes.js';
 import { shapeValuesOf } from './shape-values.js';
 import type {
   FeatureRowField,
@@ -734,6 +735,7 @@ export function storeWritesOf(
 
   return {
     createRows,
+    createRowsFromPages: createRowsFromPagesOf(document),
     writeRows,
     clear,
     createLayer,

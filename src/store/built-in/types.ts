@@ -7,6 +7,7 @@
  * built-in Store. The text of each declaration is that of the fixed declarations of the entry.
  */
 
+import type { Geometry } from 'geojson';
 import type { UpdateSource } from '../../api/extension/store.js';
 import type {
   FeatureStyle,
@@ -98,6 +99,21 @@ export interface Store extends StoreView {
    *   created then
    */
   createRows(rows: NewRows): boolean;
+  /**
+   * Creates the rows of pages built in a Worker ({@link createRowPageBuilder}) in a layer at once,
+   * without copying their columns: what a large document is opened from, a few pages at a time
+   * so that the map keeps drawing between them. The rows are given references and are listed as
+   * created in the change. The pages are kept as they are, so their arrays are not to be changed
+   * afterwards.
+   *
+   * @param layerId - The layer the rows go into
+   * @param pages - The pages
+   * @returns False when the Store does not take the pages (none is added)
+   * @throws `DrawError` with the code `notFound` when there is no such layer or a row names a
+   *   group that is not there, `alreadyExists` when an id of a row is in use, or `invalidInput`
+   *   when a page was built for other dimensions than those of the layer; nothing is added then
+   */
+  createRowsFromPages(layerId: string, pages: readonly RowPage[]): boolean;
   /**
    * Writes values of rows there are, by their references: the fields given and the geometry, for
    * the rows given ({@link RowValues}). `deleted` deletes a row (non-zero), or brings back a
@@ -799,6 +815,12 @@ export type DeletedRowsToken = number & {
 /** The options of {@link createStore}. */
 export interface StoreOptions {
   /**
+   * Where the large merges and builds of rows run (a Worker of the application that runs
+   * {@link mergeRowPages} and {@link createRowPageBuilder}); on the main thread, between the
+   * frames of the map, when it is left out
+   */
+  readonly worker?: RowPageWorker;
+  /**
    * How the boxes of the rows and the order of their spatial index are computed from their
    * positions (the plane of the longitudes and latitudes when it is left out): for positions whose
    * boxes are computed otherwise, such as across the ±180 degree meridian. A Worker that builds
@@ -832,4 +854,96 @@ export interface RowSpatialIndexing {
    * Hilbert curve over the plane when it is left out)
    */
   sortKey?(centerX: number, centerY: number): number;
+}
+
+declare const rowPageBrand: unique symbol;
+
+/**
+ * A page of rows: a few thousand rows of one layer, in the order of the layer, as columns of
+ * typed arrays. A Worker builds it ({@link createRowPageBuilder}) and posts it to the main thread
+ * without a copy ({@link getRowPageTransferList}), and the Store takes it as it is
+ * ({@link Store.createRowsFromPages}). Its columns are read by the Store only.
+ */
+export interface RowPage {
+  /** The number of rows */
+  readonly length: number;
+  /** Tells it from other objects */
+  readonly [rowPageBrand]: true;
+}
+
+/** One row given to a {@link RowPageBuilder}. */
+export interface RowInput {
+  /** The id of the row, unique in the document */
+  readonly id: string;
+  /** The type of the feature (`'Point'`, `'Circle'`, the name of a custom type) */
+  readonly type: FeatureType;
+  /**
+   * The GeoJSON geometry (a Circle and an Image give the Point of their center, a Freehand a
+   * LineString), or null for a row without one
+   */
+  readonly geometry: Geometry | null;
+  /** The key of its order, among the members of its group or the items of its layer */
+  readonly orderKey: string;
+  /** The id of its group, one of `RowPageBuilderOptions.groups`; none when it is left out */
+  readonly groupId?: string;
+  /** The style */
+  readonly style?: Readonly<FeatureStyle>;
+  /** The attributes */
+  readonly properties?: Readonly<Record<string, unknown>>;
+  /** Whether it is visible (true when it is left out) */
+  readonly visible?: boolean;
+  /** Whether it is locked (false when it is left out) */
+  readonly locked?: boolean;
+}
+
+/** The options of {@link createRowPageBuilder}. */
+export interface RowPageBuilderOptions {
+  /** The groups the rows can be in, with the keys of their places (none when it is left out) */
+  readonly groups?: readonly {
+    readonly id: string;
+    readonly orderKey: string;
+  }[];
+  /** The number of values of the positions of the layer the pages go to (2 when it is left out) */
+  readonly valuesPerPosition?: 2 | 3 | 4;
+  /** The system of the boxes, the one the Store is given ({@link StoreOptions.spatialIndexing}) */
+  readonly spatialIndexing?: RowSpatialIndexing;
+}
+
+/** Builds the pages of one layer, in a Worker or on the main thread. */
+export interface RowPageBuilder {
+  /** The number of rows added */
+  readonly length: number;
+  /**
+   * Adds a row.
+   *
+   * @throws `DrawError` with the code `invalidInput` when the id was already added, when the
+   *   geometry is not a GeoJSON geometry of one of the six types, or when a value of the style or
+   *   the attributes cannot be held (a number that is not finite, a function)
+   */
+  addRow(row: RowInput): void;
+  /**
+   * Puts the rows in the order of their keys and cuts them into pages.
+   *
+   * @throws `DrawError` with the code `notFound` when a row names a group the options do not give
+   */
+  finish(): RowPage[];
+}
+
+declare const rowPageMergeTaskBrand: unique symbol;
+
+/**
+ * Work the Store hands to a Worker: rows of pages to merge into the next pages of a layer, posted
+ * as it is (it holds no function).
+ */
+export interface RowPageMergeTask {
+  /** Tells it from other objects */
+  readonly [rowPageMergeTaskBrand]: true;
+}
+
+/** A Worker of the application as the Store hands it its work ({@link StoreOptions.worker}). */
+export interface RowPageWorker {
+  /** Merges rows of pages ({@link mergeRowPages} in the Worker) */
+  merge(merge: RowPageMergeTask): Promise<RowPage[]>;
+  /** Builds rows into pages ({@link createRowPageBuilder} in the Worker): many new rows written at once */
+  build(rows: readonly RowInput[], options: RowPageBuilderOptions): Promise<RowPage[]>;
 }

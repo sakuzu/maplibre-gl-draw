@@ -69,6 +69,21 @@ export type {
   TableScanOptions,
 } from './built-in/types.js';
 
+// The pages of rows built in a Worker
+export {
+  createRowPageBuilder,
+  getRowPageTransferList,
+  mergeRowPages,
+} from './built-in/pages.js';
+export type {
+  RowInput,
+  RowPage,
+  RowPageBuilder,
+  RowPageBuilderOptions,
+  RowPageMergeTask,
+  RowPageWorker,
+} from './built-in/types.js';
+
 // The changes
 export type {
   DeletedRowsToken,

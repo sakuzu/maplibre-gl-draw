@@ -456,9 +456,6 @@
       "main:removed:Store.deleteFeature": "cf4666c7893500a2f5518a49bc5b80a9eb06fc087bbb68b8a4d3c73f1ea22a46",
       "main:removed:Store.updateFeature": "646667cb5ddcf64781a1eaaedcefe570bbc0c068b3d1365ca1f7a31d5f662130"
     },
-    "110": {
-      "store:added:Store.createRowsFromPages": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "118": {
       "main:removed:Store.reorderInGroup": "668dfe6e629f378a98b07990cb2b0edb319971fcf5ed07bd4b7eb8ebd03fdd49",
       "main:removed:Store.reorderInLayer": "e08de45d43190858e95e1574efe8da926310d46551a02263f5501bb2a0b0b962"
@@ -487,42 +484,6 @@
     },
     "124": {
       "store:added:StoreView.listPropertyKeys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "136": {
-      "store:added:StoreOptions.worker": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "138": {
-      "store:added:RowInput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.geometry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.groupId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.id": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.locked": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.orderKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.properties": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.style": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.type": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowInput.visible": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPage": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPage.[rowPageBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPage.length": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilder.addRow": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilder.finish": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilder.length": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilderOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilderOptions.groups": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilderOptions.spatialIndexing": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageBuilderOptions.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageMergeTask": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageMergeTask.[rowPageMergeTaskBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageWorker": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageWorker.build": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowPageWorker.merge": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:createRowPageBuilder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:getRowPageTransferList": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:mergeRowPages": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:rowPageBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:rowPageMergeTaskBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "151": {
       "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"

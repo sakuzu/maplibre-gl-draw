@@ -61,5 +61,5 @@ export function storeOf(document: StoreDocument): Store {
  * ```
  */
 export function createStore(options: StoreOptions = {}): Store {
-  return storeOf(openDocument(options.spatialIndexing));
+  return storeOf(openDocument(options.spatialIndexing, options.worker));
 }

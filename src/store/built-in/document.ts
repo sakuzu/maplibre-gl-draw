@@ -35,21 +35,11 @@ import { createTables, type TableColumns } from '@sakuzu/kasane';
 import type { FileData, Layer, Metadata } from '../../api/model.js';
 import { createWorkCounts } from '../../shared/work-counts.js';
 import { createChanges } from './changes.js';
-import type { RowSpatialIndexing, StoreGroup } from './types.js';
+import { tablesWorkerOf } from './pages.js';
+import { ROW_COLUMNS } from './row-columns.js';
+import type { RowPageWorker, RowSpatialIndexing, StoreGroup } from './types.js';
 
-/**
- * The columns of the rows of the features
- *
- * @internal
- */
-export const ROW_COLUMNS: TableColumns = Object.freeze({
-  type: 'value',
-  geometry: 'shape',
-  style: Object.freeze({ type: 'value', dictionary: 'tables' }),
-  properties: 'struct',
-  hidden: 'flag',
-  locked: 'flag',
-});
+export { ROW_COLUMNS } from './row-columns.js';
 
 /**
  * The columns of the groups of rows, besides their fixed fields (`id`, `parent`, `key`)
@@ -96,9 +86,11 @@ export function dimensionsOfPositions(positions: LayerPositions): 'xy' | 'xyz' |
  *
  * @param spatialIndexing - How the boxes of the rows and the order of their spatial index are
  *   computed (the plane of the longitudes and latitudes when it is left out)
+ * @param worker - Where the large merges and builds of rows run (on the main thread, in the
+ *   frames the tables are given to work in, when it is left out)
  * @internal
  */
-export function openDocument(spatialIndexing?: RowSpatialIndexing) {
+export function openDocument(spatialIndexing?: RowSpatialIndexing, worker?: RowPageWorker) {
   /** How the positions of each layer are held, by the id of the layer */
   const layerPositions = new Map<string, LayerPositions>();
   const { tables, writer: rowWrites } = createTables({
@@ -112,6 +104,7 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing) {
     dimensionsOf: (layerId) =>
       dimensionsOfPositions(layerPositions.get(layerId) ?? PLANE_POSITIONS),
     ...(spatialIndexing && { coordinateSystem: spatialIndexing }),
+    ...(worker && { worker: tablesWorkerOf(worker) }),
   });
   const counts = createWorkCounts();
   return {
