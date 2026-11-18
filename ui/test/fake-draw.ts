@@ -21,6 +21,7 @@ import type {
   SelectionType,
   StyleRule,
 } from '@sakuzu/maplibre-gl-draw';
+import { createIdSet } from '@sakuzu/maplibre-gl-draw';
 import { vi } from 'vitest';
 
 type Listener = (payload: unknown) => void;
@@ -413,7 +414,7 @@ export function fakeDraw(
       has: (id: string) => hidden.has(id),
       remove: vi.fn((id: string) => {
         const had = hidden.delete(id);
-        if (had) emit('hidden.changed', { ids: [...hidden] });
+        if (had) emit('hidden.changed', { ids: createIdSet(hidden) });
         return had;
       }),
     },
@@ -481,7 +482,7 @@ export function fakeDraw(
     /** Hides an item in this client, from outside the interface */
     hide(id: string) {
       hidden.add(id);
-      emit('hidden.changed', { ids: [...hidden] });
+      emit('hidden.changed', { ids: createIdSet(hidden) });
     },
     /** Changes the document from outside the interface */
     change(fn: (doc: { layers: Map<string, Layer>; features: Map<string, Feature> }) => void) {
@@ -704,11 +705,11 @@ export function fakeDocument(
       has: (id: string) => hidden.has(id),
       add: vi.fn((id: string) => {
         hidden.add(id);
-        fake.emit('hidden.changed', { ids: [...hidden] });
+        fake.emit('hidden.changed', { ids: createIdSet(hidden) });
       }),
       remove: vi.fn((id: string) => {
         const had = hidden.delete(id);
-        fake.emit('hidden.changed', { ids: [...hidden] });
+        fake.emit('hidden.changed', { ids: createIdSet(hidden) });
         return had;
       }),
     },
