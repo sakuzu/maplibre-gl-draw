@@ -147,6 +147,20 @@
       "from": "ui/test/tools.test.ts",
       "to": "ui/test/tools.test.ts",
       "note": "not brought: the same renames of the string values (scripts/term-map.json) run on main give the content that branch had"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/geometry/enu-transforms.ts",
+      "to": "src/shared/math/enu-transform.ts",
+      "note": "only the formulas of the east, north and up frame, written again over the arrays of the computation; the memo at the top of the module, the scratch arrays at the top of the module, the range of the factors and the bringing of the first longitude within [-180, 180] are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/geometry/enu-transforms.test.ts",
+      "to": "src/shared/math/enu-transform.test.ts",
+      "note": "only the cases (the move to the point to, the twelve turns, the latitudes past the one of Web Mercator and the poles, the numbers past the longitude and the latitude, the fields, the features that keep their shape, the values taken), written again over the arrays; the ranges are not brought"
     }
   ]
 }

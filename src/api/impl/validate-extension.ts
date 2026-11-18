@@ -25,8 +25,10 @@ export type ExtensionKind =
   | 'overlay'
   | 'snap provider'
   | 'handle provider'
-  | 'companion provider'
-  | 'transform provider';
+  | 'companion provider';
+
+/** The kinds of value whose shape is checked here: the extensions, and the computation set alone */
+type CheckedKind = ExtensionKind | 'transform provider';
 
 /** The kinds of GeoJSON geometry a feature type can declare */
 const GEOMETRY_TYPES: ReadonlySet<string> = new Set([
@@ -98,11 +100,10 @@ const SHAPES: Readonly<
     optional: ['globalHandles', 'onDragStart', 'onDragEnd'],
   },
   'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
-  'transform provider': { required: ['accepts', 'apply'], optional: [] },
 };
 
 /** The error for a value of the wrong shape */
-function wrongShape(kind: ExtensionKind, message: string, member?: string): DrawError {
+function wrongShape(kind: CheckedKind, message: string, member?: string): DrawError {
   return new DrawError(
     'invalidInput',
     `The ${kind} ${message}`,
@@ -117,7 +118,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 /** Checks that the members named are functions: required ones must be there */
 function requireFunctions(
-  kind: ExtensionKind,
+  kind: CheckedKind,
   value: Record<string, unknown>,
   required: readonly string[],
   optional: readonly string[],
@@ -201,4 +202,19 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
     default:
       return;
   }
+}
+
+/**
+ * Checks that a value has the shape of a computation of moves, rotations and scalings
+ * (`TransformProvider`): an object with the functions `accepts` and `apply`; the name is not
+ * checked
+ *
+ * @param value - The value given to `setTransformProvider`
+ * @throws `DrawError` with the code `invalidInput` when the value does not have the shape
+ * @internal
+ */
+export function validateTransformProvider(value: unknown): void {
+  const kind = 'transform provider';
+  if (!isObject(value)) throw wrongShape(kind, 'must be an object');
+  requireFunctions(kind, value, ['accepts', 'apply'], []);
 }

@@ -167,21 +167,6 @@
       "main:added:IndexRange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:IndexRange.end": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:IndexRange.start": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Rotation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Rotation.center": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Rotation.counterclockwiseDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Scaling": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Scaling.center": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Scaling.eastFactor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Scaling.northFactor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Scaling.sizeFactor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOperation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOperation{0}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOperation{1}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOperation{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Translation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Translation.from": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:Translation.to": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:createIdSet": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "40": {
@@ -374,31 +359,6 @@
       "main:added:FileProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FileProvider.getFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FileProvider.name": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "83": {
-      "main:added:ExtensionsCollections.getTransformProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:ExtensionsCollections.setTransformProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "84": {
-      "main:added:TransformInput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.bearingDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.coordinates": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.featureCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.isScaledUniformly": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.positionStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.rotationDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.size": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformInput.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOutput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOutput.bearingDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOutput.coordinates": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOutput.rotationDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformOutput.size": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformProvider.accepts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformProvider.apply": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformProvider.name": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "85": {
       "main:added:ModesCollection.override": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"

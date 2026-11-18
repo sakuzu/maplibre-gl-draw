@@ -112,6 +112,12 @@ export type {
   MoveTarget,
   SkippedFeature,
 } from './api/model.js';
+export type {
+  Rotation,
+  Scaling,
+  TransformOperation,
+  Translation,
+} from './shared/types/model.js';
 
 // State
 export type {
@@ -200,6 +206,11 @@ export type {
   PluginsCollection,
   ProvidersCollection,
 } from './api/extensions.js';
+export type {
+  TransformInput,
+  TransformOutput,
+  TransformProvider,
+} from './shared/types/model.js';
 
 // Style rule functions
 export { deriveLegend, evaluateStyleRule, getStyleRuleChannel } from './api/model.js';

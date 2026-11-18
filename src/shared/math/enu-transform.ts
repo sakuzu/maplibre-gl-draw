@@ -61,7 +61,10 @@ function isFiniteNumber(value: unknown): value is number {
 /** Whether a value is a point of an operation: an array whose first two numbers are finite */
 function isPoint(value: unknown): value is readonly number[] {
   return (
-    Array.isArray(value) && value.length >= 2 && isFiniteNumber(value[0]) && isFiniteNumber(value[1])
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    isFiniteNumber(value[0]) &&
+    isFiniteNumber(value[1])
   );
 }
 

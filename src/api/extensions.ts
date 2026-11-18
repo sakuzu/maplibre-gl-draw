@@ -8,12 +8,12 @@
  * that removes it, and `remove(name)` removes it by name.
  */
 
+import type { TransformProvider } from '../shared/types/model.js';
 import type { FeatureTypeDefinition } from './extension/feature-type.js';
 import type { ModeFactory } from './extension/mode.js';
 import type { Plugin } from './extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from './extension/provider.js';
 import type { OverlayRenderer } from './extension/render.js';
-import type { TransformProvider } from '../shared/types/model.js';
 
 /** The plugins, in the order they were added. */
 export interface PluginsCollection {
