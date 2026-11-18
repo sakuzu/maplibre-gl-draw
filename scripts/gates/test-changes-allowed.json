@@ -345,6 +345,11 @@
       "path": "ui/e2e/ui.e2e.test.ts",
       "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
       "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 39, 84 (seven types added to the list of the public names)",
+      "unit": "the default computations of moves, rotations and scales"
     }
   ]
 }
