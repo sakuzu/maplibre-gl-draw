@@ -385,6 +385,71 @@
       "path": "bench/edit-document.test.ts",
       "change": "the list of the scenes of the editing benchmark gains the scene of the pages built in a worker",
       "unit": "the pages and the worker of the standard store"
+    },
+    {
+      "path": "src/store/draw-store.test.ts",
+      "change": "CHANGES 119, 140 (4) (the client state read and written through the instance instead of the store; the values checked do not change)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/store/read-only-and-visibility.test.ts",
+      "change": "CHANGES 119 (the client state through the instance)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/store/memory.test.ts",
+      "change": "CHANGES 119 (the scenes of the client state through the instance)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/modes/manager.test.ts",
+      "change": "CHANGES 119 (the client state through the instance)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/api/impl/store-contract.test.ts",
+      "change": "CHANGES 119 (the scenes of the client state through the instance)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/api/impl/hidden.test.ts",
+      "change": "CHANGES 37, 73 (the hidden features as a set of ids)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/api/impl/events.test.ts",
+      "change": "CHANGES 69, 73 (the scenes of hidden.changed and editing)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/destroy.test.ts",
+      "change": "CHANGES 119 (only the lines that read the client state from the store)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 12, 39 (EditingFeaturesResource, IdSet and createIdSet added to the public names)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/e2e/examples.e2e.test.ts",
+      "change": "CHANGES 37, 73 (the lines that read the length of hidden.list() and the ids of hidden.changed; what is seen does not change)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/e2e/playground.e2e.test.ts",
+      "change": "CHANGES 37, 73 (the same lines)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "ui/e2e/ui.e2e.test.ts",
+      "change": "CHANGES 37, 73 (the same lines)",
+      "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "ui/test/fake-draw.ts",
+      "change": "CHANGES 37, 73 (the lines that read the length of hidden.list() and the ids of hidden.changed)",
+      "unit": "the client state moved to the instance"
     }
   ]
 }
