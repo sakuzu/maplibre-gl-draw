@@ -47,6 +47,7 @@ describe('the scenes', () => {
       'storeParts',
       'storeRead',
       'storeMoveBefore',
+      'storePages',
     ]);
   });
 });
