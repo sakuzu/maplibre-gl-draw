@@ -225,6 +225,9 @@ describe('a box selection', () => {
       map.drag([from[0], from[1]], [to[0], to[1]], { modifiers: { shift: true } }),
     );
   }
+  // The guide of drawing says that a box over an existing selection toggles each feature in
+  // it; the published version replaces the selection with what the box meets (the row records
+  // what the code does)
   hits(
     'box with a selection',
     (map) => map.drag([-3.6, 1.8], [-2.8, 2.2], { modifiers: { shift: true } }),

@@ -204,6 +204,10 @@ describe('the fields of document.changed', () => {
   // The declaration of `DocumentChange` has `layerReorder` and `groupReorder`, but the published
   // version never sets them: an order inside a layer or a group arrives as `layers.updated` and
   // `groups.updated` (the rows record what the code does)
+  //
+  // The guide of saving says that the subscription to the Store delivers the same
+  // `DocumentChange` as `document.changed`; the Store also notifies a change of the selection,
+  // the mode or the editing alone, which `document.changed` leaves out (the rows read both)
   scene(
     'features.move inside a layer gives the order of the layer',
     (draw) => draw.features.move('pg', { layerId: 'la', index: 0 }),

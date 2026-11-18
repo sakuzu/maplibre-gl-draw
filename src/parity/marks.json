@@ -3,18 +3,14 @@
   "marks": {
     "reads": {
       "document.toJSON | value": {
-        "changes": [30, 36, 57],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids. 57: The layers and groups of toJSON are DocumentLayer and DocumentGroup: the same fields and values."
+        "changes": [57],
+        "after": "57: The layers and groups of toJSON are DocumentLayer and DocumentGroup: the same fields and values."
       },
       "features.list of 10,001 features | value": {
         "changes": [17],
         "after": "17: Throws tooManyItems (more than 10,000 features match); features.iterate reads them."
       },
       "groups.get g1 | value": {
-        "changes": [36],
-        "after": "36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids."
-      },
-      "groups.get none | value": {
         "changes": [36],
         "after": "36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids."
       },
@@ -39,8 +35,8 @@
         "after": "36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids."
       },
       "groups.list of 10,001 groups | value": {
-        "changes": [32, 36],
-        "after": "32: Throws tooManyItems (more than 10,000 groups); groups.iterate reads them. 36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids."
+        "changes": [32],
+        "after": "32: Throws tooManyItems (more than 10,000 groups); groups.iterate reads them."
       },
       "groups.list of everything | value": {
         "changes": [36],
@@ -66,19 +62,11 @@
         "changes": [30],
         "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids."
       },
-      "layers.get none | value": {
-        "changes": [30],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids."
-      },
       "layers.getActive | value": {
         "changes": [30],
         "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids."
       },
       "layers.getMany with a missing ID | value": {
-        "changes": [30],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids."
-      },
-      "layers.getOrder | value": {
         "changes": [30],
         "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids."
       },
@@ -105,10 +93,6 @@
       "selection.features of 10,001 features | value": {
         "changes": [42],
         "after": "42: Throws tooManyItems (more than 10,000 selected features)."
-      },
-      "the document as the table reads it | value": {
-        "changes": [30, 36],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids."
       }
     },
     "writes": {
@@ -3093,12 +3077,12 @@
         "after": "106: The Store has no getFeature, listFeatures or listFeaturesInOrder: a feature is read with draw.features.get, many with the tables of the Store, with the same values."
       },
       "ctx.store.getGroup | value": {
-        "changes": [36, 116],
-        "after": "36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids. 116: A group of the Store has no featureIds (it has orderKey); the members are read with listGroupMembers."
+        "changes": [116],
+        "after": "116: A group of the Store has no featureIds (it has orderKey); the members are read with listGroupMembers."
       },
       "ctx.store.getLayer | value": {
-        "changes": [30, 125],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 125: getLayer and listLayers give the Layer of the main entry, without items."
+        "changes": [125],
+        "after": "125: getLayer and listLayers give the Layer of the main entry, without items."
       },
       "ctx.store.getMode | value": {
         "changes": [119],
@@ -3137,16 +3121,16 @@
         "after": "106: The Store has no getFeature, listFeatures or listFeaturesInOrder: a feature is read with draw.features.get, many with the tables of the Store, with the same values."
       },
       "ctx.store.listGroups | value": {
-        "changes": [36, 116],
-        "after": "36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids. 116: A group of the Store has no featureIds (it has orderKey); the members are read with listGroupMembers."
+        "changes": [116],
+        "after": "116: A group of the Store has no featureIds (it has orderKey); the members are read with listGroupMembers."
       },
       "ctx.store.listHidden | value": {
         "changes": [119],
         "after": "119: The Store does not keep the state of this client (the selection, the editing, the selected vertices, the mode, read-only, the interaction lock and the hidden items): it is read and written through the instance, with the same values."
       },
       "ctx.store.listLayers | value": {
-        "changes": [30, 125],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 125: getLayer and listLayers give the Layer of the main entry, without items."
+        "changes": [125],
+        "after": "125: getLayer and listLayers give the Layer of the main entry, without items."
       },
       "ctx.store.subscribe to a write and a selection | changes": {
         "changes": [54, 63, 64],
