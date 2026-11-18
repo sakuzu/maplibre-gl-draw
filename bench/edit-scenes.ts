@@ -20,10 +20,13 @@ import {
   type FeatureRowField,
   type GeometryColumn,
   type NewRows,
+  type RowPage,
+  type RowPageWorker,
   type Store,
 } from '@sakuzu/maplibre-gl-draw/store';
 import type * as maplibregl from 'maplibre-gl';
 import { gridOf, LAYER_ID } from './edit-document';
+import type { StorePageAnswer, StorePageAsk, StorePageRequest } from './store-page-worker';
 
 /** What a scene is given */
 export interface SceneContext {
@@ -211,6 +214,50 @@ function movedPoints(n: number, from: number, count: number): GeometryColumn {
   const { geometry } = gridRows(n, from, count);
   const coordinates = Float64Array.from(geometry.coordinates, (value) => value + 0.001);
   return { ...geometry, coordinates };
+}
+
+/** The pages a part of an opening of a Store from pages takes in */
+const STORE_PAGES_PER_PART = 4;
+
+/** The Worker that builds pages (`store-page-worker.ts`), as the scenes ask it */
+interface PageWorker {
+  /** Asks for pages, and the time the Worker took to make them (ms) */
+  ask(request: StorePageAsk): Promise<{ pages: RowPage[]; buildMs: number }>;
+  /** The Worker as a Store hands it its work */
+  readonly worker: RowPageWorker;
+  terminate(): void;
+}
+
+/** Starts the Worker that builds pages */
+function startPageWorker(): PageWorker {
+  const worker = new Worker(new URL('./store-page-worker.ts', import.meta.url), {
+    type: 'module',
+  });
+  const waiting = new Map<number, (answer: StorePageAnswer) => void>();
+  let next = 0;
+  worker.onmessage = (event: MessageEvent<StorePageAnswer>) => {
+    const settle = waiting.get(event.data.id);
+    waiting.delete(event.data.id);
+    settle?.(event.data);
+  };
+  const ask = (request: StorePageAsk) =>
+    new Promise<{ pages: RowPage[]; buildMs: number }>((resolve, reject) => {
+      const id = next++;
+      waiting.set(id, (answer) => {
+        if ('error' in answer) reject(new Error(answer.error));
+        else resolve({ pages: answer.pages, buildMs: answer.buildMs });
+      });
+      const message: StorePageRequest = { ...request, id };
+      worker.postMessage(message);
+    });
+  return {
+    ask,
+    worker: {
+      merge: async (task) => (await ask({ kind: 'merge', task })).pages,
+      build: async (rows, options) => (await ask({ kind: 'build', rows, options })).pages,
+    },
+    terminate: () => worker.terminate(),
+  };
 }
 
 /** Puts the camera home and draws until the drawing has nothing left to do */
@@ -503,6 +550,70 @@ export const SCENES: readonly Scene[] = [
         'rowsWithValuesBefore',
         before.reduce((sum, count) => sum + count, 0),
       );
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'storePages',
+    label: `Open the rows of a Store without a map from pages built in a Worker, ${STORE_PAGES_PER_PART} pages at a time as the parts of one operation, a frame between them`,
+    async prepare(ctx): Promise<{
+      store: Store;
+      pages: RowPage[];
+      buildMs: number;
+      changes: number[];
+      pageWorker: PageWorker;
+    }> {
+      await rest(ctx);
+      const pageWorker = startPageWorker();
+      const store = createStore({ worker: pageWorker.worker });
+      store.createLayer({
+        id: LAYER_ID,
+        name: 'Rows',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        items: [],
+        styleRule: undefined,
+        metadata: undefined,
+      });
+      // The pages are built in the Worker and posted without a copy (not measured)
+      const { pages, buildMs } = await pageWorker.ask({ kind: 'grid', n: ctx.n });
+      // The rows each change tells as created
+      const changes: number[] = [];
+      store.subscribe((change) => {
+        changes.push(change.rows?.layers.get(LAYER_ID)?.created.length ?? 0);
+      });
+      return { store, pages, buildMs, changes, pageWorker };
+    },
+    async run(ctx, { store, pages, buildMs, changes, pageWorker }) {
+      const operationId = store.newOperationId();
+      let ended = false;
+      try {
+        for (let from = 0; from < pages.length; from += STORE_PAGES_PER_PART) {
+          if (ctx.expired()) break;
+          const hasMoreParts = from + STORE_PAGES_PER_PART < pages.length;
+          ended = !hasMoreParts;
+          const part = pages.slice(from, from + STORE_PAGES_PER_PART);
+          const t0 = performance.now();
+          ctx.input(() =>
+            store.transact(() => store.createRowsFromPages(LAYER_ID, part), 'remote', {
+              operationId,
+              hasMoreParts,
+            }),
+          );
+          ctx.part(performance.now() - t0);
+          if (hasMoreParts) await ctx.frame();
+        }
+      } finally {
+        // An opening stopped before its last part ends the operation with nothing written
+        if (!ended) store.transact(() => {}, 'remote', { operationId, stopped: true });
+        pageWorker.terminate();
+      }
+      ctx.note('rows', store.tables.get(LAYER_ID)?.rowCount ?? 0);
+      ctx.note('pages', pages.length);
+      ctx.note('changes', changes.length);
+      ctx.note('mostRowsInAChange', Math.max(0, ...changes));
+      ctx.note('buildMsInTheWorker', Math.round(buildMs));
       await ctx.settle();
     },
   }),
