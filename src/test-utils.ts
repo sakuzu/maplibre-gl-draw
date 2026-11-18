@@ -512,15 +512,35 @@ export interface WorkComparison {
   ratio: number;
 }
 
+/** How a comparison takes the amounts it is given */
+export interface CompareOptions {
+  /**
+   * The amount is meant to be zero at both sizes. Without it, an amount that is zero at both
+   * sizes throws: nothing counted it, so the comparison would check nothing.
+   */
+  zero?: boolean;
+}
+
 /**
  * Runs a scene at both sizes
+ *
+ * Throws when the amount is zero at both sizes, unless `options.zero` names it.
  *
  * @param scene Builds the scene for that number of features and returns the amount it
  *   measured (the building itself is not measured)
  */
-export function compareWork(scene: (size: number) => number): WorkComparison {
+export function compareWork(
+  scene: (size: number) => number,
+  options: CompareOptions = {},
+): WorkComparison {
   const small = scene(WORK_SIZES.small);
   const large = scene(WORK_SIZES.large);
+  if (small === 0 && large === 0 && !options.zero) {
+    throw new Error(
+      `nothing was counted at ${WORK_SIZES.small} or at ${WORK_SIZES.large} features: ` +
+        'the comparison checks nothing (pass { zero: true } when no work is what is checked)',
+    );
+  }
   return { small, large, ratio: large / Math.max(small, 1) };
 }
 
@@ -528,15 +548,17 @@ export function compareWork(scene: (size: number) => number): WorkComparison {
  * Throws unless the amount of the scene grows less than twice from 1,000 to 10,000 features
  *
  * Ten times the features with work proportional to them gives ten times the amount; work
- * that does not depend on them gives about the same amount.
+ * that does not depend on them gives about the same amount. An amount that is zero at both
+ * sizes throws unless `options.zero` names it (see `compareWork`).
  *
  * @param what What was measured, for the message
  */
 export function expectNotProportional(
   scene: (size: number) => number,
   what = 'the work',
+  options: CompareOptions = {},
 ): WorkComparison {
-  const comparison = compareWork(scene);
+  const comparison = compareWork(scene, options);
   if (!(comparison.ratio < 2)) {
     throw new Error(
       `${what} grows with the number of features: ${comparison.small} at ` +

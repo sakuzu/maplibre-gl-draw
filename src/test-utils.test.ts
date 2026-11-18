@@ -42,8 +42,15 @@ describe('the comparison of the two sizes', () => {
     expect(comparison).toEqual({ small: 3, large: 3, ratio: 1 });
   });
 
-  it('passes no work at all', () => {
-    expect(expectNotProportional(() => 0).ratio).toBe(0);
+  it('passes no work at all when the test names it', () => {
+    expect(expectNotProportional(() => 0, 'the work', { zero: true }).ratio).toBe(0);
+  });
+
+  it('fails an amount that nothing counted at either size', () => {
+    expect(() => expectNotProportional(() => 0, 'the rows touched')).toThrow(
+      /nothing was counted at 1000 or at 10000 features: the comparison checks nothing/,
+    );
+    expect(() => compareWork(() => 0)).toThrow(/checks nothing/);
   });
 
   it('fails a scene that makes an array as long as the features', () => {

@@ -5,6 +5,16 @@
       "path": "src/test-utils.ts",
       "change": "the description of the work names this file as a place to add tools to (the tools of counting work); the tests themselves do not change",
       "unit": "the base of the tests that count work"
+    },
+    {
+      "path": "src/test-utils.test.ts",
+      "change": "the rule that a comparison of two zeros fails, unless the test names the zero (the user accepted the change of these tests; the designer is to confirm it)",
+      "unit": "the work that closes the holes of the gates"
+    },
+    {
+      "path": "src/api/impl/work-scenes.test.ts",
+      "change": "the rule that a comparison of two zeros fails, unless the test names the zero (the user accepted the change of these tests; the designer is to confirm it)",
+      "unit": "the work that closes the holes of the gates"
     }
   ]
 }

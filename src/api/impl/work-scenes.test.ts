@@ -75,7 +75,10 @@ describe(WORK_SCENES.select, () => {
   });
 
   it('makes no more features for a click on one of 10,000 than of 1,000', () => {
-    expectNotProportional((size) => scene(size).objectsCreated, 'the features made');
+    // A click makes no feature at all
+    expectNotProportional((size) => scene(size).objectsCreated, 'the features made', {
+      zero: true,
+    });
   });
 
   it('notifies as often', () => {

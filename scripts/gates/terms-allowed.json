@@ -612,9 +612,7 @@
       "reason": "a page of the browser (several instances can share a page); not a page of rows",
       "hits": 1,
       "why": "a declaration that waits; the main entry words of the rows are not meant",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/DocumentResource.loadMany",
@@ -622,9 +620,7 @@
       "reason": "the published version describes what an application or an extension does with the changes (an import is one change to send)",
       "hits": 1,
       "why": "a declaration that waits; to be judged: it presumes that something sends the changes",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/DocumentResource.loadMany",
@@ -632,9 +628,7 @@
       "reason": "the published version describes an undo kept by an application or an extension here",
       "hits": 1,
       "why": "a declaration that waits (one step to undo)",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/DocumentResource.loadMany",
@@ -642,9 +636,7 @@
       "reason": "the published version describes an undo kept by an application or an extension here",
       "hits": 1,
       "why": "the same word as the row above, by the list of everywhere",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/LegendEntry",
@@ -652,9 +644,7 @@
       "reason": "a row of the legend of a style rule; not a row of a table",
       "hits": 1,
       "why": "the main entry words of the rows",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/FeaturePatch",
@@ -662,9 +652,7 @@
       "reason": "to undo a change of the type of a feature, the application deletes and creates it again; not an undo of core",
       "hits": 1,
       "why": "a declaration that waits",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/FeaturePatch",
@@ -672,9 +660,7 @@
       "reason": "to undo a change of the type of a feature, the application deletes and creates it again; not an undo of core",
       "hits": 1,
       "why": "the same word as the row above, by the list of everywhere",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/ExtensionContext.drawing",
@@ -682,9 +668,7 @@
       "reason": "the vertices of the shape being drawn, undone and redone while drawing (as the rows of src/modes/draw/vertex-drawing.ts); not a history of the document",
       "hits": 1,
       "why": "a declaration that waits; to be judged by the yardstick: an undo of core, of the vertices being drawn",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/ExtensionContext.drawing",
@@ -692,9 +676,7 @@
       "reason": "the vertices of the shape being drawn, undone and redone while drawing (as the rows of src/modes/draw/vertex-drawing.ts); not a history of the document",
       "hits": 1,
       "why": "as the row above",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/ExtensionContext.drawing",
@@ -702,9 +684,7 @@
       "reason": "the vertices of the shape being drawn, undone and redone while drawing (as the rows of src/modes/draw/vertex-drawing.ts); not a history of the document",
       "hits": 1,
       "why": "the same words as the rows above, by the list of everywhere",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/RenderContext.terrain",
@@ -712,9 +692,7 @@
       "reason": "the building blocks of the /webgl entry; not a block of rows",
       "hits": 1,
       "why": "the main entry words of the rows",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/deriveLegend",
@@ -722,9 +700,7 @@
       "reason": "a row of the legend of a style rule; not a row of a table",
       "hits": 1,
       "why": "the main entry words of the rows",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/Table",
@@ -732,9 +708,7 @@
       "reason": "the declarations of the table, those of the published version: the table is sent from a Worker to the main thread",
       "hits": 1,
       "why": "the same text as the row of declarations/table/Table, reached from the main entry",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/main/PreparedTable",
@@ -742,9 +716,7 @@
       "reason": "the declarations of the table, those of the published version: the table is sent from a Worker to the main thread",
       "hits": 1,
       "why": "the same text as the row of declarations/table/PreparedTable, reached from the main entry",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/geometry/(entry)",
@@ -752,9 +724,7 @@
       "reason": "the places the geometry functions run in (workers, servers, tests)",
       "hits": 1,
       "why": "the same text as the row of src/geometry/index.ts, in the description of the entry",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "declarations/geometry/(entry)",
@@ -762,9 +732,7 @@
       "reason": "the places the geometry functions run in (workers, servers, tests)",
       "hits": 1,
       "why": "the same word as the row above, by the list of everywhere",
-      "lines": [
-        null
-      ]
+      "lines": [null]
     },
     {
       "where": "src/api/impl/create-draw.test.ts",
@@ -772,10 +740,7 @@
       "reason": "the source of a transaction an extension names for its own history; not a history of core",
       "hits": 2,
       "why": "string values the old reading did not read",
-      "lines": [
-        "169",
-        "172"
-      ]
+      "lines": ["169", "172"]
     },
     {
       "where": "src/dispatcher/hit-test/topmost.test.ts",
@@ -783,10 +748,7 @@
       "reason": "the feature a companion belongs to",
       "hits": 2,
       "why": "the identifier ownerIds after a template literal the old reading lost",
-      "lines": [
-        "311",
-        "314"
-      ]
+      "lines": ["311", "314"]
     },
     {
       "where": "src/store/memory.test.ts",
@@ -794,13 +756,7 @@
       "reason": "the published version describes an undo kept by an application or an extension here",
       "hits": 5,
       "why": "the sources undo and redo a test gives a transaction, as an extension would; string values the old reading did not read",
-      "lines": [
-        "649",
-        "676",
-        "688",
-        "863",
-        "866"
-      ]
+      "lines": ["649", "676", "688", "863", "866"]
     },
     {
       "where": "src/view/layer/drape-planner.ts",
@@ -808,9 +764,7 @@
       "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
       "hits": 1,
       "why": "the order of the elements of the terrain announced to the tile store; after a template literal the old reading lost",
-      "lines": [
-        "626"
-      ]
+      "lines": ["626"]
     },
     {
       "where": "src/view/layer/store-retained.test.ts",
@@ -818,10 +772,7 @@
       "reason": "the feature a companion belongs to",
       "hits": 2,
       "why": "the identifier ownerIds after a template literal the old reading lost",
-      "lines": [
-        "1917",
-        "1920"
-      ]
+      "lines": ["1917", "1920"]
     },
     {
       "where": "src/view/terrain/drape/bin-store.ts",
@@ -829,9 +780,7 @@
       "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
       "hits": 1,
       "why": "the name of the internal method that announces the order of the elements of the terrain; after a template literal the old reading lost; to be judged: a name of code",
-      "lines": [
-        "306"
-      ]
+      "lines": ["306"]
     },
     {
       "where": "bench/test-data/generate.ts",
@@ -839,9 +788,7 @@
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
       "hits": 1,
       "why": "writeFileSync",
-      "lines": [
-        "280"
-      ]
+      "lines": ["280"]
     },
     {
       "where": "bench/vite.config.ts",
@@ -849,9 +796,7 @@
       "reason": "the development server of the bench (the server option of vite)",
       "hits": 1,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "12"
-      ]
+      "lines": ["12"]
     },
     {
       "where": "playground/vite.config.ts",
@@ -859,9 +804,7 @@
       "reason": "the development server of the playground (the server option of vite)",
       "hits": 1,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "17"
-      ]
+      "lines": ["17"]
     },
     {
       "where": "ui/dev/data.ts",
@@ -869,9 +812,7 @@
       "reason": "an attribute of the sample data of the development page (the owner of a block of a city); not an owner of the document",
       "hits": 1,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "45"
-      ]
+      "lines": ["45"]
     },
     {
       "where": "ui/e2e/harness.ts",
@@ -879,10 +820,7 @@
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
       "hits": 2,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "18",
-        "190"
-      ]
+      "lines": ["18", "190"]
     },
     {
       "where": "ui/e2e/harness.ts",
@@ -890,9 +828,7 @@
       "reason": "an attribute of the sample data of the end-to-end tests (the owner of a block of a city); not an owner of the document",
       "hits": 1,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "255"
-      ]
+      "lines": ["255"]
     },
     {
       "where": "ui/scripts/check-dist.mjs",
@@ -900,15 +836,7 @@
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
       "hits": 7,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "17",
-        "26",
-        "39",
-        "40",
-        "53",
-        "54",
-        "73"
-      ]
+      "lines": ["17", "26", "39", "40", "53", "54", "73"]
     },
     {
       "where": "ui/scripts/check-dist.mjs",
@@ -916,11 +844,7 @@
       "reason": "the peer dependencies of the UI package",
       "hits": 3,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "29",
-        "49",
-        "50"
-      ]
+      "lines": ["29", "49", "50"]
     },
     {
       "where": "ui/scripts/check-imports.mjs",
@@ -928,13 +852,7 @@
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
       "hits": 5,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "15",
-        "22",
-        "37",
-        "39",
-        "63"
-      ]
+      "lines": ["15", "22", "37", "39", "63"]
     },
     {
       "where": "ui/scripts/need-core.mjs",
@@ -942,10 +860,7 @@
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
       "hits": 2,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "13",
-        "16"
-      ]
+      "lines": ["13", "16"]
     },
     {
       "where": "ui/src/actions.ts",
@@ -953,15 +868,7 @@
       "reason": "the action a keyboard shortcut is taken by; not an owner of the document",
       "hits": 7,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "63",
-        "127",
-        "128",
-        "130",
-        "241",
-        "242",
-        "244"
-      ]
+      "lines": ["63", "127", "128", "130", "241", "242", "244"]
     },
     {
       "where": "ui/src/components/StyleFields.svelte",
@@ -969,9 +876,7 @@
       "reason": "the name of an icon (undo-2) on the action that resets a style; not an undo",
       "hits": 1,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "66"
-      ]
+      "lines": ["66"]
     },
     {
       "where": "ui/src/index.ts",
@@ -979,10 +884,7 @@
       "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
       "hits": 2,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "26",
-        "276"
-      ]
+      "lines": ["26", "276"]
     },
     {
       "where": "ui/test/actions.test.ts",
@@ -1044,11 +946,7 @@
       "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
       "hits": 3,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "4",
-        "165",
-        "471"
-      ]
+      "lines": ["4", "165", "471"]
     },
     {
       "where": "ui/test/inspector-model.test.ts",
@@ -1056,10 +954,7 @@
       "reason": "an attribute key of the test data (the owner of a block); not an owner of the document",
       "hits": 2,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "330",
-        "331"
-      ]
+      "lines": ["330", "331"]
     },
     {
       "where": "ui/test/inspector.test.ts",
@@ -1139,10 +1034,7 @@
       "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
       "hits": 2,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "4",
-        "76"
-      ]
+      "lines": ["4", "76"]
     },
     {
       "where": "ui/test/scope-css.test.ts",
@@ -1150,11 +1042,7 @@
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
       "hits": 3,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "4",
-        "32",
-        "73"
-      ]
+      "lines": ["4", "32", "73"]
     },
     {
       "where": "ui/test/theme.test.ts",
@@ -1162,16 +1050,7 @@
       "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
       "hits": 8,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "4",
-        "228",
-        "233",
-        "246",
-        "252",
-        "255",
-        "268",
-        "273"
-      ]
+      "lines": ["4", "228", "233", "246", "252", "255", "268", "273"]
     },
     {
       "where": "ui/test/toolbar.test.ts",
@@ -1215,16 +1094,7 @@
       "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
       "hits": 8,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "4",
-        "26",
-        "59",
-        "68",
-        "75",
-        "79",
-        "109",
-        "113"
-      ]
+      "lines": ["4", "26", "59", "68", "75", "79", "109", "113"]
     },
     {
       "where": "ui/vite.config.ts",
@@ -1232,11 +1102,7 @@
       "reason": "the peer dependencies of the UI package",
       "hits": 3,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "7",
-        "23",
-        "46"
-      ]
+      "lines": ["7", "23", "46"]
     },
     {
       "where": "ui/vite.dev.config.ts",
@@ -1244,9 +1110,7 @@
       "reason": "the development server of the UI (the server option of vite)",
       "hits": 1,
       "why": "a folder the gate did not read before",
-      "lines": [
-        "19"
-      ]
+      "lines": ["19"]
     },
     {
       "where": "CHANGELOG.md",
@@ -1254,9 +1118,7 @@
       "reason": "the development server of the examples",
       "hits": 1,
       "why": "a file the gate did not read before",
-      "lines": [
-        "229"
-      ]
+      "lines": ["229"]
     }
   ]
 }
