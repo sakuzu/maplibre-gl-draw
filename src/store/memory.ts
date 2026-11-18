@@ -18,6 +18,7 @@
  * the notification goes out.
  */
 
+import { countWork, createWorkCounts, type WorkCounts } from '../shared/work-counts.js';
 import { DrawStore } from './draw-store.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
@@ -56,7 +57,8 @@ export interface MemoryStore extends Store {}
 export const MemoryStore: { new (): MemoryStore; readonly prototype: MemoryStore } =
   class extends DrawStore {
     constructor() {
-      super(new MemoryContractStore());
+      const counts = createWorkCounts();
+      super(new MemoryContractStore(counts), counts);
     }
   };
 
@@ -71,10 +73,12 @@ export const MemoryStore: { new (): MemoryStore; readonly prototype: MemoryStore
  */
 export class MemoryContractStore implements StoreContract {
   readonly #bus = new ChangeBus();
-  readonly #document = new MemoryDocumentStore();
+  readonly #document: MemoryDocumentStore;
   readonly #client = new MemoryClientState(this.#bus);
 
-  constructor() {
+  /** @param counts The numbers the features made are counted in */
+  constructor(counts?: WorkCounts) {
+    this.#document = new MemoryDocumentStore(counts);
     this.#document.subscribe((changes) => this.#bus.merge(changes));
   }
 
@@ -278,6 +282,12 @@ export class MemoryDocumentStore implements DocumentStore {
 
   readonly #bus = new ChangeBus(() => this.#freezeFresh());
   readonly #fileStore = new FileStore();
+  readonly #counts: WorkCounts | undefined;
+
+  /** @param counts The numbers the features made are counted in */
+  constructor(counts?: WorkCounts) {
+    this.#counts = counts;
+  }
 
   // ============================================================================
   // Feature
@@ -304,6 +314,7 @@ export class MemoryDocumentStore implements DocumentStore {
     }
 
     const stored = frozenFeature(undefined, feature);
+    countWork(this.#counts, 'objectsCreated');
     this.#features.set(stored.id, stored);
     this.#addToContainer(stored);
 
@@ -336,6 +347,7 @@ export class MemoryDocumentStore implements DocumentStore {
     }
 
     const updated = frozenFeature(previous, { ...updates, id });
+    countWork(this.#counts, 'objectsCreated');
 
     this.#withinOperation(() => {
       this.#features.set(id, updated);

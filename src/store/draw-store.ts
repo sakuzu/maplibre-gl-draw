@@ -28,6 +28,7 @@
  */
 
 import { coordinatesOf } from '../shared/utils/coordinates.js';
+import { createWorkCounts, holdWorkCounts, type WorkCounts } from '../shared/work-counts.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import type { Store, StoreContract } from './store.js';
@@ -67,12 +68,16 @@ export function toStore(store: StoreContract | Store): Store {
  */
 export class DrawStore implements Store {
   readonly #contract: StoreContract;
-  readonly #bus = new ChangeBus();
-  readonly #drawing = new MemoryDrawingState(this.#bus);
+  readonly #bus: ChangeBus;
+  readonly #drawing: MemoryDrawingState;
   /** The normalized copy of each object of the contract that gave `null` for an optional field */
   readonly #normalized = new WeakMap<object, object>();
 
-  constructor(contract: StoreContract) {
+  /** @param counts The numbers of this Store, shared with the contract that made them */
+  constructor(contract: StoreContract, counts: WorkCounts = createWorkCounts()) {
+    holdWorkCounts(this, counts);
+    this.#bus = new ChangeBus(undefined, counts);
+    this.#drawing = new MemoryDrawingState(this.#bus);
     this.#contract = contract;
     contract.subscribe((changes) => this.#receive(changes));
   }

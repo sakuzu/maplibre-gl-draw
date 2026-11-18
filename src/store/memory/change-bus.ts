@@ -24,6 +24,7 @@
  * the last state, so as the diff of a single flush it means the same as before folding.
  */
 
+import { countWork, type WorkCounts } from '../../shared/work-counts.js';
 import type { Group, Layer, StoreChange, UpdateSource } from '../types.js';
 
 export type StoreListener = (changes: StoreChange) => void;
@@ -160,6 +161,7 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
 export class ChangeBus {
   readonly #listeners = new Set<StoreListener>();
   readonly #beforeFlush: (() => void) | undefined;
+  readonly #counts: WorkCounts | undefined;
   #transactionDepth = 0;
   #pendingChanges: StoreChange = {};
   #currentSource: UpdateSource = 'local';
@@ -168,9 +170,11 @@ export class ChangeBus {
   /**
    * @param beforeFlush Called when the outermost operation is about to notify, before the
    *   listeners (MemoryStore freezes the objects it built during the flush here)
+   * @param counts The numbers each notification is counted in
    */
-  constructor(beforeFlush?: () => void) {
+  constructor(beforeFlush?: () => void, counts?: WorkCounts) {
     this.#beforeFlush = beforeFlush;
+    this.#counts = counts;
   }
 
   subscribe(listener: StoreListener): () => void {
@@ -254,6 +258,7 @@ export class ChangeBus {
     // listeners, so always recreate it so that appends do not pollute it).
     this.#pendingChanges = {};
     this.#updateIndex = { layers: new Map(), groups: new Map() };
+    countWork(this.#counts, 'notifications');
 
     // Every listener gets the notification: one that throws is reported and the others still
     // run, so the Store and its subscribers (rendering, the mode manager, the spatial index, a
