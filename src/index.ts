@@ -71,6 +71,7 @@ export type { FeaturesCollection } from './api/features.js';
 export type { LayersCollection } from './api/layers.js';
 export type { GroupsCollection } from './api/groups.js';
 export type { HiddenCollection } from './api/hidden.js';
+export type { EditingFeaturesResource } from './api/model.js';
 export type { SelectionResource, VertexSelectionResource } from './api/selection.js';
 export type { MetadataResource } from './api/metadata.js';
 export type { DrawingResource } from './api/drawing.js';
@@ -94,10 +95,6 @@ export type {
   StyleRule,
 } from './api/model.js';
 export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
-
-// Sets of IDs and the features being edited
-export type { EditingFeaturesResource, IdSet } from './api/model.js';
-export { createIdSet } from './api/model.js';
 
 // Inputs, patches and filters
 export type {
@@ -136,6 +133,8 @@ export type {
   VertexSelection,
 } from './api/state.js';
 export { MODES } from './api/state.js';
+export type { IdSet } from './api/model.js';
+export { createIdSet } from './api/model.js';
 
 // Events
 export type { DocumentChange, DrawEventListener, DrawEvents, ScreenPoint } from './api/events.js';
