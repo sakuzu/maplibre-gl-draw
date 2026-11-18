@@ -130,7 +130,7 @@ export function createRowsFromPagesOf(document: StoreDocument): Store['createRow
             `${what}: a value is not a page built by createRowPageBuilder that no Store took in yet`,
           );
         }
-        if (dimensionsOfValues(page.valuesPerPosition) !== dimensions) {
+        if (dimensionsOfValues(page.valuesPerPosition, page.thirdValue) !== dimensions) {
           throw new DrawError(
             'invalidInput',
             `${what}: a page was built for ${page.valuesPerPosition} values per position, the layer ${JSON.stringify(layerId)} has ${positions.valuesPerPosition}`,

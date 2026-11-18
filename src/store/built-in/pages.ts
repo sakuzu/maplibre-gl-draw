@@ -8,7 +8,8 @@
  *
  * A page is a page of the tables of `@sakuzu/kasane`, built with the columns of the rows of the
  * features (`row-columns.ts`), that also holds what the Store needs to take it in: the ids of the
- * groups its rows name, and the number of values of its positions. A Worker cannot know the
+ * groups its rows name, the number of values of its positions and what the third one is. A Worker
+ * cannot know the
  * references the Store gives the groups, so a row of a page built here names its group by its
  * place in the groups the builder was given (`RowPageBuilderOptions.groups`); the Store writes
  * the references of the groups over them when it takes the page in (`writeGroupRefs`), in place.
@@ -47,12 +48,12 @@ import type {
   RowPageWorker,
   RowSpatialIndexing,
 } from './types.js';
-import { isPlainObject, jsonProblem, styleProblem } from './validate.js';
+import { isPlainObject, isWellFormed, jsonProblem, styleProblem } from './validate.js';
 
 /**
  * A page as the builder makes it: a page of the tables, with the ids of the groups its rows name
- * (a row names the place of its group in `groupIds`, or -1) and the number of values of its
- * positions
+ * (a row names the place of its group in `groupIds`, or -1), the number of values of its
+ * positions and what the third one is
  *
  * @internal
  */
@@ -61,6 +62,8 @@ export interface BuiltPage extends Page {
   readonly groupIds: readonly string[];
   /** The number of values of the positions */
   readonly valuesPerPosition: 2 | 3 | 4;
+  /** What the third value of the positions is when there are 3 (a height for 2 and 4) */
+  readonly thirdValue: 'height' | 'measure';
 }
 
 /** The depth of the shape of each type of geometry: the number of its levels of arrays */
@@ -96,6 +99,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
 /** Whether a value is a non-empty string */
 function isId(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
+}
+
+/** Throws unless a string holds no lone surrogate */
+function checkWellFormed(what: string, value: string): void {
+  if (!isWellFormed(value)) invalid(`${what} holds a lone surrogate`);
 }
 
 /** Why a value is not a position of `n` finite numbers (null when it is) */
@@ -225,11 +233,16 @@ function definedAttributes(
 export function createRowPageBuilder(options: RowPageBuilderOptions = {}): RowPageBuilder {
   const what = 'createRowPageBuilder';
   if (!isObject(options)) invalid(`${what}: the options are not an object`);
-  const { groups = [], valuesPerPosition = 2 } = options;
+  const { groups = [], valuesPerPosition = 2, thirdValue = 'height' } = options;
   const spatialIndexing: unknown = options.spatialIndexing;
   if (valuesPerPosition !== 2 && valuesPerPosition !== 3 && valuesPerPosition !== 4) {
     invalid(`${what}: ${String(valuesPerPosition)} is not a number of values of a position`);
   }
+  if (thirdValue !== 'height' && thirdValue !== 'measure') {
+    invalid(`${what}: the third value is neither height nor measure`);
+  }
+  /** What the third value is: a measure only for positions of 3 values */
+  const third = valuesPerPosition === 3 ? thirdValue : 'height';
   if (!Array.isArray(groups)) invalid(`${what}: the groups are not an array`);
   if (
     spatialIndexing !== undefined &&
@@ -245,6 +258,8 @@ export function createRowPageBuilder(options: RowPageBuilderOptions = {}): RowPa
     if (!isId(group.orderKey)) {
       invalid(`${what}: the group ${JSON.stringify(group.id)} has no key of its order`);
     }
+    checkWellFormed(`${what}: the id of a group`, group.id);
+    checkWellFormed(`${what}: the key of the order of a group`, group.orderKey);
     if (numbers.has(group.id)) invalid(`${what}: the group ${JSON.stringify(group.id)} is twice`);
     numbers.set(group.id, entries.length);
     entries.push({ group: entries.length, id: group.id, key: group.orderKey });
@@ -254,7 +269,7 @@ export function createRowPageBuilder(options: RowPageBuilderOptions = {}): RowPa
     createPageBuilder({
       columns: ROW_COLUMNS,
       groups: entries,
-      dimensions: dimensionsOfValues(valuesPerPosition),
+      dimensions: dimensionsOfValues(valuesPerPosition, third),
       ...(spatialIndexing !== undefined && {
         coordinateSystem: spatialIndexing as unknown as RowSpatialIndexing,
       }),
@@ -272,12 +287,16 @@ export function createRowPageBuilder(options: RowPageBuilderOptions = {}): RowPa
       if (!isObject(row)) invalid(`${where}: the row is not an object`);
       const { id, type, geometry, orderKey, groupId, style, properties, visible, locked } = row;
       if (!isId(id)) invalid(`${where}: the id is not a non-empty string`);
+      checkWellFormed(`${where}: the id`, id);
       const of = `${where}: the row ${JSON.stringify(id)}`;
       if (!isId(type)) invalid(`${of}: the type is not a non-empty string`);
+      checkWellFormed(`${of}: the type`, type);
       if (!isId(orderKey)) invalid(`${of}: the key of the order is not a non-empty string`);
+      checkWellFormed(`${of}: the key of the order`, orderKey);
       if (groupId !== undefined && !isId(groupId)) {
         invalid(`${of}: the group is not the id of a group`);
       }
+      if (groupId !== undefined) checkWellFormed(`${of}: the group`, groupId);
       if (visible !== undefined && typeof visible !== 'boolean') {
         invalid(`${of}: visible is not a boolean`);
       }
@@ -333,7 +352,8 @@ export function createRowPageBuilder(options: RowPageBuilderOptions = {}): RowPa
         );
       }
       const pages = tables(() => builder.build());
-      for (const page of pages) Object.assign(page, { groupIds, valuesPerPosition });
+      for (const page of pages)
+        Object.assign(page, { groupIds, valuesPerPosition, thirdValue: third });
       return pages as unknown as RowPage[];
     },
   };
@@ -389,9 +409,10 @@ export function isPageShape(value: unknown): value is Page {
  */
 export function isBuiltPage(value: unknown): value is BuiltPage {
   if (!isPageShape(value)) return false;
-  const { groupIds, valuesPerPosition } = value as unknown as Record<string, unknown>;
+  const { groupIds, valuesPerPosition, thirdValue } = value as unknown as Record<string, unknown>;
   if (!Array.isArray(groupIds) || !groupIds.every(isId)) return false;
   if (valuesPerPosition !== 2 && valuesPerPosition !== 3 && valuesPerPosition !== 4) return false;
+  if (thirdValue !== 'height' && thirdValue !== 'measure') return false;
   const { rows, groups } = value;
   for (let r = 0; r < rows.length; r++) {
     if (rows[r] !== -1) return false;
@@ -509,7 +530,12 @@ export function tablesWorkerOf(worker: RowPageWorker): TablesWorker {
       const refOfId = new Map<string, number>();
       for (const entry of entries) refOfId.set(entry.id, entry.group);
       return worker
-        .build(inputs, { groups, valuesPerPosition: valuesOfDimensions(options.dimensions) })
+        .build(inputs, {
+          groups,
+          valuesPerPosition: valuesOfDimensions(options.dimensions),
+          // A third value that is a measure; a height is the one left out
+          ...(options.dimensions === 'xym' && { thirdValue: 'measure' as const }),
+        })
         .then((pages) => {
           for (const page of pages) {
             if (!isBuiltPage(page)) {

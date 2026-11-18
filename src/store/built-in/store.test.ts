@@ -599,7 +599,7 @@ describe('readValues', () => {
     expect(store.tables.get('zm')?.getPointPosition(refOf(store, 'zm1'))).toEqual([3, 4]);
   });
 
-  it('refuses rows of more than one layer, a key of the style and a field that is not one of a row', () => {
+  it('refuses rows of more than one layer, a key of the style without its name and a field that is not one of a row', () => {
     const { store, refs } = geometries();
     const elsewhere = refOf(store, 'elsewhere');
     expectCode(
@@ -610,7 +610,7 @@ describe('readValues', () => {
       () => store.tables.readValues(Int32Array.of(refs[0], elsewhere), ['geometry']),
       'invalidInput',
     );
-    expectCode(() => store.tables.readValues(refs, ['style:fillColor']), 'invalidInput');
+    expectCode(() => store.tables.readValues(refs, ['style:']), 'invalidInput');
     expectCode(
       () => store.tables.readValues(refs, ['hidden' as unknown as 'type']),
       'invalidInput',

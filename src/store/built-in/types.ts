@@ -311,6 +311,14 @@ export interface StoreView {
   /** The title and the description */
   getMetadata(): Metadata;
   /**
+   * The keys of the attributes the rows given hold, each once, in no particular order: read their
+   * values with `tables.readValues`, as the fields `properties:<key>`. With it every value of a
+   * row can be read without knowing its keys first (to write out a whole document).
+   *
+   * @param rows - The rows; every row of the document when it is left out
+   */
+  listPropertyKeys(rows?: Int32Array): string[];
+  /**
    * Subscribes to the changes of the document, as rows: one change arrives per outermost
    * transaction that changed it.
    *
@@ -389,7 +397,9 @@ export type RowRef = number;
 /**
  * A field of the values of a row of a feature, and the value each row has in it. A value that
  * breaks the rule of its field makes the whole write refused (see {@link Store}); a caller that
- * writes values that came from elsewhere checks them first with {@link validateRowValues}.
+ * writes values that came from elsewhere checks them first with {@link validateRowValues}. In every
+ * field, a string that is not well-formed (it holds a lone surrogate), as a key or as a value, breaks
+ * the rule, and so does a value of arrays and objects nested more than 32 deep.
  *
  * - `type`: the type of the feature (`'Polygon'`, `'Circle'`, the name of a custom type), a
  *   non-empty string
@@ -503,7 +513,10 @@ export const GEOMETRY_TYPES: readonly [
 
 /** New rows: their ids, and the values of their fields and their geometries ({@link Store.createRows}). */
 export interface NewRows {
-  /** The ids, one per new row, unique and not in use */
+  /**
+   * The ids, one per new row, unique and not in use: non-empty well-formed strings (an id that
+   * holds a lone surrogate is refused as `invalidInput`)
+   */
   readonly ids: readonly string[];
   /** The values of each field, one per id ({@link FeatureRowField}) */
   readonly fields: ReadonlyMap<FeatureRowField, readonly unknown[]>;
@@ -905,6 +918,8 @@ export interface RowPageBuilderOptions {
   }[];
   /** The number of values of the positions of the layer the pages go to (2 when it is left out) */
   readonly valuesPerPosition?: 2 | 3 | 4;
+  /** What the third value is when there are 3, as the layer has it ({@link LayerRowOptions.thirdValue}): `height` (the default) or `measure` */
+  readonly thirdValue?: 'height' | 'measure';
   /** The system of the boxes, the one the Store is given ({@link StoreOptions.spatialIndexing}) */
   readonly spatialIndexing?: RowSpatialIndexing;
 }

@@ -26,12 +26,16 @@ export const ROW_COLUMNS: TableColumns = Object.freeze({
 });
 
 /**
- * The dimensions of the positions of pages built for a number of values per position (the third
- * value of three is held as a height)
+ * The dimensions of the positions of pages built for a number of values per position, and what
+ * the third value of three is (a height when it is left out)
  *
  * @internal
  */
-export function dimensionsOfValues(valuesPerPosition: 2 | 3 | 4): 'xy' | 'xyz' | 'xyzm' {
+export function dimensionsOfValues(
+  valuesPerPosition: 2 | 3 | 4,
+  thirdValue: 'height' | 'measure' = 'height',
+): 'xy' | 'xyz' | 'xym' | 'xyzm' {
   if (valuesPerPosition === 2) return 'xy';
-  return valuesPerPosition === 4 ? 'xyzm' : 'xyz';
+  if (valuesPerPosition === 4) return 'xyzm';
+  return thirdValue === 'measure' ? 'xym' : 'xyz';
 }

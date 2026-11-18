@@ -12,8 +12,12 @@
  * touches and the objects it hands out.
  *
  * A deleted row is read while something keeps it (see `kept-rows.ts`); one that nothing keeps is
- * not there, though the tables hold it until its page is built again, and the references of the
- * rows of a layer leave out every deleted row.
+ * not there for any read, by its reference or by its id, though the tables hold it until its page
+ * is built again, and the references of the rows of a layer leave out every deleted row. The rows
+ * of a hidden layer are not drawn.
+ *
+ * A key of the style (`style:<key>`) is read from the style of the row, the one object the rows of
+ * the same style share in the tables: its value there, or undefined when it does not hold the key.
  *
  * An error of the tables is thrown as a `DrawError` of the same code.
  *
@@ -69,6 +73,22 @@ function read<T>(fn: () => T): T {
 }
 
 /**
+ * The values of one key of the styles of rows: the value each style holds for it, undefined for
+ * a row without the key (or without a style)
+ */
+function styleKeyOf(styles: readonly unknown[], key: string): unknown[] {
+  const out = new Array<unknown>(styles.length);
+  for (let i = 0; i < styles.length; i++) {
+    const style = styles[i] as Readonly<Record<string, unknown>> | undefined;
+    out[i] =
+      typeof style === 'object' && style !== null && Object.hasOwn(style, key)
+        ? style[key]
+        : undefined;
+  }
+  return out;
+}
+
+/**
  * What a read of values of rows reads besides their fields
  *
  * @internal
@@ -96,9 +116,11 @@ export function readRowValues(
   options: ReadRowsOptions,
   counts: readonly WorkCounts[],
 ): RowValues {
-  // The fields of the tables, in the order asked, and how each is read back
+  // The fields of the tables, in the order asked, and how each is read back; the keys of the
+  // style are read from the style
   const asked: string[] = [];
   let geometry = false;
+  let styleKeys = false;
   for (const field of fields) {
     const plain = PLAIN_FIELDS.get(field);
     if (plain !== undefined) asked.push(plain);
@@ -106,15 +128,13 @@ export function readRowValues(
     else if (field === 'geometry') geometry = true;
     else if (field.startsWith(PROPERTY_FIELD) && field.length > PROPERTY_FIELD.length) {
       asked.push(field);
-    } else if (field.startsWith(STYLE_KEY_FIELD)) {
-      throw new DrawError(
-        'invalidInput',
-        `${JSON.stringify(field)}: a key of the style is not read on its own; read the field style`,
-      );
+    } else if (field.startsWith(STYLE_KEY_FIELD) && field.length > STYLE_KEY_FIELD.length) {
+      styleKeys = true;
     } else {
       throw new DrawError('invalidInput', `${JSON.stringify(field)} is not a field of a row`);
     }
   }
+  if (styleKeys && !asked.includes('style')) asked.push('style');
   // The deletion is read to leave out the deleted rows nothing keeps
   const found = document.rows.readValues(
     refs,
@@ -158,6 +178,11 @@ export function readRowValues(
         visible[i] = hidden[i] === undefined ? undefined : hidden[i] !== true;
       }
       out.set(field, visible);
+    } else if (field.startsWith(STYLE_KEY_FIELD) && field.length > STYLE_KEY_FIELD.length) {
+      out.set(
+        field,
+        styleKeyOf(found.fields.get('style') ?? [], field.slice(STYLE_KEY_FIELD.length)),
+      );
     } else {
       out.set(field, found.fields.get(PLAIN_FIELDS.get(field) ?? field) ?? []);
     }
@@ -180,23 +205,56 @@ export function readRowValues(
 }
 
 /**
+ * The keys of the attributes rows hold, each once (see `StoreView.listPropertyKeys`): of the rows
+ * given, or of every row of the document. The tables list them without an object per row
+ *
+ * @internal
+ */
+export function listPropertyKeysOf(document: StoreDocument, rows?: Int32Array): string[] {
+  if (rows !== undefined && !(rows instanceof Int32Array)) {
+    throw new DrawError(
+      'invalidInput',
+      'listPropertyKeys: the rows are not an Int32Array of references',
+    );
+  }
+  return read(() => {
+    const keys = document.rows.listKeys('properties', rows);
+    if (rows) countWork(document.counts, 'rowsTouched', rows.length);
+    countWork(document.counts, 'objectsCreated');
+    return keys;
+  });
+}
+
+/**
  * The tables of the rows of a document, as the Store hands them out
  *
  * @internal
  */
 export function featureTablesOf(document: StoreDocument): FeatureTables {
   const { rows, rowWrites, counts } = document;
+  const { kept } = document.changes;
   const views = new WeakMap<TableView, LayerTableView>();
 
-  /** The values of fields of one row, read alone, with the layer it is in */
+  /** Whether a row read with its deletion is there: not deleted, or deleted and kept */
+  const isThere = (ref: RowRef, deleted: Uint8Array | undefined): boolean =>
+    !deleted?.[0] || isKept(kept, ref);
+
+  /**
+   * The values of fields of one row, read alone, with the layer it is in (undefined for a row
+   * that is not there, a deleted row nothing keeps included)
+   */
   const readRow = (ref: RowRef, fields: readonly RowField[], geometry = false) => {
     const values = rows.readValues(
       Int32Array.of(ref),
-      ['parent', ...fields],
+      ['parent', ...fields, 'deleted'],
       geometry ? { shapes: 'columns' } : undefined,
     );
     countWork(counts, 'rowsTouched');
-    return { layerId: layerOfParent(document, values.fields.get('parent')?.[0]), values };
+    const there = isThere(ref, values.deleted);
+    return {
+      layerId: there ? layerOfParent(document, values.fields.get('parent')?.[0]) : undefined,
+      values,
+    };
   };
 
   const viewOf = (view: TableView): LayerTableView => {
@@ -238,11 +296,18 @@ export function featureTablesOf(document: StoreDocument): FeatureTables {
       get itemCount() {
         return read(() => view.itemCount);
       },
-      listDrawnRows: (bbox) => read(() => touched(view.listVisibleRows(bbox))),
-      getDrawnRowsRevision: () => read(() => view.getVisibleRowsVersion()),
+      // The rows of a hidden layer are not drawn
+      listDrawnRows: (bbox) =>
+        read(() =>
+          document.layers.get(layerId)?.visible === false
+            ? new Int32Array(0)
+            : touched(view.listVisibleRows(bbox)),
+        ),
+      getDrawnRowsRevision: () =>
+        read(() => view.getVisibleRowsVersion() + document.layerVisibilityRevision),
       getRowBBox: (ref) =>
         read(() => {
-          countWork(counts, 'rowsTouched');
+          if (readRow(ref, []).layerId === undefined) return null;
           return view.getRowBBox(ref);
         }),
       getRowType: (ref) =>
@@ -303,10 +368,13 @@ export function featureTablesOf(document: StoreDocument): FeatureTables {
         return out;
       }),
     getRowRef: (id) => read(() => rows.getRowRef(id)),
+    // A deleted row is found while something keeps it
     findRow: (id) =>
       read(() => {
         const row = rowWrites.lookup(id);
-        return row ? { ref: row.row, deleted: row.deleted } : undefined;
+        countWork(counts, 'rowsTouched');
+        if (!row || (row.deleted && !isKept(kept, row.row))) return undefined;
+        return { ref: row.row, deleted: row.deleted };
       }),
     getRowId: (ref) => read(() => rows.getRowId(ref)),
     findGroup: (id) => read(() => rows.getGroupRef(id)),

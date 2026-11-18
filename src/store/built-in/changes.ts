@@ -7,8 +7,9 @@
  * The writes of a transaction are gathered as they come, and told once, when the outermost
  * transaction ends: to every listener, in the order they subscribed, before `transact` returns.
  * A write made outside a transaction is a transaction of its own, of the source `'remote'`. A
- * transaction inside another folds into it when it has the same source and no options, and throws
- * `invalidState` otherwise; so does a write or a transaction while the listeners are told. Each
+ * transaction inside another folds into it when it has the same source (the options of the
+ * outermost one win: those of the inner one are not used), and throws `invalidState` otherwise;
+ * so does a write or a transaction while the listeners are told. Each
  * part of an operation written in several transactions is told as it ends: nothing is held back to
  * a later part.
  *
@@ -335,12 +336,7 @@ export function transact<T>(
         `transact: a transaction of the source ${JSON.stringify(source)} inside one of ${JSON.stringify(outer.source)}`,
       );
     }
-    if (options !== undefined) {
-      throw new DrawError(
-        'invalidState',
-        'transact: the options of a transaction are given by the outermost one only',
-      );
-    }
+    // The options of the outermost transaction win: those of this one are not used
     changes.depth += 1;
     try {
       return fn();
@@ -559,13 +555,16 @@ function takeFrom(
 
 /**
  * Folds the rows one write of the tables wrote in one table into the writes before it: a deleted
- * row brought back, which the tables tell as created, is updated
+ * row brought back, which the tables tell as created, is updated. The fields are those the write
+ * was given: the style written by its keys is named by the keys written, and the whole style as
+ * `style` alone
  */
 function foldTable(
   pending: PendingChange,
   layerId: string,
   written: TableRowsChange,
   broughtBack?: ReadonlySet<number>,
+  styleKeys?: readonly FeatureRowField[],
 ): void {
   let fold = pending.rows.get(layerId);
   if (!fold) {
@@ -573,9 +572,10 @@ function foldTable(
     pending.rows.set(layerId, fold);
   }
   for (const field of written.fields) {
-    fold.fields.add(TABLE_FIELDS.get(field) ?? (field as FeatureRowField));
-    if (field === 'style') {
-      for (const key of written.changedKeys) fold.fields.add(`style:${key}`);
+    if (field === 'style' && styleKeys) {
+      for (const key of styleKeys) fold.fields.add(key);
+    } else {
+      fold.fields.add(TABLE_FIELDS.get(field) ?? (field as FeatureRowField));
     }
   }
   const others: LayerFold[] = [];
@@ -617,16 +617,21 @@ function foldTable(
  * Adds the rows a write of the tables wrote to the change of the transaction under way
  *
  * @param broughtBack - The deleted rows the write brought back (none when it is left out)
+ * @param styleKeys - The fields of the keys of the style the write was given, when it wrote the
+ *   style by its keys (the tables are given the whole style then)
  * @internal
  */
 export function addRows(
   changes: Changes,
   written: TablesRowsChange,
   broughtBack?: ReadonlySet<number>,
+  styleKeys?: readonly FeatureRowField[],
 ): void {
   if (written.tables.size === 0) return;
   const pending = pendingOf(changes);
-  for (const [layerId, rows] of written.tables) foldTable(pending, layerId, rows, broughtBack);
+  for (const [layerId, rows] of written.tables) {
+    foldTable(pending, layerId, rows, broughtBack, styleKeys);
+  }
 }
 
 /** The rows of a fold, joined */

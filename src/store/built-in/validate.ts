@@ -53,6 +53,12 @@ const PLAIN_FIELDS: ReadonlySet<string> = new Set([
 /** The fields a new row is not made without (besides its geometry) */
 const NEEDED_FIELDS: readonly FeatureRowField[] = ['type', 'parent', 'orderKey'];
 
+/** The deepest a value of arrays and objects nests: what a value nested deeper is refused for */
+const MAX_DEPTH = 32;
+
+/** Why a string is refused (a lone surrogate has no UTF-8, and is not replaced unseen) */
+const LONE_SURROGATE = 'holds a lone surrogate';
+
 /** The error of one value */
 function error(row: number, field: FeatureRowField | 'deleted', reason: string): RowValuesError {
   return { row, field, reason };
@@ -67,6 +73,24 @@ export function fieldKind(field: string): 'plain' | 'style' | 'property' | null 
   if (field.startsWith(STYLE_KEY_FIELD) && field.length > STYLE_KEY_FIELD.length) return 'style';
   if (field.startsWith(PROPERTY_FIELD) && field.length > PROPERTY_FIELD.length) return 'property';
   return null;
+}
+
+/**
+ * Whether a string is well-formed: it holds no lone surrogate (a high surrogate not followed by a
+ * low one, or a low one without a high one before it)
+ *
+ * @internal
+ */
+export function isWellFormed(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 0xd800 || code > 0xdfff) continue;
+    if (code > 0xdbff) return false;
+    const low = value.charCodeAt(i + 1);
+    if (!(low >= 0xdc00 && low <= 0xdfff)) return false;
+    i++;
+  }
+  return true;
 }
 
 /**
@@ -85,6 +109,13 @@ function isStyleValue(value: unknown): boolean {
   return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
 }
 
+/** Why a value is not one a key of the style holds (null when it is) */
+function styleValueProblem(value: unknown): string | null {
+  if (!isStyleValue(value)) return 'a key of the style is neither a string nor a finite number';
+  if (typeof value === 'string' && !isWellFormed(value)) return `the value ${LONE_SURROGATE}`;
+  return null;
+}
+
 /**
  * Why a style is not one (null when it is): an object whose values are strings and finite numbers
  *
@@ -94,8 +125,13 @@ export function styleProblem(style: unknown): string | null {
   if (!isPlainObject(style)) return 'the style is not an object';
   // A plain object inherits no key it lists
   for (const key in style) {
-    if (!isStyleValue(style[key])) {
+    if (!isWellFormed(key)) return `a key of the style ${LONE_SURROGATE}`;
+    const value = style[key];
+    if (!isStyleValue(value)) {
       return `the key ${JSON.stringify(key)} of the style is neither a string nor a finite number`;
+    }
+    if (typeof value === 'string' && !isWellFormed(value)) {
+      return `the value of the key ${JSON.stringify(key)} of the style ${LONE_SURROGATE}`;
     }
   }
   return null;
@@ -103,20 +139,23 @@ export function styleProblem(style: unknown): string | null {
 
 /**
  * Why a value of an attribute is not one JSON holds (null when it is): a string, a finite number,
- * a boolean, `null`, or arrays and plain objects of them
+ * a boolean, `null`, or arrays and plain objects of them, nested at most 32 deep, every string of
+ * them (the keys included) well-formed
  *
  * @param within - The arrays and objects the value is in, from the value of the attribute: a value
- *   that is in itself is not one JSON holds
+ *   that is in itself is not one JSON holds, and one inside 32 of them nests too deep
  * @internal
  */
 export function jsonProblem(value: unknown, within: unknown[]): string | null {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return null;
+  if (typeof value === 'string') return isWellFormed(value) ? null : `a string ${LONE_SURROGATE}`;
+  if (value === null || typeof value === 'boolean') return null;
   if (typeof value === 'number') {
     return Number.isFinite(value) ? null : `${value} is not a finite number`;
   }
   if (typeof value === 'function') return 'a function is not a value JSON holds';
   if (typeof value !== 'object') return `a ${typeof value} is not a value JSON holds`;
   if (within.includes(value)) return 'the value is in itself';
+  if (within.length >= MAX_DEPTH) return `the value nests more than ${MAX_DEPTH} deep`;
   if (Array.isArray(value)) {
     within.push(value);
     for (let i = 0; i < value.length; i++) {
@@ -130,6 +169,7 @@ export function jsonProblem(value: unknown, within: unknown[]): string | null {
     return 'an object that is not a plain object is not a value JSON holds';
   within.push(value);
   for (const key in value) {
+    if (!isWellFormed(key)) return `a key of an object ${LONE_SURROGATE}`;
     const item = value[key];
     const problem =
       item === undefined
@@ -159,15 +199,12 @@ function valueProblem(
     within.length = 0;
     return jsonProblem(value, within);
   }
-  if (kind === 'style') {
-    return value === undefined || isStyleValue(value)
-      ? null
-      : 'a key of the style is neither a string nor a finite number';
-  }
+  if (kind === 'style') return value === undefined ? null : styleValueProblem(value);
   if (value === undefined) {
     if (created) return NEEDED_FIELDS.includes(field) ? 'a new row needs it' : null;
     return 'the value is missing';
   }
+  if (typeof value === 'string' && !isWellFormed(value)) return `the value ${LONE_SURROGATE}`;
   switch (field) {
     case 'type':
       return typeof value === 'string' && value !== ''
@@ -344,6 +381,9 @@ export function validateRowValues(
     }
     const kind = typeof field === 'string' ? fieldKind(field) : null;
     if (kind === null) return error(0, field, `${JSON.stringify(field)} is not a field of a row`);
+    if (kind !== 'plain' && !isWellFormed(field)) {
+      return error(0, field, `the key of the field ${LONE_SURROGATE}`);
+    }
     if (!Array.isArray(column) || column.length !== count) {
       return error(0, field, `the field has no array of ${count} values`);
     }

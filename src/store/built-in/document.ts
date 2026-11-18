@@ -126,6 +126,11 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing, worker?: RowP
     metadata: Object.freeze({}) as Metadata,
     /** The reference the next group is given in the tables */
     nextGroupRef: 1,
+    /**
+     * The number of times a layer was hidden or shown: the rows drawn change with it, though the
+     * tables do not (they do not know the layers)
+     */
+    layerVisibilityRevision: 0,
     /** The amounts of work done */
     counts,
     /** The transactions, the listeners, and the deleted rows kept for them */

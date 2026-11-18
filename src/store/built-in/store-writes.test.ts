@@ -372,7 +372,11 @@ describe.each(STORES)('%s', (_name, make) => {
           () =>
             store.createRows({
               ...good,
-              fields: new Map([...good.fields, ['style:fillColor', ['#f00', '#f00', '#f00']]]),
+              fields: new Map([
+                ...good.fields,
+                ['style', [{}, {}, {}]],
+                ['style:fillColor', ['#f00', '#f00', '#f00']],
+              ]),
             }),
         ],
         [
@@ -464,9 +468,9 @@ describe.each(STORES)('%s', (_name, make) => {
       const store = withRows(make);
       const p = refOf(store, 'p');
       const q = refOf(store, 'q');
-      store.writeRows(valuesOf([refOf(store, 'm')], [], { deleted: Uint8Array.of(1) }));
-      const m = store.tables.findRow('m')?.ref as number;
-      expect(store.tables.findRow('m')?.deleted).toBe(true);
+      const m = refOf(store, 'm');
+      store.writeRows(valuesOf([m], [], { deleted: Uint8Array.of(1) }));
+      expect(store.tables.findRow('m')).toBeUndefined();
       const cases: Array<[string, () => unknown]> = [
         ['notFound', () => store.writeRows(valuesOf([p, 9999], [['visible', [false, false]]]))],
         // A deleted row that nothing keeps
@@ -474,7 +478,19 @@ describe.each(STORES)('%s', (_name, make) => {
         ['invalidInput', () => store.writeRows(valuesOf([p, q], [['visible', [false, 1]]]))],
         ['invalidInput', () => store.writeRows(valuesOf([p, q], [['visible', [false]]]))],
         ['invalidInput', () => store.writeRows(valuesOf([p, q], [['type', ['', 'Point']]]))],
-        ['invalidInput', () => store.writeRows(valuesOf([p], [['style:fillColor', ['#f00']]]))],
+        [
+          'invalidInput',
+          () =>
+            store.writeRows(
+              valuesOf(
+                [p],
+                [
+                  ['style', [{}]],
+                  ['style:fillColor', ['#f00']],
+                ],
+              ),
+            ),
+        ],
         ['invalidInput', () => store.writeRows(valuesOf([p], [['geometry', [null]]]))],
         ['invalidInput', () => store.writeRows(valuesOf([p], [['properties:f', [() => 1]]]))],
         ['notFound', () => store.writeRows(valuesOf([p], [['parent', ['none']]]))],
@@ -598,11 +614,21 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(store.tables.getValuesPerPosition('b')).toBe(2);
     });
 
-    it('refuse other numbers of values per position until the tables hold them', () => {
+    it('are created with 3 and 4 values per position, and refuse other numbers', () => {
       const store = make();
-      for (const valuesPerPosition of [3, 4] as const) {
-        expectNothingWritten(store, () => store.createLayer(layer('a'), { valuesPerPosition }));
-      }
+      expect(store.createLayer(layer('z'), { valuesPerPosition: 3 })).toBe(true);
+      expect(store.createLayer(layer('m'), { valuesPerPosition: 3, thirdValue: 'measure' })).toBe(
+        true,
+      );
+      expect(store.createLayer(layer('zm'), { valuesPerPosition: 4 })).toBe(true);
+      expect(store.tables.getValuesPerPosition('z')).toBe(3);
+      expect(store.tables.getThirdValue('z')).toBe('height');
+      expect(store.tables.getThirdValue('m')).toBe('measure');
+      expect(store.tables.getValuesPerPosition('zm')).toBe(4);
+      expect(store.tables.getThirdValue('zm')).toBe('height');
+      expectNothingWritten(store, () =>
+        store.createLayer(layer('a'), { valuesPerPosition: 5 as 4 }),
+      );
       expectNothingWritten(store, () =>
         store.createLayer(layer('a'), { thirdValue: 'other' as 'height' }),
       );
@@ -888,22 +914,29 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(changes[0].layers?.created?.map((l) => l.id)).toEqual(['a']);
     });
 
-    it('throw for a transaction inside another given options, writing nothing', () => {
+    it('fold a transaction inside another given options into it, the options of the outermost winning', () => {
       const store = make();
-      const operationId = store.newOperationId();
+      const outer = store.newOperationId();
+      const inner = store.newOperationId();
       const changes = record(store);
-      store.transact(() => {
-        expectCode(
-          () => store.transact(() => store.createLayer(layer('b')), 'local', { operationId }),
-          'invalidState',
-        );
-        expectCode(
-          () => store.transact(() => store.createLayer(layer('b')), 'local', {}),
-          'invalidState',
-        );
-      }, 'local');
-      expect(store.getLayer('b')).toBeUndefined();
-      expect(changes).toEqual([]);
+      store.transact(
+        () => {
+          store.transact(() => store.createLayer(layer('b')), 'local', {
+            operationId: inner,
+            hasMoreParts: true,
+          });
+          store.transact(() => store.createLayer(layer('c')), 'local', {});
+        },
+        'local',
+        { operationId: outer },
+      );
+      expect(store.getLayer('b')).toBeDefined();
+      expect(store.getLayer('c')).toBeDefined();
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toEqual(
+        expect.objectContaining({ operationId: outer, hasMoreParts: false, stopped: false }),
+      );
+      expect(changes[0].layers?.created?.map((l) => l.id)).toEqual(['b', 'c']);
     });
 
     it('tell the writes made before fn threw as one change, then throw again', () => {
@@ -1088,15 +1121,13 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(idsOf(store, b?.created)).toEqual([]);
     });
 
-    it('name the keys of the style that changed', () => {
+    it('name the whole style written as style alone', () => {
       const store = withRows(make);
       const p = refOf(store, 'p');
       store.writeRows(valuesOf([p], [['style', [{ fillColor: '#f00', strokeWidth: 2 }]]]));
       const changes = record(store);
       store.writeRows(valuesOf([p], [['style', [{ fillColor: '#0f0', strokeWidth: 2 }]]]));
-      expect(changes[0].rows?.layers.get('a')?.fields).toEqual(
-        new Set(['style', 'style:fillColor']),
-      );
+      expect(changes[0].rows?.layers.get('a')?.fields).toEqual(new Set(['style']));
     });
 
     it('fold the updates of a layer and of a group into one entry per id', () => {

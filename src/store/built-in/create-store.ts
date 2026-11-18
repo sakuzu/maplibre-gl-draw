@@ -10,7 +10,7 @@
 
 import { holdWorkCounts } from '../../shared/work-counts.js';
 import { openDocument, type StoreDocument } from './document.js';
-import { featureTablesOf } from './feature-tables.js';
+import { featureTablesOf, listPropertyKeysOf } from './feature-tables.js';
 import type { Store, StoreOptions } from './types.js';
 import { storeWritesOf } from './writes.js';
 
@@ -31,6 +31,7 @@ export function storeOf(document: StoreDocument): Store {
     getFile: (id) => document.files.get(id),
     listFiles: () => Array.from(document.files.values()),
     getMetadata: () => document.metadata,
+    listPropertyKeys: (rows) => listPropertyKeysOf(document, rows),
     ...storeWritesOf(document),
   };
   holdWorkCounts(store, document.counts);

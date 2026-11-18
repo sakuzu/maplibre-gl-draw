@@ -19,7 +19,10 @@
  *
  * The rows of one write go to the tables in one write of theirs, with what the write was given:
  * the fields under the names of the columns, and the geometries as the columns of their shapes.
- * Nothing is made per row.
+ * Nothing is made per row. The style written by its keys (`style:<key>`) goes to the tables as the
+ * whole style of each row: its style now with the keys written, one object for every row whose
+ * style was the same object and that is given the same values, so the rows of one style given one
+ * value of a key share one new style.
  *
  * While a listener asks for the values before, each write of rows reads the values its rows have
  * before it writes them (`values-before.ts`); while a listener keeps the deleted rows, each write
@@ -33,7 +36,7 @@
 import { KasaneError, type RowValues as TablesRowValues } from '@sakuzu/kasane';
 import type { FileData, Layer, Metadata } from '../../api/model.js';
 import { DrawError } from '../../shared/errors.js';
-import { countWork } from '../../shared/work-counts.js';
+import { countWork, type WorkCounts } from '../../shared/work-counts.js';
 import {
   addCleared,
   addFileCreated,
@@ -69,10 +72,22 @@ import type {
   Store,
   StoreGroup,
 } from './types.js';
-import { fieldKind, validateRowValues } from './validate.js';
+import { fieldKind, isWellFormed, validateRowValues } from './validate.js';
 
 /** The type of a row without a geometry, in `GeometryColumn.types` */
 const NO_TYPE = 255;
+
+/** The style of a row that has none */
+const NO_STYLE: Readonly<Record<string, never>> = Object.freeze({});
+
+/** A key of the style written `undefined` (taken off), as the value of a step of the styles made */
+const TAKEN_OFF = Symbol('taken off');
+
+/** The number -0 as the value of a step of the styles made (a Map does not tell it from 0) */
+const NEGATIVE_ZERO = Symbol('-0');
+
+/** The start of the fields of the keys of the style */
+const STYLE_KEY_FIELD = 'style:';
 
 /** The fields of a row written under another name in the tables */
 const TABLE_NAMES: ReadonlyMap<string, string> = new Map([['orderKey', 'key']]);
@@ -110,27 +125,100 @@ function isId(value: unknown): value is string {
 }
 
 /**
- * Throws unless the fields of a write of rows are fields it writes: the fields of a row, the keys
- * of the style excepted (`style:<key>` is not written on its own yet), and not the geometry,
- * which is given as a column
+ * Throws unless the fields of a write of rows are fields it writes: the fields of a row, and not
+ * the geometry, which is given as a column; the whole style and keys of it are not written
+ * together
  */
 function checkFields(
   what: string,
   fields: unknown,
 ): asserts fields is ReadonlyMap<FeatureRowField, readonly unknown[]> {
   if (!(fields instanceof Map)) invalid(`${what}: the fields are not a Map`);
+  let styleKey: string | undefined;
   for (const field of fields.keys()) {
     if (field === 'geometry') {
       invalid(`${what}: the geometries are given as a GeometryColumn (geometry), not as a field`);
     }
     const kind = typeof field === 'string' ? fieldKind(field) : null;
     if (kind === null) invalid(`${what}: ${JSON.stringify(field)} is not a field of a row`);
-    if (kind === 'style') {
-      invalid(
-        `${what}: ${JSON.stringify(field)}: a key of the style is not written on its own; write the field style`,
-      );
+    if (kind === 'style') styleKey ??= field as string;
+  }
+  if (styleKey !== undefined && fields.has('style')) {
+    invalid(
+      `${what}: the whole style and its key ${JSON.stringify(styleKey)} are written together; write one of them`,
+    );
+  }
+}
+
+/** The fields of the keys of the style among the fields of a write, with their values */
+function styleKeysOf(
+  fields: ReadonlyMap<FeatureRowField, readonly unknown[]>,
+): Array<[FeatureRowField, readonly unknown[]]> {
+  const out: Array<[FeatureRowField, readonly unknown[]]> = [];
+  for (const entry of fields) {
+    if (entry[0].startsWith(STYLE_KEY_FIELD) && entry[0].length > STYLE_KEY_FIELD.length) {
+      out.push(entry);
     }
   }
+  return out;
+}
+
+/** A step of the styles made: the style made once the values that led here are written */
+interface StyleStep {
+  readonly next: Map<unknown, StyleStep>;
+  style: Readonly<Record<string, unknown>> | undefined;
+}
+
+/**
+ * The whole styles of rows with the keys of the style written: for each row, its style (`before`)
+ * with the values of the keys given, `undefined` taking a key off. The rows whose style was the
+ * same object and that are given the same values share one new style, made once
+ *
+ * @param counts - Where the objects made are counted
+ */
+function stylesWithKeys(
+  before: readonly unknown[],
+  keys: ReadonlyArray<[FeatureRowField, readonly unknown[]]>,
+  length: number,
+  counts: WorkCounts,
+): unknown[] {
+  const names = keys.map(([field]) => field.slice(STYLE_KEY_FIELD.length));
+  /** The first step of the styles made from each style there was, by the style */
+  const first = new Map<unknown, StyleStep>();
+  const out = new Array<unknown>(length);
+  countWork(counts, 'objectsCreated', 3);
+  for (let i = 0; i < length; i++) {
+    const style = (before[i] ?? NO_STYLE) as Readonly<Record<string, unknown>>;
+    let step: StyleStep | undefined = first.get(style);
+    if (!step) {
+      step = { next: new Map(), style: undefined };
+      countWork(counts, 'objectsCreated', 2);
+      first.set(style, step);
+    }
+    for (const [, column] of keys) {
+      const value = column[i];
+      const at = value === undefined ? TAKEN_OFF : Object.is(value, -0) ? NEGATIVE_ZERO : value;
+      let next: StyleStep | undefined = step.next.get(at);
+      if (!next) {
+        next = { next: new Map(), style: undefined };
+        countWork(counts, 'objectsCreated', 2);
+        step.next.set(at, next);
+      }
+      step = next;
+    }
+    if (!step.style) {
+      const made: Record<string, unknown> = { ...style };
+      for (let k = 0; k < keys.length; k++) {
+        const value = keys[k][1][i];
+        if (value === undefined) delete made[names[k]];
+        else made[names[k]] = value;
+      }
+      step.style = Object.freeze(made);
+      countWork(counts, 'objectsCreated');
+    }
+    out[i] = step.style;
+  }
+  return out;
 }
 
 /** Throws unless values of rows keep the rules of their fields */
@@ -147,6 +235,9 @@ function checkValues(what: string, values: RowValues | NewRows, valuesPerPositio
 /**
  * The ids of rows as the tables take them: their UTF-8 bytes one after the other, encoded as a
  * `TextEncoder` encodes them, into one array
+ *
+ * @throws `DrawError` with the code `invalidInput` for an id that holds a lone surrogate (it has
+ *   no UTF-8)
  */
 function idColumnOf(ids: readonly string[]): { offsets: Int32Array; bytes: Uint8Array } {
   let size = 0;
@@ -165,8 +256,9 @@ function idColumnOf(ids: readonly string[]): { offsets: Int32Array; bytes: Uint8
           k++;
         }
       }
-      // A lone surrogate is written as the character that replaces it
-      if (code >= 0xd800 && code <= 0xdfff) code = 0xfffd;
+      if (code >= 0xd800 && code <= 0xdfff) {
+        invalid(`createRows: the id ${i} holds a lone surrogate`);
+      }
       if (code < 0x80) {
         bytes[at++] = code;
       } else if (code < 0x800) {
@@ -214,6 +306,7 @@ export function storeWritesOf(
   | 'getFile'
   | 'listFiles'
   | 'getMetadata'
+  | 'listPropertyKeys'
 > {
   const { changes, counts, rowWrites } = document;
   const { kept } = changes;
@@ -283,8 +376,37 @@ export function storeWritesOf(
   ): FeatureRowField[] => [...fields.keys(), ...(geometry ? (['geometry'] as const) : [])];
 
   /**
+   * The fields of a write with the keys of the style written as the whole style of each row: its
+   * style now (none for a new row) with the keys written; the fields as they are when no key of
+   * the style is written
+   */
+  const withWholeStyles = (
+    rows: Int32Array,
+    fields: ReadonlyMap<FeatureRowField, readonly unknown[]>,
+    keys: ReadonlyArray<[FeatureRowField, readonly unknown[]]>,
+    created: boolean,
+  ): ReadonlyMap<FeatureRowField, readonly unknown[]> => {
+    if (keys.length === 0) return fields;
+    let before: readonly unknown[] = [];
+    if (!created) {
+      before = tables(() => document.rows.readValues(rows, ['style'])).fields.get('style') ?? [];
+      countWork(counts, 'objectsCreated', 3);
+      countWork(counts, 'rowsTouched', rows.length);
+    }
+    const out = new Map<FeatureRowField, readonly unknown[]>();
+    for (const [field, column] of fields) {
+      if (!field.startsWith(STYLE_KEY_FIELD)) out.set(field, column);
+    }
+    out.set('style', stylesWithKeys(before, keys, rows.length, counts));
+    countWork(counts, 'objectsCreated');
+    return out;
+  };
+
+  /**
    * Writes values of rows to the tables, and adds what they wrote to the change: the rows brought
    * back are updated, and the rows deleted and brought back are marked as kept or not
+   *
+   * @param created - Whether the rows are new ones (their style is none before the write)
    */
   const writeTables = (
     rows: Int32Array,
@@ -292,11 +414,13 @@ export function storeWritesOf(
     geometry: GeometryColumn | undefined,
     layerId: string,
     deleted: Uint8Array | undefined,
+    created: boolean,
     broughtBack?: ReadonlySet<number>,
   ): void => {
+    const styleKeys = styleKeysOf(fields);
     const values: TablesRowValues = {
       rows,
-      fields: tableFieldsOf(fields),
+      fields: tableFieldsOf(withWholeStyles(rows, fields, styleKeys, created)),
       ...(geometry && {
         shapes: new Map([
           [
@@ -315,7 +439,12 @@ export function storeWritesOf(
       ),
     );
     if (deleted) markDeletionWritten(changes, rows, deleted);
-    addRows(changes, written.rows, broughtBack);
+    addRows(
+      changes,
+      written.rows,
+      broughtBack,
+      styleKeys.length > 0 ? styleKeys.map(([field]) => field) : undefined,
+    );
     countWork(counts, 'rowsWritten', rows.length);
     countWork(counts, 'rowsTouched', rows.length);
   };
@@ -337,7 +466,11 @@ export function storeWritesOf(
       const what = 'createRows';
       if (!isObject(rows) || !Array.isArray(rows.ids)) invalid(`${what}: the rows have no ids`);
       const { ids, fields, geometry } = rows;
-      for (const id of ids) if (typeof id !== 'string') invalid(`${what}: an id is not a string`);
+      for (const id of ids) {
+        if (typeof id !== 'string') invalid(`${what}: an id is not a string`);
+        if (!isWellFormed(id))
+          invalid(`${what}: the id ${JSON.stringify(id)} holds a lone surrogate`);
+      }
       checkFields(what, fields);
       // The layer of the rows: the layer of their parents
       const parents = fields.get('parent');
@@ -361,21 +494,38 @@ export function storeWritesOf(
       if (ids.length === 0 || layerId === undefined) return true;
       // The ids are those of no row in use and no group, and are not given twice
       const seen = new Set<string>();
-      let again = false;
-      for (const id of ids) {
+      /** The ids the tables hold already (those of deleted rows nothing keeps), by their places */
+      let found: Uint8Array | undefined;
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
         if (seen.has(id) || document.groups.has(id)) return false;
-        const found = tables(() => rowWrites.lookup(id));
-        if (found && (!found.deleted || isKept(kept, found.row))) return false;
-        // The id of a deleted row nothing keeps: the transaction may have deleted it
-        if (found) again = true;
+        const row = tables(() => rowWrites.lookup(id));
+        if (row && (!row.deleted || isKept(kept, row.row))) return false;
+        // The id of a deleted row nothing keeps that the tables still hold (a row the clear of
+        // the transaction took out)
+        if (row) {
+          found ??= new Uint8Array(ids.length);
+          found[i] = 1;
+        }
         seen.add(id);
       }
       countWork(counts, 'objectsCreated');
       const column = idColumnOf(ids);
       countWork(counts, 'objectsCreated', 3);
       const refs = tables(() => rowWrites.allocateRowRefs(column));
-      if (again) readValuesBefore(changes, refs, fieldsWritten(fields, geometry as GeometryColumn));
-      writeTables(refs, fields, geometry as GeometryColumn, layerId, undefined);
+      if (found) readValuesBefore(changes, refs, fieldsWritten(fields, geometry as GeometryColumn));
+      try {
+        writeTables(refs, fields, geometry as GeometryColumn, layerId, undefined, true);
+      } catch (error) {
+        // The ids given new references are taken out again: nothing was created
+        let fresh = refs;
+        if (found) {
+          const isNew = found;
+          fresh = refs.filter((_, i) => isNew[i] === 0);
+        }
+        tables(() => rowWrites.forgetIds(fresh));
+        throw error;
+      }
       return true;
     });
 
@@ -442,7 +592,15 @@ export function storeWritesOf(
       }
       checkValues(what, values, valuesPerPosition);
       readValuesBefore(changes, rows, fieldsWritten(fields, geometry));
-      writeTables(rows, fields, geometry, layerNamed(parents?.[0]) ?? layer, deleted, broughtBack);
+      writeTables(
+        rows,
+        fields,
+        geometry,
+        layerNamed(parents?.[0]) ?? layer,
+        deleted,
+        false,
+        broughtBack,
+      );
       return true;
     });
 
@@ -509,21 +667,34 @@ export function storeWritesOf(
     write(changes, 'createLayer', () => {
       const what = 'createLayer';
       if (!isObject(layer) || !isId(layer.id)) invalid(`${what}: the layer has no id`);
+      let valuesPerPosition: 2 | 3 | 4 = 2;
+      let thirdValue: 'height' | 'measure' = 'height';
       if (options !== undefined) {
         if (!isObject(options)) invalid(`${what}: the options are not an object`);
-        const { valuesPerPosition, thirdValue } = options;
-        // The positions of the rows have two values until the tables hold more
-        if (valuesPerPosition !== undefined && valuesPerPosition !== 2) {
-          invalid(
-            `${what}: a layer of ${String(valuesPerPosition)} values per position is not held yet; a layer holds 2`,
-          );
+        const given = options as { valuesPerPosition?: unknown; thirdValue?: unknown };
+        if (given.valuesPerPosition !== undefined) {
+          if (
+            given.valuesPerPosition !== 2 &&
+            given.valuesPerPosition !== 3 &&
+            given.valuesPerPosition !== 4
+          ) {
+            invalid(
+              `${what}: ${String(given.valuesPerPosition)} is not a number of values of a position (2, 3 or 4)`,
+            );
+          }
+          valuesPerPosition = given.valuesPerPosition;
         }
-        if (thirdValue !== undefined && thirdValue !== 'height' && thirdValue !== 'measure') {
-          invalid(`${what}: the third value is neither height nor measure`);
+        if (given.thirdValue !== undefined) {
+          if (given.thirdValue !== 'height' && given.thirdValue !== 'measure') {
+            invalid(`${what}: the third value is neither height nor measure`);
+          }
+          thirdValue = given.thirdValue;
         }
       }
       if (document.layers.has(layer.id) || document.groups.has(layer.id)) return false;
       const created = frozenLayer(layer);
+      // How its positions are held, read by the tables before its first row
+      document.layerPositions.set(created.id, Object.freeze({ valuesPerPosition, thirdValue }));
       document.layers.set(created.id, created);
       addLayerCreated(changes, created);
       const previous = document.layerOrder;
@@ -541,6 +712,10 @@ export function storeWritesOf(
       if (!isObject(updates)) invalid('updateLayer: the updates are not an object');
       const layer = frozenLayer({ ...previous, ...updates, id });
       document.layers.set(id, layer);
+      // The rows drawn change when the layer is hidden or shown
+      if ((layer.visible === false) !== (previous.visible === false)) {
+        document.layerVisibilityRevision += 1;
+      }
       addLayerUpdated(changes, layer, previous);
       return true;
     });
@@ -667,6 +842,17 @@ export function storeWritesOf(
       }
       if (fields.size > 0) {
         const ref = tables(() => document.rows.getGroupRef(id));
+        // The members that go with it to the other layer are written their parent: the values
+        // before have it
+        if (ref !== undefined && fields.has('parent') && readsValuesBefore(changes)) {
+          const view = tables(() => document.rows.get(previous.layerId));
+          const count = tables(() => view?.countGroupMembers(ref) ?? 0);
+          if (view && count > 0) {
+            const members = tables(() => view.listGroupMembers(ref, 0, count));
+            countWork(counts, 'rowsTouched', members.length);
+            readValuesBefore(changes, members, ['parent']);
+          }
+        }
         if (ref !== undefined) writeGroups(Int32Array.of(ref), fields);
       }
       document.groups.set(id, group);
