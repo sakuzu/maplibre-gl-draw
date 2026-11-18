@@ -318,6 +318,38 @@ export const SCENES: readonly Scene[] = [
     },
   }),
   scene({
+    name: 'selectOne',
+    label: 'Select one feature (draw.selection.set with one ID)',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      ctx.draw.selection.clear();
+      await rest(ctx);
+      return ctx.featureIds[Math.floor(ctx.featureIds.length / 2)];
+    },
+    async run(ctx, id) {
+      const { draw } = ctx;
+      ctx.input(() => draw.selection.set('feature', [id]));
+      ctx.note('selected', draw.selection.get().ids.length);
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'hideOne',
+    label: 'Hide one feature in this client only (draw.hidden.add)',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      ctx.draw.hidden.clear();
+      await rest(ctx);
+      return ctx.featureIds[Math.floor(ctx.featureIds.length / 2)];
+    },
+    async run(ctx, id) {
+      const { draw } = ctx;
+      ctx.input(() => draw.hidden.add(id));
+      ctx.note('hidden', draw.hidden.count());
+      await ctx.settle();
+    },
+  }),
+  scene({
     name: 'boxSelect',
     label: 'Draw a box over the whole view with Shift, a move per frame',
     async prepare(ctx) {

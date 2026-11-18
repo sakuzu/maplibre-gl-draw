@@ -39,6 +39,8 @@ describe('the scenes', () => {
       'open',
       'pan',
       'selectAll',
+      'selectOne',
+      'hideOne',
       'boxSelect',
       'drag',
       'delete',
