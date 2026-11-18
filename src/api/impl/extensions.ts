@@ -7,7 +7,8 @@
  * Every collection is a registry by name over the same core: `add` installs an extension into
  * the engine and returns the function that uninstalls it, `addMany` and `removeMany` do all or
  * nothing. The installing is given by the host (`extension-host.ts`); this file only keeps the
- * names, the order and the errors.
+ * names, the order and the errors. The computations of moves, rotations and scalings are not
+ * named: they are kept in the order they were set ({@link TransformProviderStack}).
  */
 
 import type { Geometry } from 'geojson';
@@ -17,6 +18,7 @@ import type { ModeFactory } from '../extension/mode.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from '../extension/provider.js';
 import type { OverlayRenderer } from '../extension/render.js';
+import type { TransformProvider } from '../../shared/types/model.js';
 import type {
   ExtensionsCollections,
   FeatureTypesCollection,
@@ -26,6 +28,7 @@ import type {
   ProvidersCollection,
 } from '../extensions.js';
 import { invalidInput, notFound } from './shared.js';
+import { validateExtension } from './validate-extension.js';
 
 /**
  * How one kind of extension is installed into the engine
@@ -164,6 +167,52 @@ export function createRegistry<T>(installer: Installer<T>): Registry<T> {
   };
 }
 
+/**
+ * The computations of moves, rotations and scalings set on one instance, in the order they were
+ * set: the one used is the last one still there
+ *
+ * @internal
+ */
+export interface TransformProviderStack {
+  /** The computation used now, or `undefined` when the built-in one is */
+  current(): TransformProvider | undefined;
+  /**
+   * Sets a computation on top
+   *
+   * @returns The function that takes out this one only, wherever it stands
+   */
+  push(provider: TransformProvider): () => void;
+  /** Takes out every computation (the instance is destroyed) */
+  clear(): void;
+}
+
+/**
+ * Creates the stack of the computations of moves, rotations and scalings of one instance
+ *
+ * @internal
+ */
+export function createTransformProviderStack(): TransformProviderStack {
+  // One entry per call of push, so that the same provider set twice is taken out once per call
+  const entries: Array<{ readonly provider: TransformProvider }> = [];
+  return {
+    current: () => entries[entries.length - 1]?.provider,
+    push(provider) {
+      const entry = { provider };
+      entries.push(entry);
+      let removed = false;
+      return () => {
+        if (removed) return;
+        removed = true;
+        const index = entries.indexOf(entry);
+        if (index >= 0) entries.splice(index, 1);
+      };
+    },
+    clear() {
+      entries.length = 0;
+    },
+  };
+}
+
 /** The name of an extension that carries one, as a checked string */
 function nameOf(value: unknown, kind: string): string {
   const name = (value as { name?: unknown } | null)?.name;
@@ -186,6 +235,7 @@ export interface ExtensionRegistries {
   readonly snapProviders: Registry<SnapProvider>;
   readonly handleProviders: Registry<HandleProvider>;
   readonly companionProviders: Registry<CompanionProvider>;
+  readonly transformProviders: TransformProviderStack;
 }
 
 /**
@@ -300,6 +350,14 @@ export function createExtensionsCollections(
     snapProviders,
     handleProviders,
     companionProviders,
+    getTransformProvider: () => registries.transformProviders.current(),
+    setTransformProvider(provider) {
+      validateExtension('transform provider', provider);
+      nameOf(provider, 'transform provider');
+      const remove = registries.transformProviders.push(provider);
+      record?.(remove);
+      return remove;
+    },
   };
 }
 

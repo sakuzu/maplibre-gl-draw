@@ -25,7 +25,8 @@ export type ExtensionKind =
   | 'overlay'
   | 'snap provider'
   | 'handle provider'
-  | 'companion provider';
+  | 'companion provider'
+  | 'transform provider';
 
 /** The kinds of GeoJSON geometry a feature type can declare */
 const GEOMETRY_TYPES: ReadonlySet<string> = new Set([
@@ -97,6 +98,7 @@ const SHAPES: Readonly<
     optional: ['globalHandles', 'onDragStart', 'onDragEnd'],
   },
   'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
+  'transform provider': { required: ['accepts', 'apply'], optional: [] },
 };
 
 /** The error for a value of the wrong shape */

@@ -13,6 +13,7 @@ import type { ModeFactory } from './extension/mode.js';
 import type { Plugin } from './extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from './extension/provider.js';
 import type { OverlayRenderer } from './extension/render.js';
+import type { TransformProvider } from '../shared/types/model.js';
 
 /** The plugins, in the order they were added. */
 export interface PluginsCollection {
@@ -310,4 +311,25 @@ export interface ExtensionsCollections {
   readonly handleProviders: ProvidersCollection<HandleProvider>;
   /** The providers of companions drawn one step below a feature */
   readonly companionProviders: ProvidersCollection<CompanionProvider>;
+  /**
+   * The computation of moves, rotations and scalings set now ({@link TransformProvider}).
+   *
+   * @returns The provider, or `undefined` when the built-in computation is used
+   */
+  getTransformProvider(): TransformProvider | undefined;
+  /**
+   * Sets the computation of the moves, rotations and scalings that the bulk edits write
+   * (`features.translate`, `rotate`, `scale`, `duplicate` with an offset, and the drags and
+   * keys that write with them), in place of the built-in one. One is used at a time: the
+   * computations set are kept in the order they were set, and the one used is the last one set
+   * that is still there. The function it returns takes out that computation only, wherever it
+   * stands, so that taking out one set earlier leaves the one used as it is; the built-in
+   * computation is used again when none is left. One set through the context of a plugin is
+   * taken out when the plugin is removed.
+   *
+   * @returns The function that takes this computation out
+   * @throws `DrawError` with the code `invalidInput` when the value does not have the shape of
+   *   the contract
+   */
+  setTransformProvider(provider: TransformProvider): () => void;
 }

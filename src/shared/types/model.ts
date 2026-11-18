@@ -953,3 +953,191 @@ export interface DragState {
    */
   movingFeatureIds?: string[];
 }
+
+// ============================================================================
+// Moves, rotations and scalings
+// ============================================================================
+
+/**
+ * How `translate` moves the features: as the move from one point to another moves them (for a
+ * drag, the point the drag started at and the point the pointer is at).
+ *
+ * The built-in computation keeps the shapes and sizes on the ground: every position is moved on
+ * the WGS 84 ellipsoid so that it keeps its offset in meters, east and north, from `from` as it
+ * stands at `to` (the east, north and up axes of the earth at each of the two points). It is not
+ * the difference of the longitudes and latitudes added to them.
+ */
+export interface Translation {
+  /** The point the features move from, as `[longitude, latitude]` in degrees (WGS 84) */
+  from: Position;
+  /** The point they move to, as `[longitude, latitude]` in degrees (WGS 84) */
+  to: Position;
+}
+
+/**
+ * How `rotate` turns the features. The built-in computation turns them on the WGS 84 ellipsoid,
+ * in the east and north axes of the center.
+ */
+export interface Rotation {
+  /** The center, as `[longitude, latitude]` in degrees (WGS 84); it stays where it is */
+  center: Position;
+  /**
+   * The angle to turn by, in degrees, counterclockwise seen from above (from the east toward
+   * the north); a negative angle turns clockwise
+   */
+  counterclockwiseDegrees: number;
+}
+
+/**
+ * How `scale` scales the features. A drag of a corner handle gives two factors of its own, and
+ * a drag of a side handle a factor of 1 along the other side. In a drag of a corner handle and
+ * of a side handle alike, `sizeFactor` is the distance from the pointer to the point that stays
+ * (the opposite corner, or the middle of the opposite side) divided by that distance when the
+ * drag started; a drag gives no factor below 0.1.
+ *
+ * The built-in computation scales the distances on the ground, in meters, along the east and the
+ * north axes of the center on the WGS 84 ellipsoid: a position 100 m east of the center goes 200
+ * m east of it with an `eastFactor` of 2. A factor of 1 changes nothing along its axis.
+ */
+export interface Scaling {
+  /** The center, as `[longitude, latitude]` in degrees (WGS 84); it stays where it is */
+  center: Position;
+  /** The factor along the east, above 0 (1 for no change); 2 doubles the width and 0.5 halves it */
+  eastFactor: number;
+  /** The factor along the north, above 0 (1 for no change) */
+  northFactor: number;
+  /**
+   * The factor of the size of the features that have one (the scale of an image, the radius
+   * of a circle, the field of size a type declares), above 0 (1 for no change). Such a feature
+   * keeps its shape: its positions move from the center by this factor along both the east and
+   * the north, in place of `eastFactor` and `northFactor`.
+   */
+  sizeFactor: number;
+}
+
+/**
+ * A move, a rotation or a scaling of features (not a change of the system of coordinates): what
+ * `translate`, `rotate` and `scale` take, with the kind of the operation. A drag carries it in
+ * `drag.changed`, and the provider set with `draw.extensions.setTransformProvider` computes it.
+ */
+export type TransformOperation =
+  | ({ kind: 'translate' } & Translation)
+  | ({ kind: 'rotate' } & Rotation)
+  | ({ kind: 'scale' } & Scaling);
+
+/**
+ * An extension that computes the moves, rotations and scalings of features, in place of the
+ * built-in computation: the same operations, computed with another precision or by other rules,
+ * such as on a plane rather than on the ellipsoid, or with another geodesic formula. It is set
+ * with `draw.extensions.setTransformProvider`; there is one at a time.
+ *
+ * The built-in computation works on the WGS 84 ellipsoid, in the east, north and up axes of the
+ * point the operation names (see {@link Translation}, {@link Rotation} and {@link Scaling}).
+ *
+ * A provider is called only for what is written: the bulk edits `translate`, `rotate` and
+ * `scale` (and `duplicate` with an offset), with the drags and keys that write with them, a part
+ * of the features at a time. While a drag goes on, the features are drawn moved by the built-in
+ * computation, and the provider computes the values written once the pointer is let go of. A
+ * provider whose results differ visibly from the built-in computation therefore makes the
+ * features move when a drag ends, from where they were drawn to where it puts them.
+ *
+ * It receives and returns arrays of numbers, so that an operation on 100,000 features makes no
+ * object per feature. The result of a feature depends on the operation and on the values of that
+ * feature alone, so the features can be given in any parts and in any order. What depends on the
+ * whole edit is settled before it is called: a rotation of a single feature of a `Point`
+ * geometry with a field of rotation comes with the position of that feature as its center (see
+ * `features.rotate`).
+ */
+export interface TransformProvider {
+  /** The name it is set under, for messages */
+  readonly name: string;
+  /**
+   * Whether it computes this operation (its points, its angle, its factors). The instance does
+   * not apply an operation it does not compute: the bulk edit rejects with the code
+   * `invalidInput`, and a drag or a key leaves the features as they are. A computation on a
+   * plane, for instance, does not compute an operation near a pole, or across the ±180
+   * degree meridian.
+   */
+  accepts(operation: TransformOperation): boolean;
+  /**
+   * Computes an operation for some features: writes into `output` the values each of them has
+   * after it. It is called only with an operation `accepts` took.
+   *
+   * @param operation - What is done, in geographic values: positions as `[longitude,
+   *   latitude]` in degrees, angles in degrees
+   * @param input - The features and their values now
+   * @param output - Where to write their values after: arrays of the same lengths as those of
+   *   `input`, every entry to be written
+   */
+  apply(operation: TransformOperation, input: TransformInput, output: TransformOutput): void;
+}
+
+/**
+ * The features an operation is computed for, in one call, and their values now, as arrays:
+ * entry `i` of each array of one value per feature is feature `i`.
+ */
+export interface TransformInput {
+  /**
+   * The number of the operation, the same in every call for it: its changes carry it
+   * (`DocumentChange.operationId`), and so does the drag that writes it (`drag.started`)
+   */
+  readonly operationId: number;
+  /** The number of features in this call */
+  readonly featureCount: number;
+  /**
+   * The positions of every feature, one after the other, `valuesPerPosition` numbers each: the
+   * longitude and the latitude in degrees, then the height in meters and the measure when the
+   * features have them (copied as they are)
+   */
+  readonly coordinates: Float64Array;
+  /** The number of values of a position: 2, 3 or 4 */
+  readonly valuesPerPosition: number;
+  /**
+   * Where the positions of each feature start in `coordinates`, counted in positions (not in
+   * numbers): those of feature `i` are positions `positionStarts[i]` to `positionStarts[i + 1]`,
+   * without the last (one more entry than there are features)
+   */
+  readonly positionStarts: Int32Array;
+  /**
+   * The rotation of each feature, in degrees counterclockwise seen from above (the rotation of
+   * an image, or the field a type declares, `TransformFields.rotationDegreesKey`), NaN for a
+   * feature without one; `null` when none has one. A rotation adds its angle to it, within
+   * [0, 360), a NaN counting as 0
+   */
+  readonly rotationDegrees: Float64Array | null;
+  /**
+   * A direction of each feature, in degrees clockwise from the north
+   * (`TransformFields.bearingDegreesKey`), NaN for a feature without one; `null` when none has
+   * one. A rotation takes its angle away from it, within [0, 360), and leaves a NaN as it is
+   */
+  readonly bearingDegrees: Float64Array | null;
+  /**
+   * The size of each feature: the factor of an image (1 for the size it was placed at), the
+   * radius of a circle in meters, or the factor a type declares (`TransformFields.sizeKey`);
+   * NaN for a feature without one, `null` when none has one. A scaling multiplies it by
+   * `sizeFactor`, a NaN counting as 1
+   */
+  readonly size: Float64Array | null;
+  /**
+   * 1 for a feature that keeps its shape when it is scaled (an image, a circle, a type that
+   * declares `TransformFields.isScaledUniformly`): its positions move by `sizeFactor` along both
+   * the east and the north, in place of `eastFactor` and `northFactor`; 0 for the others; `null`
+   * when none keeps its shape
+   */
+  readonly isScaledUniformly: Uint8Array | null;
+}
+
+/**
+ * Where a {@link TransformProvider} writes the values of the features after an operation: arrays
+ * of the same lengths as those of the {@link TransformInput}, not the same arrays.
+ */
+export interface TransformOutput {
+  /** The positions after, as `TransformInput.coordinates` (the height and the measure copied) */
+  readonly coordinates: Float64Array;
+  /** The rotations after, when the input has them */
+  readonly rotationDegrees: Float64Array | null;
+  /** The directions after, when the input has them */
+  readonly bearingDegrees: Float64Array | null;
+  /** The sizes after, when the input has them */
+  readonly size: Float64Array | null;
+}

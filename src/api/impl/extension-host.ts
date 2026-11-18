@@ -49,7 +49,12 @@ import {
 } from './contexts.js';
 import type { Context } from './engine-context.js';
 import type { ExtensionRegistries, Installer } from './extensions.js';
-import { createExtensionsCollections, createRegistry, OVERRIDABLE_TYPES } from './extensions.js';
+import {
+  createExtensionsCollections,
+  createRegistry,
+  createTransformProviderStack,
+  OVERRIDABLE_TYPES,
+} from './extensions.js';
 import { preparePatch } from './features.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
 import { createOverlayStack, terrainAnchorsOf } from './render-context.js';
@@ -246,6 +251,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
           featureCompanions.register(adaptCompanionProvider(provider, adapterDeps)),
       }),
     ),
+    transformProviders: createTransformProviderStack(),
   };
   const collections = createExtensionsCollections(registries);
 
@@ -491,6 +497,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       registries.overlays.clear();
       registries.featureTypes.clear();
       registries.modes.clear();
+      registries.transformProviders.clear();
       destroyed = true;
     },
   };
