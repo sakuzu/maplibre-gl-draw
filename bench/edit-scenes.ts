@@ -18,6 +18,7 @@ import type { Draw, DrawDocument } from '@sakuzu/maplibre-gl-draw';
 import {
   createStore,
   type FeatureRowField,
+  type GeometryColumn,
   type NewRows,
   type Store,
 } from '@sakuzu/maplibre-gl-draw/store';
@@ -182,6 +183,34 @@ function gridRows(n: number, from: number, count: number): NewRows {
       positionStarts: starts,
     },
   };
+}
+
+/**
+ * A Store without a map that holds the `n` rows of the grid in the layer of the page, and the
+ * references of its rows in their order
+ */
+function storeOfGrid(n: number): { store: Store; rows: Int32Array } {
+  const store = createStore();
+  store.createLayer({
+    id: LAYER_ID,
+    name: 'Rows',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
+  store.createRows(gridRows(n, 0, n));
+  const view = store.tables.get(LAYER_ID);
+  return { store, rows: view ? view.listRowRefs(0, view.rowCount) : new Int32Array(0) };
+}
+
+/** The points of rows moved by a small offset: the geometries of `count` of them from `from` */
+function movedPoints(n: number, from: number, count: number): GeometryColumn {
+  const { geometry } = gridRows(n, from, count);
+  const coordinates = Float64Array.from(geometry.coordinates, (value) => value + 0.001);
+  return { ...geometry, coordinates };
 }
 
 /** Puts the camera home and draws until the drawing has nothing left to do */
@@ -388,6 +417,92 @@ export const SCENES: readonly Scene[] = [
       ctx.note('parts', parts.length);
       ctx.note('changes', changes.length);
       ctx.note('mostRowsInAChange', Math.max(0, ...changes));
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'storeRead',
+    label: 'Read every field and the geometries of the rows of a Store without a map, in one read',
+    async prepare(ctx): Promise<{ store: Store }> {
+      await rest(ctx);
+      return { store: storeOfGrid(ctx.n).store };
+    },
+    async run(ctx, { store }) {
+      const view = store.tables.get(LAYER_ID);
+      const rows = ctx.input(() => view?.listRowRefs(0, view.rowCount) ?? new Int32Array(0));
+      const values = ctx.input(() =>
+        store.tables.readValues(rows, [
+          'type',
+          'parent',
+          'orderKey',
+          'visible',
+          'locked',
+          'style',
+          'geometry',
+        ]),
+      );
+      ctx.note('rows', values.rows.length);
+      ctx.note('positions', (values.geometry?.coordinates.length ?? 0) / 2);
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'storeMoveBefore',
+    label: `Move the rows of a Store without a map for a listener that asks for the values before, ${STORE_PART_ROWS.toLocaleString('en')} at a time as the parts of one operation, a frame between them`,
+    async prepare(
+      ctx,
+    ): Promise<{ store: Store; rows: Int32Array; parts: GeometryColumn[]; before: number[] }> {
+      await rest(ctx);
+      const { store, rows } = storeOfGrid(ctx.n);
+      const parts: GeometryColumn[] = [];
+      for (let from = 0; from < rows.length; from += STORE_PART_ROWS) {
+        parts.push(movedPoints(ctx.n, from, Math.min(STORE_PART_ROWS, rows.length - from)));
+      }
+      // The rows whose values before each change carries
+      const before: number[] = [];
+      store.subscribe(
+        (change) => {
+          before.push(change.previousValues?.get(LAYER_ID)?.rows.length ?? 0);
+        },
+        { previousValues: true },
+      );
+      return { store, rows, parts, before };
+    },
+    async run(ctx, { store, rows, parts, before }) {
+      const operationId = store.newOperationId();
+      let ended = false;
+      try {
+        for (let i = 0; i < parts.length; i++) {
+          if (ctx.expired()) break;
+          const hasMoreParts = i < parts.length - 1;
+          ended = !hasMoreParts;
+          const from = i * STORE_PART_ROWS;
+          const t0 = performance.now();
+          ctx.input(() =>
+            store.transact(
+              () =>
+                store.writeRows({
+                  rows: rows.subarray(from, from + parts[i].types.length),
+                  fields: new Map(),
+                  geometry: parts[i],
+                }),
+              'remote',
+              { operationId, hasMoreParts },
+            ),
+          );
+          ctx.part(performance.now() - t0);
+          if (hasMoreParts) await ctx.frame();
+        }
+      } finally {
+        // A move stopped before its last part ends the operation with nothing written
+        if (!ended) store.transact(() => {}, 'remote', { operationId, stopped: true });
+      }
+      ctx.note('rows', rows.length);
+      ctx.note('parts', parts.length);
+      ctx.note(
+        'rowsWithValuesBefore',
+        before.reduce((sum, count) => sum + count, 0),
+      );
       await ctx.settle();
     },
   }),
