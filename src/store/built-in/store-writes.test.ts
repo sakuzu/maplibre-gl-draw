@@ -685,6 +685,25 @@ describe.each(STORES)('%s', (_name, make) => {
       ]);
     });
 
+    it('and the rows are put in other places by their new keys', () => {
+      const store = withRows(make);
+      const view = store.tables.get('a');
+      if (!view) throw new Error('no rows');
+      const order = () => {
+        const items = view.listItemRefs(0, 10);
+        return [...items.kinds].map((kind, i) =>
+          kind === 0
+            ? store.tables.getRowId(items.refs[i])
+            : store.tables.getGroupId(items.refs[i]),
+        );
+      };
+      expect(order()).toEqual(['p', 'q', 'g']);
+      expect(store.updateGroup('g', { orderKey: 'k0' })).toBe(true);
+      expect(order()).toEqual(['g', 'p', 'q']);
+      expect(store.writeRows(valuesOf([refOf(store, 'q')], [['orderKey', ['a']]]))).toBe(true);
+      expect(order()).toEqual(['q', 'g', 'p']);
+    });
+
     it('deleted do not move their members, and are not deleted while a row names them', () => {
       const store = withRows(make);
       const m = refOf(store, 'm');
