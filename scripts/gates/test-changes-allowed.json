@@ -350,6 +350,11 @@
       "path": "src/index.test.ts",
       "change": "CHANGES 39, 84 (seven types added to the list of the public names)",
       "unit": "the default computations of moves, rotations and scales"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 104, 136 (the names of the store entry added to the list of the entries)",
+      "unit": "the tables and the reads of the standard store"
     }
   ]
 }
