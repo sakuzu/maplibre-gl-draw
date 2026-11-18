@@ -470,13 +470,19 @@ describe('the Store takes pages all or none', () => {
     const again = pointPages(1, 1);
     expect(store.createRowsFromPages('a', again)).toBe(false);
     expect(store.tables.get('a')?.rowCount).toBe(2);
-    // The whole document opened again from pages, in one operation
+    // The whole document opened again from pages, in one transaction, for a listener that asks
+    // for the values before
+    const told: StoreChange[] = [];
+    store.subscribe((change) => told.push(change), { previousValues: true });
     store.transact(() => {
       store.clear();
       store.createLayer(layer('a'));
       expect(store.createRowsFromPages('a', again)).toBe(true);
     }, 'remote');
     expect(store.tables.getRowRef(pointRow(1).id)).toBe(ref);
+    expect(told).toHaveLength(1);
+    expect(told[0].reset).toBe(true);
+    expect(told[0].previousValues?.get('a')?.rows).toBeInstanceOf(Int32Array);
   });
 });
 
