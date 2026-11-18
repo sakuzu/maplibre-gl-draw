@@ -4,7 +4,6 @@
   "samples": {
     "sample-follow-drag.ts": 4,
     "sample-main-usage.ts": 27,
-    "sample-persist-store.ts": 1,
     "sample-presence-events.ts": 20,
     "sample-remote-changes.ts": 9,
     "sample-save-on-change.ts": 5,
@@ -440,16 +439,6 @@
     "120": {
       "main:removed:Store.getMaxNameNumber": "cf6ee1c217428e3f865b2dc13caffb9587426a6403df40d244d0fba795e72eff",
       "main:removed:Store.recordNameNumber": "73d296d1fd274967463f6e5ce1e799b1befb985499510dd8849d765fe1b4c184"
-    },
-    "124": {
-      "store:added:StoreView.listPropertyKeys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "129": {
-      "store:doc:FeatureRowField": "91b45ce362f051f900dbf9a4dd1dc812af8856f4ff4e467180237d3db0368ee0",
-      "store:doc:NewRows.ids": "96afdbf10b7e7ec4dbf309c6967d7f5a7253980c65122f627f324ac05764a618"
-    },
-    "138": {
-      "store:added:RowPageBuilderOptions.thirdValue": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "151": {
       "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"

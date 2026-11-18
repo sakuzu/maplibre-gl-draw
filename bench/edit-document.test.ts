@@ -50,6 +50,8 @@ describe('the scenes', () => {
       'storeRead',
       'storeMoveBefore',
       'storePages',
+      'storeStyleKey',
+      'storePropertyKeys',
     ]);
   });
 });

@@ -649,4 +649,59 @@ export const SCENES: readonly Scene[] = [
       await ctx.settle();
     },
   }),
+  scene({
+    name: 'storeStyleKey',
+    label: `Write one key of the style of the rows of a Store without a map (style:fillColor), ${STORE_PART_ROWS.toLocaleString('en')} at a time as the parts of one operation, a frame between them`,
+    async prepare(ctx): Promise<{ store: Store; rows: Int32Array }> {
+      await rest(ctx);
+      return storeOfGrid(ctx.n);
+    },
+    async run(ctx, { store, rows }) {
+      const operationId = store.newOperationId();
+      let ended = false;
+      let parts = 0;
+      try {
+        for (let from = 0; from < rows.length; from += STORE_PART_ROWS) {
+          if (ctx.expired()) break;
+          const hasMoreParts = from + STORE_PART_ROWS < rows.length;
+          ended = !hasMoreParts;
+          const part = rows.subarray(from, from + STORE_PART_ROWS);
+          const colors = new Array<unknown>(part.length).fill('#e0457b');
+          const t0 = performance.now();
+          ctx.input(() =>
+            store.transact(
+              () => store.writeRows({ rows: part, fields: new Map([['style:fillColor', colors]]) }),
+              'remote',
+              { operationId, hasMoreParts },
+            ),
+          );
+          ctx.part(performance.now() - t0);
+          parts += 1;
+          if (hasMoreParts) await ctx.frame();
+        }
+      } finally {
+        // A write stopped before its last part ends the operation with nothing written
+        if (!ended) store.transact(() => {}, 'remote', { operationId, stopped: true });
+      }
+      ctx.note('rows', rows.length);
+      ctx.note('parts', parts);
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'storePropertyKeys',
+    label: 'List the keys of the attributes of every row of a Store without a map, in one read',
+    async prepare(ctx): Promise<{ store: Store }> {
+      await rest(ctx);
+      const { store, rows } = storeOfGrid(ctx.n);
+      const names = Array.from({ length: rows.length }, (_, i) => `n${i}`);
+      store.writeRows({ rows, fields: new Map([['properties:name', names]]) });
+      return { store };
+    },
+    async run(ctx, { store }) {
+      const keys = ctx.input(() => store.listPropertyKeys());
+      ctx.note('keys', keys.length);
+      await ctx.settle();
+    },
+  }),
 ];
