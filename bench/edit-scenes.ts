@@ -15,8 +15,14 @@
  */
 
 import type { Draw, DrawDocument } from '@sakuzu/maplibre-gl-draw';
+import {
+  createStore,
+  type FeatureRowField,
+  type NewRows,
+  type Store,
+} from '@sakuzu/maplibre-gl-draw/store';
 import type * as maplibregl from 'maplibre-gl';
-import { LAYER_ID } from './edit-document';
+import { gridOf, LAYER_ID } from './edit-document';
 
 /** What a scene is given */
 export interface SceneContext {
@@ -135,6 +141,47 @@ async function pressAndMove(
   }
   ctx.input(() => mouse(map, 'mouseup', last[0], last[1], { pressed: false, shift }));
   return moves;
+}
+
+/** The rows a part of a write of the Store without a map writes */
+const STORE_PART_ROWS = 5_000;
+
+/**
+ * The rows of points on the grid of `n` features, from the `from`-th, `count` of them, as new
+ * rows of the layer of the page
+ */
+function gridRows(n: number, from: number, count: number): NewRows {
+  const grid = gridOf(n);
+  const ids: string[] = [];
+  const keys: string[] = [];
+  const coordinates = new Float64Array(count * 2);
+  const starts = new Int32Array(count + 1);
+  const cellWidth = (grid.east - grid.west) / grid.columns;
+  const cellHeight = (grid.north - grid.south) / grid.rows;
+  for (let i = 0; i < count; i++) {
+    const cell = from + i;
+    ids.push(`row-${cell}`);
+    keys.push(`k${String(cell).padStart(7, '0')}`);
+    coordinates[i * 2] = grid.west + ((cell % grid.columns) + 0.5) * cellWidth;
+    coordinates[i * 2 + 1] = grid.south + (Math.floor(cell / grid.columns) + 0.5) * cellHeight;
+    starts[i + 1] = i + 1;
+  }
+  return {
+    ids,
+    fields: new Map<FeatureRowField, unknown[]>([
+      ['type', ids.map(() => 'Point')],
+      ['parent', ids.map(() => LAYER_ID)],
+      ['orderKey', keys],
+    ]),
+    geometry: {
+      types: new Uint8Array(count),
+      coordinates,
+      valuesPerPosition: 2,
+      partStarts: starts,
+      ringStarts: starts,
+      positionStarts: starts,
+    },
+  };
 }
 
 /** Puts the camera home and draws until the drawing has nothing left to do */
@@ -285,6 +332,62 @@ export const SCENES: readonly Scene[] = [
       const text = ctx.input(() => JSON.stringify(document));
       ctx.note('features', document.features.length);
       ctx.note('bytes', text.length);
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'storeParts',
+    label: `Write the rows into a Store without a map, ${STORE_PART_ROWS.toLocaleString('en')} at a time as the parts of one operation, a frame between them`,
+    async prepare(ctx): Promise<{ store: Store; parts: NewRows[]; changes: number[] }> {
+      await rest(ctx);
+      const store = createStore();
+      store.createLayer({
+        id: LAYER_ID,
+        name: 'Rows',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        items: [],
+        styleRule: undefined,
+        metadata: undefined,
+      });
+      const parts: NewRows[] = [];
+      for (let from = 0; from < ctx.n; from += STORE_PART_ROWS) {
+        parts.push(gridRows(ctx.n, from, Math.min(STORE_PART_ROWS, ctx.n - from)));
+      }
+      // The rows each change tells as created
+      const changes: number[] = [];
+      store.subscribe((change) => {
+        changes.push(change.rows?.layers.get(LAYER_ID)?.created.length ?? 0);
+      });
+      return { store, parts, changes };
+    },
+    async run(ctx, { store, parts, changes }) {
+      const operationId = store.newOperationId();
+      let ended = false;
+      try {
+        for (let i = 0; i < parts.length; i++) {
+          if (ctx.expired()) break;
+          const hasMoreParts = i < parts.length - 1;
+          ended = !hasMoreParts;
+          const t0 = performance.now();
+          ctx.input(() =>
+            store.transact(() => store.createRows(parts[i]), 'remote', {
+              operationId,
+              hasMoreParts,
+            }),
+          );
+          ctx.part(performance.now() - t0);
+          if (hasMoreParts) await ctx.frame();
+        }
+      } finally {
+        // A write stopped before its last part ends the operation with nothing written
+        if (!ended) store.transact(() => {}, 'remote', { operationId, stopped: true });
+      }
+      ctx.note('rows', store.tables.get(LAYER_ID)?.rowCount ?? 0);
+      ctx.note('parts', parts.length);
+      ctx.note('changes', changes.length);
+      ctx.note('mostRowsInAChange', Math.max(0, ...changes));
       await ctx.settle();
     },
   }),

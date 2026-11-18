@@ -17,7 +17,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@sakuzu/maplibre-gl-draw": ["../src/index.ts"]
+      "@sakuzu/maplibre-gl-draw": ["../src/index.ts"],
+      "@sakuzu/maplibre-gl-draw/store": ["../src/store/index.ts"]
     }
   },
   "include": ["."],

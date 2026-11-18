@@ -27,7 +27,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // The library is taken from its sources, so a change is measured without a build
+      // The library is taken from its sources, so a change is measured without a build (the
+      // store entry first: an alias also takes the paths under its name)
+      '@sakuzu/maplibre-gl-draw/store': resolve(root, '../src/store/index.ts'),
       '@sakuzu/maplibre-gl-draw': resolve(root, '../src/index.ts'),
     },
   },
