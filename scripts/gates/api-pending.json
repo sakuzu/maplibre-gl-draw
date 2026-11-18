@@ -1,6 +1,6 @@
 {
   "description": "What the build does not match yet. `declarations`: the differences between the declarations the build emits and the fixed files of api/, by the number of the change that explains them; a key is <entry>:<kind>:<declaration>, the kind being removed (the build has it, the fixed file does not), added (the fixed file has it, the build does not), sig (the type differs), doc (only the TSDoc differs) or export, and its value is the digest of what the build has there now (scripts/gates/api.mjs prints it), so that a waiting declaration keeps the form it has until its change gives it the fixed form. `samples`: the samples of api/samples/ that do not type-check against the build yet, with the number of their type errors, which may not grow. `entries`: the entries of package.json that are not there yet. The list only gets shorter: the work that makes the build match removes its rows.",
-  "entries": ["./store"],
+  "entries": [],
   "samples": {
     "sample-follow-drag.ts": 4,
     "sample-main-usage.ts": 27,
@@ -446,14 +446,7 @@
       "main:removed:StoreView.transact": "1a394771ab37c3514d7af0872745ad0d57b103b0aa01858f7db313ec54df820e",
       "store:added:Store.createFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:Store.deleteFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:Store.setLayerOrder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.getFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.getLayerOrder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.getMetadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.listFiles": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "105": {
-      "store:added:Store": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "store:added:Store.setLayerOrder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "106": {
       "main:removed:StoreView.getFeature": "c58d9aaf3b8c940fe5d25cec8078309205595f5cc96eeb28e0b927d61db707ad",
@@ -495,11 +488,7 @@
     },
     "116": {
       "store:added:Store.createGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:Store.updateGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreGroup.orderKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.getGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.listGroups": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "store:added:Store.updateGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "117": {
       "store:added:Store.deleteGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -530,54 +519,11 @@
       "main:removed:Store.getMaxNameNumber": "cf6ee1c217428e3f865b2dc13caffb9587426a6403df40d244d0fba795e72eff",
       "main:removed:Store.recordNameNumber": "73d296d1fd274967463f6e5ce1e799b1befb985499510dd8849d765fe1b4c184"
     },
-    "121": {
-      "store:added:FeatureTables": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.findGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.findRow": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.get": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.getGroupId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.getRowId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.getRowRef": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.getValuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.readValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:FeatureTables.scan": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.tables": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "122": {
-      "store:added:LayerTableView": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.countGroupMembers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.getDrawnRowsRevision": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.getPointPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.getRowBBox": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.getRowProperty": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.getRowStyle": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.getRowType": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.itemCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.layerId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.listGroupMembers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.listItemRefs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.listRowRefs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerTableView.rowCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "123": {
-      "store:added:ItemRefs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:ItemRefs.kinds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:ItemRefs.refs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowCursor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowCursor.next": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowRef": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:TableScanOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:TableScanOptions.batchSize": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:TableScanOptions.bbox": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:TableScanOptions.layerIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "124": {
       "store:added:StoreView.listPropertyKeys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "125": {
-      "store:added:Store.updateLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.getLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreView.listLayers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "store:added:Store.updateLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "126": {
       "store:added:StoreView.subscribe": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -590,26 +536,6 @@
       "store:added:StoreTransactOptions.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:StoreTransactOptions.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:StoreTransactOptions.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "129": {
-      "store:added:FeatureRowField": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "130": {
-      "store:added:RowValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowValues.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowValues.fields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowValues.geometry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowValues.rows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "131": {
-      "store:added:GEOMETRY_TYPES": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:GeometryColumn": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:GeometryColumn.coordinates": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:GeometryColumn.partStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:GeometryColumn.positionStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:GeometryColumn.ringStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:GeometryColumn.types": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:GeometryColumn.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "132": {
       "store:added:NewRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -663,13 +589,7 @@
       "store:added:deletedRowsTokenBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "136": {
-      "store:added:RowSpatialIndexing": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowSpatialIndexing.rowBox": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowSpatialIndexing.sortKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreOptions.spatialIndexing": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreOptions.worker": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:createStore": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "store:added:StoreOptions.worker": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "138": {
       "store:added:RowInput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -703,12 +623,6 @@
       "store:added:mergeRowPages": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:rowPageBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:rowPageMergeTaskBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "140": {
-      "store:added:StoreView": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "143": {
-      "store:added:(entry)": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "151": {
       "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"
@@ -770,14 +684,8 @@
     "164": {
       "store:added:createOrderKeyBetween": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "165": {
-      "store:added:FeatureTables.getThirdValue": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "167": {
       "store:added:Store.setMetadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "168": {
-      "store:added:LayerTableView.listDrawnRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "171": {
       "main:added:DrawEvents.drag.changed.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",

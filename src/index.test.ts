@@ -215,6 +215,26 @@ const TABLE = [
   'transferList',
 ];
 
+/** The store entry (layer 1) */
+const STORE = [
+  'createStore',
+  'FeatureRowField',
+  'FeatureTables',
+  'GEOMETRY_TYPES',
+  'GeometryColumn',
+  'ItemRefs',
+  'LayerTableView',
+  'RowCursor',
+  'RowRef',
+  'RowSpatialIndexing',
+  'RowValues',
+  'Store',
+  'StoreGroup',
+  'StoreOptions',
+  'StoreView',
+  'TableScanOptions',
+];
+
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
 const WEBGL = [
   'applyDrawBlendState',
@@ -312,6 +332,7 @@ describeEntry('src/index.ts', MAIN, () => import('./index.js'));
 describeEntry('src/geometry/index.ts', GEOMETRY, () => import('./geometry/index.js'));
 describeEntry('src/table/index.ts', TABLE, () => import('./table/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
+describeEntry('src/store/index.ts', STORE, () => import('./store/index.js'));
 
 describe('the four entries', () => {
   it('share no name', () => {
@@ -475,7 +496,8 @@ describe('the emitted declarations', () => {
   const geometry = resolve(outDir, 'geometry/index.d.ts');
   const table = resolve(outDir, 'table/index.d.ts');
   const webgl = resolve(outDir, 'webgl/index.d.ts');
-  const entries = [main, geometry, table, webgl];
+  const store = resolve(outDir, 'store/index.d.ts');
+  const entries = [main, geometry, table, store, webgl];
   let files: Map<string, string>;
   let program: ts.Program;
 
@@ -500,7 +522,12 @@ describe('the emitted declarations', () => {
   it('export every named type that a layer 1 declaration refers to, from layer 1', () => {
     setup();
     expect(
-      findForgottenExports(program, files, [main, geometry, table], [main, geometry, table]),
+      findForgottenExports(
+        program,
+        files,
+        [main, geometry, table, store],
+        [main, geometry, table, store],
+      ),
     ).toEqual([]);
   }, 60_000);
 
