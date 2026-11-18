@@ -15,6 +15,336 @@
       "path": "src/api/impl/work-scenes.test.ts",
       "change": "the rule that a comparison of two zeros fails, unless the test names the zero (the user accepted the change of these tests; the designer is to confirm it)",
       "unit": "the work that closes the holes of the gates"
+    },
+    {
+      "path": "src/api/impl/create-draw.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/datasets.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/document.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/drawing.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/engine-context.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/engine-input.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/events.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/extensions.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/features.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/generate-id.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/groups.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/hidden.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/layers.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/options.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/prepopulated-store.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/selection.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/store-contract.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/validate-extension.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/import-export/embedded-file.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/import-export/embedded-image-errors.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/api/impl/import-export/parse.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/dataset.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/external-point-render.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/interaction.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/manager.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/performance.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/provider.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/retained.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/table-dataset.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/thinning.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dataset/triangulation.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/destroy.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dispatcher/hit-test/bearing.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dispatcher/hit-test/service.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dispatcher/hit-test/topmost.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dispatcher/input-router.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/dispatcher/normalizer.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/geometry/errors.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/geometry/public.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/modes/draw/commit-layer.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/modes/draw/drawing-input.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/modes/draw/freehand.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/modes/draw/trace-mode.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/modes/manager.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/modes/select/mode.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/snapping/providers.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/snapping/service.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/store/draw-store.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/store/memory.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/store/read-only-and-visibility.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/view/layer/blend-restore.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/view/layer/image-error.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/view/layer/render.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/view/terrain/drape/pass.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "ui/test/actions.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "ui/test/layer-panel.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "ui/test/layers.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "ui/test/toolbar.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "ui/test/tools.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "ui/test/ui.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/e2e/draw.e2e.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/e2e/examples.e2e.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/e2e/globe.e2e.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "src/e2e/playground.e2e.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
+    },
+    {
+      "path": "ui/e2e/ui.e2e.test.ts",
+      "change": "CHANGES 7, 74, 80, 99, 150, 152 (the old name strings replaced by the new ones only)",
+      "unit": "the names of the values made to follow the naming rule"
     }
   ]
 }
