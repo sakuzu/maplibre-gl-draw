@@ -39,8 +39,8 @@ import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
-import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type {
   CompanionHitContext,
@@ -103,7 +103,7 @@ export type HitTestTopmost = (point: ScreenPoint, options?: TopmostHitTestOption
  * @internal
  */
 export interface TopmostHitTestDeps {
-  store: Store;
+  store: DocumentAccess;
   /** The candidate narrowing and the precise test on the Store side */
   hitTestService: HitTestService;
   /** From screen coordinates to geographic coordinates */

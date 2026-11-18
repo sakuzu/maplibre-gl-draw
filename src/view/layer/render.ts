@@ -14,7 +14,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { drawFeatureCompanionsInFrame } from '../feature-companion.js';
@@ -69,7 +69,7 @@ import { customRendererOf } from './store-retained-classify.js';
  */
 export function renderLayers(
   r: Renderers,
-  store: Store,
+  store: DocumentAccess,
   features: Feature[],
   selectedIdSet: Set<string>,
   defaultProjectionData: ProjectionData,

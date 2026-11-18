@@ -23,9 +23,9 @@ import {
   makeRefFactory,
 } from '../../shared/utils/feature-segments.js';
 import { isSameVertexRef } from '../../shared/utils/vertex-ref.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Store } from '../../store/store.js';
 import type { BoundingBox, Coordinate, Feature, VertexRef } from '../../store/types.js';
 import { computeVertexHandles } from '../../view/ui/handles.js';
 import type { SnapTargetsRegistry } from '../custom-targets.js';
@@ -47,7 +47,7 @@ export {
  * @internal
  */
 export interface StoreSnapProviderDeps {
-  store: Store;
+  store: DocumentAccess;
   spatialIndex: SpatialIndex;
   /**
    * The snapping candidates of the custom feature types of this draw instance (when omitted,
@@ -62,7 +62,7 @@ export interface StoreSnapProviderDeps {
  * It looks at both the shared visible cascade (feature / group / layer) and the local
  * hiding that applies to this client only.
  */
-export function isSnapVisible(feature: Feature, store: Store): boolean {
+export function isSnapVisible(feature: Feature, store: DocumentAccess): boolean {
   if (!feature.visible) return false;
   if (!store.getLayer(feature.layerId)?.visible) return false;
   if (feature.groupId && store.getGroup(feature.groupId)?.visible === false) return false;

@@ -50,7 +50,7 @@ export function createDrawOnEngine(
   const { store } = context;
   // The state of this client, held by the instance (the Store holds only the document)
   const { client } = store;
-  const view: StoreView = store;
+  const view: StoreView = context.exposedStore;
 
   const deps: ResourceDeps = {
     store,

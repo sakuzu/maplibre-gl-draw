@@ -8,7 +8,7 @@
  * themselves, and `index` is their position within the destination once they have left it.
  */
 
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
 import type { MoveTarget } from '../model.js';
 import {
@@ -42,7 +42,7 @@ export type ResolvedTarget =
  *   or a group that does not exist
  * @internal
  */
-export function resolveMoveTarget(store: Store, to: MoveTarget): ResolvedTarget {
+export function resolveMoveTarget(store: DocumentAccess, to: MoveTarget): ResolvedTarget {
   if (!isRecord(to)) throw invalidInput('The target must be an object');
   const hasLayer = 'layerId' in to;
   const hasGroup = 'groupId' in to;
@@ -76,7 +76,11 @@ function insertAt(list: string[], ids: readonly string[], index: number | undefi
  * @param features The features, in stacking order
  * @internal
  */
-export function moveFeatures(store: Store, features: Feature[], target: ResolvedTarget): void {
+export function moveFeatures(
+  store: DocumentAccess,
+  features: Feature[],
+  target: ResolvedTarget,
+): void {
   const ids = features.map((feature) => feature.id);
   const moved = new Set(ids);
   store.transact(() => {
@@ -150,7 +154,12 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
  * @param groups The groups, in stacking order
  * @internal
  */
-export function moveGroups(store: Store, groups: Group[], layer: Layer, index?: number): void {
+export function moveGroups(
+  store: DocumentAccess,
+  groups: Group[],
+  layer: Layer,
+  index?: number,
+): void {
   const ids = groups.map((group) => group.id);
   const moved = new Set(ids);
   store.transact(() => {

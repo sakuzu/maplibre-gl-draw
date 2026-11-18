@@ -9,8 +9,8 @@
  */
 
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
+import type { DocumentAccess } from '../store/document-access.js';
 import { isFeatureLocked, isGroupLocked } from '../store/lock.js';
-import type { Store } from '../store/store.js';
 import type { FeatureCoordinates, VertexSelection } from '../store/types.js';
 import { deleteVertex as deleteVertexOp, sortVertexRefsForDeletion } from './vertex.js';
 
@@ -32,7 +32,7 @@ import { deleteVertex as deleteVertexOp, sortVertexRefsForDeletion } from './ver
  * @returns true when something was deleted; false while read-only or the interaction lock is
  *   on, when nothing is selected, or when everything selected is locked
  */
-export function deleteSelection(store: Store): boolean {
+export function deleteSelection(store: DocumentAccess): boolean {
   // Do not start a deletion while readOnly / the interaction lock is on (group and layer
   // deletion does not go through the per-feature isFeatureLocked).
   if (store.isReadOnly() || store.isInteractionLocked()) return false;
@@ -53,7 +53,7 @@ export function deleteSelection(store: Store): boolean {
  * @returns true when something was deleted; false while read-only or the interaction lock is
  *   on, when nothing is selected, or when everything selected is locked
  */
-export function deleteSelectedItems(store: Store): boolean {
+export function deleteSelectedItems(store: DocumentAccess): boolean {
   if (store.isReadOnly() || store.isInteractionLocked()) return false;
 
   const selection = store.getSelection();
@@ -130,7 +130,7 @@ export function deleteSelectedItems(store: Store): boolean {
 /**
  * Whether a layer holds a feature or a group that is locked on its own
  */
-function holdsLockedItem(store: Store, layerId: string): boolean {
+function holdsLockedItem(store: DocumentAccess, layerId: string): boolean {
   const layer = store.getLayer(layerId);
   if (!layer) return false;
   for (const itemId of layer.items) {
@@ -145,7 +145,7 @@ function holdsLockedItem(store: Store, layerId: string): boolean {
  *
  * @returns The number of vertices deleted
  */
-export function deleteSelectedVertices(store: Store, selection: VertexSelection): number {
+export function deleteSelectedVertices(store: DocumentAccess, selection: VertexSelection): number {
   const feature = store.getFeature(selection.featureId);
   if (!feature) return 0;
 

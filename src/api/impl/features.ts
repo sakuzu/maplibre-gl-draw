@@ -8,9 +8,9 @@
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
-import type { Store } from '../../store/store.js';
 import type {
   Feature as StoredFeature,
   FeatureStyle as StoredFeatureStyle,
@@ -504,7 +504,7 @@ function withoutUndefined(value: object): Record<string, unknown> {
  * are the strings given, never rounded
  */
 function appliedStyle(
-  store: Store,
+  store: DocumentAccess,
   feature: StoredFeature,
   style: RuntimeOptions['style'],
 ): FeatureStyleResolved {

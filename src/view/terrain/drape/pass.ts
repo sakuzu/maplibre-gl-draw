@@ -20,8 +20,8 @@
 
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCreatedZoom } from '../../../shared/utils/property.js';
+import type { DocumentAccess } from '../../../store/document-access.js';
 import { getDisplayFeatures, isLocallyHidden } from '../../../store/local-visibility.js';
-import type { Store } from '../../../store/store.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import { layerDrawFactors } from '../../renderers/draw-factors.js';
 import { dashCoefficientsOf } from '../../renderers/line/dash.js';
@@ -159,7 +159,7 @@ export interface DrapeDatasetSource {
  *   rendering scale not applied; `resolveContentPixelRatio`)
  */
 export function collectDrapeElements(
-  store: Store,
+  store: DocumentAccess,
   styles: RetainedStyleResolver,
   pixelRatio: number,
   contentPixelRatio: number,

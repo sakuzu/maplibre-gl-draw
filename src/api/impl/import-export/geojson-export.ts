@@ -28,8 +28,8 @@ import {
   normalizePolygonOrientation,
 } from '../../../geometry/simplify.js';
 import { DRAW_PROPERTY_PREFIX, getDrawProperty } from '../../../shared/properties.js';
+import type { DocumentAccess } from '../../../store/document-access.js';
 import { listShownFeatures } from '../../../store/local-visibility.js';
-import type { Store } from '../../../store/store.js';
 import type { ExportOptions, Feature, FileData } from '../../../store/types.js';
 import { GEOJSON_COORDINATE_DECIMALS } from './constants.js';
 import { setOwnProperty } from './own-property.js';
@@ -209,7 +209,7 @@ export function convertFeatureToGeoJSON(
  * Exports the current data as a GeoJSON FeatureCollection
  */
 export function exportGeoJSON(
-  store: Store,
+  store: DocumentAccess,
   options?: ExportOptions,
 ): GeoJSON.FeatureCollection<GeoJSON.Geometry> {
   // In addition to the draw order (visible), hidden features are also included at the end

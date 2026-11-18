@@ -41,8 +41,8 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { getDisplayFeatures, isLocallyHidden } from '../../store/local-visibility.js';
-import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
@@ -89,7 +89,7 @@ export type { StoreImmediateTarget, StoreRetainedDrawDeps } from './store-retain
  * changes of the Store.
  */
 export class StoreRetainedCache {
-  private readonly store: Store;
+  private readonly store: DocumentAccess;
 
   /** layerId → cache */
   private readonly layers = new Map<string, LayerCache>();
@@ -117,7 +117,7 @@ export class StoreRetainedCache {
   private frame = 0;
 
   constructor(
-    store: Store,
+    store: DocumentAccess,
     scope: { terrain?: TerrainContext; extensions?: SelectionExtensionRegistry } = {},
   ) {
     this.store = store;

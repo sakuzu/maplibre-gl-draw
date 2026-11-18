@@ -5,8 +5,8 @@
  * `draw.groups`: the groups of the document
  */
 
+import type { DocumentAccess } from '../../store/document-access.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
-import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature, Group as StoredGroup } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
@@ -176,7 +176,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
  *
  * @internal
  */
-export function insertGroup(store: Store, prepared: StoredGroup): void {
+export function insertGroup(store: DocumentAccess, prepared: StoredGroup): void {
   const members = new Set(prepared.featureIds);
   const layer = store.getLayer(prepared.layerId);
   if (layer) {
@@ -274,7 +274,7 @@ function prepareGroup(
 }
 
 /** The features in stacking order, from the back */
-function inStackingOrder(store: Store, features: StoredFeature[]): StoredFeature[] {
+function inStackingOrder(store: DocumentAccess, features: StoredFeature[]): StoredFeature[] {
   const position = new Map(listEveryFeatureInOrder(store).map((f, index) => [f.id, index]));
   return [...features].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
 }

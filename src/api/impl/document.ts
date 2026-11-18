@@ -6,7 +6,7 @@
  */
 
 import type { FeatureCollection } from 'geojson';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { Coordinate } from '../../store/types.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
@@ -264,7 +264,7 @@ export function createDocument(
 }
 
 /** Deletes every feature and group of the document, keeping the layers */
-function deleteFeaturesAndGroups(store: Store): void {
+function deleteFeaturesAndGroups(store: DocumentAccess): void {
   for (const feature of store.listFeatures()) store.deleteFeature(feature.id);
   for (const group of store.listGroups()) store.deleteGroup(group.id);
 }

@@ -24,8 +24,8 @@
  */
 
 import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
-import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
@@ -186,7 +186,7 @@ export interface DrapePlannerDatasets {
 /** What the planner needs for the whole life of the layer */
 export interface DrapePlannerDeps {
   map: MapLibreMap;
-  store: Store;
+  store: DocumentAccess;
   terrain: TerrainContext;
   datasets?: DrapePlannerDatasets;
   /**
@@ -840,7 +840,7 @@ export class DrapePlanner {
  * Those layers have their opacity baked into the colors of their elements, so a change of it
  * has to collect the elements again. Empty while every layer has a source (the usual case).
  */
-function bakedLayerOpacityKey(store: Store, datasetCount: number): string {
+function bakedLayerOpacityKey(store: DocumentAccess, datasetCount: number): string {
   let key = '';
   let layerIndex = 0;
   for (const layerId of store.getLayerOrder()) {

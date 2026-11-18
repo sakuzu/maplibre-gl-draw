@@ -15,7 +15,7 @@ import {
   setDrawProperty,
 } from '../../../shared/properties.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
-import type { Store } from '../../../store/store.js';
+import type { DocumentAccess } from '../../../store/document-access.js';
 import type {
   Coordinate,
   Feature,
@@ -736,7 +736,7 @@ const MAX_ID_ATTEMPTS = 1000;
 export async function prepareGeoJSON(
   data: GeoJSON.FeatureCollection<GeoJSON.Geometry>,
   deps: {
-    store: Store;
+    store: DocumentAccess;
     autoNameGenerator: AutoNameGenerator;
     generateFeatureId: () => string;
     getCurrentLayerId: () => string;

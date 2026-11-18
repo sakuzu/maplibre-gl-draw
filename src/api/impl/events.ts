@@ -18,7 +18,7 @@
 import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type {
   FeatureCoordinates,
   StoreChange,
@@ -123,7 +123,7 @@ export function createEventHub(): EventHub {
  * @returns The function that stops
  * @internal
  */
-export function connectStoreEvents(hub: EventHub, store: Store): () => void {
+export function connectStoreEvents(hub: EventHub, store: DocumentAccess): () => void {
   // The state of this client is held by the instance; its changes arrive in the notification of
   // the operation they belong to
   const { client } = store;
@@ -219,7 +219,7 @@ function sameIds(list: readonly string[], set: ReadonlySet<string>): boolean {
 }
 
 /** The events of each resource of one notification */
-function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): void {
+function emitResourceEvents(hub: EventHub, store: DocumentAccess, changes: StoreChange): void {
   const source = changes.source ?? 'local';
 
   const { features, layers, groups } = changes;
@@ -314,7 +314,7 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
  * otherwise
  */
 function describeMove(
-  store: Store,
+  store: DocumentAccess,
   changes: StoreChange,
   previous: StoredFeature,
   feature: StoredFeature,

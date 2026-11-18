@@ -8,7 +8,7 @@
 import { drawProperties } from '../../../shared/properties.js';
 import { processImageFile } from '../../../shared/utils/image.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
-import type { Store } from '../../../store/store.js';
+import type { DocumentAccess } from '../../../store/document-access.js';
 import type { Feature, FileData, LoadOptions, LoadResult } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
 import type { PreparedLoad } from './types.js';
@@ -23,7 +23,7 @@ export async function prepareImage(
   file: File,
   options: LoadOptions,
   deps: {
-    store: Store;
+    store: DocumentAccess;
     autoNameGenerator: AutoNameGenerator;
     generateFeatureId: () => string;
     getCurrentLayerId: () => string;

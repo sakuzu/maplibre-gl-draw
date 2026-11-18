@@ -258,6 +258,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const services: ContextServices = {
     map,
     store,
+    exposedStore: context.exposedStore,
     terrain,
     pixelRatio: context.pixelRatioSource,
     autoNameGenerator: context.autoNameGenerator,

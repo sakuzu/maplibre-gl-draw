@@ -7,7 +7,7 @@
  * Helper functions for obtaining the selected features and computing the bounding box.
  */
 
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { Feature } from '../../store/types.js';
 import type { BoundingBoxCoords, SelectionExtensionRegistry } from './selection-ui/index.js';
 import {
@@ -28,7 +28,7 @@ import {
  * @param store The Store to read the selection from
  * @returns The feature ids. An empty array when nothing is selected
  */
-export function getSelectedFeatureIds(store: Store): readonly string[] {
+export function getSelectedFeatureIds(store: DocumentAccess): readonly string[] {
   const selection = store.getSelection();
   switch (selection.type) {
     case 'feature':
@@ -43,7 +43,7 @@ export function getSelectedFeatureIds(store: Store): readonly string[] {
 }
 
 // All feature IDs under a layer (the features in order + the members of the groups).
-function featureIdsInLayer(store: Store, layerId: string): string[] {
+function featureIdsInLayer(store: DocumentAccess, layerId: string): string[] {
   const layer = store.getLayer(layerId);
   if (!layer) return [];
   const ids: string[] = [];
@@ -63,7 +63,7 @@ function featureIdsInLayer(store: Store, layerId: string): string[] {
  *
  * @internal
  */
-export function getSelectedFeatures(store: Store): Feature[] {
+export function getSelectedFeatures(store: DocumentAccess): Feature[] {
   return getSelectedFeatureIds(store)
     .map((id) => store.getFeature(id))
     .filter((f): f is Feature => f !== undefined);

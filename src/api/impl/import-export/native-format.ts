@@ -6,7 +6,7 @@
  */
 
 import { getDrawProperty } from '../../../shared/properties.js';
-import type { Store } from '../../../store/store.js';
+import type { DocumentAccess } from '../../../store/document-access.js';
 import type { Data, ExportOptions, FileData, LoadResult } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
@@ -20,7 +20,7 @@ const DEFAULT_LAYER_ID = 'default-layer';
 /**
  * Exports the current data in the native format
  */
-export function exportNative(store: Store, options?: ExportOptions): Data {
+export function exportNative(store: DocumentAccess, options?: ExportOptions): Data {
   let features = store.listFeatures();
   const layers = store.listLayers();
   const groups = store.listGroups();
@@ -72,7 +72,10 @@ export function exportNative(store: Store, options?: ExportOptions): Data {
  * Reads the native format for a load that replaces the existing data: everything is checked
  * here, and the writes are left to the transaction of the caller
  */
-export async function prepareNative(data: Data, deps: { store: Store }): Promise<PreparedLoad> {
+export async function prepareNative(
+  data: Data,
+  deps: { store: DocumentAccess },
+): Promise<PreparedLoad> {
   const { store } = deps;
 
   // Validate before applying. Since store.transact does not roll back, if an exception

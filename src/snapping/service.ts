@@ -28,8 +28,8 @@ import { DEFAULT_TILE_SIZE } from '../shared/math/index.js';
 import { nearestLongitude, wrapLongitude } from '../shared/math/longitude.js';
 import type { EventEmitter } from '../shared/utils/event-emitter.js';
 import { isSameVertexRef } from '../shared/utils/vertex-ref.js';
+import type { DocumentAccess } from '../store/document-access.js';
 import type { SpatialIndex } from '../store/spatial/spatial-index.js';
-import type { Store } from '../store/store.js';
 import type { BoundingBox, Coordinate, VertexRef } from '../store/types.js';
 import type { SnapTargetsRegistry } from './custom-targets.js';
 import type { DegreesPerPixel } from './geometry.js';
@@ -69,7 +69,7 @@ import {
  */
 export interface SnapServiceDeps {
   /** The Store (for the built-in providers) */
-  store?: Store;
+  store?: DocumentAccess;
   /** The SpatialIndex (for the built-in providers) */
   spatialIndex?: SpatialIndex;
   /** The snapping candidates of the custom feature types of this draw instance */

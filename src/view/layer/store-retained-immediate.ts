@@ -11,8 +11,8 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
-import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
 import {
   drawFeatureCompanionsInFrame,
@@ -73,7 +73,7 @@ export interface StoreRetainedDrawDeps {
  * @param visibleIds Feature ids inside the expanded viewport (no thinning when omitted)
  */
 export function drawFeaturesImmediate(
-  store: Store,
+  store: DocumentAccess,
   featureIds: string[],
   layer: Layer | undefined,
   projectionData: ProjectionData,

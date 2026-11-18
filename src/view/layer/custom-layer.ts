@@ -47,8 +47,8 @@ import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Store } from '../../store/store.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
 import { beginRenderFrame } from '../shaders/frame.js';
@@ -84,7 +84,7 @@ import { TerrainResolver } from './terrain-resolver.js';
  */
 export interface CustomLayerDeps {
   map: MapLibreMap;
-  store: Store;
+  store: DocumentAccess;
   spatialIndex: SpatialIndex;
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;

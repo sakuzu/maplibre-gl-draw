@@ -13,8 +13,8 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { isInteractionBlocked } from '../../store/lock.js';
-import type { Store } from '../../store/store.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { TerrainContext } from '../terrain/context.js';
 import {
@@ -55,7 +55,7 @@ export interface FrameRenderDeps {
   gl: WebGL2RenderingContext;
   renderers: Renderers;
   map: MapLibreMap;
-  store: Store;
+  store: DocumentAccess;
   terrainContext: TerrainContext;
   drape: DrapePlanner;
   customRenderers: Map<string, FeatureTypeHandler['renderer']>;

@@ -9,14 +9,14 @@
  */
 
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
-import type { Store } from '../store/store.js';
+import type { DocumentAccess } from '../store/document-access.js';
 import type { Feature, Group } from '../store/types.js';
 
 /**
  * Deletes the group if it has become empty (the standard behavior of canvas tools).
  * Called at the end of each path that moves or removes a feature out of a group.
  */
-function deleteGroupIfEmpty(store: Store, groupId: string): void {
+function deleteGroupIfEmpty(store: DocumentAccess, groupId: string): void {
   const group = store.getGroup(groupId);
   if (group && group.featureIds.length === 0) {
     store.deleteGroup(groupId);
@@ -28,7 +28,7 @@ function deleteGroupIfEmpty(store: Store, groupId: string): void {
  *
  * @internal
  */
-export function takeOutOfGroup(store: Store, featureId: string): void {
+export function takeOutOfGroup(store: DocumentAccess, featureId: string): void {
   const feature = store.getFeature(featureId);
   if (!feature?.groupId) return;
 
@@ -77,7 +77,7 @@ export function takeOutOfGroup(store: Store, featureId: string): void {
  * @internal
  */
 export function groupSelection(
-  store: Store,
+  store: DocumentAccess,
   generateFeatureId: () => string,
   autoNameGenerator: AutoNameGenerator,
 ): string | null {
@@ -168,7 +168,7 @@ export function groupSelection(
  * It removes the group from the order, expands its member features into the same position,
  * and then deletes the group itself. The caller must wrap it in store.transact.
  */
-function dissolveGroup(store: Store, groupId: string): void {
+function dissolveGroup(store: DocumentAccess, groupId: string): void {
   const group = store.getGroup(groupId);
   if (!group) return;
 
@@ -213,7 +213,7 @@ function dissolveGroup(store: Store, groupId: string): void {
  * @returns Whether a group was dissolved or a feature taken out of its group
  * @internal
  */
-export function ungroupSelection(store: Store): boolean {
+export function ungroupSelection(store: DocumentAccess): boolean {
   const selection = store.getSelection();
   if (selection.ids.length === 0) return false;
 

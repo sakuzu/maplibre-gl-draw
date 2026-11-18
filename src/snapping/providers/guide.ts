@@ -32,7 +32,7 @@ import { initialBearingDegrees } from '../../geometry/distance.js';
 import { EARTH_RADIUS_METERS, toRadians } from '../../geometry/units.js';
 import { type Messages, resolveMessages } from '../../messages.js';
 import { DEFAULT_TILE_SIZE } from '../../shared/math/index.js';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { BoundingBox, Coordinate, TentativeState } from '../../store/types.js';
 import { degreesPerPixel } from '../geometry.js';
 import {
@@ -57,7 +57,7 @@ const GUIDE_LENGTH_PIXELS = 4096;
  */
 export interface GuideSnapProviderDeps {
   /** The Store of the draw instance */
-  store: Store;
+  store: DocumentAccess;
 }
 
 /**

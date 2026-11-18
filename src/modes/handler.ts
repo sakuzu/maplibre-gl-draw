@@ -67,7 +67,7 @@ export interface EngineModeContext {
   /** The map the draw instance is attached to */
   map: MapLibreMap;
   /** The Store of the document; a mode writes features through it */
-  store: import('../store/store.js').Store;
+  store: import('../store/document-access.js').DocumentAccess;
   /**
    * The queries of the spatial index (it is derived from the Store, so a mode only reads it)
    */

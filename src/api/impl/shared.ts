@@ -7,8 +7,8 @@
  */
 
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { isFeatureLocked, isGroupLocked } from '../../store/lock.js';
-import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Group, Layer, SelectionType } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { RuntimeOptions } from '../options.js';
@@ -21,7 +21,7 @@ import type { RuntimeOptions } from '../options.js';
  */
 export interface ResourceDeps {
   /** The Store of the instance */
-  store: Store;
+  store: DocumentAccess;
   /** Generates the ID of a new feature, layer or group */
   generateId: () => string;
   /** The names of new layers and groups */
@@ -148,7 +148,7 @@ export function onlyLockOrVisibility(patch: object): boolean {
 // ============================================================================
 
 /** Whether the ID names a feature, a group or a layer */
-export function isTaken(store: Store, id: string): boolean {
+export function isTaken(store: DocumentAccess, id: string): boolean {
   return (
     store.getFeature(id) !== undefined ||
     store.getGroup(id) !== undefined ||
@@ -157,19 +157,19 @@ export function isTaken(store: Store, id: string): boolean {
 }
 
 /** The layer that lists a group, or else the layer the group records */
-export function layerOfGroup(store: Store, group: Group): Layer | undefined {
+export function layerOfGroup(store: DocumentAccess, group: Group): Layer | undefined {
   return store.getLayer(group.layerId);
 }
 
 /** How deep each Store is in `transact` calls with `ignoreLocks` */
-const lockBypassDepth = new WeakMap<Store, number>();
+const lockBypassDepth = new WeakMap<DocumentAccess, number>();
 
 /**
  * Runs `fn` with the locks of the features, groups and layers of the Store ignored by the
  * writes of the resources; read-only is still enforced. Nested calls keep ignoring them until
  * the outermost one ends.
  */
-export function withLocksIgnored<T>(store: Store, fn: () => T): T {
+export function withLocksIgnored<T>(store: DocumentAccess, fn: () => T): T {
   lockBypassDepth.set(store, (lockBypassDepth.get(store) ?? 0) + 1);
   try {
     return fn();
@@ -181,7 +181,7 @@ export function withLocksIgnored<T>(store: Store, fn: () => T): T {
 }
 
 /** Whether the writes to the Store ignore the locks now (see {@link withLocksIgnored}) */
-export function locksIgnored(store: Store): boolean {
+export function locksIgnored(store: DocumentAccess): boolean {
   return lockBypassDepth.has(store);
 }
 
@@ -189,7 +189,7 @@ export function locksIgnored(store: Store): boolean {
  * Whether a lock refuses a write to the feature: it, its group or its layer is locked, and
  * the write does not ignore the locks
  */
-export function featureLocked(store: Store, feature: Feature): boolean {
+export function featureLocked(store: DocumentAccess, feature: Feature): boolean {
   return !locksIgnored(store) && isFeatureLocked(feature, store);
 }
 
@@ -197,12 +197,12 @@ export function featureLocked(store: Store, feature: Feature): boolean {
  * Whether a lock refuses a write to the group: it or its layer is locked, and the write does
  * not ignore the locks
  */
-export function groupLocked(store: Store, group: Group): boolean {
+export function groupLocked(store: DocumentAccess, group: Group): boolean {
   return !locksIgnored(store) && isGroupLocked(group, () => layerOfGroup(store, group));
 }
 
 /** Whether a lock refuses a write to the layer: it is locked, and the write does not ignore it */
-export function layerLocked(store: Store, layer: Layer): boolean {
+export function layerLocked(store: DocumentAccess, layer: Layer): boolean {
   return !locksIgnored(store) && layer.locked;
 }
 
@@ -210,7 +210,7 @@ export function layerLocked(store: Store, layer: Layer): boolean {
  * Whether an item can be seen: it exists, its own visible flag and the ones of its group and
  * layer are on, and this client hides none of them
  */
-export function isShown(store: Store, type: SelectionType, id: string): boolean {
+export function isShown(store: DocumentAccess, type: SelectionType, id: string): boolean {
   const layerShown = (layerId: string): boolean =>
     store.getLayer(layerId)?.visible === true && !store.isHidden(layerId);
   const groupShown = (group: Group): boolean =>
@@ -231,7 +231,7 @@ export function isShown(store: Store, type: SelectionType, id: string): boolean 
 
 /** Looks an item of a type up, or undefined */
 export function getItem(
-  store: Store,
+  store: DocumentAccess,
   type: SelectionType,
   id: string,
 ): Feature | Group | Layer | undefined {

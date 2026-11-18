@@ -11,8 +11,8 @@
 
 import type { ScreenPoint } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type { DrawnShapeResolver } from './globe-shape.js';
 import { clickCopies, toleranceDegrees } from './local-frame.js';
@@ -186,7 +186,7 @@ export interface HitTestServiceImplOptions extends Partial<HitTestOptions> {
  */
 export class HitTestServiceImpl implements HitTestService {
   private spatialIndex: SpatialIndex;
-  private store: Store;
+  private store: DocumentAccess;
   private registry: HitTestStrategyRegistry;
   private options: HitTestOptions;
   private imageStrategy: ImageHitTestStrategy;
@@ -202,7 +202,11 @@ export class HitTestServiceImpl implements HitTestService {
     this.options = { ...this.options, clickTolerancePx: px };
   }
 
-  constructor(store: Store, spatialIndex: SpatialIndex, options: HitTestServiceImplOptions = {}) {
+  constructor(
+    store: DocumentAccess,
+    spatialIndex: SpatialIndex,
+    options: HitTestServiceImplOptions = {},
+  ) {
     this.store = store;
     this.spatialIndex = spatialIndex;
     this.anchorScreen = options.anchorScreen ?? null;

@@ -292,6 +292,7 @@ export function createModeHarness(options: {
   const services: ModeServices = {
     map,
     store,
+    exposedStore: store,
     terrain: {} as TerrainContext,
     pixelRatio: { resolve: () => 1, getScaleFactor: () => 1 },
     autoNameGenerator,

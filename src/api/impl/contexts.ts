@@ -22,6 +22,7 @@ import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { PixelRatioProvider } from '../../shared/utils/pixel-ratio.js';
 import type { SnapResult as StoredSnapResult } from '../../snapping/types.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature, TentativeState } from '../../store/types.js';
@@ -173,7 +174,10 @@ export function toTentative(
  */
 export interface ContextServices {
   readonly map: MapLibreMap;
-  readonly store: Store;
+  /** The layer over the Store of the instance */
+  readonly store: DocumentAccess;
+  /** The Store itself, which the contexts hand out as `store` */
+  readonly exposedStore: Store;
   /** The terrain state of the instance */
   readonly terrain: TerrainContext;
   /** The pixel ratio the drawing uses */
@@ -355,7 +359,7 @@ export function createExtensionContext(
     get draw() {
       return services.getDraw();
     },
-    store: services.store,
+    store: services.exposedStore,
     on: (event, listener) => subscribe(event, listener, false),
     off(event, listener) {
       listeners.get(listener)?.get(event)?.();

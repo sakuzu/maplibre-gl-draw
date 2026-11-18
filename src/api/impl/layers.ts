@@ -5,7 +5,7 @@
  * `draw.layers`: the layers of the document
  */
 
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { Layer as StoredLayer, StyleRule } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { LayersCollection } from '../layers.js';
@@ -210,7 +210,7 @@ export function createLayers(
 }
 
 /** Whether a deletion of the layer is refused: it, or a feature or group in it, is locked */
-function holdsLock(store: Store, layer: StoredLayer): boolean {
+function holdsLock(store: DocumentAccess, layer: StoredLayer): boolean {
   if (locksIgnored(store)) return false;
   if (layer.locked) return true;
   for (const itemId of layer.items) {
@@ -239,7 +239,7 @@ export interface PreparedLayer {
  *
  * @internal
  */
-export function insertLayer(store: Store, { layer, index }: PreparedLayer): void {
+export function insertLayer(store: DocumentAccess, { layer, index }: PreparedLayer): void {
   store.createLayer(layer);
   if (index !== undefined) {
     const order = store.getLayerOrder().filter((id) => id !== layer.id);

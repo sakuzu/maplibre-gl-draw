@@ -26,9 +26,9 @@ import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
 import { segmentIntersection } from '../../geometry/split.js';
 import { MESSAGES_EN, type Messages } from '../../messages.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Store } from '../../store/store.js';
 import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
 import { computeVertexHandles } from '../../view/ui/handles.js';
 import type { SnapTargetsRegistry } from '../custom-targets.js';
@@ -54,7 +54,7 @@ export interface DisplaySnapProviderDeps {
   /** The manager of the datasets */
   datasets: DatasetManager;
   /** The Store (used as the counterpart of an intersection) */
-  store: Store;
+  store: DocumentAccess;
   /** The SpatialIndex (used as the counterpart of an intersection) */
   spatialIndex: SpatialIndex;
   /** Whether snapping to the data is enabled (options.datasets of SnapService) */

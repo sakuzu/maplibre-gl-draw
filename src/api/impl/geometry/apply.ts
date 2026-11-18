@@ -11,7 +11,7 @@
 import type { DrawPropertyName } from '../../../shared/properties.js';
 import { setDrawProperty } from '../../../shared/properties.js';
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
-import type { Store } from '../../../store/store.js';
+import type { DocumentAccess } from '../../../store/document-access.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../../store/types.js';
 import type { GeometryDeps } from './types.js';
 
@@ -40,7 +40,7 @@ interface ResultPlacement {
  * result is put just in front of that input.
  */
 function planPlacement(
-  store: Store,
+  store: DocumentAccess,
   anchor: Feature,
   removedIds: ReadonlySet<string>,
 ): ResultPlacement {
@@ -63,7 +63,11 @@ function planPlacement(
  * Moves the result that createFeature stacked at the tail (the frontmost) to the z position of
  * its placement.
  */
-function moveToPlacement(store: Store, resultId: string, placement: ResultPlacement): void {
+function moveToPlacement(
+  store: DocumentAccess,
+  resultId: string,
+  placement: ResultPlacement,
+): void {
   if (placement.groupId) {
     const group = store.getGroup(placement.groupId);
     if (!group) return;

@@ -24,7 +24,7 @@
  * that with invalidateType(), which re-derives the features of that type from the Store.
  */
 
-import type { Store } from '../store.js';
+import type { DocumentAccess } from '../document-access.js';
 import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
 import {
   type CustomBoundingBoxCalculator,
@@ -36,11 +36,11 @@ import {
  * The spatial index derived from a Store
  */
 export class StoreSpatialIndex implements SpatialIndex {
-  readonly #store: Store;
+  readonly #store: DocumentAccess;
   readonly #index = new RBushSpatialIndex();
   #unsubscribe: (() => void) | null;
 
-  constructor(store: Store) {
+  constructor(store: DocumentAccess) {
     this.#store = store;
     this.#unsubscribe = store.subscribe((changes) => this.#apply(changes));
     // A Store handed in from outside can already hold features

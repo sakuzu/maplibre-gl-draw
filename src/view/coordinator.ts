@@ -10,8 +10,8 @@
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { DocumentAccess } from '../store/document-access.js';
 import type { ClientChange } from '../store/memory/ui-state.js';
-import type { Store } from '../store/store.js';
 import type { StoreChange } from '../store/types.js';
 
 /**
@@ -44,7 +44,7 @@ export interface RenderCoordinator {
 export interface RenderCoordinatorDeps {
   map: MapLibreMap;
   /** The Store, and the state of this client the instance holds (`store.client`) */
-  store: Pick<Store, 'subscribe' | 'client'>;
+  store: Pick<DocumentAccess, 'subscribe' | 'client'>;
 }
 
 /**

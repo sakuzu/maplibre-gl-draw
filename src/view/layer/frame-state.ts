@@ -17,8 +17,8 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
-import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import {
   calculateOffsetUniforms,
@@ -246,7 +246,7 @@ export interface FrameBuildInput {
   gl: WebGL2RenderingContext;
   renderers: Renderers;
   map: MapLibreMap;
-  store: Store;
+  store: DocumentAccess;
   terrainContext: TerrainContext;
   displayList: DisplayListCache;
   drape: DrapePlanner;

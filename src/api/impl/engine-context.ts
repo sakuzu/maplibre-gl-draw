@@ -49,6 +49,7 @@ import {
   resolveGuideStepDegrees,
   resolveSnapKinds,
 } from '../../snapping/types.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { toStore } from '../../store/draw-store.js';
 import { ClientState } from '../../store/memory/ui-state.js';
 import { MemoryStore } from '../../store/memory.js';
@@ -58,6 +59,7 @@ import type { FeatureStyle, Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
 import { pointMarkerReachPx } from '../../view/renderers/point/point-style.js';
 import { createSelectionScope, type SelectionScope } from '../../view/ui/selection-scope.js';
+import { createDocumentAccess } from './document-access.js';
 
 /**
  * The options of the engine, in the shapes of its components. `createDraw` translates the
@@ -123,7 +125,10 @@ export const DEFAULT_OPTIONS = {
  */
 export interface Context {
   map: MapLibreMap;
-  store: Store;
+  /** The layer over the Store, through which every part of the engine reads and writes it */
+  store: DocumentAccess;
+  /** The Store itself, which `draw.getStore()` and the contexts of the extensions hand out */
+  exposedStore: Store;
   /** The spatial index, derived from the Store (it follows every Store change by itself) */
   spatialIndex: StoreSpatialIndex;
   hitTestService: HitTestService;
@@ -259,7 +264,11 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // The internal components. The state of this client belongs to the instance: the Store a
   // host gives keeps the document only (a Store of core given as it is keeps its own)
   const client = new ClientState();
-  const store: Store = options.store ? toStore(options.store, client) : new MemoryStore(client);
+  const exposedStore: Store = options.store
+    ? toStore(options.store, client)
+    : new MemoryStore(client);
+  // The layer over the Store: one for this instance, handed to every part of it
+  const store = createDocumentAccess(exposedStore);
   // Derived from the Store: it subscribes before any other component, so a listener that
   // queries it during a notification already sees the change
   const spatialIndex = new StoreSpatialIndex(store);
@@ -377,6 +386,7 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   return {
     map,
     store,
+    exposedStore,
     spatialIndex,
     hitTestService,
     eventEmitter,

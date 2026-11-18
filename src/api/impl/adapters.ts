@@ -37,8 +37,8 @@ import type {
   SnapProviderContext,
   SnapTargetKind,
 } from '../../snapping/types.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import { getBoundingBox } from '../../store/spatial/index.js';
-import type { Store } from '../../store/store.js';
 import type { BoundingBox, Coordinate, Feature as StoredFeature } from '../../store/types.js';
 import type {
   FeatureCompanionProvider,
@@ -76,7 +76,7 @@ import { adaptFeatureRenderer, createCompanionDrawer } from './render-context.js
  */
 export interface AdapterDeps extends RenderAdapterDeps {
   readonly map: MapLibreMap;
-  readonly store: Store;
+  readonly store: DocumentAccess;
   readonly screen: ScreenContext;
   /** The click tolerance of the instance, in pixels */
   readonly clickTolerancePx: number;

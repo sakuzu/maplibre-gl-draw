@@ -14,7 +14,7 @@
  * The lookup is built for each hit test call (it is never carried over across store changes).
  */
 
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { Feature } from '../../store/types.js';
 
 export type VisibilityLookup = (feature: Feature) => boolean;
@@ -26,7 +26,7 @@ export type VisibilityLookup = (feature: Feature) => boolean;
  * drawn, so they are excluded from the targets. A lock forbids interaction, not selection,
  * so it is not consulted here.
  */
-export function createVisibilityLookup(store: Store): VisibilityLookup {
+export function createVisibilityLookup(store: DocumentAccess): VisibilityLookup {
   const layers = new Map<string, boolean>();
   const groups = new Map<string, boolean>();
 

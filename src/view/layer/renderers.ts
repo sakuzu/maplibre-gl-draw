@@ -13,8 +13,8 @@ import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
+import type { DocumentAccess } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Store } from '../../store/store.js';
 import { TextureCache } from '../cache/texture.js';
 import { AnchoredOutlineRenderer } from '../renderers/anchored-outline.js';
 import { BatchManager } from '../renderers/batch-manager.js';
@@ -67,7 +67,7 @@ export interface Renderers {
 export interface InitRenderersDeps {
   gl: WebGL2RenderingContext;
   map: MapLibreMap;
-  store: Store;
+  store: DocumentAccess;
   spatialIndex: SpatialIndex;
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;
