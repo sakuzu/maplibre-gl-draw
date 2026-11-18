@@ -15,6 +15,7 @@ import * as extensionPoints from './extension-points.mjs';
 import * as imports from './imports.mjs';
 import { recordsOfBuild } from './lib/declarations.mjs';
 import * as moduleState from './module-state.mjs';
+import * as parityRecords from './parity-records.mjs';
 import * as samples from './samples.mjs';
 import * as skips from './skips.mjs';
 import * as storeWrites from './store-writes.mjs';
@@ -36,6 +37,7 @@ export const GATES = [
   moduleState,
   storeWrites,
   workScenes,
+  parityRecords,
 ];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
