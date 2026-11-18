@@ -462,24 +462,47 @@ describe('the Store takes pages all or none', () => {
     expect(refused(made, () => made.store.createRowsFromPages('a', taken))).toBe('invalidInput');
   });
 
-  it('do not take a page while the tables still hold a deleted row of one of its ids, and take it with that reference after the clear', () => {
-    const { store } = newStore();
+  it('take a page of the id of a row deleted by a transaction told with a new reference, refuse one of a row the transaction deleted, and take it with the reference after the clear', () => {
+    const made = newStore();
+    const { store } = made;
     store.createRowsFromPages('a', pointPages(3));
     const ref = store.tables.getRowRef(pointRow(1).id) as number;
+    // Deleted by a transaction told, and kept by nothing: its id is free, with a new reference
     store.writeRows({ rows: Int32Array.of(ref), fields: new Map(), deleted: Uint8Array.of(1) });
-    const again = pointPages(1, 1);
-    expect(store.createRowsFromPages('a', again)).toBe(false);
+    expect(store.createRowsFromPages('a', pointPages(1, 1))).toBe(true);
+    const again = store.tables.getRowRef(pointRow(1).id) as number;
+    expect(again).toBeTypeOf('number');
+    expect(again).not.toBe(ref);
+    expect(store.tables.get('a')?.rowCount).toBe(3);
+    // Deleted by the transaction under way: the page is refused, and nothing is taken in
+    const two = store.tables.getRowRef(pointRow(2).id) as number;
+    made.changes.length = 0;
+    const before = contentOf(store);
+    let code = 'none';
+    store.transact(() => {
+      store.writeRows({ rows: Int32Array.of(two), fields: new Map(), deleted: Uint8Array.of(1) });
+      try {
+        store.createRowsFromPages('a', pointPages(1, 2));
+      } catch (error) {
+        code = error instanceof DrawError ? error.code : String(error);
+      }
+    }, 'remote');
+    expect(code).toBe('alreadyExists');
     expect(store.tables.get('a')?.rowCount).toBe(2);
+    expect([...(made.changes[0].rows?.layers.get('a')?.created ?? [])]).toEqual([]);
+    expect(contentOf(store).rows).toEqual(before.rows.filter((id) => id !== pointRow(2).id));
     // The whole document opened again from pages, in one transaction, for a listener that asks
     // for the values before
+    const zero = store.tables.getRowRef(pointRow(0).id) as number;
     const told: StoreChange[] = [];
     store.subscribe((change) => told.push(change), { previousValues: true });
     store.transact(() => {
       store.clear();
       store.createLayer(layer('a'));
-      expect(store.createRowsFromPages('a', again)).toBe(true);
+      expect(store.createRowsFromPages('a', pointPages(2))).toBe(true);
     }, 'remote');
-    expect(store.tables.getRowRef(pointRow(1).id)).toBe(ref);
+    expect(store.tables.getRowRef(pointRow(0).id)).toBe(zero);
+    expect(store.tables.getRowRef(pointRow(1).id)).toBe(again);
     expect(told).toHaveLength(1);
     expect(told[0].reset).toBe(true);
     expect(told[0].previousValues?.get('a')?.rows).toBeInstanceOf(Int32Array);

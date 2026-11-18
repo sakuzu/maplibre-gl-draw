@@ -32,6 +32,16 @@
  * The listeners share the arrays of the values before, and the tokens one entry that keeps the
  * rows: nothing is copied per listener.
  *
+ * The ids of the deleted rows nothing keeps are forgotten (`forgetIds` of the tables) once the
+ * outermost transaction has ended and its change has been told to every listener: the rows the
+ * transaction deleted (those it created and deleted again included), and those of the tokens let
+ * go of while it was under way or while its change was told. Until then, nothing is forgotten, so
+ * the id of a row deleted is read while the change is told, and `createRows` takes it again in the
+ * transaction with the reference of the row. The tables leave the rows that are not deleted, and
+ * those a token keeps. The rows a clear takes out are forgotten once the last transaction of its
+ * operation has been told, so that a row whose id comes back in a later part keeps its reference
+ * (the tables leave those, as they are not deleted).
+ *
  * @internal
  */
 
@@ -140,13 +150,15 @@ interface Subscription {
 }
 
 /**
- * The tokens of the tables that keep the rows a write deletes: a new one, and letting go of one
+ * The tokens of the tables that keep the rows a write deletes: a new one, and letting go of one;
+ * and the forgetting of the ids of the deleted rows nothing keeps
  *
  * @internal
  */
 export interface TablesTokens {
   createRestoreToken(): number;
   release(token: number): void;
+  forgetIds(rows: Int32Array): void;
 }
 
 /**
@@ -180,6 +192,16 @@ export interface Changes {
   readonly kept: KeptRows;
   /** The tokens of the tables of the rows that keep deleted rows */
   readonly tables: TablesTokens;
+  /**
+   * The deleted rows whose ids are forgotten once the outermost transaction has ended and its
+   * change has been told (those of a token let go of outside one are forgotten at once)
+   */
+  forgetting: Int32Array[];
+  /**
+   * The rows the clears of an operation took out, by the number of the operation: their ids are
+   * forgotten once the operation has ended and its last change has been told
+   */
+  readonly cleared: Map<number, Int32Array[]>;
   /** How the values before are read (given by the writes of the Store) */
   readBefore: ReadBefore | null;
   /** The number of values of a position of a layer */
@@ -208,6 +230,8 @@ export function createChanges(
     beforeCounts: createWorkCounts(),
     kept: createKeptRows(),
     tables,
+    forgetting: [],
+    cleared: new Map(),
     readBefore: null,
     valuesPerPosition,
   };
@@ -375,9 +399,70 @@ export function transact<T>(
   }
   changes.depth = 0;
   changes.transaction = null;
-  tell(changes, transaction);
+  try {
+    tell(changes, transaction);
+  } finally {
+    forgetDeleted(changes);
+  }
   if (failed) throw failure;
   return result as T;
+}
+
+/**
+ * Forgets the ids of the deleted rows nothing keeps, once a transaction has ended and its change
+ * has been told: the rows it deleted, those of the tokens let go of meanwhile, and the rows the
+ * clears of the operations that have ended took out
+ */
+function forgetDeleted(changes: Changes): void {
+  const lists = changes.forgetting;
+  changes.forgetting = [];
+  for (const [operationId, rows] of changes.cleared) {
+    // An operation is under way while its last part has not been written
+    if (changes.openOperations.has(operationId)) continue;
+    changes.cleared.delete(operationId);
+    for (const list of rows) lists.push(list);
+  }
+  for (const rows of lists) {
+    changes.tables.forgetIds(rows);
+    countWork(changes.counts, 'rowsTouched', rows.length);
+  }
+}
+
+/**
+ * Forgets the ids of deleted rows once nothing keeps them: while a transaction is under way, or
+ * while its change is told, once that transaction has ended and its change has been told; at once
+ * otherwise. The tables leave the rows that are not deleted, and those a token keeps
+ *
+ * @internal
+ */
+export function forgetWhenTold(changes: Changes, rows: Int32Array): void {
+  if (rows.length === 0) return;
+  if (changes.transaction || changes.notifying || changes.asking) {
+    changes.forgetting.push(rows);
+    return;
+  }
+  changes.tables.forgetIds(rows);
+  countWork(changes.counts, 'rowsTouched', rows.length);
+}
+
+/**
+ * Takes the rows a clear of the transaction under way takes out to the rows forgotten when its
+ * operation ends, with the rows deleted before it whose ids were to be forgotten when it ends: a
+ * row whose id comes back in the operation keeps its reference
+ *
+ * @internal
+ */
+export function forgetWhenOperationEnds(changes: Changes, rows: readonly Int32Array[]): void {
+  const transaction = changes.transaction;
+  if (!transaction) throw new DrawError('invalidState', 'a write outside a transaction');
+  let lists = changes.cleared.get(transaction.operationId);
+  if (!lists) {
+    lists = [];
+    changes.cleared.set(transaction.operationId, lists);
+  }
+  for (const list of rows) if (list.length > 0) lists.push(list);
+  for (const list of changes.forgetting) lists.push(list);
+  changes.forgetting = [];
 }
 
 /**

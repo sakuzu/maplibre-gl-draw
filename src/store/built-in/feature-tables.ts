@@ -208,8 +208,33 @@ export function readRowValues(
 }
 
 /**
+ * The rows given that are there: those that are not deleted, and the deleted rows kept (the rows
+ * given themselves when every one is)
+ */
+function rowsThere(document: StoreDocument, rows: Int32Array): Int32Array {
+  const deleted = document.rows.readValues(rows, ['deleted']).deleted;
+  countWork(document.counts, 'rowsTouched', rows.length);
+  countWork(document.counts, 'objectsCreated', 3);
+  if (!deleted) return rows;
+  const { kept } = document.changes;
+  let gone = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (deleted[i] !== 0 && !isKept(kept, rows[i])) gone++;
+  }
+  if (gone === 0) return rows;
+  const out = new Int32Array(rows.length - gone);
+  countWork(document.counts, 'objectsCreated');
+  let at = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (deleted[i] === 0 || isKept(kept, rows[i])) out[at++] = rows[i];
+  }
+  return out;
+}
+
+/**
  * The keys of the attributes rows hold, each once (see `StoreView.listPropertyKeys`): of the rows
- * given, or of every row of the document. The tables list them without an object per row
+ * given, the deleted rows kept included, or of every row of the document that is not deleted. A
+ * deleted row nothing keeps holds none. The tables list them without an object per row
  *
  * @internal
  */
@@ -221,7 +246,10 @@ export function listPropertyKeysOf(document: StoreDocument, rows?: Int32Array): 
     );
   }
   return read(() => {
-    const keys = document.rows.listKeys('properties', rows);
+    const keys = document.rows.listKeys(
+      'properties',
+      rows && rows.length > 0 ? rowsThere(document, rows) : rows,
+    );
     if (rows) countWork(document.counts, 'rowsTouched', rows.length);
     countWork(document.counts, 'objectsCreated');
     return keys;

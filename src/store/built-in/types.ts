@@ -61,7 +61,9 @@ import type {
  *   of the library refuse a layer whose id is that of a group and a group whose id is that of a
  *   layer. The ids of files are unique. A write that would take an id in use does not apply. The
  *   id of a deleted row that a {@link DeletedRowsToken} keeps stays in use until the token is let
- *   go of.
+ *   go of. The id of a deleted row that nothing keeps is free again: `createRows` takes it inside
+ *   the transaction that deleted the row too (the row comes back with its reference, and the
+ *   change lists it as updated), and pages take it once that transaction has ended.
  * - Writes return whether they applied: true when the write changed the Store, false when it did
  *   not apply, changing nothing (an id in use, or a reason of the Store's own, such as a place to
  *   keep the document that is full). A write whose argument cannot apply (a row or an id that
@@ -150,7 +152,8 @@ export interface Store extends StoreView {
    * written again in a later part keeps them.
    *
    * A row whose id comes back keeps its reference, so what is kept by the references (the rows
-   * hidden on this client, the values a caller keeps per row) goes on. The tokens keep nothing
+   * hidden on this client, the values a caller keeps per row) goes on. The rows whose ids have not
+   * come back when the operation ends are let go of ({@link RowRef}). The tokens keep nothing
    * afterwards.
    */
   clear(): void;
@@ -389,8 +392,15 @@ export interface StoreGroup extends Group {
 
 /**
  * The reference of a row: a number the document gives a row the first time it sees its id, and
- * never changes while the document is open, whatever group, layer or place the row moves to. A
+ * never changes while the row is there, whatever group, layer or place the row moves to. A
  * caller that keeps a value per row outside the row keys it by the reference.
+ *
+ * The reference of a deleted row lasts as long as something keeps the row (a
+ * {@link DeletedRowsToken}, or values of features of the main entry). A deleted row that nothing
+ * keeps is let go of once the change that deleted it has been told to every listener, or once
+ * the last token that kept it has been let go of: its number may then be given to another row,
+ * and its id, seen again, gets a new reference. A caller that keeps values by the references
+ * drops those of the rows a change lists as deleted, unless it keeps the rows.
  */
 export type RowRef = number;
 
@@ -702,7 +712,8 @@ export interface StoreChange {
    * brought back (`deleted` written 0) is listed as updated. A row moved to another layer is
    * listed as updated in the layer it is in now, and not in the one it left. A row the change left
    * as it was (a locked one) is not listed. The id of a row deleted is still read with
-   * `tables.getRowId` while the change is delivered.
+   * `tables.getRowId` while the change is delivered. A row the transaction deleted and created
+   * again by its id (`createRows`) keeps its reference and is listed as updated.
    */
   rows?: RowsChange;
   /**

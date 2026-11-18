@@ -197,22 +197,23 @@ describe('the writes of rows', () => {
 });
 
 describe('the promises inside the library', () => {
-  it('read the id of a deleted row from its reference after the change, until the document is cleared', () => {
+  it('read the id of a deleted row nothing keeps from its reference while the change is told, and let it go after', () => {
     const { store } = newStore();
     store.createRows(pointRows(3));
     const ref = store.tables.getRowRef('r0000001') as number;
     let deleted: Int32Array | undefined;
+    let idWhileTold: string | undefined;
     store.subscribe((change) => {
       deleted = change.rows?.layers.get('a')?.deleted;
+      if (deleted) idWhileTold = store.tables.getRowId(deleted[0]);
     });
     store.writeRows({ rows: Int32Array.of(ref), fields: new Map(), deleted: Uint8Array.of(1) });
-    // After the change was told, as the selection of the instance reads it
+    // While the change was told, as the selection of the instance reads it
     expect([...(deleted ?? [])]).toEqual([ref]);
+    expect(idWhileTold).toBe('r0000001');
+    // After it, the id is free: the row is not found by it
     expect(store.tables.getRowRef('r0000001')).toBeUndefined();
-    expect(store.tables.getRowId(ref)).toBe('r0000001');
-    store.createRows(pointRows(1, 10));
-    store.updateLayer('a', { name: 'A' });
-    expect(store.tables.getRowId(ref)).toBe('r0000001');
+    expect(store.tables.findRow('r0000001')).toBeUndefined();
   });
 
   it('take an operation left open as ended at the next clear, and close one by its last part', () => {

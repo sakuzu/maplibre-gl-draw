@@ -30,6 +30,10 @@
  * (`kept-rows.ts`). A deleted row is written only when something keeps it, and only to bring it
  * back (`deleted` 0); its id stays in use while it is kept.
  *
+ * The ids of the deleted rows nothing keeps are forgotten once the change of the transaction has
+ * been told (see `changes.ts`): until then, `createRows` takes such an id with the reference of the
+ * row, and afterwards a new row, or a row of a page, takes it with a new reference.
+ *
  * @internal
  */
 
@@ -50,6 +54,8 @@ import {
   addMetadata,
   addOrderChanged,
   addRows,
+  forgetWhenOperationEnds,
+  forgetWhenTold,
   markDeletionWritten,
   newOperationId,
   readsValuesBefore,
@@ -61,7 +67,7 @@ import {
 } from './changes.js';
 import { dimensionsOfPositions, positionsOf, type StoreDocument } from './document.js';
 import { readRowValues } from './feature-tables.js';
-import { forgetKept, isKept, releaseToken } from './kept-rows.js';
+import { forgetKept, isKept, type ReleaseTablesToken, releaseToken } from './kept-rows.js';
 import { createRowsFromPagesOf } from './page-writes.js';
 import { shapeValuesOf } from './shape-values.js';
 import type {
@@ -218,6 +224,16 @@ function stylesWithKeys(
     }
     out[i] = step.style;
   }
+  return out;
+}
+
+/** The rows written deleted (`deleted` 1), in an array of their own */
+function deletedRowsOf(rows: Int32Array, deleted: Uint8Array): Int32Array {
+  let count = 0;
+  for (let i = 0; i < rows.length; i++) if (deleted[i] !== 0) count++;
+  const out = new Int32Array(count);
+  let at = 0;
+  for (let i = 0; i < rows.length; i++) if (deleted[i] !== 0) out[at++] = rows[i];
   return out;
 }
 
@@ -404,7 +420,8 @@ export function storeWritesOf(
 
   /**
    * Writes values of rows to the tables, and adds what they wrote to the change: the rows brought
-   * back are updated, and the rows deleted and brought back are marked as kept or not
+   * back are updated, and the rows deleted and brought back are marked as kept or not. The ids of
+   * the rows deleted are forgotten once the change has been told, unless something keeps them
    *
    * @param created - Whether the rows are new ones (their style is none before the write)
    */
@@ -438,7 +455,10 @@ export function storeWritesOf(
         tablesToken === undefined ? undefined : { restoreToken: tablesToken },
       ),
     );
-    if (deleted) markDeletionWritten(changes, rows, deleted);
+    if (deleted) {
+      markDeletionWritten(changes, rows, deleted);
+      forgetWhenTold(changes, deletedRowsOf(rows, deleted));
+    }
     addRows(
       changes,
       written.rows,
@@ -501,8 +521,8 @@ export function storeWritesOf(
         if (seen.has(id) || document.groups.has(id)) return false;
         const row = tables(() => rowWrites.lookup(id));
         if (row && (!row.deleted || isKept(kept, row.row))) return false;
-        // The id of a deleted row nothing keeps that the tables still hold (a row the clear of
-        // the transaction took out)
+        // The id of a deleted row nothing keeps whose id is not forgotten yet: a row the
+        // transaction deleted, or one a clear of its operation took out (it keeps its reference)
         if (row) {
           found ??= new Uint8Array(ids.length);
           found[i] = 1;
@@ -653,8 +673,10 @@ export function storeWritesOf(
         );
       }
       tables(() => rowWrites.clear());
-      // The tables keep no deleted row any more: the tokens keep nothing
-      forgetKept(kept);
+      // The tables keep no deleted row any more: the tokens keep nothing. The ids of the rows taken
+      // out are forgotten once the operation ends, but those that come back
+      const keptWritten = forgetKept(kept);
+      forgetWhenOperationEnds(changes, [...rows.values(), ...keptWritten]);
       document.layers.clear();
       document.groups.clear();
       document.files.clear();
@@ -748,6 +770,7 @@ export function storeWritesOf(
           ),
         );
         markDeletionWritten(changes, refs, deleted);
+        forgetWhenTold(changes, refs);
         addRows(changes, written.rows);
         countWork(counts, 'rowsWritten', length);
       }
@@ -919,6 +942,15 @@ export function storeWritesOf(
       return true;
     });
 
+  /**
+   * Lets go of a token of the tables, and forgets the ids of the rows the writes gave it that
+   * nothing keeps any more (once the change is told, while a transaction is under way or told)
+   */
+  const releaseTablesToken: ReleaseTablesToken = (tablesToken, written) => {
+    tables(() => rowWrites.release(tablesToken));
+    for (const rows of written) forgetWhenTold(changes, rows);
+  };
+
   return {
     createRows,
     createRowsFromPages: createRowsFromPagesOf(document),
@@ -934,8 +966,7 @@ export function storeWritesOf(
     createFile,
     deleteFile,
     setMetadata,
-    releaseDeletedRows: (token) =>
-      releaseToken(kept, token, (tablesToken) => tables(() => rowWrites.release(tablesToken))),
+    releaseDeletedRows: (token) => releaseToken(kept, token, releaseTablesToken),
     newOperationId: () => newOperationId(changes),
     subscribe: (listener, options) => subscribe(changes, listener, options),
     transact: (fn, source, options) => transact(changes, fn, source, options),

@@ -16,22 +16,37 @@
  * deleted row without a mark is not there for the Store: its id may be taken again, it is not
  * read, and it is not brought back.
  *
+ * When every token of an entry is let go of, the ids of the rows the writes gave the token of the
+ * tables are forgotten (see `changes.ts`): the tables leave the rows another token keeps, and
+ * those that are not deleted. So a new row, or a page, takes the id of a row kept once it is let
+ * go of, with a new reference.
+ *
  * @internal
  */
 
 import type { DeletedRowsToken, RowRef } from './types.js';
 
 /**
- * What keeps the rows one change deleted: the token of the tables, the rows, and the number of
- * the tokens given for it that are not let go of
+ * What keeps the rows one change deleted: the token of the tables, the rows, the rows the writes
+ * of its transaction gave the token (whose ids are forgotten when it is let go of), and the number
+ * of the tokens given for it that are not let go of
  *
  * @internal
  */
 export interface KeptEntry {
   readonly tablesToken: number;
   readonly rows: readonly Int32Array[];
+  readonly written: readonly Int32Array[];
   holders: number;
 }
+
+/**
+ * Lets go of a token of the tables, and forgets the ids of the rows the writes gave it that
+ * nothing keeps any more (the tables leave those another token keeps, and those not deleted)
+ *
+ * @internal
+ */
+export type ReleaseTablesToken = (tablesToken: number, written: readonly Int32Array[]) => void;
 
 /**
  * The deleted rows kept, and the tokens given
@@ -101,7 +116,8 @@ function unmark(kept: KeptRows, tablesToken: number, rows: readonly Int32Array[]
  * @param written - The rows the writes of the transaction gave the token of the tables
  * @param deleted - The rows the change lists as deleted
  * @param holders - The number of listeners given a token
- * @param release - Lets go of a token of the tables
+ * @param release - Lets go of a token of the tables (the ids of the rows the transaction deleted
+ *   are forgotten when its change has been told, see `changes.ts`)
  * @returns The tokens, one per listener (none when nothing is kept)
  * @internal
  */
@@ -121,7 +137,7 @@ export function settleKept(
   for (const list of deleted) {
     for (let i = 0; i < list.length; i++) kept.keptBy.set(list[i], tablesToken);
   }
-  const entry: KeptEntry = { tablesToken, rows: deleted, holders };
+  const entry: KeptEntry = { tablesToken, rows: deleted, written, holders };
   const tokens: DeletedRowsToken[] = [];
   for (let i = 0; i < holders; i++) {
     const token = kept.nextToken as DeletedRowsToken;
@@ -134,16 +150,12 @@ export function settleKept(
 
 /**
  * Lets go of a token (see `Store.releaseDeletedRows`): once every token of its entry is let go
- * of, the rows go from the tables and are not kept any more. A token let go of, or one never
- * given, keeps nothing
+ * of, the rows go from the tables and are not kept any more, and their ids are forgotten. A token
+ * let go of, or one never given, keeps nothing
  *
  * @internal
  */
-export function releaseToken(
-  kept: KeptRows,
-  token: unknown,
-  release: (tablesToken: number) => void,
-): void {
+export function releaseToken(kept: KeptRows, token: unknown, release: ReleaseTablesToken): void {
   if (typeof token !== 'number') return;
   const entry = kept.tokens.get(token);
   if (!entry) return;
@@ -151,15 +163,22 @@ export function releaseToken(
   entry.holders -= 1;
   if (entry.holders > 0) return;
   unmark(kept, entry.tablesToken, entry.rows);
-  release(entry.tablesToken);
+  release(entry.tablesToken, entry.written);
 }
 
 /**
  * Forgets every row kept and every token given: the tables took every row out (`clear`)
  *
+ * @returns The rows the writes gave the tokens of the tables of the entries (whose ids the tables
+ *   still know)
  * @internal
  */
-export function forgetKept(kept: KeptRows): void {
+export function forgetKept(kept: KeptRows): Int32Array[] {
+  const written: Int32Array[] = [];
+  for (const entry of new Set(kept.tokens.values())) {
+    for (const rows of entry.written) written.push(rows);
+  }
   kept.keptBy.clear();
   kept.tokens.clear();
+  return written;
 }

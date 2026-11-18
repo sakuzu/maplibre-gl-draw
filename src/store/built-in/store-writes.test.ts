@@ -853,12 +853,14 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(rows?.deleted).toContain(p);
     });
 
-    it('leaves the reference of a row whose id comes back', () => {
+    it('leaves the reference of a row whose id comes back in the operation', () => {
       const store = withRows(make);
       const p = refOf(store, 'p');
-      store.clear();
-      store.createLayer(layer('a'));
-      store.createRows(newRows([{ id: 'p', parent: 'a', orderKey: 'k1' }]));
+      store.transact(() => {
+        store.clear();
+        store.createLayer(layer('a'));
+        store.createRows(newRows([{ id: 'p', parent: 'a', orderKey: 'k1' }]));
+      }, 'load');
       expect(refOf(store, 'p')).toBe(p);
     });
   });

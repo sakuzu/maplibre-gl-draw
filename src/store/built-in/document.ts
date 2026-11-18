@@ -21,9 +21,10 @@
  * (its `orderKey`). A group of rows is a group of the tables too, with its id, its layer as its
  * parent, its key and its `hidden` flag; the rest of a group is its frozen object here.
  *
- * The reference of a row is never taken from its id while the document is open: the id of a
- * deleted row is read from its reference until the document is cleared, and after it (a row whose
- * id comes back keeps its reference).
+ * The reference of a row lasts while the row is there, or while something keeps it deleted: the
+ * ids of the deleted rows nothing keeps are forgotten once the change that deleted them has been
+ * told (see `changes.ts`), and their references may be given to other rows. A row whose id comes
+ * back after a clear, in the same operation, keeps its reference.
  *
  * Nothing here is shared between two documents: every document has its own tables, objects,
  * transactions and numbers of work.

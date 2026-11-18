@@ -7,44 +7,28 @@
  * The pages are checked before anything is taken in, so that the write applies to all of their
  * rows or to none: that each is a page the builder made and nothing took in yet, built for the
  * dimensions of the layer; that every group a row names is a group of the layer; that no id is that
- * of a row in use or of a group, nor the id of another row of the pages. The ids are compared as
- * their bytes in the pages, with the hashes the builder made of them: nothing is made per row.
+ * of a group, nor the id of another row of the pages. The ids are compared as their bytes in the
+ * pages, with the hashes the builder made of them: nothing is made per row. That no id is that of a
+ * row the tables hold is checked by the tables, which refuse such pages before they take any in
+ * (`alreadyExists`): a row in use, a deleted row a token keeps, and a row the transaction deleted
+ * (the ids of the deleted rows nothing keeps are forgotten once the change of their transaction has
+ * been told, see `changes.ts`). The id of a row a clear took out is taken with its reference.
  *
  * The pages are then given to the tables as they are: the tables hold their columns, and give
  * their rows references. Only the column of the groups of each page is written over, in place,
  * with the references of the groups (a Worker cannot know them, see `pages.ts`).
  *
- * A row whose id is that of a deleted row nothing keeps is taken in with the reference of that row
- * once the tables hold it no more (after `clear`, or after the next version of its page); while
- * they still hold it, the tables cannot take the page, and the write returns false.
- *
  * @internal
  */
 
 import { KasaneError } from '@sakuzu/kasane';
-import { listPages } from '@sakuzu/kasane/render';
 import { DrawError } from '../../shared/errors.js';
 import { countWork } from '../../shared/work-counts.js';
-import { addRows, readsValuesBefore, readValuesBefore, write } from './changes.js';
+import { addRows, write } from './changes.js';
 import { dimensionsOfPositions, positionsOf, type StoreDocument } from './document.js';
-import { isKept } from './kept-rows.js';
 import { type BuiltPage, isBuiltPage, writeGroupPlaces, writeGroupRefs } from './pages.js';
 import { dimensionsOfValues } from './row-columns.js';
-import type { FeatureRowField, Store } from './types.js';
-
-/** The bit of the flags of a row of a page that is deleted */
-const ROW_DELETED = 1;
-
-/** The fields every row of a page is written with, besides its attributes */
-const PAGE_FIELDS: readonly FeatureRowField[] = [
-  'type',
-  'parent',
-  'orderKey',
-  'visible',
-  'locked',
-  'style',
-  'geometry',
-];
+import type { Store } from './types.js';
 
 /** Runs a call of the tables, throwing an error of the tables as a `DrawError` of the same code */
 function tables<T>(fn: () => T): T {
@@ -110,7 +94,6 @@ function groupIdBytesOf(document: StoreDocument): Map<number, Uint8Array[]> {
  */
 export function createRowsFromPagesOf(document: StoreDocument): Store['createRowsFromPages'] {
   const { changes, counts, rowWrites } = document;
-  const { kept } = changes;
 
   return (layerId, pages) =>
     write(changes, 'createRowsFromPages', () => {
@@ -174,17 +157,12 @@ export function createRowsFromPagesOf(document: StoreDocument): Store['createRow
         }
       }
 
-      // The ids: none of a row in use or of a group, nor twice in the pages
-      const index = tables(() => listPages(document.rows));
+      // The ids: none of a group, nor twice in the pages (the tables refuse the id of a row)
       const groupIds = document.groups.size > 0 ? groupIdBytesOf(document) : null;
       if (groupIds) countWork(counts, 'objectsCreated');
       /** The hashes of the ids of the rows of the pages met so far (one page has no id twice) */
       const hashes = built.length > 1 ? new Set<number>() : null;
       if (hashes) countWork(counts, 'objectsCreated');
-      /** The rows whose ids are those of deleted rows the tables no longer hold */
-      const again: number[] = [];
-      countWork(counts, 'objectsCreated');
-      let held = false;
       for (let p = 0; p < built.length; p++) {
         const page = built[p];
         const { offsets, bytes } = page.ids;
@@ -230,38 +208,9 @@ export function createRowsFromPagesOf(document: StoreDocument): Store['createRow
               }
             }
           }
-          const handle = index.ids.handleOfEntry(page.ids, r, page.idHashes[r]);
-          if (handle < 0) continue;
-          const place = index.placeOf(handle);
-          if (!place) {
-            again.push(handle);
-            continue;
-          }
-          const deleted = (place.group.data.flags[place.row] & ROW_DELETED) !== 0;
-          if (!deleted || isKept(kept, handle)) {
-            throw new DrawError(
-              'alreadyExists',
-              `${what}: ${JSON.stringify(idOf(page, r))} is the id of a row`,
-            );
-          }
-          // A deleted row nothing keeps that the tables still hold
-          held = true;
         }
       }
-      if (held) return false;
       if (total === 0) return true;
-
-      // The values before of the rows whose ids come back
-      if (again.length > 0 && readsValuesBefore(changes)) {
-        const fields = new Set<FeatureRowField>(PAGE_FIELDS);
-        for (const page of built) {
-          const keyed = (
-            page as unknown as { keyed: readonly ({ keys?: readonly string[] } | null)[] }
-          ).keyed;
-          for (const key of keyed[0]?.keys ?? []) fields.add(`properties:${key}`);
-        }
-        readValuesBefore(changes, Int32Array.from(again), fields);
-      }
 
       for (const page of built) writeGroupRefs(page, refsOf.get(page.groupIds) as Int32Array);
       const taken = built.filter((page) => page.length > 0);
