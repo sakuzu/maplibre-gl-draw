@@ -74,16 +74,19 @@ function read<T>(fn: () => T): T {
 
 /**
  * The values of one key of the styles of rows: the value each style holds for it, undefined for
- * a row without the key (or without a style)
+ * a row without the key (or without a style). The rows of one style share its object, so the key
+ * is looked up once per style
  */
 function styleKeyOf(styles: readonly unknown[], key: string): unknown[] {
   const out = new Array<unknown>(styles.length);
+  const keyValues = new Map<unknown, unknown>();
   for (let i = 0; i < styles.length; i++) {
-    const style = styles[i] as Readonly<Record<string, unknown>> | undefined;
-    out[i] =
-      typeof style === 'object' && style !== null && Object.hasOwn(style, key)
-        ? style[key]
-        : undefined;
+    const style = styles[i];
+    if (typeof style !== 'object' || style === null) continue;
+    if (!keyValues.has(style)) {
+      keyValues.set(style, Object.getOwnPropertyDescriptor(style, key)?.value);
+    }
+    out[i] = keyValues.get(style);
   }
   return out;
 }
