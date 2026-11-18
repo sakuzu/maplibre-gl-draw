@@ -45,6 +45,8 @@ describe('the scenes', () => {
       'import',
       'export',
       'storeParts',
+      'storeRead',
+      'storeMoveBefore',
     ]);
   });
 });
