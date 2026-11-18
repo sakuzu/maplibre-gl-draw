@@ -35,7 +35,12 @@ import {
   ROW_COLUMNS,
   type StoreDocument,
 } from './document.js';
-import { GEOMETRY_TYPES, type GeometryColumn, type StoreGroup } from './types.js';
+import {
+  GEOMETRY_TYPES,
+  type GeometryColumn,
+  type RowSpatialIndexing,
+  type StoreGroup,
+} from './types.js';
 
 // ---------------------------------------------------------------------------------------------
 // Writing the document directly
@@ -70,8 +75,10 @@ function shapeOf(geometry: Geometry) {
 }
 
 /** A new document with its own references for the groups */
-function newDocument(): StoreDocument & { groupRefs: Map<string, number> } {
-  return Object.assign(openDocument(), { groupRefs: new Map<string, number>() });
+function newDocument(
+  spatialIndexing?: RowSpatialIndexing,
+): StoreDocument & { groupRefs: Map<string, number> } {
+  return Object.assign(openDocument(spatialIndexing), { groupRefs: new Map<string, number>() });
 }
 
 type TestDocument = ReturnType<typeof newDocument>;
@@ -618,6 +625,43 @@ describe('readValues', () => {
         deleted: Uint8Array.of(0, 1),
       }),
     );
+  });
+});
+
+describe('the spatial indexing given', () => {
+  it('makes the boxes of the rows written', () => {
+    // The boxes of the plane moved 1,000 degrees east
+    const spatialIndexing: RowSpatialIndexing = {
+      rowBox(coordinates, valuesPerPosition, from, to, out, at) {
+        let minX = Number.POSITIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (let p = from; p < to; p++) {
+          const x = coordinates[p * valuesPerPosition] + 1000;
+          const y = coordinates[p * valuesPerPosition + 1];
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+        out.set(from < to ? [minX, minY, maxX, maxY] : [NaN, NaN, NaN, NaN], at);
+      },
+    };
+    const document = newDocument(spatialIndexing);
+    addLayer(document, 'a');
+    addRows(document, 'a', [{ id: 'p', orderKey: 'k0', geometry: point(0, 0) }]);
+    const store = storeOf(document);
+    const ref = refOf(store, 'p');
+    // The tables make the box of a geometry they are given
+    document.rowWrites.writeRows({
+      rows: Int32Array.of(ref),
+      fields: new Map([['geometry', [shapeOf(point(1, 2))]]]),
+    });
+    const view = store.tables.get('a');
+    expect(view?.getRowBBox(ref)).toEqual([1001, 2, 1001, 2]);
+    expect([...(view?.listDrawnRows([1000, 0, 1002, 3]) ?? [])]).toEqual([ref]);
+    expect([...(view?.listDrawnRows([0, 0, 2, 3]) ?? [])]).toEqual([]);
   });
 });
 
