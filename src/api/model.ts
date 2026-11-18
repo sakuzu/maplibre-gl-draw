@@ -25,6 +25,7 @@ import {
   getStyleRuleChannel as getRuleChannel,
 } from '../view/style-rule.js';
 import type { DrawErrorCode } from './errors.js';
+import { makeIdSet } from './impl/id-set.js';
 import {
   convertFeaturesToGeoJSON,
   convertFeatureToGeoJSON,
@@ -752,4 +753,78 @@ export function parseGeoJSON(
  */
 export function parseNative(input: DrawDocument, options?: ParseOptions): Promise<ParsedDocument> {
   return parseNativeInput(input, options);
+}
+
+// ============================================================================
+// Sets of IDs and the features being edited
+// ============================================================================
+
+/**
+ * A set of IDs, read without an array of every ID: the selection, the items this client hides,
+ * the features of a drag, of a change and of a load. It is the set as it was when it was given,
+ * and it never changes afterwards; a change makes a new set. Unlike a `Set` of JavaScript, it is
+ * read only through these methods. A set that stands for the features of layers (a selection
+ * made with `{ layerIds }`) counts, answers `has` and is read without the IDs being made.
+ *
+ * A set of features a change deleted (`ChangedIds.deleted`) is read after the change was told
+ * too, as long as the document is open and not replaced as a whole: the IDs of deleted features
+ * stay readable from the set.
+ */
+export interface IdSet {
+  /** The number of IDs. */
+  count(): number;
+  /** Whether the set holds this ID. */
+  has(id: string): boolean;
+  /**
+   * Reads the IDs one at a time, for a set of any size, in the order of the set.
+   *
+   * @returns An iterator of the IDs
+   */
+  iterate(): IterableIterator<string>;
+  /**
+   * The IDs as an array, in the order of the set.
+   *
+   * @throws `DrawError` with the code `tooManyItems` when the set holds more than 10,000 IDs;
+   *   the array is never cut short. {@link IdSet.iterate} reads any number of them
+   */
+  toArray(): string[];
+}
+
+/**
+ * Makes an {@link IdSet} of IDs, in the order given, each once: what an extension gives back
+ * where an `IdSet` is asked for (`Plugin.interaction.filterSelection`), or gives to
+ * `selection.set`.
+ *
+ * @param ids - The IDs
+ * @returns The set
+ */
+export function createIdSet(ids: Iterable<string>): IdSet {
+  return makeIdSet(ids);
+}
+
+/**
+ * The features this client marks as being edited: a mark of this client that the document does
+ * not hold, as the selection. An extension that edits a feature in a field of its own marks it
+ * here while the field is open, so that other extensions can tell (one that draws the feature
+ * leaves out what the field shows, say). A feature deleted leaves it.
+ *
+ * When the select mode is entered, every feature marked is told to the plugins as a feature a
+ * drawing mode created (`Plugin.interaction.onDrawCommit`), and the marks are taken off: a
+ * drawing mode that leaves a new feature marked hands it over so.
+ *
+ * A value written to a marked feature from elsewhere (a change written to the Store directly, an
+ * edit of another extension) is written and told as any other change: what the open field does
+ * with it is up to the extension that owns the field.
+ */
+export interface EditingFeaturesResource {
+  /** The features marked, as they are now */
+  get(): IdSet;
+  /**
+   * Marks features as being edited.
+   *
+   * @throws `DrawError` with the code `notFound` when one of the IDs is not a feature
+   */
+  add(ids: readonly string[]): void;
+  /** Takes the mark off features; an ID that is not marked is left as it is. */
+  remove(ids: readonly string[]): void;
 }

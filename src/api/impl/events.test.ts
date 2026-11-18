@@ -322,12 +322,9 @@ describe('the events of the state of this client', () => {
     draw.hidden.add(b.id);
     draw.features.delete(a.id);
     draw.hidden.clear();
-    expect(payloadsOf(events, 'hidden.changed')).toEqual([
-      { ids: [a.id] },
-      { ids: [a.id, b.id] },
-      { ids: [b.id] },
-      { ids: [] },
-    ]);
+    expect(payloadsOf(events, 'hidden.changed').map(({ ids }) => ({ ids: ids.toArray() }))).toEqual(
+      [{ ids: [a.id] }, { ids: [a.id, b.id] }, { ids: [b.id] }, { ids: [] }],
+    );
   });
 
   it('readOnly.changed and interactionLock.changed fire when the value changes', () => {

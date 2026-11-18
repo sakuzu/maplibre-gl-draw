@@ -18,6 +18,7 @@ import type {
   FeatureInput,
   FileData,
   Group,
+  IdSet,
   Layer,
   LoadResult,
   Metadata,
@@ -150,6 +151,10 @@ export interface DrawEvents {
   'document.loaded': { result: LoadResult; source: UpdateSource };
   /** The selection changed */
   'selection.changed': { selection: Selection; previous: Selection };
+  /** The features this client marks as being edited changed; `ids` is the whole set after it */
+  'editingFeatures.changed': {
+    ids: IdSet;
+  };
   /** The vertex selection changed */
   'vertexSelection.changed': {
     selection: VertexSelection | null;
@@ -162,7 +167,9 @@ export interface DrawEvents {
   /** The mode changed */
   'mode.changed': { mode: Mode; previous: Mode };
   /** The items this client hides changed; `ids` is the whole set after the change */
-  'hidden.changed': { ids: readonly string[] };
+  'hidden.changed': {
+    ids: IdSet;
+  };
   /** Read-only was turned on or off */
   'readOnly.changed': { readOnly: boolean };
   /** The interaction lock was turned on or off */

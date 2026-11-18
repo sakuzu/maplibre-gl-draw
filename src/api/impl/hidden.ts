@@ -6,6 +6,7 @@
  */
 
 import type { HiddenCollection } from '../hidden.js';
+import { makeIdSet } from './id-set.js';
 import type { ResourceDeps } from './shared.js';
 import { isTaken, notFound, requireIds } from './shared.js';
 
@@ -18,6 +19,8 @@ import { isTaken, notFound, requireIds } from './shared.js';
  */
 export function createHidden(deps: Pick<ResourceDeps, 'store'>): HiddenCollection {
   const { store } = deps;
+  // What this client hides is the state of this client, held by the instance
+  const { client } = store;
 
   /** Throws unless every ID names a feature, a group or a layer of the document */
   const requireItems = (ids: unknown): string[] => {
@@ -29,36 +32,36 @@ export function createHidden(deps: Pick<ResourceDeps, 'store'>): HiddenCollectio
   };
 
   const removeMany = (ids: readonly string[]): boolean => {
-    const hidden = requireItems(ids).filter((id) => store.isHidden(id));
+    const hidden = requireItems(ids).filter((id) => client.isHidden(id));
     if (hidden.length === 0) return false;
     store.transact(() => {
-      for (const id of hidden) store.setLocallyHidden(id, false);
+      for (const id of hidden) client.setLocallyHidden(id, false);
     });
     return true;
   };
 
   return {
-    get: (id) => store.isHidden(id),
-    list: () => [...store.listHidden()],
-    count: () => store.listHidden().size,
-    has: (id) => store.isHidden(id),
+    get: (id) => client.isHidden(id),
+    list: () => makeIdSet(client.listHidden()),
+    count: () => client.listHidden().size,
+    has: (id) => client.isHidden(id),
     add(id) {
       const [item] = requireItems([id]);
-      store.setLocallyHidden(item, true);
+      client.setLocallyHidden(item, true);
     },
     addMany(ids) {
       const items = requireItems(ids);
       store.transact(() => {
-        for (const id of items) store.setLocallyHidden(id, true);
+        for (const id of items) client.setLocallyHidden(id, true);
       });
     },
     remove: (id) => removeMany([id]),
     removeMany,
     clear() {
-      const hidden = [...store.listHidden()];
+      const hidden = [...client.listHidden()];
       if (hidden.length === 0) return;
       store.transact(() => {
-        for (const id of hidden) store.setLocallyHidden(id, false);
+        for (const id of hidden) client.setLocallyHidden(id, false);
       });
     },
   };

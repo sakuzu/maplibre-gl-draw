@@ -101,11 +101,13 @@ function graphFeature(id: string, geometry: Geometry, type: string = geometry.ty
  */
 export function traceSourceOf(ctx: ModeContext): TraceSource {
   const { draw, store } = ctx;
+  // What this client hides is read through the instance, which holds it
+  const hidden = { isHidden: (id: string) => draw.hidden.has(id) };
   const shown = (feature: PublicFeature): boolean => {
     if (!feature.visible) return false;
     if (!store.getLayer(feature.layerId)?.visible) return false;
     if (feature.groupId && store.getGroup(feature.groupId)?.visible === false) return false;
-    return !isLocallyHidden(feature as Feature, store);
+    return !isLocallyHidden(feature as Feature, hidden);
   };
   return {
     isEnabled: () => draw.options.get().tracing?.enabled !== false,

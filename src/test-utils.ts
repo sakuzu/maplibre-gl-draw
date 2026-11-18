@@ -22,6 +22,7 @@ import type { Engine } from './api/impl/engine.js';
 import { createEngine } from './api/impl/engine.js';
 import { createFeatures } from './api/impl/features.js';
 import { createGroups } from './api/impl/groups.js';
+import { createHidden } from './api/impl/hidden.js';
 import { bridgeMode, createInputRoute } from './api/impl/input.js';
 import { createLayers } from './api/impl/layers.js';
 import { checkDrawOptions, toEngineOptions } from './api/impl/options.js';
@@ -37,7 +38,7 @@ import type {
   Feature as PublicFeature,
 } from './api/model.js';
 import type { DrawOptions } from './api/options.js';
-import type { Selection } from './api/state.js';
+import type { Selection, VertexSelection } from './api/state.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
@@ -269,6 +270,8 @@ export function createModeHarness(options: {
     groups,
     layers: createLayers(deps),
     selection: createSelection(deps, { features, groups }),
+    // What this client hides, which the modes read through the instance
+    hidden: createHidden(deps),
     extensions: collections,
     getMap: () => map,
     getStore: () => store,
@@ -1326,8 +1329,11 @@ export function createParityMap(
   return parity;
 }
 
-/** Every member of the public Store of the main entry */
-export const PARITY_STORE_MEMBERS: readonly (keyof PublicStore)[] = [
+/**
+ * Every member of the public Store of the main entry of the published version; the members of
+ * the state of this client are no longer the Store's (see `PARITY_CLIENT_MEMBERS`)
+ */
+export const PARITY_STORE_MEMBERS: readonly string[] = [
   'getFeature',
   'listFeatures',
   'listFeaturesInOrder',
@@ -1385,16 +1391,73 @@ const OPTIONAL_STORE_MEMBERS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The members of the state of this client the Store of the published version had, which the
+ * scenes call on the Store of the application. The Store no longer holds that state: the
+ * instance does, so each one is read and written through the instance given the Store.
+ */
+export interface ParityClientMembers {
+  getEditingIds(): readonly string[];
+  setSelection(type: Selection['type'], ids: string[]): void;
+  startEditing(ids: string[]): void;
+  endEditing(ids: string[]): void;
+  setSelectedVertices(selection: VertexSelection | null): void;
+  setMode(mode: string): void;
+  setReadOnly(value: boolean): void;
+  setInteractionLock(value: boolean): void;
+  setLocallyHidden(id: string, hidden: boolean): void;
+}
+
+/** Each member of the state of this client, read and written through the instance */
+const PARITY_CLIENT_MEMBERS: {
+  [K in keyof ParityClientMembers]: (draw: Draw) => ParityClientMembers[K];
+} = {
+  getEditingIds: (draw) => () => draw.editingFeatures.get().toArray(),
+  setSelection: (draw) => (type, ids) => {
+    if (type === null || ids.length === 0) draw.selection.clear();
+    else draw.selection.set(type, ids);
+  },
+  // A feature that is not in the document cannot be marked (the published version kept it)
+  startEditing: (draw) => (ids) =>
+    draw.editingFeatures.add(ids.filter((id) => draw.features.has(id))),
+  endEditing: (draw) => (ids) => draw.editingFeatures.remove(ids),
+  setSelectedVertices: (draw) => (selection) => {
+    if (selection) draw.vertexSelection.set(selection.featureId, selection.vertices);
+    else draw.vertexSelection.clear();
+  },
+  setMode: (draw) => (mode) => {
+    draw.setMode(mode);
+  },
+  setReadOnly: (draw) => (value) => draw.setReadOnly(value),
+  setInteractionLock: (draw) => (value) => draw.setInteractionLocked(value),
+  setLocallyHidden: (draw) => (id, hidden) => {
+    if (hidden) draw.hidden.add(id);
+    else draw.hidden.remove(id);
+  },
+};
+
+/** The instance each Store of a scene (and the view of it a scene reads) belongs to */
+const parityDraws = new WeakMap<object, Draw>();
+
+/** The instance a Store of a scene belongs to */
+function drawOfParityStore(store: unknown): Draw {
+  const draw = parityDraws.get(store as object);
+  if (!draw) throw new Error('the Store belongs to no instance of the scene');
+  return draw;
+}
+
+/**
  * A Store of the application, kept in memory, with the members of the public Store only
  *
  * `store` is given to `createDraw`; `scene` is the same Store for the scene, which writes to it
- * from outside the instance as an application that keeps the document elsewhere does. What the
- * scene calls on `scene`, and the optional members the instance calls, are the uses of the row.
- * `calls` lists the calls of the instance to the optional members.
+ * from outside the instance as an application that keeps the document elsewhere does, and calls
+ * the members of the state of this client through it (`ParityClientMembers`, read and written
+ * through the instance). What the scene calls on `scene`, and the optional members the instance
+ * calls, are the uses of the row. `calls` lists the calls of the instance to the optional
+ * members.
  */
 export interface ApplicationStore {
   store: PublicStore;
-  scene: PublicStore;
+  scene: PublicStore & ParityClientMembers;
   calls: string[];
 }
 
@@ -1427,10 +1490,20 @@ export function createApplicationStore(
       calls.push(`abortIntermediateUpdates ${ids.join(',')}`);
     };
   }
-  const members = new Set<string>(PARITY_STORE_MEMBERS);
+  const members = new Set<string>(
+    PARITY_STORE_MEMBERS.filter((m) => !(m in PARITY_CLIENT_MEMBERS)),
+  );
+  const client = PARITY_CLIENT_MEMBERS as Record<string, (draw: Draw) => unknown>;
   const view = (recordAll: boolean) =>
     new Proxy(inner, {
       get(target, key) {
+        if (recordAll && typeof key === 'string' && key in client) {
+          return (...args: unknown[]) => {
+            useParity(`Store.${key}`);
+            const member = client[key](drawOfParityStore(app)) as (...a: unknown[]) => unknown;
+            return member(...args);
+          };
+        }
         if (typeof key !== 'string' || !members.has(key)) return undefined;
         const value = OPTIONAL_STORE_MEMBERS.has(key) ? optional[key] : Reflect.get(target, key);
         if (typeof value !== 'function') return value;
@@ -1447,12 +1520,17 @@ export function createApplicationStore(
         );
       },
     }) as unknown as PublicStore;
-  return { store: view(false), scene: view(true), calls };
+  const app: ApplicationStore = {
+    store: view(false),
+    scene: view(true) as ApplicationStore['scene'],
+    calls,
+  };
+  return app;
 }
 
 /** The same Store for the scene: what it calls on it are the uses of the row */
 export function parityStoreView<S extends object>(store: S): S {
-  return new Proxy(store, {
+  const view = new Proxy(store, {
     get(target, key) {
       const value = Reflect.get(target, key, target) as unknown;
       if (typeof key !== 'string' || typeof value !== 'function') return value;
@@ -1462,6 +1540,9 @@ export function parityStoreView<S extends object>(store: S): S {
       };
     },
   });
+  const draw = parityDraws.get(store);
+  if (draw) parityDraws.set(view, draw);
+  return view;
 }
 
 /** The public resources of the instance whose methods the rows use, by field */
@@ -1559,8 +1640,10 @@ export function createParityInstance(
     ...(app ? { store: app.store } : {}),
   });
   parityInstances.push(draw);
+  parityDraws.set(draw.getStore(), draw);
+  if (app) parityDraws.set(app, draw);
   const log: ParityEvent[] = [];
-  for (const name of Object.keys(PARITY_EVENT_READS) as (keyof DrawEvents)[]) {
+  for (const name of PARITY_EVENT_NAMES) {
     draw.on(name, (payload) => log.push([name, payload] as ParityEvent));
   }
   return { draw: recordingDraw(draw), map, log, app };
@@ -1695,7 +1778,8 @@ const PARITY_EVENT_READS: { [K in keyof DrawEvents]-?: (p: DrawEvents[K]) => unk
   'drag.started': (p) => ({ kind: p.kind, featureIds: [...p.featureIds] }),
   'drag.ended': (p) => ({ kind: p.kind, featureIds: [...p.featureIds], cancelled: p.cancelled }),
   'mode.changed': (p) => ({ mode: p.mode, previous: p.previous }),
-  'hidden.changed': (p) => ({ ids: [...p.ids] }),
+  'hidden.changed': (p) => ({ ids: p.ids.toArray() }),
+  'editingFeatures.changed': (p) => ({ ids: p.ids.toArray() }),
   'readOnly.changed': (p) => ({ readOnly: p.readOnly }),
   'interactionLock.changed': (p) => ({ locked: p.locked }),
   'options.changed': (p) => ({ options: p.options, previous: p.previous }),
@@ -1725,8 +1809,16 @@ const PARITY_EVENT_READS: { [K in keyof DrawEvents]-?: (p: DrawEvents[K]) => unk
   }),
 };
 
-/** The names of every event of the instance */
-export const PARITY_EVENT_NAMES = Object.keys(PARITY_EVENT_READS) as readonly (keyof DrawEvents)[];
+/**
+ * The events of 3.0 that the published version did not have: the table is what the published
+ * version did, so the scenes do not record them
+ */
+const PARITY_EVENTS_AFTER: ReadonlySet<string> = new Set(['editingFeatures.changed']);
+
+/** The names of every event of the instance the table records */
+export const PARITY_EVENT_NAMES = (Object.keys(PARITY_EVENT_READS) as (keyof DrawEvents)[]).filter(
+  (name) => !PARITY_EVENTS_AFTER.has(name),
+);
 
 /** A `document.changed` notification (and a notification of the Store), field by field */
 function readChange(p: DocumentChange) {
@@ -1861,7 +1953,7 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
         interactionLocked: draw.isInteractionLocked(),
         selection: readSelection(draw.selection.get()),
         vertexSelection: draw.vertexSelection.get(),
-        hidden: [...draw.hidden.list()],
+        hidden: draw.hidden.list().toArray(),
       }));
     case 'value':
       return a;
@@ -1925,7 +2017,7 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
     case 'hidden.get':
       return read(() => draw.hidden.get(a as string));
     case 'hidden.list':
-      return read(() => [...draw.hidden.list()]);
+      return read(() => draw.hidden.list().toArray());
     case 'hidden.count':
       return read(() => draw.hidden.count());
     case 'hidden.has':
@@ -1980,22 +2072,23 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
       return read(() => store.listFiles());
     case 'store.getMetadata':
       return read(() => store.getMetadata());
+    // The state of this client is the instance's: read through the instance of the Store
     case 'store.getSelection':
-      return read(() => readSelection(store.getSelection()));
+      return read(() => readSelection(drawOfParityStore(target).selection.get()));
     case 'store.getEditingIds':
-      return read(() => [...store.getEditingIds()]);
+      return read(() => drawOfParityStore(target).editingFeatures.get().toArray());
     case 'store.getVertexSelection':
-      return read(() => store.getVertexSelection());
+      return read(() => drawOfParityStore(target).vertexSelection.get());
     case 'store.getMode':
-      return read(() => store.getMode());
+      return read(() => drawOfParityStore(target).getMode());
     case 'store.isReadOnly':
-      return read(() => store.isReadOnly());
+      return read(() => drawOfParityStore(target).isReadOnly());
     case 'store.isInteractionLocked':
-      return read(() => store.isInteractionLocked());
+      return read(() => drawOfParityStore(target).isInteractionLocked());
     case 'store.isHidden':
-      return read(() => store.isHidden(a as string));
+      return read(() => drawOfParityStore(target).hidden.has(a as string));
     case 'store.listHidden':
-      return read(() => [...store.listHidden()]);
+      return read(() => drawOfParityStore(target).hidden.list().toArray());
   }
 }
 

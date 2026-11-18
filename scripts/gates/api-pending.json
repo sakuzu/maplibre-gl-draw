@@ -44,13 +44,6 @@
     "11": {
       "main:added:Draw.waitForWrites": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "12": {
-      "main:added:Draw.editingFeatures": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditingFeaturesResource": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditingFeaturesResource.add": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditingFeaturesResource.get": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditingFeaturesResource.remove": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "13": {
       "main:added:Draw.rendered": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -130,9 +123,6 @@
       "main:doc:Group": "3d6ba2e6c9e59cbcf31c8cd4edf4263f102ef48f9e94fd4923d1cd87adf80951",
       "main:removed:Group.featureIds": "d203f0f29488cb000ec82defc0ed1669d5ebc31894bd60a470d78bd73e77cb4b"
     },
-    "37": {
-      "main:sig:HiddenCollection.list": "046eb1216559924e1d9a883ff8bb021a644a65b80803cabb57a55ce539c734ea"
-    },
     "38": {
       "main:doc:FeaturePatch": "d6fe9f5f81a481f9b14600aa56b5ccb3e36a9bebc58238968fa6a2f8b66b0323",
       "main:doc:MoveTarget": "c5aed41ec76e3fb8e950764501d9fecb8c0f06fcf6b4611c696a52dd5a1c3e21"
@@ -158,15 +148,9 @@
       "main:added:FeatureValues.[featureValuesBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FeatureValues.byteLength": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FeatureValues.featureCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IdSet": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IdSet.count": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IdSet.has": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IdSet.iterate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IdSet.toArray": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:IndexRange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:IndexRange.end": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IndexRange.start": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:createIdSet": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "main:added:IndexRange.start": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "40": {
       "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
@@ -317,10 +301,6 @@
       "main:added:DrawEvents.selection.changed.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:doc:DrawEvents.selection.changed": "0a9c40a1ece0c6f4f2581597127bb46ee4354db2c2a8717b247a09cbf95e1c6b"
     },
-    "69": {
-      "main:added:DrawEvents.editingFeatures.changed": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.editingFeatures.changed.ids": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "70": {
       "main:added:DrawEvents.drag.started.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:DrawEvents.drag.started.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -341,9 +321,6 @@
       "main:added:DrawEvents.drag.ended.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:doc:DrawEvents.drag.ended": "a5927735907d5a63ffd3b7c20bb44aaf4c946196891a094caa23d38ebb8ab7cf",
       "main:sig:DrawEvents.drag.ended.featureIds": "a82b9cd87b0c51aeec801915ca1cff93ba939048fad913847549ef3b40afc7ab"
-    },
-    "73": {
-      "main:sig:DrawEvents.hidden.changed.ids": "48ddcfa3accfef0910ceb58904bb21acf9467c54383ddc65f8770cbc3d7637e3"
     },
     "76": {
       "main:doc:DrawEvents.document.changed": "bbd11a39515f863f3d85c57862fd5d26afc05bc7e7c430902a94720848b971cd"
@@ -459,24 +436,6 @@
     "118": {
       "main:removed:Store.reorderInGroup": "668dfe6e629f378a98b07990cb2b0edb319971fcf5ed07bd4b7eb8ebd03fdd49",
       "main:removed:Store.reorderInLayer": "e08de45d43190858e95e1574efe8da926310d46551a02263f5501bb2a0b0b962"
-    },
-    "119": {
-      "main:removed:Store.endEditing": "2158163ebca2bc157a038c9e5312c23a4022c6d349268d63b938ed9698c71585",
-      "main:removed:Store.setInteractionLock": "c3c49944d7fd9b0e2bf16ee09a9425017308875d545c891a3fe64ec66c0e0a46",
-      "main:removed:Store.setLocallyHidden": "6788d7fa0f52d5b1d3bac1ec8947ff45b42cb02c8430262000538c85dfcf4013",
-      "main:removed:Store.setMode": "eb001180a5f17c51f827ee8ced31f5b78d400df83094025e687386cedeecae30",
-      "main:removed:Store.setReadOnly": "661287166143e84fe483c71f6194691250bc2094a03ecec5037c25234f65b824",
-      "main:removed:Store.setSelectedVertices": "610c0d16885bbc329d116cf3f07861aba8bc712cd4f1d32e6af9adeb4e928b55",
-      "main:removed:Store.setSelection": "d5ae97971ec5cac78ccf4e332f1224748c725a87e5dff0d3f3d0d33634d1819f",
-      "main:removed:Store.startEditing": "51b5d0fbdd5cc5d48b4d8f59325b57b847b442537a35992970ddca9ab452d0ef",
-      "main:removed:StoreView.getEditingIds": "c858ea6e7f597bafc9c21ec94d9717f980e2b88f500fafc131725dc97b87b165",
-      "main:removed:StoreView.getMode": "85565364024a70d61caf3dc46134edc781eb114819b63d228643f2a930bdd947",
-      "main:removed:StoreView.getSelection": "62a913716d9257801a7650c417d8b252a3ec3f0754228370e008a64eeecef5b8",
-      "main:removed:StoreView.getVertexSelection": "622df1957cd77953184e560702767bd1e3295b4d554f2c17c811cb114f6ae8a4",
-      "main:removed:StoreView.isHidden": "89f7b6185db9a9cb2d2388deea4ab2ab64d8431aa1f40caf95b4cd4b320c4888",
-      "main:removed:StoreView.isInteractionLocked": "a04fe9b7b49943c25066815eab8eb4a9e1f2cc62c397af75c057e59c1f34e5a4",
-      "main:removed:StoreView.isReadOnly": "72ad2765eaf1e3f55ce667f4429c9f69a1acb4e3a8eceffd8292a8eda2a979b5",
-      "main:removed:StoreView.listHidden": "754ae16adea10b2bc91a0b175c160c42c72e34faf0fe4b9084419a2323565a30"
     },
     "120": {
       "main:removed:Store.getMaxNameNumber": "cf6ee1c217428e3f865b2dc13caffb9587426a6403df40d244d0fba795e72eff",

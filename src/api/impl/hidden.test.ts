@@ -63,7 +63,7 @@ describe('draw.hidden', () => {
     expect(hidden.get('a')).toBe(true);
     expect(hidden.has('l1')).toBe(true);
     expect(hidden.get('b')).toBe(false);
-    expect([...hidden.list()].sort()).toEqual(['a', 'l1']);
+    expect(hidden.list().toArray().sort()).toEqual(['a', 'l1']);
     expect(hidden.count()).toBe(2);
     expect(store.getFeature('a')?.visible).toBe(true);
   });
@@ -95,6 +95,6 @@ describe('draw.hidden', () => {
     hidden.addMany(['a', 'l1']);
     expect(hidden.count()).toBe(2);
     hidden.clear();
-    expect(hidden.list()).toEqual([]);
+    expect(hidden.list().toArray()).toEqual([]);
   });
 });

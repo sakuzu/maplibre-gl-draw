@@ -5,11 +5,12 @@
  * ModeManager
  *
  * Manages the switching of the drawing modes.
- * Following the SSoT architecture, the mode state is managed in the Store.
+ * The mode is part of the state of this client, which the instance holds (ClientState): the
+ * manager writes it there and switches the handler when it changes there.
  */
 
-import type { Store } from '../store/store.js';
-import type { Mode, StoreChange } from '../store/types.js';
+import type { ClientChange, ClientState } from '../store/memory/ui-state.js';
+import type { Mode } from '../store/types.js';
 import type { EngineModeContext, EngineModeFactory, EngineModeHandler } from './handler.js';
 
 /**
@@ -58,7 +59,7 @@ export interface ModeManager {
   /** Sets the context */
   setContext(context: EngineModeContext): void;
 
-  /** Starts the initial mode and starts subscribing to the Store */
+  /** Starts the initial mode and starts following the mode of the state of this client */
   start(): void;
 
   /** Stops the current mode and unsubscribes */
@@ -111,7 +112,8 @@ export interface ModeManagerOptions {
 /**
  * ModeManager implementation
  *
- * Subscribes to the mode state of the Store and switches the handler when the mode changes.
+ * Subscribes to the mode of the state of this client and switches the handler when the mode
+ * changes there (once the operation that changed it is over, after its notification).
  *
  * @internal
  */
@@ -121,15 +123,23 @@ export class ModeManagerImpl implements ModeManager {
   private context: EngineModeContext | null = null;
   private unsubscribe: (() => void) | null = null;
   /**
-   * The handler created by setMode to ask canEnter, which starts when the Store reports the
-   * mode change (so a mode is never constructed twice for one transition)
+   * The handler created by setMode to ask canEnter, which starts when the state of this client
+   * reports the mode change (so a mode is never constructed twice for one transition)
    */
   private pending: { mode: Mode; handler: EngineModeHandler } | null = null;
+  /** The state of this client, held by the instance: where the mode is */
+  private readonly client: ClientState;
 
+  /**
+   * @param store The Store core works with, which holds the state of this client of the
+   *   instance; only that state is read
+   */
   constructor(
-    private readonly store: Store,
+    store: { readonly client: ClientState },
     private readonly options: ModeManagerOptions = {},
-  ) {}
+  ) {
+    this.client = store.client;
+  }
 
   /**
    * Sets the context
@@ -139,13 +149,13 @@ export class ModeManagerImpl implements ModeManager {
   }
 
   getMode(): Mode {
-    return this.store.getMode();
+    return this.client.getMode();
   }
 
   setMode(mode: Mode): boolean {
-    if (mode === this.store.getMode()) return true;
+    if (mode === this.client.getMode()) return true;
 
-    // A mode without a factory is refused before the Store changes, so the Store, the
+    // A mode without a factory is refused before the mode changes, so the state, the
     // draw.mode.change event and the running handler never disagree (a typo in a mode name
     // is reported, not half applied).
     const factory = this.factories.get(mode);
@@ -157,7 +167,7 @@ export class ModeManagerImpl implements ModeManager {
     // select) are refused. In the read-only state only select is allowed, which prevents
     // entering an editing mode. This is not a write gate, so it is a suppression independent
     // of readOnly, and returning to select is always allowed.
-    if (mode !== 'select' && this.store.isInteractionLocked()) return false;
+    if (mode !== 'select' && this.client.isInteractionLocked()) return false;
     // A mode that the canEnter predicate rejects (for example, one that writes features
     // while no layer can be written) is refused in the same way.
     const { canEnter } = this.options;
@@ -166,10 +176,10 @@ export class ModeManagerImpl implements ModeManager {
       if (!canEnter(handler)) return false;
       this.pending = { mode, handler };
     }
-    // Following SSoT, the mode change is carried out through the Store
-    // The result of the mode change is handled in handleModeChange through the Store subscription
-    this.store.setMode(mode);
-    return this.store.getMode() === mode;
+    // The mode change is carried out through the state of this client; its result is handled
+    // in handleModeChange through the subscription to that state
+    this.client.setMode(mode);
+    return this.client.getMode() === mode;
   }
 
   registerMode(mode: Mode, factory: EngineModeFactory): () => void {
@@ -185,7 +195,7 @@ export class ModeManagerImpl implements ModeManager {
 
   unregisterMode(mode: Mode): void {
     if (!this.factories.has(mode)) return;
-    if (mode !== 'select' && this.store.getMode() === mode) this.setMode('select');
+    if (mode !== 'select' && this.client.getMode() === mode) this.setMode('select');
     if (this.pending?.mode === mode) this.pending = null;
     this.factories.delete(mode);
   }
@@ -195,18 +205,18 @@ export class ModeManagerImpl implements ModeManager {
   }
 
   /**
-   * Starts the initial mode and starts subscribing to the Store
+   * Starts the initial mode and starts following the mode of the state of this client
    */
   start(): void {
-    // Subscribe to the mode changes of the Store
-    this.unsubscribe = this.store.subscribe((changes: StoreChange) => {
-      if (changes.mode) {
-        this.handleModeChange(changes.mode.mode);
+    // Subscribe to the mode changes of the state of this client
+    this.unsubscribe = this.client.subscribe((change: ClientChange) => {
+      if (change.mode) {
+        this.handleModeChange(change.mode.mode);
       }
     });
 
     // Start the handler of the initial mode
-    const currentMode = this.store.getMode();
+    const currentMode = this.client.getMode();
     const factory = this.factories.get(currentMode);
     if (factory) {
       this.currentHandler = factory();
@@ -232,7 +242,7 @@ export class ModeManagerImpl implements ModeManager {
   }
 
   /**
-   * Handles a mode change notification from the Store
+   * Handles a mode change of the state of this client
    */
   private handleModeChange(mode: Mode): void {
     const factory = this.factories.get(mode);

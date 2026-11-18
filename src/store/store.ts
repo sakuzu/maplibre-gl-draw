@@ -4,25 +4,29 @@
 /**
  * The Store contracts
  *
- * All of the state lives in one place (Single Source of Truth), split along one line:
+ * The state is split along two lines:
  *
  *   - StoreContract: the document (features, layers, groups, the stacking order, files and
- *     metadata) and the state of this client that the public `Store` holds (selection,
- *     editing, vertex selection, mode, read-only, interaction lock, local visibility). It is
- *     what a host may replace (`Options.store`), and core reads and writes it only through the
- *     methods of the public `Store`.
+ *     metadata). It is what a host may replace (`Options.store`), and core reads and writes it
+ *     only through the methods of the public `Store`.
+ *   - The state of this client (selection, editing, vertex selection, mode, read-only,
+ *     interaction lock, local visibility). The instance holds it (ClientState), never the
+ *     contract.
  *   - The state only the drawing reads (the geometry being drawn, the box selection, the drag,
  *     the vertices that follow along). core owns it around whatever holds the rest.
  *
- * Store joins the two for core: it reads and writes the contract, holds the drawing state,
- * gates the writes while read-only, keeps the state of this client in step with deletions,
- * and delivers every change of a transaction in one notification. StoreView is the part of
- * it the host sees (`draw.getStore()`): reads, subscription and transactions, no writes.
+ * Store joins them for core: it reads and writes the contract, reads and writes the state of
+ * this client of the instance, holds the drawing state, does not call the writes of the
+ * document while read-only, hands every change of the document to the state of this client
+ * (which keeps itself in step with deletions), and delivers every change of a transaction in
+ * one notification. StoreView is the part of it the host sees (`draw.getStore()`): reads,
+ * subscription and transactions, no writes.
  *
  * DocumentStore is the document half the in-memory contract store is built on.
  */
 
 import type { Store as PublicStore } from '../api/extension/store.js';
+import type { ClientState } from './memory/ui-state.js';
 import type {
   BoxSelection,
   DragState,
@@ -46,10 +50,10 @@ import type {
  * The Store a host gives with the `store` option: the public `Store`, with the rules core
  * relies on
  *
- * Core programs against the members of the public `Store` only: every read and every write it
- * makes, the writes of the state of this client included, goes through them. It adds nothing
- * to them; the state only the drawing reads (the geometry being drawn, the box selection, the
- * drag, the vertices that follow along) stays with core. The rules an implementation keeps are
+ * Core programs against the members of the public `Store` only: every read and every write of
+ * the document it makes goes through them. It adds nothing to them; the state of this client
+ * and the state only the drawing reads (the geometry being drawn, the box selection, the drag,
+ * the vertices that follow along) stay with core. The rules an implementation keeps are
  * written on the public `Store` and `StoreView` (`src/api/extension/store.ts`).
  */
 export interface StoreContract extends PublicStore {}
@@ -212,12 +216,11 @@ export interface DocumentStore {
 /**
  * The local state of this instance as core reads and writes it: never part of the document
  *
- * The state of this client the public contract names (selection, editing, vertex selection,
- * mode, read-only, interaction lock, local visibility) is kept by the {@link StoreContract};
- * the drawing state (the geometry being drawn, the box selection, the drag, the vertices that
- * follow along) is kept by core. The host reads it through {@link StoreView} and changes it
- * through the methods of the draw instance (`setMode`, `setSelection`, `setReadOnly` and so
- * on).
+ * The state of this client (selection, editing, vertex selection, mode, read-only, interaction
+ * lock, local visibility) is held by the instance ({@link ClientState}), and these members read
+ * and write it there; the drawing state (the geometry being drawn, the box selection, the drag,
+ * the vertices that follow along) is kept by core. The host reads and changes the state of this
+ * client through the draw instance (`draw.selection`, `setMode`, `setReadOnly` and so on).
  */
 export interface UiState {
   // Selection
@@ -273,8 +276,8 @@ export interface UiState {
   setMode(mode: Mode): void;
 
   /**
-   * Read-only. While it is on, every write to the document through the Store is refused
-   * (the write methods return false). It does not stop the other local state.
+   * Read-only. While it is on, the writes of the document are not called on the contract (the
+   * write methods return false). It does not stop the other local state.
    */
   isReadOnly(): boolean;
   /** Turns read-only on or off */
@@ -384,19 +387,27 @@ export interface StoreView {
  * The Store core works with: the document and the local state behind one gate
  *
  * Every document write returns true when it was applied and false when it was refused
- * because the Store is read-only (it never throws for that). An argument that cannot apply
+ * because the instance is read-only (it never throws for that). An argument that cannot apply
  * may throw, as in {@link StoreContract}. When a feature, group or layer is deleted (by a write here or
  * by a change applied to the document from elsewhere), its id leaves the selection, the
  * features being edited and the locally hidden set in the same notification. A change that
  * hides a selected item (its visible flag, the one of its group or layer, or local hiding)
  * takes it out of the selection, and the vertex selection ends when its feature is deleted
- * or its coordinates change other than by a drag. One notification carries the changes of the
- * document and of the local state of one transaction.
+ * or its coordinates change other than by a drag. These rules are kept by the state of this
+ * client ({@link ClientState}). One notification carries the changes of the document and of
+ * the local state of one transaction.
  *
  * A plugin reaches it with `getStore()` of {@link PluginContext}; the host gets the read-only
  * {@link StoreView}. The write methods behave as those of {@link StoreContract}.
  */
 export interface Store extends StoreView, UiState {
+  /**
+   * The state of this client the instance holds: what the members of {@link UiState} for it
+   * read and write, and the subscription to its changes (once per outermost operation, after
+   * the notification of this Store)
+   */
+  readonly client: ClientState;
+
   /** Creates a feature (see {@link DocumentStore.createFeature}) */
   createFeature(feature: Feature): boolean;
   /** Updates a feature (see {@link DocumentStore.updateFeature}) */

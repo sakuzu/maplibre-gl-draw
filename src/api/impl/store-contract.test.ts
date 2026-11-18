@@ -3,7 +3,7 @@
 
 /**
  * Tests for a Store of the application: the instance reaches it only through the members of the
- * public Store, and writes the state of this client through them too
+ * public Store, and keeps the state of this client itself (the Store holds the document)
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,14 +30,6 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'getFile',
   'listFiles',
   'getMetadata',
-  'getSelection',
-  'getEditingIds',
-  'getVertexSelection',
-  'getMode',
-  'isReadOnly',
-  'isInteractionLocked',
-  'isHidden',
-  'listHidden',
   'subscribe',
   'transact',
   'createFeature',
@@ -56,14 +48,6 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'createFile',
   'deleteFile',
   'setMetadata',
-  'setSelection',
-  'startEditing',
-  'endEditing',
-  'setSelectedVertices',
-  'setMode',
-  'setReadOnly',
-  'setInteractionLock',
-  'setLocallyHidden',
   'getMaxNameNumber',
   'recordNameNumber',
 ]);
@@ -152,7 +136,7 @@ describe('a Store of the application', () => {
     expect(host.strays).toEqual([]);
   });
 
-  it('receives the writes of the state of this client through the contract', () => {
+  it('keeps the writes of the state of this client in the instance, not in the contract', () => {
     const feature = draw.features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
@@ -165,20 +149,20 @@ describe('a Store of the application', () => {
     draw.setInteractionLocked(true);
     draw.setReadOnly(true);
 
-    expect(host.calls).toEqual(
-      expect.arrayContaining([
-        'setSelection',
-        'setLocallyHidden',
-        'setMode',
-        'setInteractionLock',
-        'setReadOnly',
-      ]),
-    );
-    expect(host.store.isHidden(feature.id)).toBe(true);
-    expect(host.store.isReadOnly()).toBe(true);
-    expect(host.store.isInteractionLocked()).toBe(true);
-    // Hiding the selected feature took it out of the selection, in the Store of the application
-    expect(host.store.getSelection()).toEqual({ type: null, ids: [] });
+    // The Store holds the document only: none of these writes reaches it (CHANGES 119)
+    const clientWrites = [
+      'setSelection',
+      'setLocallyHidden',
+      'setMode',
+      'setInteractionLock',
+      'setReadOnly',
+    ];
+    expect(host.calls.filter((call) => clientWrites.includes(call))).toEqual([]);
+    expect(draw.hidden.has(feature.id)).toBe(true);
+    expect(draw.isReadOnly()).toBe(true);
+    expect(draw.isInteractionLocked()).toBe(true);
+    // Hiding the selected feature took it out of the selection, in the instance
+    expect(draw.selection.get()).toEqual({ type: null, ids: [] });
   });
 });
 

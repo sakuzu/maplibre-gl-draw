@@ -5,6 +5,8 @@
  * `draw.hidden`: what this client hides without changing the document
  */
 
+import type { IdSet } from './model.js';
+
 /**
  * The IDs of the features, groups and layers this client hides. Hiding changes only what this
  * client draws; the document and its `visible` flags stay as they are.
@@ -12,8 +14,8 @@
 export interface HiddenCollection {
   /** Whether this client hides the item with this ID. */
   get(id: string): boolean;
-  /** Lists the IDs this client hides. */
-  list(): readonly string[];
+  /** The IDs this client hides, as they are now. */
+  list(): IdSet;
   /** Counts the IDs this client hides. */
   count(): number;
   /** Whether this client hides the item with this ID; the same as {@link HiddenCollection.get}. */

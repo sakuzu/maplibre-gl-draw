@@ -50,6 +50,7 @@ import {
   resolveSnapKinds,
 } from '../../snapping/types.js';
 import { toStore } from '../../store/draw-store.js';
+import { ClientState } from '../../store/memory/ui-state.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store, StoreContract } from '../../store/store.js';
@@ -255,8 +256,10 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // runtime options change, so always copy it so that the default is not shared
   const trace: TraceConfig = mergeTraceConfig(DEFAULT_TRACE_CONFIG, options.trace ?? {});
 
-  // The internal components
-  const store: Store = options.store ? toStore(options.store) : new MemoryStore();
+  // The internal components. The state of this client belongs to the instance: the Store a
+  // host gives keeps the document only (a Store of core given as it is keeps its own)
+  const client = new ClientState();
+  const store: Store = options.store ? toStore(options.store, client) : new MemoryStore(client);
   // Derived from the Store: it subscribes before any other component, so a listener that
   // queries it during a notification already sees the change
   const spatialIndex = new StoreSpatialIndex(store);

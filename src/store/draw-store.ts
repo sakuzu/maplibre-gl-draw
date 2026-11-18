@@ -5,32 +5,31 @@
  * DrawStore
  *
  * The Store core works with: a {@link StoreContract} (the in-memory one, or one the host gave)
+ * that keeps the document, the state of this client the instance holds ({@link ClientState}),
  * and the state only the drawing reads, behind one gate. It reaches the contract only through
- * the members of the public `Store`.
+ * the members of the public `Store`, which hold the document alone.
  *
- *   - Read-only is enforced here, at the write methods of the document. A refused write
- *     returns false and touches nothing. Changes applied to the contract from elsewhere are not
- *     stopped by it.
+ *   - Read-only is the one of the instance: the writes of the document are not called on the
+ *     contract while it is on. A refused write returns false and touches nothing. Changes
+ *     applied to the contract from elsewhere are not stopped by it.
  *   - The notifications of the contract are forwarded into the ChangeBus of this Store, so a
- *     listener gets one StoreChange per transaction with every kind of change.
+ *     listener gets one StoreChange per transaction with every kind of change, the changes of
+ *     the state of this client included.
  *   - What the contract returns and notifies is read in the shape of the public types: an
  *     optional field it gives as `null` (`Feature.groupId`, `Layer.metadata`,
  *     `Layer.styleRule`) is read as `undefined`. The normalized object is kept per object of
  *     the contract, so the same object of the contract always reads as the same object here.
- *   - Deletions reach the state of this client: the id of a deleted feature, group or layer
- *     leaves the selection, the features being edited and the locally hidden set, whatever
- *     deleted it, through the writes of the contract.
- *   - The selection holds only what can be seen: a change that hides a selected item (its own
- *     visible flag, the one of its group or layer, or local hiding) takes it out of the
- *     selection, and the vertex selection ends when its feature is deleted or its coordinates
- *     change other than by a drag. This is the only place that keeps these invariants; the
- *     modes and the public API rely on it.
+ *   - Every change of the document, whatever wrote it, is handed to the state of this client,
+ *     which keeps its rules (a deleted ID leaves the selection, the features being edited and
+ *     the hidden items; the selection holds only what can be seen; the vertex selection ends
+ *     with its feature or its coordinates).
+ *   - The members of the state of this client are those of the {@link ClientState} it was
+ *     given, read and written there.
  */
 
-import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { createWorkCounts, holdWorkCounts, type WorkCounts } from '../shared/work-counts.js';
 import { ChangeBus } from './memory/change-bus.js';
-import { MemoryDrawingState } from './memory/ui-state.js';
+import { ClientState, MemoryDrawingState } from './memory/ui-state.js';
 import type { Store, StoreContract } from './store.js';
 import type {
   BoxSelection,
@@ -52,13 +51,15 @@ import type {
 } from './types.js';
 
 /**
- * Returns the Store for a store option: a Store of core is used as it is, a Store of the host
- * gets the drawing state and the read-only gate of core around it
+ * Returns the Store for a store option: a Store of core is used as it is (with the state of
+ * this client it holds), a Store of the host gets the state of this client given, the drawing
+ * state and the read-only gate of core around it
  *
+ * @param client The state of this client of the instance
  * @internal
  */
-export function toStore(store: StoreContract | Store): Store {
-  return store instanceof DrawStore ? store : new DrawStore(store);
+export function toStore(store: StoreContract | Store, client?: ClientState): Store {
+  return store instanceof DrawStore ? store : new DrawStore(store, undefined, client);
 }
 
 /**
@@ -67,19 +68,39 @@ export function toStore(store: StoreContract | Store): Store {
  * @internal
  */
 export class DrawStore implements Store {
+  readonly #client: ClientState;
   readonly #contract: StoreContract;
   readonly #bus: ChangeBus;
   readonly #drawing: MemoryDrawingState;
   /** The normalized copy of each object of the contract that gave `null` for an optional field */
   readonly #normalized = new WeakMap<object, object>();
 
-  /** @param counts The numbers of this Store, shared with the contract that made them */
-  constructor(contract: StoreContract, counts: WorkCounts = createWorkCounts()) {
+  /**
+   * @param counts The numbers of this Store, shared with the contract that made them
+   * @param client The state of this client the instance holds (a new one when left out)
+   */
+  constructor(
+    contract: StoreContract,
+    counts: WorkCounts = createWorkCounts(),
+    client: ClientState = new ClientState(),
+  ) {
     holdWorkCounts(this, counts);
     this.#bus = new ChangeBus(undefined, counts);
     this.#drawing = new MemoryDrawingState(this.#bus);
     this.#contract = contract;
+    this.#client = client;
+    const bus = this.#bus;
+    client.attach({
+      document: contract,
+      merge: (change) => bus.merge(change),
+      transact: (fn) => bus.transact(fn, 'local'),
+    });
     contract.subscribe((changes) => this.#receive(changes));
+  }
+
+  /** The state of this client, held by the instance */
+  get client(): ClientState {
+    return this.#client;
   }
 
   // ============================================================================
@@ -140,7 +161,7 @@ export class DrawStore implements Store {
     return this.#write(() => {
       const deleted = this.#contract.deleteFeature(id);
       // At once, so that the rest of a transaction already sees the selection without it
-      if (deleted) this.#forget(id);
+      if (deleted) this.client.forget(id);
       return deleted;
     });
   }
@@ -197,68 +218,62 @@ export class DrawStore implements Store {
   }
 
   // ============================================================================
-  // The state of this client (kept by the contract)
+  // The state of this client (held by the instance, see ClientState)
   // ============================================================================
 
   getSelection(): Selection {
-    return this.#contract.getSelection();
+    return this.client.getSelection();
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
-    this.#local(() => this.#contract.setSelection(type, ids));
+    this.client.setSelection(type, ids);
   }
 
   getEditingIds(): readonly string[] {
-    return this.#contract.getEditingIds();
+    return this.client.getEditingIds();
   }
   startEditing(ids: string[]): void {
-    this.#local(() => this.#contract.startEditing(ids));
+    this.client.startEditing(ids);
   }
   endEditing(ids: string[]): void {
-    this.#local(() => this.#contract.endEditing(ids));
+    this.client.endEditing(ids);
   }
 
   getVertexSelection(): VertexSelection | null {
-    return this.#contract.getVertexSelection();
+    return this.client.getVertexSelection();
   }
   setSelectedVertices(selection: VertexSelection | null): void {
-    this.#local(() => this.#contract.setSelectedVertices(selection), true);
+    this.client.setSelectedVertices(selection);
   }
 
   getMode(): Mode {
-    return this.#contract.getMode();
+    return this.client.getMode();
   }
   setMode(mode: Mode): void {
-    this.#local(() => this.#contract.setMode(mode));
+    this.client.setMode(mode);
   }
 
   isReadOnly(): boolean {
-    return this.#contract.isReadOnly();
+    return this.client.isReadOnly();
   }
   setReadOnly(value: boolean): void {
-    if (this.#contract.isReadOnly() === value) return;
-    this.#local(() => this.#contract.setReadOnly(value), true);
+    this.client.setReadOnly(value);
   }
 
   isInteractionLocked(): boolean {
-    return this.#contract.isInteractionLocked();
+    return this.client.isInteractionLocked();
   }
   setInteractionLock(value: boolean): void {
-    if (this.#contract.isInteractionLocked() === value) return;
-    this.#local(() => this.#contract.setInteractionLock(value), true);
+    this.client.setInteractionLock(value);
   }
 
   isHidden(id: string): boolean {
-    return this.#contract.isHidden(id);
+    return this.client.isHidden(id);
   }
   listHidden(): ReadonlySet<string> {
-    return this.#contract.listHidden();
+    return this.client.listHidden();
   }
   setLocallyHidden(id: string, hidden: boolean): void {
-    if (this.#contract.isHidden(id) === hidden) return;
-    this.#local(() => {
-      this.#contract.setLocallyHidden(id, hidden);
-      if (hidden) this.#pruneInvisible();
-    }, true);
+    this.client.setLocallyHidden(id, hidden);
   }
 
   // ============================================================================
@@ -302,30 +317,20 @@ export class DrawStore implements Store {
   }
 
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
-    return this.#bus.transact(() => this.#contract.transact(fn, source), source);
+    // The subscribers of the state of this client hear of its changes after the notification
+    return this.client.hold(() =>
+      this.#bus.transact(() => this.#contract.transact(fn, source), source),
+    );
   }
 
   // ============================================================================
   // Private
   // ============================================================================
 
-  /** Runs one document write unless read-only; what the contract returned */
+  /** Runs one document write unless read-only (that of the instance); what the contract returned */
   #write(fn: () => boolean): boolean {
-    if (this.#contract.isReadOnly()) return false;
+    if (this.client.isReadOnly()) return false;
     return this.transact(fn);
-  }
-
-  /**
-   * Runs a write of the state of this client as one notification of this Store. `redraw` marks
-   * the notification for a state the categories do not describe (the vertex selection,
-   * read-only, the interaction lock, local visibility), in case the contract notifies it with no
-   * category or not at all.
-   */
-  #local(fn: () => void, redraw = false): void {
-    this.#bus.transact(() => {
-      fn();
-      if (redraw) this.#bus.merge({ uiStateChanged: true });
-    }, 'local');
   }
 
   /**
@@ -334,14 +339,12 @@ export class DrawStore implements Store {
    * did not come from a transaction of this Store)
    */
   #receive(changes: StoreChange): void {
-    this.#bus.transact(() => {
-      this.#bus.merge(this.#normalizeChanges(withoutSource(changes)));
-      for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
-      for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
-      for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);
-      if (mayHide(changes)) this.#pruneInvisible();
-      this.#pruneVertices(changes);
-    }, changes.source ?? 'local');
+    this.client.hold(() =>
+      this.#bus.transact(() => {
+        this.#bus.merge(this.#normalizeChanges(withoutSource(changes)));
+        this.client.followDocument(changes, this.#drawing.getDragState() !== null);
+      }, changes.source ?? 'local'),
+    );
   }
 
   // ============================================================================
@@ -412,145 +415,6 @@ export class DrawStore implements Store {
     }
     return normalized;
   }
-
-  /** Removes an id that no longer names anything from the state of this client */
-  #forget(id: string): void {
-    const contract = this.#contract;
-    if (contract.getFeature(id) || contract.getGroup(id) || contract.getLayer(id)) return;
-    const selection = contract.getSelection();
-    if (selection.ids.includes(id)) {
-      const ids = selection.ids.filter((selected) => selected !== id);
-      contract.setSelection(ids.length === 0 ? null : selection.type, ids);
-    }
-    if (contract.getEditingIds().includes(id)) contract.endEditing([id]);
-    if (contract.isHidden(id)) {
-      contract.setLocallyHidden(id, false);
-      this.#bus.merge({ uiStateChanged: true });
-    }
-  }
-
-  /**
-   * Takes out of the selection what cannot be seen (see isShown); a hidden item never keeps
-   * its handles, its vertex hits or its place in a Delete
-   */
-  #pruneInvisible(): void {
-    const selection = this.#contract.getSelection();
-    const type = selection.type;
-    if (type === null || selection.ids.length === 0) return;
-    const shown = createShownLookup(this.#contract);
-    const kept = selection.ids.filter((id) => shown(type, id));
-    if (kept.length !== selection.ids.length) {
-      this.#contract.setSelection(kept.length > 0 ? type : null, kept);
-    }
-  }
-
-  /**
-   * Ends the vertex selection when its feature is gone or its coordinates changed other than
-   * by a local drag (a change from elsewhere, an edit through the API): the indices it holds
-   * would name other vertices
-   */
-  #pruneVertices(changes: StoreChange): void {
-    const vertices = this.#contract.getVertexSelection();
-    if (!vertices) return;
-    const featureId = vertices.featureId;
-    if (!this.#contract.getFeature(featureId)) {
-      this.#endVertexSelection();
-      return;
-    }
-    const local = changes.source !== 'remote';
-    for (const entry of changes.features?.updated ?? []) {
-      if (entry.id !== featureId) continue;
-      // The frames and the commit of a local drag keep the vertices being dragged selected
-      if (local && (entry.isIntermediate || this.#drawing.getDragState() !== null)) continue;
-      if (sameCoordinates(coordinatesOf(entry.feature), coordinatesOf(entry.previous))) continue;
-      this.#endVertexSelection();
-      return;
-    }
-  }
-
-  /** Clears the vertex selection, marking the notification for the drawing */
-  #endVertexSelection(): void {
-    this.#contract.setSelectedVertices(null);
-    this.#bus.merge({ uiStateChanged: true });
-  }
-}
-
-/**
- * Whether a notification can hide something that was visible: a change of the visible flag
- * of a feature, or of its place (a feature moved into a hidden layer or group), and any
- * update of a group or a layer
- */
-function mayHide(changes: StoreChange): boolean {
-  if (changes.layers?.updated?.length || changes.groups?.updated?.length) return true;
-  for (const { feature, previous } of changes.features?.updated ?? []) {
-    if (feature.visible !== previous.visible) return true;
-    if (feature.layerId !== previous.layerId || feature.groupId !== previous.groupId) return true;
-  }
-  return false;
-}
-
-/**
- * Whether a selected item can be seen: it exists, its own visible flag and the ones of its
- * group and layer are on, and neither it nor its group nor its layer is hidden locally.
- * Each layer and group is looked up once per call site (a document can take time to read a
- * layer).
- */
-function createShownLookup(document: StoreContract): (type: SelectionType, id: string) => boolean {
-  const ui = document;
-  const layers = new Map<string, boolean>();
-  const groups = new Map<string, boolean>();
-
-  const layerShown = (id: string): boolean => {
-    let shown = layers.get(id);
-    if (shown === undefined) {
-      const layer = document.getLayer(id);
-      shown = layer?.visible === true && !ui.isHidden(id);
-      layers.set(id, shown);
-    }
-    return shown;
-  };
-
-  const groupShown = (id: string): boolean => {
-    let shown = groups.get(id);
-    if (shown === undefined) {
-      const group = document.getGroup(id);
-      const layerId = group ? groupLayerId(document, group) : undefined;
-      shown =
-        group?.visible === true &&
-        !ui.isHidden(id) &&
-        (layerId === undefined || layerShown(layerId));
-      groups.set(id, shown);
-    }
-    return shown;
-  };
-
-  return (type, id) => {
-    if (type === 'layer') return layerShown(id);
-    if (type === 'group') return groupShown(id);
-    const feature = document.getFeature(id);
-    if (!feature?.visible || ui.isHidden(id)) return false;
-    if (feature.groupId && !groupShown(feature.groupId)) return false;
-    return layerShown(feature.layerId);
-  };
-}
-
-/** The layer of a group: the one of its members, or the layer that lists an empty group */
-function groupLayerId(document: StoreContract, group: Group): string | undefined {
-  for (const featureId of group.featureIds) {
-    const feature = document.getFeature(featureId);
-    if (feature) return feature.layerId;
-  }
-  return document.listLayers().find((layer) => layer.items.includes(group.id))?.id;
-}
-
-/** Whether two coordinate values are equal, position by position */
-function sameCoordinates(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (!sameCoordinates(a[i], b[i])) return false;
-  }
-  return true;
 }
 
 /** Whether a feature of the contract gives `null` for an optional field */

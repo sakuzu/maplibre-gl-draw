@@ -6,7 +6,7 @@
  * the Store and by the signals of the engine
  *
  * One transaction of the Store is one notification. From it come first the events of each
- * resource (features, layers, groups, metadata, selection, vertex selection, mode, hidden,
+ * resource (features, layers, groups, metadata, selection, editing, vertex selection, mode, hidden,
  * read-only, interaction lock, the shape being drawn), in that order, and last one
  * `document.changed` with the whole
  * change when the transaction changed the document. The engine announces the rest
@@ -31,6 +31,7 @@ import type { DocumentChange, DrawEventListener, DrawEvents } from '../events.js
 import type { Hit } from '../extension/provider.js';
 import type { Feature, FeatureInput, MoveTarget } from '../model.js';
 import type { SnapResult } from '../state.js';
+import { makeIdSet } from './id-set.js';
 import { toDatasetRow } from './rows.js';
 
 /**
@@ -123,14 +124,17 @@ export function createEventHub(): EventHub {
  * @internal
  */
 export function connectStoreEvents(hub: EventHub, store: Store): () => void {
-  let vertexSelection = store.getVertexSelection();
-  let hidden: readonly string[] = Object.freeze([...store.listHidden()]);
-  let readOnly = store.isReadOnly();
-  let locked = store.isInteractionLocked();
+  // The state of this client is held by the instance; its changes arrive in the notification of
+  // the operation they belong to
+  const { client } = store;
+  let vertexSelection = client.getVertexSelection();
+  let hidden: readonly string[] = Object.freeze([...client.listHidden()]);
+  let readOnly = client.isReadOnly();
+  let locked = client.isInteractionLocked();
   return store.subscribe((changes) => {
     emitResourceEvents(hub, store, changes);
 
-    const nextVertexSelection = store.getVertexSelection();
+    const nextVertexSelection = client.getVertexSelection();
     if (!sameVertexSelection(vertexSelection, nextVertexSelection)) {
       const previous = vertexSelection;
       vertexSelection = nextVertexSelection;
@@ -139,17 +143,17 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
 
     // The state of this client that the notifications do not describe is compared with the
     // state the previous notification left
-    const nextHidden = store.listHidden();
+    const nextHidden = client.listHidden();
     if (!sameIds(hidden, nextHidden)) {
       hidden = Object.freeze([...nextHidden]);
-      hub.emit('hidden.changed', { ids: hidden });
+      hub.emit('hidden.changed', { ids: makeIdSet(hidden) });
     }
-    const nextReadOnly = store.isReadOnly();
+    const nextReadOnly = client.isReadOnly();
     if (nextReadOnly !== readOnly) {
       readOnly = nextReadOnly;
       hub.emit('readOnly.changed', { readOnly });
     }
-    const nextLocked = store.isInteractionLocked();
+    const nextLocked = client.isInteractionLocked();
     if (nextLocked !== locked) {
       locked = nextLocked;
       hub.emit('interactionLock.changed', { locked });
@@ -294,6 +298,10 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
       selection: { type: changes.selection.type, ids: [...changes.selection.ids] },
       previous: { type: changes.selection.previousType, ids: [...changes.selection.previousIds] },
     });
+  }
+
+  if (changes.editing) {
+    hub.emit('editingFeatures.changed', { ids: makeIdSet(store.client.getEditingIds()) });
   }
 
   if (changes.mode) {

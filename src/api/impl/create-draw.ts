@@ -13,6 +13,7 @@ import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 import { createDocument } from './document.js';
 import { createDrawing, createDrawingResource } from './drawing.js';
+import { createEditingFeatures } from './editing-features.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import { createFeatures } from './features.js';
@@ -47,6 +48,8 @@ export function createDrawOnEngine(
   drawOptions.applyCreation();
   const { context, modeManager, events, map } = engine;
   const { store } = context;
+  // The state of this client, held by the instance (the Store holds only the document)
+  const { client } = store;
   const view: StoreView = store;
 
   const deps: ResourceDeps = {
@@ -76,6 +79,7 @@ export function createDrawOnEngine(
     hidden: createHidden(deps),
     selection: createSelection(deps, { features, groups }),
     vertexSelection: createVertexSelection(deps),
+    editingFeatures: createEditingFeatures(deps),
     drawing: createDrawingResource(engine),
     metadata: createMetadata(deps),
     options: { get: drawOptions.get, update: drawOptions.update },
@@ -94,13 +98,13 @@ export function createDrawOnEngine(
       return modeManager.setMode(mode);
     },
 
-    isReadOnly: () => store.isReadOnly(),
+    isReadOnly: () => client.isReadOnly(),
     setReadOnly(value) {
-      store.setReadOnly(value === true);
+      client.setReadOnly(value === true);
     },
-    isInteractionLocked: () => store.isInteractionLocked(),
+    isInteractionLocked: () => client.isInteractionLocked(),
     setInteractionLocked(value) {
-      store.setInteractionLock(value === true);
+      client.setInteractionLock(value === true);
       // A drawing mode cannot run under the lock
       if (value === true && modeManager.getMode() !== 'select') modeManager.setMode('select');
     },

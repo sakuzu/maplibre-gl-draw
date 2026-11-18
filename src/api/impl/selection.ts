@@ -45,6 +45,8 @@ export function createSelection(
   collections: { features: FeaturesCollection; groups: GroupsCollection },
 ): SelectionResource {
   const { store } = deps;
+  // The selection and read-only are the state of this client, held by the instance
+  const { client } = store;
 
   /** Throws unless every ID names an item of the type */
   const requireItems = (type: SelectionType, ids: unknown): string[] => {
@@ -56,7 +58,7 @@ export function createSelection(
   };
 
   return {
-    get: () => store.getSelection(),
+    get: () => client.getSelection(),
 
     set(type, ids) {
       if (!SELECTION_TYPES.includes(type)) {
@@ -64,12 +66,12 @@ export function createSelection(
       }
       const selectable = requireItems(type, ids).filter((id) => isShown(store, type, id));
       if (selectable.length === 0) return false;
-      store.setSelection(type, selectable);
+      client.setSelection(type, selectable);
       return true;
     },
 
     add(ids) {
-      const current = store.getSelection();
+      const current = client.getSelection();
       const list = requireIds(ids);
       // With nothing selected, the type is the one of the first ID
       const type = current.type ?? SELECTION_TYPES.find((t) => getItem(store, t, list[0] ?? ''));
@@ -81,25 +83,25 @@ export function createSelection(
         (id) => !current.ids.includes(id) && isShown(store, type, id),
       );
       if (added.length === 0) return false;
-      store.setSelection(type, [...current.ids, ...added]);
+      client.setSelection(type, [...current.ids, ...added]);
       return true;
     },
 
     remove(ids) {
-      const current = store.getSelection();
+      const current = client.getSelection();
       const removed = new Set(requireIds(ids).filter((id) => current.ids.includes(id)));
       if (removed.size === 0) return false;
       const kept = current.ids.filter((id) => !removed.has(id));
-      store.setSelection(kept.length > 0 ? current.type : null, kept);
+      client.setSelection(kept.length > 0 ? current.type : null, kept);
       return true;
     },
 
     clear() {
-      store.setSelection(null, []);
+      client.setSelection(null, []);
     },
 
     features() {
-      const { type, ids } = store.getSelection();
+      const { type, ids } = client.getSelection();
       if (type === 'feature') {
         return ids
           .map((id) => store.getFeature(id))
@@ -119,19 +121,19 @@ export function createSelection(
     },
 
     group() {
-      if (store.isReadOnly()) return null;
+      if (client.isReadOnly()) return null;
       const id = groupSelection(store, deps.generateId, deps.autoNameGenerator);
       return id === null ? null : (store.getGroup(id) ?? null);
     },
 
     ungroup() {
       // The same operation as the ungroup shortcut
-      if (store.isReadOnly()) return false;
+      if (client.isReadOnly()) return false;
       return ungroupSelection(store);
     },
 
     move(to) {
-      const { type, ids } = store.getSelection();
+      const { type, ids } = client.getSelection();
       if (type === 'feature' && ids.length > 0) return collections.features.moveMany(ids, to);
       if (type === 'group' && ids.length > 0) return collections.groups.moveMany(ids, to);
       return false;
@@ -146,8 +148,10 @@ export function createSelection(
  */
 export function createVertexSelection(deps: Pick<ResourceDeps, 'store'>): VertexSelectionResource {
   const { store } = deps;
+  // The vertex selection, read-only and the lock are the state of this client, of the instance
+  const { client } = store;
   return {
-    get: () => store.getVertexSelection(),
+    get: () => client.getVertexSelection(),
 
     set(featureId, vertices) {
       const id = requireId(featureId, 'featureId');
@@ -162,18 +166,18 @@ export function createVertexSelection(deps: Pick<ResourceDeps, 'store'>): Vertex
         return { ...vertex };
       });
       if (isFeatureLocked(feature, store)) return false;
-      store.setSelectedVertices(refs.length > 0 ? { featureId: id, vertices: refs } : null);
+      client.setSelectedVertices(refs.length > 0 ? { featureId: id, vertices: refs } : null);
       return true;
     },
 
     clear() {
-      store.setSelectedVertices(null);
+      client.setSelectedVertices(null);
     },
 
     delete() {
-      const selection = store.getVertexSelection();
+      const selection = client.getVertexSelection();
       if (!selection || selection.vertices.length === 0) return false;
-      if (store.isReadOnly() || store.isInteractionLocked()) return false;
+      if (client.isReadOnly() || client.isInteractionLocked()) return false;
       return deleteSelectedVertices(store, selection) > 0;
     },
   };

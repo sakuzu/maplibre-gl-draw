@@ -18,6 +18,7 @@ import type { HiddenCollection } from './hidden.js';
 import { createDraw as createDrawInstance } from './impl/create-draw.js';
 import type { LayersCollection } from './layers.js';
 import type { MetadataResource } from './metadata.js';
+import type { EditingFeaturesResource } from './model.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
@@ -54,6 +55,8 @@ export interface Draw {
   readonly selection: SelectionResource;
   /** The selected vertices of one feature in this client */
   readonly vertexSelection: VertexSelectionResource;
+  /** The features this client marks as being edited in a field of an extension */
+  readonly editingFeatures: EditingFeaturesResource;
   /** The shape the current drawing mode is drawing, to drive it from code */
   readonly drawing: DrawingResource;
   /** The title and the description of the document */

@@ -5,7 +5,7 @@
  * MemoryStore
  *
  * The in-memory Store: a DrawStore over a MemoryContractStore, which keeps a
- * MemoryDocumentStore and the state of this client.
+ * MemoryDocumentStore (the document; the state of this client is the instance's).
  *
  * MemoryDocumentStore is the in-memory implementation of the DocumentStore contract.
  * Keeping Feature / Layer / Group consistent (cascading updates on deletion, cascading
@@ -23,7 +23,7 @@ import { DrawStore } from './draw-store.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy, frozenFeature } from './memory/frozen.js';
-import { MemoryClientState } from './memory/ui-state.js';
+import type { ClientState } from './memory/ui-state.js';
 import type { DocumentStore, Store, StoreContract } from './store.js';
 import type {
   Feature,
@@ -31,20 +31,16 @@ import type {
   Group,
   Layer,
   Metadata,
-  Mode,
-  Selection,
-  SelectionType,
   StoreChange,
   UpdateFeatureOptions,
   UpdateSource,
-  VertexSelection,
 } from './types.js';
 
 /**
  * The in-memory Store, the default
  *
  * `new MemoryStore()` is a complete Store (the document and the local state); it is what
- * `createDraw` uses when no store is given.
+ * `createDraw` uses when no store is given, with the state of this client of the instance.
  *
  * It keeps its own copy of what it is given and freezes what it returns. A feature, a layer
  * or a group it has returned or notified never changes afterwards (a change replaces it), and
@@ -54,17 +50,20 @@ import type {
 export interface MemoryStore extends Store {}
 
 /** Creates an empty in-memory Store */
-export const MemoryStore: { new (): MemoryStore; readonly prototype: MemoryStore } =
-  class extends DrawStore {
-    constructor() {
-      const counts = createWorkCounts();
-      super(new MemoryContractStore(counts), counts);
-    }
-  };
+export const MemoryStore: {
+  new (client?: ClientState): MemoryStore;
+  readonly prototype: MemoryStore;
+} = class extends DrawStore {
+  /** @param client The state of this client the instance holds (a new one when left out) */
+  constructor(client?: ClientState) {
+    const counts = createWorkCounts();
+    super(new MemoryContractStore(counts), counts, client);
+  }
+};
 
 /**
- * The in-memory {@link StoreContract}: a MemoryDocumentStore and the state of this client, with
- * one notification per transaction
+ * The in-memory {@link StoreContract}: a MemoryDocumentStore, with one notification per
+ * transaction
  *
  * Its writes of the document apply whatever read-only says (the Store of core gates them), and
  * throw for an argument that cannot apply, as MemoryDocumentStore does.
@@ -74,7 +73,6 @@ export const MemoryStore: { new (): MemoryStore; readonly prototype: MemoryStore
 export class MemoryContractStore implements StoreContract {
   readonly #bus = new ChangeBus();
   readonly #document: MemoryDocumentStore;
-  readonly #client = new MemoryClientState(this.#bus);
 
   /** @param counts The numbers the features made are counted in */
   constructor(counts?: WorkCounts) {
@@ -162,57 +160,6 @@ export class MemoryContractStore implements StoreContract {
   }
   setMetadata(metadata: Partial<Metadata>): boolean {
     return this.#apply(() => this.#document.setMetadata(metadata));
-  }
-
-  // The state of this client
-
-  getSelection(): Selection {
-    return this.#client.getSelection();
-  }
-  setSelection(type: SelectionType | null, ids: string[]): void {
-    this.#client.setSelection(type, ids);
-  }
-  getEditingIds(): readonly string[] {
-    return this.#client.getEditingIds();
-  }
-  startEditing(ids: string[]): void {
-    this.#client.startEditing(ids);
-  }
-  endEditing(ids: string[]): void {
-    this.#client.endEditing(ids);
-  }
-  getVertexSelection(): VertexSelection | null {
-    return this.#client.getVertexSelection();
-  }
-  setSelectedVertices(selection: VertexSelection | null): void {
-    this.#client.setSelectedVertices(selection);
-  }
-  getMode(): Mode {
-    return this.#client.getMode();
-  }
-  setMode(mode: Mode): void {
-    this.#client.setMode(mode);
-  }
-  isReadOnly(): boolean {
-    return this.#client.isReadOnly();
-  }
-  setReadOnly(value: boolean): void {
-    this.#client.setReadOnly(value);
-  }
-  isInteractionLocked(): boolean {
-    return this.#client.isInteractionLocked();
-  }
-  setInteractionLock(value: boolean): void {
-    this.#client.setInteractionLock(value);
-  }
-  isHidden(id: string): boolean {
-    return this.#client.isHidden(id);
-  }
-  listHidden(): ReadonlySet<string> {
-    return this.#client.listHidden();
-  }
-  setLocallyHidden(id: string, hidden: boolean): void {
-    this.#client.setLocallyHidden(id, hidden);
   }
 
   // Subscription and transactions

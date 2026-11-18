@@ -10,7 +10,6 @@
 
 import type { DocumentChange } from '../events.js';
 import type { Feature, FeatureType, FileData, Group, Layer, Metadata } from '../model.js';
-import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
 
 /**
  * Where a write came from, as it arrives in {@link DocumentChange.source} and in the `source` of
@@ -92,22 +91,6 @@ export interface StoreView {
   listFiles(): FileData[];
   /** The title and the description */
   getMetadata(): Metadata;
-  /** The selection of this client */
-  getSelection(): Selection;
-  /** The IDs of the features being edited */
-  getEditingIds(): readonly string[];
-  /** The selected vertices, or `null` */
-  getVertexSelection(): VertexSelection | null;
-  /** The current mode */
-  getMode(): Mode;
-  /** Whether the document is read-only */
-  isReadOnly(): boolean;
-  /** Whether the interaction lock is on */
-  isInteractionLocked(): boolean;
-  /** Whether this client hides the item */
-  isHidden(id: string): boolean;
-  /** The IDs this client hides */
-  listHidden(): ReadonlySet<string>;
   /**
    * Subscribes to the changes; one notification arrives per outermost transaction.
    *
@@ -187,22 +170,6 @@ export interface Store extends StoreView {
   deleteFile(id: string): boolean;
   /** Changes the fields given of the metadata. */
   setMetadata(metadata: Partial<Metadata>): boolean;
-  /** Replaces the selection of this client. */
-  setSelection(type: SelectionType | null, ids: string[]): void;
-  /** Marks features as being edited. */
-  startEditing(ids: string[]): void;
-  /** Marks features as no longer being edited. */
-  endEditing(ids: string[]): void;
-  /** Replaces the selected vertices. */
-  setSelectedVertices(selection: VertexSelection | null): void;
-  /** Replaces the mode. */
-  setMode(mode: Mode): void;
-  /** Turns read-only on or off. */
-  setReadOnly(value: boolean): void;
-  /** Turns the interaction lock on or off. */
-  setInteractionLock(value: boolean): void;
-  /** Hides or shows an item in this client. */
-  setLocallyHidden(id: string, hidden: boolean): void;
   /**
    * The largest number of a generated name ("Point 7") the Store knows to be used for this
    * type: a feature type, `'Layer'` or `'Group'`. Optional.

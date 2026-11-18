@@ -95,6 +95,10 @@ export type {
 } from './api/model.js';
 export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
 
+// Sets of IDs and the features being edited
+export type { EditingFeaturesResource, IdSet } from './api/model.js';
+export { createIdSet } from './api/model.js';
+
 // Inputs, patches and filters
 export type {
   FeatureFilter,

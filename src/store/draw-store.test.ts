@@ -189,10 +189,10 @@ describe('a Store of the host', () => {
     expect(store.getMode()).toBe('drawLine');
     expect(store.createFeature(point('f2'))).toBe(false);
     expect(document.getFeature('f2')).toBeUndefined();
-    // The state of this client is written to the Store of the host
-    expect(document.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
-    expect(document.getMode()).toBe('drawLine');
-    expect(document.isReadOnly()).toBe(true);
+    // The state of this client is held by the instance, not by the Store of the host
+    expect(store.client.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect(store.client.getMode()).toBe('drawLine');
+    expect(store.client.isReadOnly()).toBe(true);
     // The drawing state stays with core
     store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'l1' });
     expect(store.getTentative()).not.toBeNull();
