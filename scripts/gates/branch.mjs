@@ -9,9 +9,13 @@
 //   names such a branch.
 // - A file of the working tree with the same content as a file brought in by an old branch is
 //   a row of scripts/gates/provenance.json (the old branch, the commit, the old path, the new
-//   path). The content of every commit of the old branches that `main` does not have counts.
+//   path). The content of every commit of the old branches that `main` does not have counts. The
+//   contents are compared without their whitespace and line breaks, so a space or a line break
+//   added to a copy does not hide where it came from; a content that differs from one of `main`
+//   only in its whitespace does not count.
 
-import { lstatSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readList, result } from './lib/files.mjs';
 import { firstRef, git } from './lib/git.mjs';
@@ -118,6 +122,20 @@ export function check(ctx) {
       .map((l) => l.split(' ')[0])
       .filter((id) => id !== EMPTY_BLOB),
   );
+  // The same contents without their whitespace, but those `main` has
+  const oldSqueezed = new Set();
+  for (const content of blobContents(root, [...oldBlobs])) {
+    const d = squeezedDigest(content);
+    if (d) oldSqueezed.add(d);
+  }
+  const mainBlobs = git(root, ['ls-tree', '-r', '--format=%(objecttype) %(objectname)', main])
+    .split('\n')
+    .filter((l) => l.startsWith('blob '))
+    .map((l) => l.slice(5));
+  for (const content of blobContents(root, mainBlobs)) {
+    const d = squeezedDigest(content);
+    if (d) oldSqueezed.delete(d);
+  }
   const files = git(root, ['ls-files', '-co', '--exclude-standard']).split('\n').filter(Boolean);
   const regular = files.filter((f) => {
     try {
@@ -134,12 +152,60 @@ export function check(ctx) {
         .split('\n')
     : [];
   regular.forEach((f, i) => {
-    if (oldBlobs.has(hashes[i]) && !listed.has(f)) {
+    if (listed.has(f)) return;
+    if (oldBlobs.has(hashes[i])) {
       out.errors.push(
         `${f} has the content of a file of an old branch; write where it came from in scripts/gates/provenance.json`,
       );
+      return;
+    }
+    const d = oldSqueezed.size ? squeezedDigest(readFileSync(join(root, f))) : null;
+    if (d && oldSqueezed.has(d)) {
+      out.errors.push(
+        `${f} has the content of a file of an old branch but for its whitespace; write where it came from in scripts/gates/provenance.json`,
+      );
     }
   });
+  return out;
+}
+
+/**
+ * The digest of a content without its whitespace and line breaks, or null for a content that is
+ * not text (it holds a zero byte) or that is only whitespace
+ *
+ * @param {Buffer} content
+ */
+function squeezedDigest(content) {
+  if (content.includes(0)) return null;
+  const text = content.toString('utf8').replace(/\s+/g, '');
+  return text ? createHash('sha1').update(text).digest('hex') : null;
+}
+
+/**
+ * The contents of blobs, read in batches
+ *
+ * @param {string} root
+ * @param {string[]} ids
+ * @returns {Buffer[]}
+ */
+function blobContents(root, ids) {
+  const out = [];
+  for (let start = 0; start < ids.length; start += 1000) {
+    const batch = ids.slice(start, start + 1000);
+    const data = git(root, ['cat-file', '--batch'], {
+      input: `${batch.join('\n')}\n`,
+      buffer: true,
+    });
+    let at = 0;
+    while (at < data.length) {
+      const eol = data.indexOf(10, at);
+      const header = data.subarray(at, eol).toString('utf8').split(' ');
+      const size = Number(header[2]);
+      at = eol + 1;
+      if (header[1] === 'blob') out.push(data.subarray(at, at + size));
+      at += Number.isFinite(size) ? size + 1 : 0;
+    }
+  }
   return out;
 }
 

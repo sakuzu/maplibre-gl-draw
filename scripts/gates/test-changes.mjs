@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // The gate of the changes to the tests: a test file (`*.test.*` and the files of the end-to-end
-// tests) that the working tree changed or deleted since `redesign/main` is a row of
-// scripts/gates/test-changes-allowed.json. A row has the path, the number of the change (or the
-// work) it follows from and the work that changes it. A new test file needs no row.
+// tests) that the working tree changed or deleted since the published version (`main`, from which
+// the work branches) is a row of scripts/gates/test-changes-allowed.json. The comparison is with
+// `main` and not with the branch the work is merged into, so that a change committed there still
+// counts. A row has the path, the number of the change (or the work) it follows from and the work
+// that changes it. A new test file needs no row.
 
 import { isTestFile, readList, result } from './lib/files.mjs';
 import { firstRef, git } from './lib/git.mjs';
 
 export const name = 'test-changes';
 
-export const BASE_REFS = ['redesign/main', 'origin/redesign/main'];
+export const BASE_REFS = ['main', 'origin/main'];
 
 /** @param {{ root: string, baseRefs?: string[] }} ctx */
 export function check(ctx) {

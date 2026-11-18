@@ -60,6 +60,16 @@ describe('the gate of the changes to the tests', () => {
     expect(checkTests({ root }).errors.join('\n')).toContain('deletes src/e2e/page.ts');
   });
 
+  it('fails when a test file that is not listed is changed and committed on redesign/main', () => {
+    const root = repo();
+    git(root, 'checkout', '-q', 'redesign/main');
+    write(root, {
+      'src/a.test.ts': "import { it } from 'vitest';\nit('reads a again', () => {});\n",
+    });
+    git(root, 'commit', '-q', '-am', 'Change a test');
+    expect(checkTests({ root }).errors.join('\n')).toContain('changes src/a.test.ts');
+  });
+
   it('passes on a listed change', () => {
     const root = repo();
     write(root, {
@@ -121,5 +131,30 @@ describe('the gate of the branch', () => {
     });
     expect(checkBranch({ root }).errors).toEqual([]);
     rmSync(join(root, 'scripts/gates/copied.mjs'));
+  });
+
+  it('fails on a copy of a file of an old branch with a line break added', () => {
+    const root = repo();
+    oldBranch(root, 'rebuild/old');
+    write(root, {
+      'scripts/gates/copied.mjs':
+        '// an old check\nconsole.log("old check of the old branch");\n\n',
+      'scripts/gates/indented.mjs':
+        '  // an old check\n  console.log("old check of the old branch");\n',
+    });
+    const e = checkBranch({ root }).errors.join('\n');
+    expect(e).toContain(
+      'scripts/gates/copied.mjs has the content of a file of an old branch but for its whitespace',
+    );
+    expect(e).toContain('scripts/gates/indented.mjs has the content of a file of an old branch');
+  });
+
+  it('does not count a file of main that an old branch only spaced differently', () => {
+    const root = repo();
+    git(root, 'checkout', '-q', '-b', 'rebuild/spaced', 'main');
+    write(root, { 'src/a.ts': 'export const a  =  1;\n\n' });
+    git(root, 'commit', '-q', '-am', 'Space a');
+    git(root, 'checkout', '-q', 'redesign/work');
+    expect(checkBranch({ root }).errors).toEqual([]);
   });
 });
