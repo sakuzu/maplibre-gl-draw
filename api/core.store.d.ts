@@ -440,7 +440,9 @@ export type RowRef = number;
 /**
  * A field of the values of a row of a feature, and the value each row has in it. A value that
  * breaks the rule of its field makes the whole write refused (see {@link Store}); a caller that
- * writes values that came from elsewhere checks them first with {@link validateRowValues}.
+ * writes values that came from elsewhere checks them first with {@link validateRowValues}. In every
+ * field, a string that is not well-formed (it holds a lone surrogate), as a key or as a value, breaks
+ * the rule, and so does a value of arrays and objects nested more than 32 deep.
  *
  * - `type`: the type of the feature (`'Polygon'`, `'Circle'`, the name of a custom type), a
  *   non-empty string
@@ -561,7 +563,10 @@ export declare function createOrderKeyBetween(before: string | undefined, after:
 
 /** New rows: their ids, and the values of their fields and their geometries ({@link Store.createRows}). */
 export interface NewRows {
-  /** The ids, one per new row, unique and not in use */
+  /**
+   * The ids, one per new row, unique and not in use: non-empty well-formed strings (an id that
+   * holds a lone surrogate is refused as `invalidInput`)
+   */
   readonly ids: readonly string[];
   /** The values of each field, one per id ({@link FeatureRowField}) */
   readonly fields: ReadonlyMap<FeatureRowField, readonly unknown[]>;
