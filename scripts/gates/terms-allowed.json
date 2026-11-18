@@ -292,7 +292,7 @@
       "where": "src/api/impl/store-contract.test.ts",
       "term": "\\b(undo|redo)\\b(?! vertex)",
       "reason": "the published version describes an undo kept by an application or an extension here",
-      "hits": 2
+      "hits": 3
     },
     {
       "where": "src/api/model.ts",
@@ -328,7 +328,7 @@
       "where": "src/dataset/thinning.test.ts",
       "term": "\\bsync(ed|ing|s)?\\b",
       "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
-      "hits": 1
+      "hits": 20
     },
     {
       "where": "src/dataset/thinning.ts",
@@ -346,7 +346,7 @@
       "where": "src/e2e/examples.e2e.test.ts",
       "term": "\\bsync(ed|ing|s)?\\b",
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
-      "hits": 2
+      "hits": 8
     },
     {
       "where": "src/e2e/harness.ts",
@@ -412,7 +412,7 @@
       "where": "src/operations/vertex.test.ts",
       "term": "\\bsynchroni[sz](e|es|ed|ing|ation)\\b",
       "reason": "the first and the last vertex of a closed ring kept equal",
-      "hits": 8
+      "hits": 10
     },
     {
       "where": "src/operations/vertex.ts",
@@ -490,7 +490,7 @@
       "where": "src/view/cache/texture.ts",
       "term": "\\bsync(ed|ing|s)?\\b",
       "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
-      "hits": 1
+      "hits": 2
     },
     {
       "where": "src/view/feature-companion.test.ts",
@@ -562,7 +562,7 @@
       "where": "src/view/shaders/compile.test.ts",
       "term": "\\bsync(ed|ing|s)?\\b",
       "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document; the synchronous functions of Node (readFileSync and the like), not a sync of the document",
-      "hits": 2
+      "hits": 5
     },
     {
       "where": "src/view/terrain/anchor.ts",
@@ -605,6 +605,658 @@
       "term": "\\b(undo|redo)\\b(?! vertex)",
       "reason": "the published version describes an undo kept by an application or an extension here",
       "hits": 1
+    },
+    {
+      "where": "declarations/main/createDraw",
+      "term": "\\bpages?\\b",
+      "reason": "a page of the browser (several instances can share a page); not a page of rows",
+      "hits": 1,
+      "why": "a declaration that waits; the main entry words of the rows are not meant",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/DocumentResource.loadMany",
+      "term": "\\bsend",
+      "reason": "the published version describes what an application or an extension does with the changes (an import is one change to send)",
+      "hits": 1,
+      "why": "a declaration that waits; to be judged: it presumes that something sends the changes",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/DocumentResource.loadMany",
+      "term": "\\bundo(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1,
+      "why": "a declaration that waits (one step to undo)",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/DocumentResource.loadMany",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 1,
+      "why": "the same word as the row above, by the list of everywhere",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/LegendEntry",
+      "term": "\\brows?\\b",
+      "reason": "a row of the legend of a style rule; not a row of a table",
+      "hits": 1,
+      "why": "the main entry words of the rows",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/FeaturePatch",
+      "term": "\\bundo(?! vertex)",
+      "reason": "to undo a change of the type of a feature, the application deletes and creates it again; not an undo of core",
+      "hits": 1,
+      "why": "a declaration that waits",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/FeaturePatch",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "to undo a change of the type of a feature, the application deletes and creates it again; not an undo of core",
+      "hits": 1,
+      "why": "the same word as the row above, by the list of everywhere",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/ExtensionContext.drawing",
+      "term": "\\bundo(?! vertex)",
+      "reason": "the vertices of the shape being drawn, undone and redone while drawing (as the rows of src/modes/draw/vertex-drawing.ts); not a history of the document",
+      "hits": 1,
+      "why": "a declaration that waits; to be judged by the yardstick: an undo of core, of the vertices being drawn",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/ExtensionContext.drawing",
+      "term": "\\bredo(?! vertex)",
+      "reason": "the vertices of the shape being drawn, undone and redone while drawing (as the rows of src/modes/draw/vertex-drawing.ts); not a history of the document",
+      "hits": 1,
+      "why": "as the row above",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/ExtensionContext.drawing",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the vertices of the shape being drawn, undone and redone while drawing (as the rows of src/modes/draw/vertex-drawing.ts); not a history of the document",
+      "hits": 1,
+      "why": "the same words as the rows above, by the list of everywhere",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/RenderContext.terrain",
+      "term": "\\bblocks?\\b",
+      "reason": "the building blocks of the /webgl entry; not a block of rows",
+      "hits": 1,
+      "why": "the main entry words of the rows",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/deriveLegend",
+      "term": "\\brows?\\b",
+      "reason": "a row of the legend of a style rule; not a row of a table",
+      "hits": 1,
+      "why": "the main entry words of the rows",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/Table",
+      "term": "\\bsent\\b",
+      "reason": "the declarations of the table, those of the published version: the table is sent from a Worker to the main thread",
+      "hits": 1,
+      "why": "the same text as the row of declarations/table/Table, reached from the main entry",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/main/PreparedTable",
+      "term": "\\bsent\\b",
+      "reason": "the declarations of the table, those of the published version: the table is sent from a Worker to the main thread",
+      "hits": 1,
+      "why": "the same text as the row of declarations/table/PreparedTable, reached from the main entry",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/geometry/(entry)",
+      "term": "\\bservers?",
+      "reason": "the places the geometry functions run in (workers, servers, tests)",
+      "hits": 1,
+      "why": "the same text as the row of src/geometry/index.ts, in the description of the entry",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "declarations/geometry/(entry)",
+      "term": "\\bservers?\\b",
+      "reason": "the places the geometry functions run in (workers, servers, tests)",
+      "hits": 1,
+      "why": "the same word as the row above, by the list of everywhere",
+      "lines": [
+        null
+      ]
+    },
+    {
+      "where": "src/api/impl/create-draw.test.ts",
+      "term": "\\bhistory",
+      "reason": "the source of a transaction an extension names for its own history; not a history of core",
+      "hits": 2,
+      "why": "string values the old reading did not read",
+      "lines": [
+        "169",
+        "172"
+      ]
+    },
+    {
+      "where": "src/dispatcher/hit-test/topmost.test.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the feature a companion belongs to",
+      "hits": 2,
+      "why": "the identifier ownerIds after a template literal the old reading lost",
+      "lines": [
+        "311",
+        "314"
+      ]
+    },
+    {
+      "where": "src/store/memory.test.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the published version describes an undo kept by an application or an extension here",
+      "hits": 5,
+      "why": "the sources undo and redo a test gives a transaction, as an extension would; string values the old reading did not read",
+      "lines": [
+        "649",
+        "676",
+        "688",
+        "863",
+        "866"
+      ]
+    },
+    {
+      "where": "src/view/layer/drape-planner.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 1,
+      "why": "the order of the elements of the terrain announced to the tile store; after a template literal the old reading lost",
+      "lines": [
+        "626"
+      ]
+    },
+    {
+      "where": "src/view/layer/store-retained.test.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the feature a companion belongs to",
+      "hits": 2,
+      "why": "the identifier ownerIds after a template literal the old reading lost",
+      "lines": [
+        "1917",
+        "1920"
+      ]
+    },
+    {
+      "where": "src/view/terrain/drape/bin-store.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
+      "hits": 1,
+      "why": "the name of the internal method that announces the order of the elements of the terrain; after a template literal the old reading lost; to be judged: a name of code",
+      "lines": [
+        "306"
+      ]
+    },
+    {
+      "where": "bench/test-data/generate.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 1,
+      "why": "writeFileSync",
+      "lines": [
+        "280"
+      ]
+    },
+    {
+      "where": "bench/vite.config.ts",
+      "term": "\\bservers?\\b",
+      "reason": "the development server of the bench (the server option of vite)",
+      "hits": 1,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "12"
+      ]
+    },
+    {
+      "where": "playground/vite.config.ts",
+      "term": "\\bservers?\\b",
+      "reason": "the development server of the playground (the server option of vite)",
+      "hits": 1,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "17"
+      ]
+    },
+    {
+      "where": "ui/dev/data.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "an attribute of the sample data of the development page (the owner of a block of a city); not an owner of the document",
+      "hits": 1,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "45"
+      ]
+    },
+    {
+      "where": "ui/e2e/harness.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 2,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "18",
+        "190"
+      ]
+    },
+    {
+      "where": "ui/e2e/harness.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "an attribute of the sample data of the end-to-end tests (the owner of a block of a city); not an owner of the document",
+      "hits": 1,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "255"
+      ]
+    },
+    {
+      "where": "ui/scripts/check-dist.mjs",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 7,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "17",
+        "26",
+        "39",
+        "40",
+        "53",
+        "54",
+        "73"
+      ]
+    },
+    {
+      "where": "ui/scripts/check-dist.mjs",
+      "term": "\\bpeers?\\b(?! dependenc)",
+      "reason": "the peer dependencies of the UI package",
+      "hits": 3,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "29",
+        "49",
+        "50"
+      ]
+    },
+    {
+      "where": "ui/scripts/check-imports.mjs",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 5,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "15",
+        "22",
+        "37",
+        "39",
+        "63"
+      ]
+    },
+    {
+      "where": "ui/scripts/need-core.mjs",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 2,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "13",
+        "16"
+      ]
+    },
+    {
+      "where": "ui/src/actions.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "the action a keyboard shortcut is taken by; not an owner of the document",
+      "hits": 7,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "63",
+        "127",
+        "128",
+        "130",
+        "241",
+        "242",
+        "244"
+      ]
+    },
+    {
+      "where": "ui/src/components/StyleFields.svelte",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the name of an icon (undo-2) on the action that resets a style; not an undo",
+      "hits": 1,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "66"
+      ]
+    },
+    {
+      "where": "ui/src/index.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 2,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "26",
+        "276"
+      ]
+    },
+    {
+      "where": "ui/test/actions.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 17,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "20",
+        "71",
+        "74",
+        "85",
+        "126",
+        "138",
+        "143",
+        "149",
+        "158",
+        "161",
+        "178",
+        "192",
+        "210",
+        "227",
+        "282",
+        "287"
+      ]
+    },
+    {
+      "where": "ui/test/basemaps.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 19,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "61",
+        "104",
+        "121",
+        "134",
+        "137",
+        "144",
+        "154",
+        "193",
+        "203",
+        "213",
+        "220",
+        "226",
+        "229",
+        "240",
+        "249",
+        "268",
+        "347",
+        "355"
+      ]
+    },
+    {
+      "where": "ui/test/controls.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 3,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "165",
+        "471"
+      ]
+    },
+    {
+      "where": "ui/test/inspector-model.test.ts",
+      "term": "\\bowners?\\b(?! document)",
+      "reason": "an attribute key of the test data (the owner of a block); not an owner of the document",
+      "hits": 2,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "330",
+        "331"
+      ]
+    },
+    {
+      "where": "ui/test/inspector.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 23,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "72",
+        "78",
+        "96",
+        "101",
+        "104",
+        "107",
+        "148",
+        "157",
+        "183",
+        "249",
+        "285",
+        "289",
+        "319",
+        "390",
+        "491",
+        "502",
+        "537",
+        "540",
+        "548",
+        "565",
+        "568",
+        "577"
+      ]
+    },
+    {
+      "where": "ui/test/layer-panel.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 31,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "5",
+        "120",
+        "129",
+        "150",
+        "160",
+        "168",
+        "181",
+        "194",
+        "334",
+        "343",
+        "360",
+        "363",
+        "383",
+        "385",
+        "388",
+        "391",
+        "394",
+        "426",
+        "466",
+        "469",
+        "472",
+        "475",
+        "479",
+        "482",
+        "502",
+        "520",
+        "525",
+        "537",
+        "555",
+        "564",
+        "576"
+      ]
+    },
+    {
+      "where": "ui/test/overlay.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 2,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "76"
+      ]
+    },
+    {
+      "where": "ui/test/scope-css.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
+      "hits": 3,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "32",
+        "73"
+      ]
+    },
+    {
+      "where": "ui/test/theme.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 8,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "228",
+        "233",
+        "246",
+        "252",
+        "255",
+        "268",
+        "273"
+      ]
+    },
+    {
+      "where": "ui/test/toolbar.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 27,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "78",
+        "82",
+        "98",
+        "101",
+        "112",
+        "115",
+        "155",
+        "159",
+        "178",
+        "180",
+        "182",
+        "185",
+        "188",
+        "195",
+        "197",
+        "210",
+        "227",
+        "230",
+        "238",
+        "245",
+        "247",
+        "254",
+        "266",
+        "268",
+        "271",
+        "274"
+      ]
+    },
+    {
+      "where": "ui/test/ui.test.ts",
+      "term": "\\bsync(ed|ing|s)?\\b",
+      "reason": "flushSync of Svelte (the changes of the components applied at once); not a sync of the document",
+      "hits": 8,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "4",
+        "26",
+        "59",
+        "68",
+        "75",
+        "79",
+        "109",
+        "113"
+      ]
+    },
+    {
+      "where": "ui/vite.config.ts",
+      "term": "\\bpeers?\\b(?! dependenc)",
+      "reason": "the peer dependencies of the UI package",
+      "hits": 3,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "7",
+        "23",
+        "46"
+      ]
+    },
+    {
+      "where": "ui/vite.dev.config.ts",
+      "term": "\\bservers?\\b",
+      "reason": "the development server of the UI (the server option of vite)",
+      "hits": 1,
+      "why": "a folder the gate did not read before",
+      "lines": [
+        "19"
+      ]
+    },
+    {
+      "where": "CHANGELOG.md",
+      "term": "\\bservers?\\b",
+      "reason": "the development server of the examples",
+      "hits": 1,
+      "why": "a file the gate did not read before",
+      "lines": [
+        "229"
+      ]
     }
   ]
 }
