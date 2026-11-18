@@ -44,6 +44,7 @@ describe('the scenes', () => {
       'delete',
       'import',
       'export',
+      'storeParts',
     ]);
   });
 });
