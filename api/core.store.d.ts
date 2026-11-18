@@ -986,6 +986,8 @@ export interface RowPageBuilderOptions {
   }[];
   /** The number of values of the positions of the layer the pages go to (2 when it is left out) */
   readonly valuesPerPosition?: 2 | 3 | 4;
+  /** What the third value is when there are 3, as the layer has it ({@link LayerRowOptions.thirdValue}): `height` (the default) or `measure` */
+  readonly thirdValue?: 'height' | 'measure';
   /** The system of the boxes, the one the Store is given ({@link StoreOptions.spatialIndexing}) */
   readonly spatialIndexing?: RowSpatialIndexing;
 }
