@@ -365,6 +365,11 @@
       "path": "bench/edit-document.test.ts",
       "change": "the list of the scenes of the editing benchmark gains the scene of the store written in parts",
       "unit": "the writes, transactions and notifications of the standard store"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 135 (SubscribeOptions and DeletedRowsToken added to the names of the store entry)",
+      "unit": "the values before and the deleted rows of the standard store"
     }
   ]
 }
