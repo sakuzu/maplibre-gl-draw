@@ -27,7 +27,7 @@ draw.once('document.loaded', ({ result }) => console.log(result.featureIds));
 
 `on` and `once` return the function that unsubscribes. `off(event,
 listener)` removes a listener given to either of them. A listener that is
-not a function throws a `DrawError` with the code `invalid-input`.
+not a function throws a `DrawError` with the code `invalidInput`.
 
 An extension subscribes with `on`, `off` and `once` of its context. They
 take the same names and payloads, and the subscriptions end by themselves
@@ -122,7 +122,7 @@ change is made.
 | Event | Payload |
 | --- | --- |
 | `layerStack.changed` | `{ entries: LayerStackEntry[] }` |
-| `error` | `{ error: DrawError; source; featureId? }` |
+| `image.failed` | `{ error: DrawError; source; featureId? }` |
 
 `lngLat` is `[longitude, latitude]` in degrees, and `point` is `[x, y]` in
 CSS pixels from the top left of the map.
@@ -370,12 +370,12 @@ feature of the document, or on nothing, does not fire it: listen to
 
 ### image.requested
 
-Fires when the mode `draw_image` starts. The library does not open a file
+Fires when the mode `drawImage` starts. The library does not open a file
 dialog: your application picks the file and loads it with
 `draw.document.load(file, { coordinate: lngLat, zoom, layerId })`.
 `lngLat` is the clicked position when a click led to the mode (a listener
 of `map.clicked` entered it), and the center of the map when the mode was
-entered otherwise, such as by `draw.setMode('draw_image')` from a button.
+entered otherwise, such as by `draw.setMode('drawImage')` from a button.
 `layerId` is the layer the image goes into. The mode returns to `select`
 right after, and the mode cannot start while no layer can be written.
 
@@ -404,7 +404,7 @@ The datasets that exist before you subscribe are not announced, so read
 - It fires when a dataset moved within its side of the document, or to
   another side, even when the IDs read in the same sequence
 - A move that leaves the dataset where it was fires nothing
-- The position of a dataset with `order: 'layer-order'` follows the
+- The position of a dataset with `order: 'layerOrder'` follows the
   stacking order of the document, which is `layer.reordered`
 
 ### layerStack.changed
@@ -415,11 +415,11 @@ list that `draw.getLayerStack()` returns. An application that places its
 own MapLibre layers between the divisions places them again here (see
 [Layers](../guides/layers.md)).
 
-### error
+### image.failed
 
 The image of an Image feature could not be decoded. `source` is `image`,
 `featureId` names the feature, and `error` is a `DrawError` with the code
-`unsupported-format` whose `details` holds what was thrown. It fires once
+`unsupportedFormat` whose `details` holds what was thrown. It fires once
 per image, and the feature is drawn without it.
 
 A failure of `draw.document.load()` rejects its promise instead.

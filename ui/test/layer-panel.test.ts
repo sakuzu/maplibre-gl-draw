@@ -309,7 +309,7 @@ describe('the datasets of the layer panel', () => {
         layers: [layer('l1', [], { name: 'Survey' }), layer('l2', [], { name: 'Route' })],
         datasets: [
           { id: 'buildings', rows: 12_345 },
-          { id: 'places', order: 'above-store', rows: 7 },
+          { id: 'places', order: 'aboveLayers', rows: 7 },
         ],
         order: ['l1', 'buildings', 'l2'],
       },
@@ -381,7 +381,7 @@ describe('the datasets of the layer panel', () => {
     const fake = stacked();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
     flushSync();
-    fake.addDataset({ id: 'trees', order: 'below-store', rows: 2 });
+    fake.addDataset({ id: 'trees', order: 'belowLayers', rows: 2 });
     flushSync();
     expect(rowNames(fake.container).at(-1)).toBe('trees');
     fake.datasets[0].setRowCount(10);
@@ -448,7 +448,7 @@ describe('the datasets of the legend', () => {
         layers: [layer('l1', [], { name: 'Survey', styleRule: { kind: 'single', color: '#f00' } })],
         datasets: [
           { id: 'buildings', rows: 3, styleRule: AREA },
-          { id: 'places', order: 'above-store', rows: 2, rowType: 'Point' },
+          { id: 'places', order: 'aboveLayers', rows: 2, rowType: 'Point' },
         ],
         order: ['buildings', 'l1'],
       },
@@ -465,7 +465,7 @@ describe('the datasets of the legend', () => {
     handle = createLegend(fake.asDraw, { target: fake.container });
     flushSync();
     expect(handle.element.textContent).toContain('No layer or dataset has a style rule.');
-    const places = fake.addDataset({ id: 'places', order: 'above-store', rows: 2 });
+    const places = fake.addDataset({ id: 'places', order: 'aboveLayers', rows: 2 });
     flushSync();
     expect(titles(fake.container)).toEqual([]);
     places.setStyleRule(AREA);
@@ -475,7 +475,7 @@ describe('the datasets of the legend', () => {
     flushSync();
     expect(handle.element.textContent).toContain('All');
     expect(handle.element.textContent).not.toContain('Below 200');
-    fake.addDataset({ id: 'water', order: 'below-store', rows: 1, styleRule: AREA });
+    fake.addDataset({ id: 'water', order: 'belowLayers', rows: 1, styleRule: AREA });
     flushSync();
     expect(titles(fake.container)).toEqual(['places', 'water']);
     fake.removeDataset('places');

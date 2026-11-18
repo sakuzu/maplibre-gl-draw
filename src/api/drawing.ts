@@ -45,7 +45,7 @@ export interface DrawingResource {
    * @param position - The position, as `[longitude, latitude]` in degrees
    * @returns True when the mode (or a plugin) took the click; false when no drawing mode is
    *   active or nothing took it
-   * @throws `DrawError` with the code `invalid-input` when the position is not two finite
+   * @throws `DrawError` with the code `invalidInput` when the position is not two finite
    *   numbers
    */
   addVertex(position: Position): boolean;
@@ -55,7 +55,7 @@ export interface DrawingResource {
    * nothing when no drawing mode is active.
    *
    * @param position - The position, as `[longitude, latitude]` in degrees
-   * @throws `DrawError` with the code `invalid-input` when the position is not two finite
+   * @throws `DrawError` with the code `invalidInput` when the position is not two finite
    *   numbers
    */
   moveTo(position: Position): void;

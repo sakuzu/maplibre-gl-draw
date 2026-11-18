@@ -172,7 +172,7 @@ export class DatasetImpl implements Dataset {
     }
 
     this.id = options.id;
-    this.currentOrder = options.order ?? 'below-store';
+    this.currentOrder = options.order ?? 'belowLayers';
     this.interactive = options.interactive ?? false;
     this.styler = new DisplayFeatureStyler(options.styleRule, options.baseStyle);
     this.zoomScale = options.zoomScale ?? null;

@@ -283,7 +283,7 @@ describe('parseGeoJSON', () => {
     });
   });
 
-  it('reports a feature that cannot be read, and an invalid image, as invalid-input', async () => {
+  it('reports a feature that cannot be read, and an invalid image, as invalidInput', async () => {
     const parsed = await parseGeoJSON({
       type: 'FeatureCollection',
       features: [
@@ -295,17 +295,17 @@ describe('parseGeoJSON', () => {
     expect(parsed.features).toHaveLength(1);
     expect(parsed.files).toEqual([]);
     expect(parsed.skipped).toEqual([
-      { index: 1, reason: 'invalid-input', detail: 'the Point has malformed coordinates' },
+      { index: 1, reason: 'invalidInput', detail: 'the Point has malformed coordinates' },
       {
         index: 2,
-        reason: 'invalid-input',
+        reason: 'invalidInput',
         detail:
           'the image data is not an embedded PNG / JPEG / WebP / GIF data URL of its declared type',
       },
     ]);
   });
 
-  it('reports an image the browser cannot encode as unsupported-format, without throwing', async () => {
+  it('reports an image the browser cannot encode as unsupportedFormat, without throwing', async () => {
     vi.mocked(processImageDataUrl).mockRejectedValue(new UnsupportedImageTypeError('image/bmp'));
     const parsed = await parseGeoJSON({
       type: 'FeatureCollection',
@@ -316,20 +316,20 @@ describe('parseGeoJSON', () => {
     expect(parsed.skipped).toEqual([
       {
         index: 0,
-        reason: 'unsupported-format',
+        reason: 'unsupportedFormat',
         detail:
           'the image data cannot be stored: The browser returned an image of an unsupported type: image/bmp',
       },
     ]);
   });
 
-  it('reports an image that cannot be decoded as invalid-input, without the raw error', async () => {
+  it('reports an image that cannot be decoded as invalidInput, without the raw error', async () => {
     vi.mocked(processImageDataUrl).mockRejectedValue(new Error('Failed to load image'));
     const parsed = await parseGeoJSON(image(LARGE));
     expect(parsed.skipped).toEqual([
       {
         index: 0,
-        reason: 'invalid-input',
+        reason: 'invalidInput',
         detail: 'the image data cannot be decoded: Failed to load image',
       },
     ]);
@@ -348,15 +348,15 @@ describe('parseGeoJSON', () => {
     ]);
   });
 
-  it('throws unsupported-format for an input that is not GeoJSON, invalid-input for bad options', async () => {
+  it('throws unsupportedFormat for an input that is not GeoJSON, invalidInput for bad options', async () => {
     await expect(parseGeoJSON({ type: 'Nothing' } as never)).rejects.toMatchObject({
       name: 'DrawError',
-      code: 'unsupported-format',
+      code: 'unsupportedFormat',
     });
     for (const options of [{ generateId: 'x' }, { layerId: '' }, { flattenMulti: 1 }, { x: 1 }]) {
       await expect(parseGeoJSON(input, options as never)).rejects.toMatchObject({
         name: 'DrawError',
-        code: 'invalid-input',
+        code: 'invalidInput',
       });
     }
   });
@@ -368,7 +368,7 @@ describe('parseGeoJSON', () => {
       },
     });
     await expect(failure).rejects.toBeInstanceOf(DrawError);
-    await expect(failure).rejects.toMatchObject({ code: 'invalid-input' });
+    await expect(failure).rejects.toMatchObject({ code: 'invalidInput' });
   });
 });
 
@@ -494,7 +494,7 @@ describe('parseNative', () => {
     expect(parsed.skipped).toEqual([
       {
         index: 1,
-        reason: 'unsupported-format',
+        reason: 'unsupportedFormat',
         detail:
           'the image of file "f" cannot be stored: The browser returned an image of an unsupported type: image/bmp',
       },
@@ -502,9 +502,9 @@ describe('parseNative', () => {
   });
 
   it('throws for an input that is not a document of the library, or a malformed one', async () => {
-    await expect(parseNative({} as never)).rejects.toMatchObject({ code: 'unsupported-format' });
+    await expect(parseNative({} as never)).rejects.toMatchObject({ code: 'unsupportedFormat' });
     await expect(
       parseNative({ ...doc, layerOrder: ['front'] } as DrawDocument),
-    ).rejects.toMatchObject({ name: 'DrawError', code: 'invalid-input' });
+    ).rejects.toMatchObject({ name: 'DrawError', code: 'invalidInput' });
   });
 });

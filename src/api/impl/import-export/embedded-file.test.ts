@@ -45,38 +45,38 @@ describe('normalizeEmbeddedFile', () => {
     });
   });
 
-  it('reports unsupported-format when the scaled-down result comes back in a type that is not accepted', async () => {
+  it('reports unsupportedFormat when the scaled-down result comes back in a type that is not accepted', async () => {
     vi.mocked(processImageDataUrl).mockRejectedValueOnce(
       new UnsupportedImageTypeError('image/bmp'),
     );
     expect(await normalizeEmbeddedFile(pngDataUrl(16384, 4096), 'image/png')).toMatchObject({
-      code: 'unsupported-format',
+      code: 'unsupportedFormat',
       detail: 'cannot be stored: The browser returned an image of an unsupported type: image/bmp',
     });
   });
 
-  it('reports invalid-input instead of throwing when the pixels cannot be decoded', async () => {
+  it('reports invalidInput instead of throwing when the pixels cannot be decoded', async () => {
     const failure = new Error('Failed to load image');
     vi.mocked(processImageDataUrl).mockRejectedValueOnce(failure);
     expect(await normalizeEmbeddedFile(pngDataUrl(16384, 4096), 'image/png')).toEqual({
-      code: 'invalid-input',
+      code: 'invalidInput',
       detail: 'cannot be decoded: Failed to load image',
       cause: failure,
     });
   });
 
-  it('reports invalid-input for an external URL', async () => {
+  it('reports invalidInput for an external URL', async () => {
     expect(await normalizeEmbeddedFile('https://example.com/a.png', 'image/png')).toMatchObject({
-      code: 'invalid-input',
+      code: 'invalidInput',
     });
   });
 
-  it('reports invalid-input for a declared MIME type that disagrees with the data', async () => {
+  it('reports invalidInput for a declared MIME type that disagrees with the data', async () => {
     expect(await normalizeEmbeddedFile(pngDataUrl(10, 10), 'image/jpeg')).toMatchObject({
-      code: 'invalid-input',
+      code: 'invalidInput',
     });
     expect(await normalizeEmbeddedFile(pngDataUrl(10, 10), undefined)).toMatchObject({
-      code: 'invalid-input',
+      code: 'invalidInput',
     });
   });
 });

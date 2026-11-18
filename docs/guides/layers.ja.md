@@ -17,7 +17,7 @@ const draw = createDraw(map);
 const notes = draw.layers.create({ name: 'Notes' });
 if (notes) {
   draw.layers.setActive(notes.id);
-  draw.setMode('draw_point');
+  draw.setMode('drawPoint');
 
   // 後で: ロックして、地物を選べるが編集できないようにする
   draw.layers.update(notes.id, { locked: true });
@@ -41,7 +41,7 @@ if (notes) {
 `create` と `update` は、保存したとおりのレイヤーを返します。読み取り
 専用のあいだは何も変えず、`create` と `update` は `null` を、`delete` は
 `false` を返します ([読み取り専用](read-only.ja.md))。無い ID を渡すと、
-コード `not-found` の `DrawError` を投げます。名前が `Many` で終わる
+コード `notFound` の `DrawError` を投げます。名前が `Many` で終わる
 メソッドは、同じことを複数のレイヤーについて 1 つの取引で行います。
 
 ```ts
@@ -304,7 +304,7 @@ draw.on('layerStack.changed', placeMapLayers);
 - 自前の項目が無ければ並びは 1 つで、`maplibre-gl-draw-layer` です
 - 並びが増減したときや範囲が変わったときに `layerStack.changed` が
   届きます。そのときに地図のレイヤーを置き直してください
-- `order: 'layer-order'` のデータセットは、同じ順の中の自分の ID の位置に
+- `order: 'layerOrder'` のデータセットは、同じ順の中の自分の ID の位置に
   描かれます ([大量のデータを表示する](large-data.ja.md))
 
 ## 関連する例

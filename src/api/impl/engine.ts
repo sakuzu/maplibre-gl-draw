@@ -214,8 +214,8 @@ export function createEngine(
 
   // 2.6 Hit testing with a unified z traversal.
   // Walks the features of the Store and the datasets in a
-  // single stacking order (above-store -> the stacking order from the front ->
-  // below-store) and returns the frontmost one.
+  // single stacking order (aboveLayers -> the stacking order from the front ->
+  // belowLayers) and returns the frontmost one.
   // The select mode and the interception of the datasets see
   // the same result.
   // The providers of companion rendering and companion hits are held one per
@@ -231,7 +231,8 @@ export function createEngine(
     hitTestService,
     unproject,
     // The same bearing-independent tolerance as the HitTestService
-    toleranceLngLat: (point) => toleranceDegrees(unproject, point, context.options.clickTolerance),
+    toleranceLngLat: (point) =>
+      toleranceDegrees(unproject, point, context.options.clickTolerancePx),
     datasets,
     // Context of the companion hits (feature companion). A companion decides
     // its hit by its appearance in screen px, so the projection, the zoom and
@@ -243,7 +244,7 @@ export function createEngine(
     getZoom: () => map.getZoom(),
     // Read at each hit, so a change of the option applies at once
     get clickTolerancePx() {
-      return context.options.clickTolerance;
+      return context.options.clickTolerancePx;
     },
     companions: featureCompanions,
   };
@@ -284,7 +285,7 @@ export function createEngine(
     // Additions and removals of separators are announced (layerStack.changed)
     isExternalEntry: context.isExternalEntry,
     onSlotsChange: (slots) => eventEmitter.emit('layerStack.change', { slots }),
-    // The failure to load the image of an Image feature (an error event)
+    // The failure to load the image of an Image feature (the image.failed event)
     onImageError: (featureId, error) =>
       eventEmitter.emit('load.error', { source: 'image', featureId, error }),
   });
@@ -313,7 +314,7 @@ export function createEngine(
 
   // 5. Set up the ModeManager
   modeManager.registerMode('select', () => new SelectMode());
-  modeManager.registerMode('draw_image', () => new DrawImageMode());
+  modeManager.registerMode('drawImage', () => new DrawImageMode());
 
   // 6.5 Create the host of the extensions of the extension contract, and add the built-in
   // modes written to that contract through it
@@ -340,11 +341,11 @@ export function createEngine(
         : [],
   });
   extensions.collections.modes.addMany([
-    { name: 'draw_point', factory: drawPointMode },
-    { name: 'draw_line', factory: drawLineMode },
-    { name: 'draw_polygon', factory: drawPolygonMode },
-    { name: 'draw_circle', factory: drawCircleMode },
-    { name: 'draw_freehand', factory: drawFreehandMode },
+    { name: 'drawPoint', factory: drawPointMode },
+    { name: 'drawLine', factory: drawLineMode },
+    { name: 'drawPolygon', factory: drawPolygonMode },
+    { name: 'drawCircle', factory: drawCircleMode },
+    { name: 'drawFreehand', factory: drawFreehandMode },
   ]);
 
   // The position of the click being handled, for what a click causes
@@ -396,7 +397,7 @@ export function createEngine(
   // The drag threshold of the options is the one of the mouse (a finger and a pen take a
   // larger one of their own)
   const inputNormalizer = createInputNormalizer(map, {
-    dragThreshold: context.options.dragThreshold,
+    dragThresholdPx: context.options.dragThresholdPx,
   });
   const inputRouter = createInputRouter({
     normalizer: inputNormalizer,

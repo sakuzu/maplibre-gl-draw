@@ -439,9 +439,9 @@ export interface RuntimeOptions {
   /** Moving shared vertices together */
   topology?: TopologyOptions;
   /** How far the pointer may move and still click, in pixels */
-  clickTolerance?: number;
+  clickTolerancePx?: number;
   /** How far the pointer must move to start a drag, in pixels */
-  dragThreshold?: number;
+  dragThresholdPx?: number;
   /** The switches of the drawing */
   rendering?: RenderingOptions;
   /**
@@ -483,7 +483,7 @@ export interface OptionsResource {
    * Changes the options given: snapping, tracing, shared vertices, the scale of the drawing
    * and the rest of {@link RuntimeOptions}.
    *
-   * @throws `DrawError` with the code `invalid-input` when a value has the wrong type
+   * @throws `DrawError` with the code `invalidInput` when a value has the wrong type
    */
   update(patch: Partial<RuntimeOptions>): void;
 }

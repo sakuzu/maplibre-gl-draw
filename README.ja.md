@@ -188,7 +188,7 @@ const draw = createDraw(map);
 // 自分のボタンで描き始める。クリックで頂点を足し、最初の頂点のクリックか
 // Enter で確定する
 document.querySelector('#polygon')?.addEventListener('click', () => {
-  draw.setMode('draw_polygon');
+  draw.setMode('drawPolygon');
 });
 
 draw.on('feature.created', ({ feature }) => {

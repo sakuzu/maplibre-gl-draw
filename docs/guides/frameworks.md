@@ -21,7 +21,7 @@ interface, for React, for Vue and for a page without a bundler.
 `destroy()` removes the layers and listeners the instance added, removes
 its plugins and the other extensions, and gives the map back the
 settings it changed. A second call does nothing, and any other method
-called after it throws a `DrawError` with the code `invalid-state`, so a
+called after it throws a `DrawError` with the code `invalidState`, so a
 late callback shows up instead of acting on a dead map. `draw.on` returns
 the function that unsubscribes, so a component that subscribes to a
 longer-lived instance can clean up with it.
@@ -61,7 +61,7 @@ export function DrawMap() {
 
   return (
     <>
-      <button onClick={() => drawRef.current?.setMode('draw_polygon')}>
+      <button onClick={() => drawRef.current?.setMode('drawPolygon')}>
         Polygon
       </button>
       <div ref={container} style={{ height: 400 }} />
@@ -106,7 +106,7 @@ The example uses the Svelte 5 syntax (`onclick`).
   });
 </script>
 
-<button onclick={() => draw?.setMode('draw_polygon')}>Polygon</button>
+<button onclick={() => draw?.setMode('drawPolygon')}>Polygon</button>
 <div bind:this={container} style="height: 400px"></div>
 ```
 
@@ -142,7 +142,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <button @click="draw?.setMode('draw_polygon')">Polygon</button>
+  <button @click="draw?.setMode('drawPolygon')">Polygon</button>
   <div ref="container" style="height: 400px"></div>
 </template>
 ```

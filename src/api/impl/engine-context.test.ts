@@ -29,12 +29,12 @@ const map = {} as unknown as MapLibreMap;
 /** Creates a context with the drawing modes the tests enter (the draw instance registers them) */
 function createTestContext(options: Parameters<typeof createContext>[1] = {}) {
   const context = createContext(map, options);
-  context.modeManager.registerMode('draw_point', () => ({
-    modeName: 'draw_point',
+  context.modeManager.registerMode('drawPoint', () => ({
+    modeName: 'drawPoint',
     writesFeatures: true,
   }));
-  context.modeManager.registerMode('draw_polygon', () => ({
-    modeName: 'draw_polygon',
+  context.modeManager.registerMode('drawPolygon', () => ({
+    modeName: 'drawPolygon',
     writesFeatures: true,
   }));
   return context;
@@ -45,7 +45,7 @@ describe('Context.getWritableLayerId', () => {
     const context = createTestContext({ initDefaultLayer: false });
     expect(context.getWritableLayerId()).toBe('');
 
-    context.modeManager.setMode('draw_polygon');
+    context.modeManager.setMode('drawPolygon');
     expect(context.modeManager.getMode()).toBe('select');
   });
 
@@ -54,8 +54,8 @@ describe('Context.getWritableLayerId', () => {
     context.store.createLayer(layer('l1'));
     expect(context.getWritableLayerId()).toBe('l1');
 
-    context.modeManager.setMode('draw_polygon');
-    expect(context.modeManager.getMode()).toBe('draw_polygon');
+    context.modeManager.setMode('drawPolygon');
+    expect(context.modeManager.getMode()).toBe('drawPolygon');
   });
 
   it('falls back to the first writable layer without changing the active layer', () => {
@@ -78,7 +78,7 @@ describe('Context.getWritableLayerId', () => {
     context.store.setLocallyHidden('a', true);
     expect(context.getWritableLayerId()).toBe('');
 
-    context.modeManager.setMode('draw_point');
+    context.modeManager.setMode('drawPoint');
     expect(context.modeManager.getMode()).toBe('select');
   });
 

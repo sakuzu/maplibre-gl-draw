@@ -4,7 +4,7 @@
 /**
  * Hit testing does not depend on the bearing
  *
- * The click tolerance is a screen length (clickTolerance px). The same pixel distance from a
+ * The click tolerance is a screen length (clickTolerancePx px). The same pixel distance from a
  * feature must give the same decision however the map is turned and at any latitude. The
  * map is stood in for by a Web Mercator camera whose project / unproject rotate by the
  * bearing, like maplibre's.
@@ -92,7 +92,7 @@ function serviceWith(features: Feature[]): HitTestServiceImpl {
     store.createFeature(f);
     index.insert(f);
   }
-  return new HitTestServiceImpl(store, index, { clickTolerance: 6 });
+  return new HitTestServiceImpl(store, index, { clickTolerancePx: 6 });
 }
 
 /** Whether a click `offsetPx` screen pixels to the right of the feature anchor hits it */

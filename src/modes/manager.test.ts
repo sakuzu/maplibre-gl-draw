@@ -18,7 +18,7 @@ import { ModeManagerImpl, type ModeManagerOptions } from './manager.js';
 /** A manager with a plain handler registered for select and the given drawing modes */
 function createManager(
   store: MemoryStore,
-  modes: Mode[] = ['draw_point', 'draw_line', 'draw_polygon'],
+  modes: Mode[] = ['drawPoint', 'drawLine', 'drawPolygon'],
   options?: ModeManagerOptions,
 ): ModeManagerImpl {
   const manager = new ModeManagerImpl(store, options);
@@ -34,7 +34,7 @@ describe('interaction lock gate of ModeManagerImpl.setMode', () => {
     const manager = createManager(store);
 
     store.setInteractionLock(true);
-    expect(manager.setMode('draw_point')).toBe(false);
+    expect(manager.setMode('drawPoint')).toBe(false);
 
     expect(store.getMode()).toBe('select');
   });
@@ -44,8 +44,8 @@ describe('interaction lock gate of ModeManagerImpl.setMode', () => {
     const manager = createManager(store);
 
     // First switch to a drawing mode, then verify that it can return to select after locking.
-    manager.setMode('draw_polygon');
-    expect(store.getMode()).toBe('draw_polygon');
+    manager.setMode('drawPolygon');
+    expect(store.getMode()).toBe('drawPolygon');
 
     store.setInteractionLock(true);
     manager.setMode('select');
@@ -57,12 +57,12 @@ describe('interaction lock gate of ModeManagerImpl.setMode', () => {
     const manager = createManager(store);
 
     store.setInteractionLock(true);
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     expect(store.getMode()).toBe('select');
 
     store.setInteractionLock(false);
-    manager.setMode('draw_line');
-    expect(store.getMode()).toBe('draw_line');
+    manager.setMode('drawLine');
+    expect(store.getMode()).toBe('drawLine');
   });
 });
 
@@ -72,21 +72,21 @@ describe('canEnter gate of ModeManagerImpl.setMode', () => {
     const manager = new ModeManagerImpl(store, {
       canEnter: (handler) => !handler.writesFeatures,
     });
-    manager.registerMode('draw_point', () => ({ modeName: 'draw_point', writesFeatures: true }));
-    manager.registerMode('draw_line', () => ({ modeName: 'draw_line' }));
+    manager.registerMode('drawPoint', () => ({ modeName: 'drawPoint', writesFeatures: true }));
+    manager.registerMode('drawLine', () => ({ modeName: 'drawLine' }));
 
-    manager.setMode('draw_point');
+    manager.setMode('drawPoint');
     expect(store.getMode()).toBe('select');
 
-    manager.setMode('draw_line');
-    expect(store.getMode()).toBe('draw_line');
+    manager.setMode('drawLine');
+    expect(store.getMode()).toBe('drawLine');
   });
 
   it('never asks canEnter for select', () => {
     const store = new MemoryStore();
     const manager = new ModeManagerImpl(store, { canEnter: () => false });
     manager.registerMode('select', () => ({ modeName: 'select' }));
-    store.setMode('draw_line');
+    store.setMode('drawLine');
 
     manager.setMode('select');
     expect(store.getMode()).toBe('select');
@@ -116,17 +116,17 @@ describe('unregistered modes in ModeManagerImpl.setMode', () => {
 
   it('returns the same false for every refusal and true for an entered mode', () => {
     const store = new MemoryStore();
-    const manager = createManager(store, ['draw_point', 'draw_line'], {
-      canEnter: (handler: EngineModeHandler) => handler.modeName !== 'draw_line',
+    const manager = createManager(store, ['drawPoint', 'drawLine'], {
+      canEnter: (handler: EngineModeHandler) => handler.modeName !== 'drawLine',
     });
 
-    expect(manager.setMode('draw_line')).toBe(false);
+    expect(manager.setMode('drawLine')).toBe(false);
     store.setInteractionLock(true);
-    expect(manager.setMode('draw_point')).toBe(false);
+    expect(manager.setMode('drawPoint')).toBe(false);
     store.setInteractionLock(false);
-    expect(manager.setMode('draw_point')).toBe(true);
-    expect(manager.setMode('draw_point')).toBe(true);
-    expect(store.getMode()).toBe('draw_point');
+    expect(manager.setMode('drawPoint')).toBe(true);
+    expect(manager.setMode('drawPoint')).toBe(true);
+    expect(store.getMode()).toBe('drawPoint');
   });
 });
 

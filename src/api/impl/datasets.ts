@@ -62,7 +62,7 @@ function requireBBox(bbox: unknown): BBox {
   return bbox as unknown as BBox;
 }
 
-const ORDERS: readonly string[] = ['below-store', 'above-store', 'layer-order'];
+const ORDERS: readonly string[] = ['belowLayers', 'aboveLayers', 'layerOrder'];
 
 const OPTION_KEYS = [
   'id',
@@ -419,7 +419,7 @@ export function createDatasets(
   const checkNew = (options: unknown, taken: Set<string>): DatasetOptions => {
     checkOptions(options);
     if (manager.get(options.id) || taken.has(options.id)) {
-      throw new DrawError('already-exists', `A dataset with the ID ${options.id} exists`, {
+      throw new DrawError('alreadyExists', `A dataset with the ID ${options.id} exists`, {
         id: options.id,
       });
     }

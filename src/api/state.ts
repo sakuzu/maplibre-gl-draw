@@ -11,12 +11,12 @@ import type { Position } from 'geojson';
 /** The names of the built-in modes. */
 export const MODES = [
   'select',
-  'draw_point',
-  'draw_line',
-  'draw_polygon',
-  'draw_image',
-  'draw_circle',
-  'draw_freehand',
+  'drawPoint',
+  'drawLine',
+  'drawPolygon',
+  'drawImage',
+  'drawCircle',
+  'drawFreehand',
 ] as const;
 
 /**

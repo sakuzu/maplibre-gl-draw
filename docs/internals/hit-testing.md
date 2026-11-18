@@ -63,12 +63,12 @@ type HitTestTopmost = (
 
 The traversal walks from the front to the back:
 
-1. The datasets on the `above-store` side, from the front
+1. The datasets on the `aboveLayers` side, from the front
 2. The stacking order (`store.getLayerOrder()`) from its end, which is the
    front. When an entry is a layer, the features of that layer are tested
-   from the front. When it is a dataset with `order: 'layer-order'`,
+   from the front. When it is a dataset with `order: 'layerOrder'`,
    that dataset is tested. An ID that is neither is skipped
-3. The datasets on the `below-store` side, from the front
+3. The datasets on the `belowLayers` side, from the front
 
 The first hit ends the traversal. The Store side is hit-tested once per
 call, at the moment the first layer entry is met; its hits are then looked
@@ -183,7 +183,7 @@ Only visible features among `orderedFeatures` are kept.
 
 ### Additional reach for the candidates
 
-The search radius is by default the equivalent of `clickTolerance`
+The search radius is by default the equivalent of `clickTolerancePx`
 (6 px). A type whose strategy treats a wider area as a hit (a point drawn
 with a large icon, for instance) would drop out of the candidates before
 it ever reached the precise test.
@@ -199,7 +199,7 @@ largest one:
 search radius = toleranceLngLat + max(registered reach) x (degrees per pixel)
 ```
 
-The degrees per pixel are `toleranceLngLat / clickTolerance`, so no extra
+The degrees per pixel are `toleranceLngLat / clickTolerancePx`, so no extra
 `unproject` call is made. With no registration the radius is exactly
 `toleranceLngLat`.
 
@@ -289,13 +289,13 @@ The draw instance passes `createGlobeShapeResolver(map)`
 
 ## Tolerance and the local frame
 
-`clickTolerance` is a screen length. The same pixel distance from a
+`clickTolerancePx` is a screen length. The same pixel distance from a
 feature must give the same decision whatever the bearing, the pitch or the
 latitude. Coordinates are longitude and latitude, so the decision is made
 in the local frame of hit testing (`src/dispatcher/hit-test/local-frame.ts`),
 in which one unit is the same screen length in every direction.
 
-- The tolerance `toleranceLngLat` is the ground length of `clickTolerance`
+- The tolerance `toleranceLngLat` is the ground length of `clickTolerancePx`
   pixels along the screen x axis, measured with `unproject` and expressed
   in degrees of longitude at the click latitude (`toleranceDegrees`). The
   length of a displacement does not change when the map is turned, so it
@@ -686,13 +686,13 @@ where input is dispatched: the InputRouter intercepts the click and the
 - When not a single dataset is visible, the interception returns at
   once and the traversal is not performed
 - The event fires only when the frontmost hit is a dataset. It does not
-  fire when a Store feature is in front. A `below-store` dataset is
+  fire when a Store feature is in front. A `belowLayers` dataset is
   blocked by the Store features above it, while a dataset on the
-  `above-store` side, or in front within the stacking order, wins over the
+  `aboveLayers` side, or in front within the stacking order, wins over the
   Store features behind it
 - A dataset with `interactive: false` blocks hits but fires nothing
 - Among datasets, front and back are the reverse of the draw order.
-  `above-store` is in front of `below-store`, and a `layer-order`
+  `aboveLayers` is in front of `belowLayers`, and a `layerOrder`
   dataset is where its entry sits in the stacking order. On the same
   side a dataset added later is in front, and within a dataset a
   feature later in the array is in front

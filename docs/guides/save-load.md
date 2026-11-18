@@ -119,7 +119,7 @@ input?.addEventListener('change', async () => {
 
 - The format is read from the content: a document of the library, GeoJSON
   or an image file (below). Anything else rejects with a `DrawError` with
-  the code `unsupported-format`
+  the code `unsupportedFormat`
 - `mode` chooses between replacing the document (`replace`, the default
   for a document of the library) and adding to it (`merge`, the default
   for GeoJSON). A document of the library can only replace; GeoJSON with
@@ -131,7 +131,7 @@ input?.addEventListener('change', async () => {
   is one transaction with the source `load`, whatever the format: one
   `document.changed`, one step for a listener that records changes
 - A document of the library is rejected as a whole, with the code
-  `invalid-input`, when something in it is malformed, refers to something
+  `invalidInput`, when something in it is malformed, refers to something
   missing, or has a major version the library cannot read. A document of
   an earlier major version is upgraded as it loads
 - A GeoJSON feature whose geometry cannot be used (missing, unsupported,
@@ -142,9 +142,9 @@ input?.addEventListener('change', async () => {
   color, an opacity outside 0 to 1) is dropped, and the feature is kept
 - An embedded image that is not a PNG, JPEG, WebP or GIF data URL of its
   declared type, or whose pixels cannot be decoded, rejects the load with
-  `invalid-input`. An image that has to be scaled down and that the
+  `invalidInput`. An image that has to be scaled down and that the
   browser cannot encode in one of those types rejects it with
-  `unsupported-format`, as an image file does
+  `unsupportedFormat`, as an image file does
 - A GeoJSON feature whose ID is already taken gets a new ID, so a file
   written by `toGeoJSON()` can be loaded back into the same drawing
 - GeoJSON features go into the layer of `options.layerId` when it is
@@ -152,7 +152,7 @@ input?.addEventListener('change', async () => {
   when it exists, otherwise into the active layer
 - `options.layer` (a `LayerInput`) creates a layer in the same
   transaction and puts every feature into it; `LoadResult.layerId` is its
-  ID. It cannot be given together with `layerId` (`invalid-input`)
+  ID. It cannot be given together with `layerId` (`invalidInput`)
 - `options.group` (a `GroupInput` without `featureIds`) puts every
   feature read into one new group, created in the same transaction where
   the features land. The features then all go into one layer (that of
@@ -268,10 +268,10 @@ draw.transact(() => {
   input
 - A feature that a load would leave out, and one whose embedded image
   cannot be imported, is left out and listed in `skipped` with its index,
-  the code (`invalid-input`, or `unsupported-format` for an image the
+  the code (`invalidInput`, or `unsupportedFormat` for an image the
   browser cannot encode) and the reason. Only an input that is not of the
-  format (`unsupported-format`) and a document of the library that a load
-  would refuse (`invalid-input`) reject the promise
+  format (`unsupportedFormat`) and a document of the library that a load
+  would refuse (`invalidInput`) reject the promise
 
 With `idMap`, an application rewrites its own references before it
 writes the features. Here a feature keeps the ID of another one in
@@ -382,7 +382,7 @@ document and referenced by the new `Image` feature through its property
 `maplibre-gl-draw:imageFileId`.
 Embedded images in a loaded file are accepted only as
 `data:image/(png|jpeg|webp|gif);base64,` data URLs that match their
-declared type. See [Drawing and editing](drawing.md) for the `draw_image`
+declared type. See [Drawing and editing](drawing.md) for the `drawImage`
 mode, which asks the application for a file with `image.requested`.
 
 ## Saving as you go

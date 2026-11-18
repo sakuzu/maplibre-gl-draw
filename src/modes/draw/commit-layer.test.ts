@@ -29,12 +29,12 @@ import { drawPointMode } from './point.js';
 import { drawPolygonMode } from './polygon.js';
 
 const DRAWING_MODES: Mode[] = [
-  'draw_point',
-  'draw_line',
-  'draw_polygon',
-  'draw_circle',
-  'draw_freehand',
-  'draw_image',
+  'drawPoint',
+  'drawLine',
+  'drawPolygon',
+  'drawCircle',
+  'drawFreehand',
+  'drawImage',
 ];
 
 function layer(id: string, overrides: Partial<Layer> = {}): Layer {
@@ -94,12 +94,12 @@ beforeEach(() => {
     getWritableLayerId,
   });
   manager.registerMode('select', () => ({ modeName: 'select' }));
-  harness.register('draw_point', drawPointMode);
-  harness.register('draw_line', drawLineMode);
-  harness.register('draw_polygon', drawPolygonMode);
-  harness.register('draw_circle', drawCircleMode);
-  harness.register('draw_freehand', drawFreehandMode);
-  manager.registerMode('draw_image', () => new DrawImageMode());
+  harness.register('drawPoint', drawPointMode);
+  harness.register('drawLine', drawLineMode);
+  harness.register('drawPolygon', drawPolygonMode);
+  harness.register('drawCircle', drawCircleMode);
+  harness.register('drawFreehand', drawFreehandMode);
+  manager.registerMode('drawImage', () => new DrawImageMode());
   clickAt = (lng, lat) => {
     const handler = manager.getHandler();
     if (handler) harness.route.toMode(handler, click(lng, lat), click(lng, lat), null);
@@ -182,8 +182,8 @@ describe('entering a drawing mode', () => {
 
   it('enters a drawing mode once a writable layer exists', () => {
     store.createLayer(layer('a'));
-    manager.setMode('draw_line');
-    expect(store.getMode()).toBe('draw_line');
+    manager.setMode('drawLine');
+    expect(store.getMode()).toBe('drawLine');
   });
 });
 
@@ -191,7 +191,7 @@ describe('the layer a drawing is committed into', () => {
   it('commits into the active layer when it can be written', () => {
     store.createLayer(layer('b'));
     store.createLayer(layer('a'));
-    manager.setMode('draw_point');
+    manager.setMode('drawPoint');
     clickAt(1, 1);
     const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('a');
@@ -201,7 +201,7 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('a', { locked: true }));
     store.createLayer(layer('b', { visible: false }));
     store.createLayer(layer('c'));
-    manager.setMode('draw_point');
+    manager.setMode('drawPoint');
     clickAt(1, 1);
     const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('c');
@@ -212,7 +212,7 @@ describe('the layer a drawing is committed into', () => {
   it('asks the host for an image with the writable layer', () => {
     store.createLayer(layer('a', { visible: false }));
     store.createLayer(layer('b'));
-    manager.setMode('draw_image');
+    manager.setMode('drawImage');
     expect(imageRequests).toEqual([expect.objectContaining({ layerId: 'b' })]);
     expect(store.getMode()).toBe('select');
   });
@@ -221,7 +221,7 @@ describe('the layer a drawing is committed into', () => {
 describe('losing the layer while drawing', () => {
   it('discards a point and returns to select when the layer was deleted', () => {
     store.createLayer(layer('a'));
-    manager.setMode('draw_point');
+    manager.setMode('drawPoint');
     store.deleteLayer('a');
 
     expect(() => clickAt(1, 1)).not.toThrow();
@@ -231,7 +231,7 @@ describe('losing the layer while drawing', () => {
 
   it('discards a line and returns to select when the layer was locked', () => {
     store.createLayer(layer('a'));
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     clickAt(1, 1);
     clickAt(2, 2);
     store.updateLayer('a', { locked: true });
@@ -244,7 +244,7 @@ describe('losing the layer while drawing', () => {
 
   it('discards a point and returns to select when the layer was locally hidden', () => {
     store.createLayer(layer('a'));
-    manager.setMode('draw_point');
+    manager.setMode('drawPoint');
     store.setLocallyHidden('a', true);
 
     expect(() => clickAt(1, 1)).not.toThrow();
@@ -254,7 +254,7 @@ describe('losing the layer while drawing', () => {
 
   it('discards a polygon and returns to select when the layer was hidden', () => {
     store.createLayer(layer('a'));
-    manager.setMode('draw_polygon');
+    manager.setMode('drawPolygon');
     clickAt(1, 1);
     clickAt(2, 1);
     clickAt(2, 2);
@@ -268,7 +268,7 @@ describe('losing the layer while drawing', () => {
   it('commits into another writable layer when one remains', () => {
     store.createLayer(layer('a'));
     store.createLayer(layer('b'));
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     clickAt(1, 1);
     clickAt(2, 2);
     store.deleteLayer('a');

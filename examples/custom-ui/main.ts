@@ -36,11 +36,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text 
 // when the mode cannot be entered now (no layer can be written, or the interaction is locked)
 const TOOLS: [Mode, string, string][] = [
   ['select', 'Select', '選択'],
-  ['draw_point', 'Point', '点'],
-  ['draw_line', 'Line', '線'],
-  ['draw_polygon', 'Polygon', '面'],
-  ['draw_circle', 'Circle', '円'],
-  ['draw_freehand', 'Freehand', 'フリーハンド'],
+  ['drawPoint', 'Point', '点'],
+  ['drawLine', 'Line', '線'],
+  ['drawPolygon', 'Polygon', '面'],
+  ['drawCircle', 'Circle', '円'],
+  ['drawFreehand', 'Freehand', 'フリーハンド'],
 ];
 const toolbar = el('div', 'toolbar');
 toolbar.setAttribute('role', 'toolbar');

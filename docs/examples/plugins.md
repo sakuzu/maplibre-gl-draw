@@ -29,7 +29,7 @@ while a field of the panels has the keyboard:
 
 Turn the switch off: the star leaves the toolbar, the Stamp section
 leaves the panel, and the mode `stamp` is no longer registered, so
-`draw.setMode('stamp')` throws `not-found`. The stars stay, as features
+`draw.setMode('stamp')` throws `notFound`. The stars stay, as features
 of the drawing with their state and their color. Turn it on again: the
 plugin, its tool and its section come back, and the plugin counts from
 zero.

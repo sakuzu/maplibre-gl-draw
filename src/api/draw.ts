@@ -80,7 +80,7 @@ export interface Draw {
    * Changes the mode.
    *
    * @returns False when the mode cannot be entered now
-   * @throws `DrawError` with the code `not-found` when there is no mode with this name
+   * @throws `DrawError` with the code `notFound` when there is no mode with this name
    */
   setMode(mode: Mode): boolean;
 
@@ -146,7 +146,7 @@ export interface Draw {
   /**
    * Removes the instance from the map and releases everything it holds. A second call does
    * nothing; every other method of the instance and of its collections then throws `DrawError`
-   * with the code `invalid-state` (`document.load` rejects with it).
+   * with the code `invalidState` (`document.load` rejects with it).
    */
   destroy(): void;
 }

@@ -109,19 +109,19 @@ describe('an embedded image that cannot be decoded', () => {
     vi.mocked(processImageDataUrl).mockRejectedValue(new Error('Failed to load image'));
   });
 
-  it('is a DrawError invalid-input on the GeoJSON path, not the raw error', async () => {
+  it('is a DrawError invalidInput on the GeoJSON path, not the raw error', async () => {
     const failure = prepareGeoJSON(geojson, importDeps());
     await expect(failure).rejects.toBeInstanceOf(DrawError);
     await expect(failure).rejects.toMatchObject({
-      code: 'invalid-input',
+      code: 'invalidInput',
       message: expect.stringContaining('cannot be decoded: Failed to load image'),
     });
   });
 
-  it('is a DrawError invalid-input on the native path', async () => {
+  it('is a DrawError invalidInput on the native path', async () => {
     const failure = prepareNative(native, { store });
     await expect(failure).rejects.toBeInstanceOf(DrawError);
-    await expect(failure).rejects.toMatchObject({ code: 'invalid-input' });
+    await expect(failure).rejects.toMatchObject({ code: 'invalidInput' });
   });
 });
 
@@ -130,13 +130,13 @@ describe('an embedded image the browser cannot encode', () => {
     vi.mocked(processImageDataUrl).mockRejectedValue(new UnsupportedImageTypeError('image/bmp'));
   });
 
-  it('is unsupported-format on every path of document.load, as for an image file', async () => {
+  it('is unsupportedFormat on every path of document.load, as for an image file', async () => {
     const doc = createDocument(createResourceDeps(store));
     for (const source of [geojson, native]) {
       const failure = doc.load(source);
       await expect(failure).rejects.toBeInstanceOf(DrawError);
       await expect(failure).rejects.toMatchObject({
-        code: 'unsupported-format',
+        code: 'unsupportedFormat',
         message: expect.stringContaining('unsupported type: image/bmp'),
       });
     }

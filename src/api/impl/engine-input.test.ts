@@ -43,7 +43,7 @@ describe('image.requested', () => {
     const requests: DrawEvents['image.requested'][] = [];
     draw.on('image.requested', (request) => requests.push(request));
     const stop = draw.on('map.clicked', () => {
-      draw.setMode('draw_image');
+      draw.setMode('drawImage');
     });
     createSyntheticInput(engine).click([0.5, -0.25]);
     stop();
@@ -55,7 +55,7 @@ describe('image.requested', () => {
   it('carries the center of the map when the API entered the mode', () => {
     const requests: DrawEvents['image.requested'][] = [];
     draw.on('image.requested', (request) => requests.push(request));
-    draw.setMode('draw_image');
+    draw.setMode('drawImage');
     expect(requests.map((request) => request.lngLat)).toEqual([[0, 0]]);
   });
 });
@@ -141,7 +141,7 @@ describe('the snap of a mode is taken back with the mode', () => {
 
   it('is cleared when the mode is left', () => {
     const kinds = watchSnap();
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     createSyntheticInput(engine).move([0, 0]);
     expect(kinds).toEqual(['vertex']);
 
@@ -153,7 +153,7 @@ describe('the snap of a mode is taken back with the mode', () => {
 
   it('is cleared when the drawing is cancelled from outside', () => {
     const kinds = watchSnap();
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0.5, 0.5]);
     input.move([0, 0]);
@@ -162,7 +162,7 @@ describe('the snap of a mode is taken back with the mode', () => {
     expect(draw.drawing.cancel()).toBe(true);
 
     expect(kinds).toEqual(['vertex', null]);
-    expect(draw.getMode()).toBe('draw_line');
+    expect(draw.getMode()).toBe('drawLine');
   });
 
   it('is cleared when an Escape the mode does not take interrupts it', () => {

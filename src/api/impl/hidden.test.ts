@@ -68,10 +68,10 @@ describe('draw.hidden', () => {
     expect(store.getFeature('a')?.visible).toBe(true);
   });
 
-  it('throws not-found for an ID that is not in the document', () => {
-    expect(codeOf(() => hidden.add('x'))).toBe('not-found');
-    expect(codeOf(() => hidden.addMany(['a', 'x']))).toBe('not-found');
-    expect(codeOf(() => hidden.remove('x'))).toBe('not-found');
+  it('throws notFound for an ID that is not in the document', () => {
+    expect(codeOf(() => hidden.add('x'))).toBe('notFound');
+    expect(codeOf(() => hidden.addMany(['a', 'x']))).toBe('notFound');
+    expect(codeOf(() => hidden.remove('x'))).toBe('notFound');
     expect(hidden.count()).toBe(0);
   });
 

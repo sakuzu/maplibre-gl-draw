@@ -136,7 +136,7 @@ draw.hidden.clear(); // show everything this client hid
 - `features.list`, `document.toJSON()` and `document.toGeoJSON()` ignore
   it: it changes what this client sees, not the data
 - `hidden.add` takes only IDs of the document, and throws a `DrawError`
-  with the code `not-found` for any other
+  with the code `notFound` for any other
 - When a feature, group or layer is deleted, its ID leaves the set
 
 Datasets do not take part; show and hide one with its `setVisible`.

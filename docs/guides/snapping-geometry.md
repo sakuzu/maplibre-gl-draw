@@ -73,7 +73,7 @@ draw.options.get().snapping; // the current settings
 ```
 
 A value of the wrong type, such as a step angle of 0 or less, throws a
-`DrawError` with the code `invalid-input` and changes nothing.
+`DrawError` with the code `invalidInput` and changes nothing.
 
 ### What it snaps to
 
@@ -101,7 +101,7 @@ then edge, then guide), and among the same kind the nearest wins.
 
 ### Guide lines
 
-In `draw_line` and `draw_polygon` the last placed vertex casts guide lines:
+In `drawLine` and `drawPolygon` the last placed vertex casts guide lines:
 from true north at every step angle (after one vertex), and along and
 perpendicular to the previous segment (after two). A real vertex, crossing
 or edge within the tolerance still wins over a guide.
@@ -178,7 +178,7 @@ can snap any point on the screen with `snap(point)` of its context
 
 ## Edge tracing
 
-In `draw_line` and `draw_polygon`, when the previous click and this click
+In `drawLine` and `drawPolygon`, when the previous click and this click
 both snapped to the boundary of existing features, the vertices of that
 boundary between the two points are inserted. An adjacent parcel can be
 drawn by clicking two corners of the shared boundary, without redrawing
@@ -272,8 +272,8 @@ when the user should keep working on them.
 
 - Areas are `Polygon`, `MultiPolygon` and `Circle`. The line of `split` is
   a `LineString`, a `MultiLineString` or a `Freehand`
-- A wrong argument throws a `DrawError` and changes nothing: `not-found`
-  for an unknown ID, `invalid-input` for a feature of the wrong type (a
+- A wrong argument throws a `DrawError` and changes nothing: `notFound`
+  for an unknown ID, `invalidInput` for a feature of the wrong type (a
   line given to `union`, an `Image` given to `buffer`) or a distance that
   is not a finite number
 - A refusal returns `null` and changes nothing: while the document is
@@ -375,7 +375,7 @@ const merged = union(parcels);
 - Lengths, distances, radii and tolerances are in meters, areas in square
   meters, bearings and coordinates in degrees
 - `null` means the result is empty; an input whose shape the function
-  cannot take throws a `GeometryError` with the code `invalid-input`
+  cannot take throws a `GeometryError` with the code `invalidInput`
 
 <!-- docs-check:
 declare const polygon: import('geojson').Polygon;
@@ -394,7 +394,7 @@ if (shrunk === null) {
   fewer than three positions or a coordinate that is not a finite number
   does not reach the computation
 - The functions that combine areas throw a `GeometryError` with the code
-  `engine-failure` when they cannot compute a result
+  `engineFailure` when they cannot compute a result
 - Areas that only share a boundary do not overlap
 - Crossing the ±180° meridian and the surroundings of the poles are out of
   scope; `buffer` returns `null` there

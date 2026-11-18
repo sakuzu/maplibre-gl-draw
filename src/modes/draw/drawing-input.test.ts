@@ -106,14 +106,14 @@ beforeEach(() => {
   manager = new ModeManagerImpl(store);
   harness = createModeHarness({ store, map, modeManager: manager, getWritableLayerId: () => 'l1' });
   manager.registerMode('select', () => ({ modeName: 'select' }));
-  harness.register('draw_line', drawLineMode);
-  harness.register('draw_polygon', drawPolygonMode);
+  harness.register('drawLine', drawLineMode);
+  harness.register('drawPolygon', drawPolygonMode);
   manager.start();
 });
 
 describe('undoing and redoing vertices while drawing a line', () => {
   it('takes back the last vertex and puts it back', () => {
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     click(A);
     click(B);
     click(C);
@@ -127,7 +127,7 @@ describe('undoing and redoing vertices while drawing a line', () => {
   });
 
   it('returns false with nothing to undo or redo, and a new vertex drops the redo', () => {
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     expect(manager.undoVertex()).toBe(false);
     expect(manager.redoVertex()).toBe(false);
 
@@ -149,7 +149,7 @@ describe('undoing and redoing vertices while drawing a line', () => {
 
 describe('undoing and redoing vertices while drawing a polygon', () => {
   it('commits the ring without the vertex that was taken back', () => {
-    manager.setMode('draw_polygon');
+    manager.setMode('drawPolygon');
     click(A);
     click(B);
     click(C);
@@ -164,7 +164,7 @@ describe('undoing and redoing vertices while drawing a polygon', () => {
 
 describe('a double click while drawing', () => {
   it('is consumed by every click-driven drawing mode (MapLibre does not zoom)', () => {
-    for (const mode of ['draw_line', 'draw_polygon'] as const) {
+    for (const mode of ['drawLine', 'drawPolygon'] as const) {
       manager.setMode(mode);
       // The router prevents the default action of a double click the mode consumes
       const consumed = deliver({
@@ -185,7 +185,7 @@ describe('a double click finishes the shape', () => {
     store.listFeatures().map((f) => (coordinatesOf(f) as Coordinate[][])[0]);
 
   it('finishes a polygon on its last vertex without a second vertex there', () => {
-    manager.setMode('draw_polygon');
+    manager.setMode('drawPolygon');
     click(A);
     click(B);
     click(C);
@@ -197,7 +197,7 @@ describe('a double click finishes the shape', () => {
   });
 
   it('adds the new position of a polygon once, then finishes it', () => {
-    manager.setMode('draw_polygon');
+    manager.setMode('drawPolygon');
     click(A);
     click(B);
     click(C);
@@ -208,7 +208,7 @@ describe('a double click finishes the shape', () => {
   });
 
   it('finishes a polygon whose third vertex the double click places', () => {
-    manager.setMode('draw_polygon');
+    manager.setMode('drawPolygon');
     click(A);
     click(B);
     doubleClick(C);
@@ -217,12 +217,12 @@ describe('a double click finishes the shape', () => {
   });
 
   it('keeps drawing a polygon of fewer than three vertices', () => {
-    manager.setMode('draw_polygon');
+    manager.setMode('drawPolygon');
     click(A);
     doubleClick(B);
 
     expect(store.listFeatures()).toEqual([]);
-    expect(manager.getMode()).toBe('draw_polygon');
+    expect(manager.getMode()).toBe('drawPolygon');
     key('Enter');
     expect(store.listFeatures()).toEqual([]);
     click(C);
@@ -231,11 +231,11 @@ describe('a double click finishes the shape', () => {
   });
 
   it('finishes a line the same way, on its last vertex or on a new position', () => {
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     click(A);
     click(B);
     doubleClick(B);
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     click(A);
     click(B);
     doubleClick(C);
@@ -248,7 +248,7 @@ describe('a double click finishes the shape', () => {
   });
 
   it('finishes a line whose second vertex the double click places', () => {
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     click(A);
     doubleClick(B);
 
@@ -257,7 +257,7 @@ describe('a double click finishes the shape', () => {
   });
 
   it('takes the second click of a line into no second vertex before one is placed', () => {
-    manager.setMode('draw_line');
+    manager.setMode('drawLine');
     doubleClick(A);
     click(B);
     key('Enter');

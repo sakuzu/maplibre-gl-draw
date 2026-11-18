@@ -12,19 +12,22 @@
 /**
  * Why a {@link DrawError} was thrown.
  *
- * - `not-found`: an ID that does not exist
- * - `already-exists`: an ID that is already taken
- * - `invalid-input`: an input of the wrong shape or value
- * - `unsupported-format`: a source that cannot be read
- * - `invalid-state`: a call that is not possible in the current situation, such as deleting
+ * - `notFound`: an ID that does not exist
+ * - `alreadyExists`: an ID that is already taken
+ * - `invalidInput`: an input of the wrong shape or value
+ * - `unsupportedFormat`: a source that cannot be read
+ * - `invalidState`: a call that is not possible in the current situation, such as deleting
  *   a feature while it is being drawn, or any call on an instance that was destroyed
+ * - `tooManyItems`: a read that would return more than 10,000 features, groups or IDs in one
+ *   array; they are read with an `iterate` method, `IdSet.iterate` or a range instead
  */
 export type DrawErrorCode =
-  | 'not-found'
-  | 'already-exists'
-  | 'invalid-input'
-  | 'unsupported-format'
-  | 'invalid-state';
+  | 'notFound'
+  | 'alreadyExists'
+  | 'invalidInput'
+  | 'unsupportedFormat'
+  | 'invalidState'
+  | 'tooManyItems';
 
 /**
  * The error a method throws when an argument is wrong; the method has changed nothing.

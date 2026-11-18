@@ -32,9 +32,6 @@
       "main:doc:DrawProperties{0}.maplibre-gl-draw:rotation": "dd91426b461df5b79b54903796238dee9051fb791295389239d64f7315d99388",
       "main:doc:DrawProperties{0}.maplibre-gl-draw:scale": "3e20fa66ad593d19a1df83fb23b018d4479f67cebb712747772ac25f744e1251"
     },
-    "7": {
-      "main:sig:MODES": "3768b7f9d2a90492df1c0c3ef732bcd48d0ebe799bb167bbf5d066c465a34312"
-    },
     "8": {
       "main:sig:Draw.getStore": "919b287cc9d135667bdd2f5aa1f27620f67a281d39e09791594a99d479833a58"
     },
@@ -364,42 +361,11 @@
     "73": {
       "main:sig:DrawEvents.hidden.changed.ids": "48ddcfa3accfef0910ceb58904bb21acf9467c54383ddc65f8770cbc3d7637e3"
     },
-    "74": {
-      "main:added:DrawEvents.image.failed": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.image.failed.error": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.image.failed.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.image.failed.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:removed:DrawEvents.error": "c0e62d9e1b12bea26506ffee98f4feaffd58ca32fac2b80348809da3dad200af",
-      "main:removed:DrawEvents.error.error": "d2b4d82c818d5504b9c475f426b954c2467f31d3c2a57491a147e2c84ffb09e4",
-      "main:removed:DrawEvents.error.featureId": "c70d3af38509f039df5f15cfed8e673c42354ddaec8fb119010d4b8723089b4f",
-      "main:removed:DrawEvents.error.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d"
-    },
-    "75": {
-      "main:sig:DrawEvents.document.loaded.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.feature.created.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.feature.deleted.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.feature.moved.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.feature.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.group.created.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.group.deleted.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.group.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.layer.created.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.layer.deleted.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.layer.reordered.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.layer.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
-      "main:sig:DrawEvents.metadata.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d"
-    },
     "76": {
       "main:doc:DrawEvents.document.changed": "bbd11a39515f863f3d85c57862fd5d26afc05bc7e7c430902a94720848b971cd"
     },
     "77": {
       "main:doc:DrawEvents.drag.started": "13702fa2996e30d4e4607741d913d6c237ee7eb3e1d8ffe47d6083b9cf2751e8"
-    },
-    "80": {
-      "main:doc:DatasetOptions": "964bc05ce1fbd6b96e04a66507bc55367e2fafcdb1eb094938e6ced3861d8cf5",
-      "main:doc:LayersCollection.getOrder": "7db6e5a96a905cae0bce5239960a8f44a5ea6f6bc9cb13c0e7b020224ba0d90d",
-      "main:doc:LayersCollection.reorder": "d22c00a9d3fda6e7ab1b3b48c551802fbb7519b33a57858e6ada5a9e3eef51ae",
-      "main:sig:DatasetOrder": "130dfdede598fc8b0cfe233875ccd1d5eef60c679da8059d5d52cca1e0b9e0af"
     },
     "81": {
       "main:added:ExtensionsCollections.fileProviders": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -485,59 +451,6 @@
     "98": {
       "main:doc:LegendEntry": "86d71933a72dccc9f6633e637aac3beca6749a2863f4aa90f0adf1f74544064c",
       "main:doc:deriveLegend": "3965705d865b929397bb9e4d1597f5e2416abf2d0b2e379edf06301878fdc1c3"
-    },
-    "99": {
-      "main:doc:DatasetsCollection.add": "e185d6181038b8535afb43747c970765220662234135950eae1ec81ee51b56a9",
-      "main:doc:DatasetsCollection.move": "7a85f9ebeb0708acc467dc322e7f273bdb2630bdd09f196d22a260247fb80dae",
-      "main:doc:DatasetsCollection.remove": "36e3b6ddaee41624edf95bb527058c059b20f23dd1e62f59fb4dc94d78b1e803",
-      "main:doc:DatasetsCollection.removeMany": "1c31f8d297bec7599120af1aba79f47d52e5ddaba7f85391e2d713837f9d9c67",
-      "main:doc:Draw.setMode": "fd35abd31abfcef9e8f0042c5dfec4bcfc58648a4ca67084d79f60b0c9284c84",
-      "main:doc:DrawingResource.addVertex": "81173413c9e5a6b37a257d7763737db624b184c4e4f2c56cb06a0fe7ab88b4ce",
-      "main:doc:DrawingResource.moveTo": "f3fdf0a50f62cac27b92cf39bc10c1e548be2b7a850ff9d82c9132ca58eea4cb",
-      "main:doc:FeatureTypesCollection.add": "cb37aa5ca3010380ccc0bceac77eaaed781443534e5ec0d4cf58abc6bb47a709",
-      "main:doc:FeatureTypesCollection.addMany": "dbdedc9828ecf3d11949a1b8a1e3a739f87968a632f945ce8bd101cd0ce97b66",
-      "main:doc:FeatureTypesCollection.remove": "34207a9706bf83c31ec1383aea3091fbaafc7f9bdc0fe24ea4d49c6c2f4ad8e6",
-      "main:doc:FeatureTypesCollection.removeMany": "77bd63391d0a4d9348b23bf754848c3eaf7b92b05a7920875e658b5d4372f84e",
-      "main:doc:FeaturesCollection.buffer": "0ac7aa14fa927210446951e8f3dcccbf43c6a46100222bb57c101e7f21b3ec18",
-      "main:doc:FeaturesCollection.delete": "c092f1180594c7e9d0cd3223837f403040b131955aebfab5fac6d6762c9159b3",
-      "main:doc:FeaturesCollection.difference": "0b7646061e333904a74b5a77af2e88885b05445f31f9813ac83c56c0d2213404",
-      "main:doc:FeaturesCollection.intersection": "abf5c55d44b4571624a37f5f63ba89443ef957bad66ed42b92b5266cc16ba49b",
-      "main:doc:FeaturesCollection.isEditable": "a8223bf7149349af2334bcc3a89ae4adba60e11f6645b47b6504e737ff7d55b2",
-      "main:doc:FeaturesCollection.move": "7b1f63b1804ba2371f9b337ec4f6b781da3557a832759013950329ffa9e9f481",
-      "main:doc:FeaturesCollection.moveMany": "3c13e89bba3bee977535aa787eaeb4c901c3446f2a83f271dedc4460ed64ade2",
-      "main:doc:FeaturesCollection.split": "d782c9717ea9a89bfa273eff0ac9c54ffa2b2ab69484ac3023d087adc8c5616a",
-      "main:doc:FeaturesCollection.union": "2c382e3be8ee0eb50f0d38a0a781eca72e2c32a6992ac913c67dfdfd1d43e8fb",
-      "main:doc:FeaturesCollection.update": "df57698c5b3870fa9b67f5c5d3852fded33d1e940ece585021cb20eb6bbdeab9",
-      "main:doc:GroupsCollection.create": "7b0bfcc77b60853189b05f12f941a78a9d2cb48294742f95957532f3119e9a30",
-      "main:doc:GroupsCollection.delete": "0ec257e1162337e47f567dec97b8fa6510f4632a3db4e955732cf2e24039dbab",
-      "main:doc:GroupsCollection.deleteMany": "3a49349ebf0c8f2d53deb4662ba410bcf9131501c8c2243c994c8fe942c68464",
-      "main:doc:GroupsCollection.move": "169a25c48baba8eef77283e28b990d85a98bcec5fff7bfe0a8d6fe93b226c0e5",
-      "main:doc:GroupsCollection.update": "28ddcb4812294b4ef95200b5eddf94fc3cb236ebb36e1bfe06a36560f05b5f85",
-      "main:doc:HiddenCollection.add": "ccf6b8694810141ab31680bda044fca457c835381f40b2c23c8460db3e3f539f",
-      "main:doc:HiddenCollection.addMany": "bbd88009f53e79b9f30c3ff95a24cb060d12040130959609518014d42fd91309",
-      "main:doc:LayersCollection.setActive": "a8afbf91e3cf245aef303198b909a3329f402d22442e93da964c540291eb2f5c",
-      "main:doc:LayersCollection.update": "dee80808bfebe5dda5c7c2abfdcd6c8a6c66444ac81f9f6dd007d25752e4a181",
-      "main:doc:ModesCollection.add": "4e39846dcd3889dda3941ab349566a9a1ed1b21cdd72b738f5f235b8e456059a",
-      "main:doc:ModesCollection.addMany": "ed315bb32aec2ea20d03b456c226c6b976ad65761fd2b68e5fd1646875e4177c",
-      "main:doc:ModesCollection.removeMany": "e5403497ea64a1f4c36be173378d6750391272bdf5ccc2c9a6233cbef2d07be0",
-      "main:doc:OptionsResource.update": "e5d091c8f8a9b46b7f6dc64878d226da6ee9aa729e8ff0a3645a0668a97232ea",
-      "main:doc:OverlaysCollection.add": "d92dd05ec4169ba5e88b35ee2ccc2dc86f07a86e6f6c43dea401492ad2b49e0f",
-      "main:doc:OverlaysCollection.addMany": "ecd0ed7b7068e2821545d21991bace3ca2b8ec44564485e14cb819f0e8c79108",
-      "main:doc:OverlaysCollection.remove": "ee4854fa6e5fbf68b986bca8e2ff163164cacc0daf8c3cb86a53f3faf6ea8930",
-      "main:doc:OverlaysCollection.removeMany": "492b98ed4b274cf1bb10c26c61031d1565af23da40683fd4ebb408421f684988",
-      "main:doc:PluginsCollection.add": "2539b598af21d333855711f2402d2010c04d50e68d1da9e2a45611fdd308066b",
-      "main:doc:PluginsCollection.addMany": "adf55d14768cc29763a138702e49ec2633f9d814d07f1693a037d27260bb118c",
-      "main:doc:PluginsCollection.remove": "7bc7ff0e755efb286850b012931f00e995cbeda24b0aeef1c49cff7186e2d303",
-      "main:doc:PluginsCollection.removeMany": "6d44031f2a7399b8222167c3b552b1644f62985152ea441e2763e51b6d5bc1b6",
-      "main:doc:ProvidersCollection.add": "6d7867f8a25ed46ba0781b7c003fae98dbaab40b97ade1f60e75a27a2a2b7ec6",
-      "main:doc:ProvidersCollection.addMany": "0bf4f0fdc370c49afe2941699c2c258792ed7911d8cfcdec3d85d6fb1298eef3",
-      "main:doc:ProvidersCollection.remove": "98992253a8a449b2af7e7c0f01a63e8fb5ba87ac13a067054f5b65103ee34bc2",
-      "main:doc:ProvidersCollection.removeMany": "1f31d215e99e77673c0b60c314612ee23dfe40e46dc9093bdfe2fb5df1637d67",
-      "main:doc:SelectionResource.move": "bc60b8b4145bbffcd5d38c8badcabab55df5f0c9baf9b722f8698e0a49134add",
-      "main:doc:VertexSelectionResource.set": "951b61cbacac1fe2ec4ad55bddea7fb0b18cadba9b1a635e0f56962143e6b015",
-      "main:doc:parseGeoJSON": "f760cc2ce6d7967d73f2eabd06bda678c6c9ae0bb5051a0ae5ca5c5ae81d99fd",
-      "main:doc:parseNative": "67633f71da601b7ecba94bfdd22ae23cddfe1f2969a9ded3597fef4b4cbc8f27",
-      "main:sig:DrawErrorCode": "ca0e1b851705cc62037a6aa1784218a00c8604315c8627ccd77a07033d0bb3db"
     },
     "101": {
       "main:doc:DrawError": "5d6d16364674af6498bf5c20e7ef7923572b8f186e76c27930cfa60eb02dc5f7"
@@ -838,42 +751,8 @@
     "143": {
       "store:added:(entry)": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "150": {
-      "geometry:doc:GeometryError": "30fea0fb5b5309266c2e382ea6d06c942decf89ac65d1d71a8e8995b145927be",
-      "geometry:doc:along": "ef7a8e4a92b9819ddc8269a3e29f7e25aedb89c2e82c7518fad3d556cfb8fbb2",
-      "geometry:doc:area": "e8f23733a004284d186dd7f1f0f753d27287cc044a06911c32a20449d1a72fcc",
-      "geometry:doc:bbox": "78e732a078c35fe11ca98972d821b75def8d4533e71275cb9fd600343473a17f",
-      "geometry:doc:bearing": "f82df6c97f114c7e4fc4b71d639b351fbc1f1ad8706e2c97d9279fc7b2589e7c",
-      "geometry:doc:buffer": "9b7afea672fbda91aa11b4d507c741c778a16be6db8807d73457cc8534e7414e",
-      "geometry:doc:centroid": "425040b625b194e13a3b658a0ac97f744f9ae57c6ae6be56e5174c8af2443c45",
-      "geometry:doc:circle": "dd66c8fa7f2fd003cb4a2ab0160b797baace0826edb6a885786786764accbe87",
-      "geometry:doc:contains": "462076284885dc6c77c41d78f86d309ce92a7c2e1194705b03e7205679c7bcd4",
-      "geometry:doc:destination": "ec3a3d0e1399aac3474e6a177e652cc2bea5082c394affebf4730f8fa5b66bec",
-      "geometry:doc:difference": "197c1a97c03bb5e2364f9abfc66ccb61b0487becc050a08d90ddbf2dd30dd06e",
-      "geometry:doc:distance": "b273a8cda9f6ee30beeff0eedd1f3394c9b452bed2a478ee8df2689071041acf",
-      "geometry:doc:intersection": "0c70925a2ed9d6c0d0a98bd1ab167a28e0d0919d7a6c9927968f5b421a9f5d9a",
-      "geometry:doc:length": "9f4e48f7d1d7275feaee0aaab03fa9e81fa384ab651e2d021b6d98cac5e9450f",
-      "geometry:doc:makeValid": "8b0144b9c090841de0fe176a6ba18edb1a51dc42786e09676dbe5b9d522ae74d",
-      "geometry:doc:midpoint": "da37e70e45d1a4bde2f6e46cbe683dbbea746719271f1848b75629d91e7c417e",
-      "geometry:doc:nearestPointOnLine": "ad0d4c30d58623253c728e31d1962785b54152ab1066857de5a34f72efcf6ec3",
-      "geometry:doc:overlaps": "34a2121be027f939e6c4ec2bb92f6e2f7ba9319f4e5f572de517edc9c2695139",
-      "geometry:doc:perimeter": "2e80c7b7865dff803a3859eee2e46f2335f9bbfff39a595a7399710d5af394b2",
-      "geometry:doc:pointInPolygon": "0ffa7838b8d7ac3d8796408a47570e7dc6854d5a93a0cb97bb943f2bc684713d",
-      "geometry:doc:pointOnSurface": "026e91f7ca1c2d078b889a5097bb77de6cdd82b854fd2f33d3bf40384b00768c",
-      "geometry:doc:rewind": "123b3a60b3bedeec8443f1b943ff008018f31ec77a3e4ceee49861e1e301c42c",
-      "geometry:doc:simplify": "663003adef7f7fd9baa81a890dfecd52bfb5786745ff90533e41c2c0e819542d",
-      "geometry:doc:split": "1d1989e6376d4e0369a9a4cd9ccb7f8c5b5cb5c7e939ff0c45ad2122e1d4d73d",
-      "geometry:doc:union": "4c39a578dea6781bcaa390038717609bbde4c852d25625190255e2ecf4c28e2f",
-      "geometry:sig:GeometryErrorCode": "1cbebf6f6ba4269db7b9d3f6f7da7577f3fa3936af639dd5191eabc9860fbb88"
-    },
     "151": {
       "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"
-    },
-    "152": {
-      "main:added:RuntimeOptions.clickTolerancePx": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:RuntimeOptions.dragThresholdPx": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:removed:RuntimeOptions.clickTolerance": "1d43be5e0cd85619cf8e8717068abe8e607998ec8ab4954b321caa4dc475c70a",
-      "main:removed:RuntimeOptions.dragThreshold": "ff5b646b7d1363ab51904190c7999a55c746c7ac61e2bf855d9d72a128b92b5f"
     },
     "153": {
       "main:added:DragResource": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",

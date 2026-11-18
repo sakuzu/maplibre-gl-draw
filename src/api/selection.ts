@@ -20,7 +20,7 @@ export interface SelectionResource {
    *
    * @param type - The type of the items
    * @returns False when none of the items can be selected
-   * @throws `DrawError` with the code `not-found` when one of the IDs is not an item of this
+   * @throws `DrawError` with the code `notFound` when one of the IDs is not an item of this
    *   type
    */
   set(type: SelectionType, ids: readonly string[]): boolean;
@@ -28,7 +28,7 @@ export interface SelectionResource {
    * Adds items of the selected type to the selection.
    *
    * @returns False when none of them can be added
-   * @throws `DrawError` with the code `not-found` when one of the IDs is not an item of the
+   * @throws `DrawError` with the code `notFound` when one of the IDs is not an item of the
    *   selected type
    */
   add(ids: readonly string[]): boolean;
@@ -66,7 +66,7 @@ export interface SelectionResource {
    * Moves what is selected.
    *
    * @returns False when nothing is selected or the move is refused
-   * @throws `DrawError` with the code `not-found` when the target does not exist
+   * @throws `DrawError` with the code `notFound` when the target does not exist
    */
   move(to: MoveTarget): boolean;
 }
@@ -85,7 +85,7 @@ export interface VertexSelectionResource {
    * Selects vertices of a feature.
    *
    * @returns False when the vertices cannot be selected (a lock)
-   * @throws `DrawError` with the code `not-found` when the feature or one of the vertices
+   * @throws `DrawError` with the code `notFound` when the feature or one of the vertices
    *   does not exist
    */
   set(featureId: string, vertices: readonly VertexRef[]): boolean;

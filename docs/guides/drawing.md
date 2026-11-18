@@ -16,7 +16,7 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map);
 
 // Click to add vertices; Enter or a click on the first vertex finishes
-draw.setMode('draw_polygon');
+draw.setMode('drawPolygon');
 
 draw.on('feature.created', ({ feature }) => {
   console.log(feature.type, feature.properties.name);
@@ -38,19 +38,19 @@ There are seven built-in modes, listed in `MODES`. `select` is the default
 | Mode | Creates | How |
 | --- | --- | --- |
 | `select` | nothing | select, move, resize, rotate, edit vertices |
-| `draw_point` | `Point` | one click |
-| `draw_line` | `LineString` | clicks, then finish |
-| `draw_polygon` | `Polygon` | clicks, then finish |
-| `draw_circle` | `Circle` | click the center, click the radius |
-| `draw_freehand` | `Freehand` | drag a stroke |
-| `draw_image` | `Image` | the application picks a file (see below) |
+| `drawPoint` | `Point` | one click |
+| `drawLine` | `LineString` | clicks, then finish |
+| `drawPolygon` | `Polygon` | clicks, then finish |
+| `drawCircle` | `Circle` | click the center, click the radius |
+| `drawFreehand` | `Freehand` | drag a stroke |
+| `drawImage` | `Image` | the application picks a file (see below) |
 
 `draw.setMode(mode)` returns `true` when the mode is `mode` after the call.
 It returns `false`, and nothing changes, for a drawing mode while the
 interaction lock is on, and for a drawing mode while no layer can be
 written (every layer is locked or hidden; see
 [Layers and groups](layers.md)). A name with no mode behind it throws a
-`DrawError` with the code `not-found`.
+`DrawError` with the code `notFound`.
 
 `draw.getMode()` reads the current mode, and `mode.changed` reports every
 change with the mode before it. Modes of your own are added with
@@ -64,11 +64,11 @@ leaves the mode for `select` only when nothing is being drawn.
 
 | Mode | Adds | Finishes | Escape | Backspace |
 | --- | --- | --- | --- | --- |
-| `draw_point` | click | the click | to select | - |
-| `draw_line` | click | Enter, last vertex | discard | last vertex |
-| `draw_polygon` | click | Enter, first vertex | discard | last vertex |
-| `draw_circle` | click, move | second click | discard | - |
-| `draw_freehand` | drag | release | discard | - |
+| `drawPoint` | click | the click | to select | - |
+| `drawLine` | click | Enter, last vertex | discard | last vertex |
+| `drawPolygon` | click | Enter, first vertex | discard | last vertex |
+| `drawCircle` | click, move | second click | discard | - |
+| `drawFreehand` | drag | release | discard | - |
 
 - A line needs two vertices and a polygon three before Enter, a double
   click or a click on the last (line) or first (polygon) vertex finishes
@@ -120,7 +120,7 @@ selection, and the mode returns to `select` with the new feature selected.
 `document.changed` once for the whole change.
 
 Freehand is different: every stroke (press, drag, release) becomes its own
-feature, the mode stays `draw_freehand` so that strokes can follow one
+feature, the mode stays `drawFreehand` so that strokes can follow one
 another, and the new features are not selected. A second finger landing
 during a stroke, or the browser cancelling the touch, discards the stroke.
 
@@ -137,7 +137,7 @@ first writable layer when the active one is locked or hidden.
 
 ### Images
 
-The library does not open a file dialog. Entering `draw_image` emits
+The library does not open a file dialog. Entering `drawImage` emits
 `image.requested` with a position, the zoom and the layer to place the
 image in, and returns to `select` at once. The position is the clicked one
 when a click led to the mode (a listener of `map.clicked` entered it), and
@@ -157,7 +157,7 @@ draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
   input.click();
 });
 
-draw.setMode('draw_image');
+draw.setMode('drawImage');
 ```
 
 The image is centered on `coordinate` and converted to WebP. When the
@@ -407,7 +407,7 @@ automatic name and the reference zoom, and it is selected when it is
 finished, as a shape drawn with the pointer.
 
 ```ts
-draw.setMode('draw_line');
+draw.setMode('drawLine');
 draw.drawing.addVertex([139.7, 35.68]); // as a click there
 draw.drawing.moveTo([139.71, 35.69]); // the preview follows
 draw.drawing.addVertex([139.71, 35.69]);
@@ -425,7 +425,7 @@ draw.drawing.finish(); // as Enter; the mode goes back to select
   one near the first vertex of an area does not close it. Only a
   position exactly equal to the closing vertex finishes the shape
 - `addVertex` returns `false` when no drawing mode is active or nothing
-  took the click. What it does is up to the mode: in `draw_point` it
+  took the click. What it does is up to the mode: in `drawPoint` it
   creates the point, and on the closing vertex of a line or an area it
   finishes the shape
 - `finish` completes the shape as soon as it has enough vertices,

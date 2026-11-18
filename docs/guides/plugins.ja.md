@@ -54,8 +54,8 @@ const removeLogger = draw.extensions.plugins.add(logger);
 `count`、`has` で名前から引けます。`add` は、足したものを外す関数を
 返します。
 
-使われている名前を渡すと、コード `already-exists` の `DrawError` が
-投げられます。無い名前を `remove` に渡すと `not-found` です。
+使われている名前を渡すと、コード `alreadyExists` の `DrawError` が
+投げられます。無い名前を `remove` に渡すと `notFound` です。
 `addMany` と `removeMany` は、全部を行うか何も行わないかのどちらかです。
 
 ## Plugin オブジェクト
@@ -246,8 +246,8 @@ function createShortcuts(): Plugin {
     input: {
       onKeyDown(event) {
         if (!ctx || event.modifiers.ctrl || event.modifiers.meta) return false;
-        if (event.key === 'p') return ctx.draw.setMode('draw_point');
-        if (event.key === 'l') return ctx.draw.setMode('draw_line');
+        if (event.key === 'p') return ctx.draw.setMode('drawPoint');
+        if (event.key === 'l') return ctx.draw.setMode('drawLine');
         return false;
       },
     },
@@ -480,7 +480,7 @@ draw.setMode('draw_rectangle');
   `ctx.extensions` で足したものが外れ、購読が終わります
 - 有効なモードを外すと、先に `select` に入ります
 - 組み込みのモードと地物の型の名前は使われているので、`add` はそれら
-  に `already-exists` を投げます
+  に `alreadyExists` を投げます
 - 拡張は、足したインスタンスに属します。ページにあるほかの draw の
   インスタンスからは見えません
 - `draw.destroy()` は、先にプラグインを外し、それからほかの拡張を

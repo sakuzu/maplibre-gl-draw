@@ -4,14 +4,14 @@
 /**
  * The local frame of hit testing
  *
- * Hit testing decides "within clickTolerance screen pixels of the click". Coordinates are
+ * Hit testing decides "within clickTolerancePx screen pixels of the click". Coordinates are
  * longitude / latitude, so that decision is made in a frame where one unit is the same
  * screen length in every direction: the Web Mercator plane around the click. Near a
  * latitude φ a latitude difference is 1 / cos φ times longer on screen than the same
  * longitude difference, so latitude differences are divided by cos φ and every distance
  * comes out in degrees of longitude at the click latitude.
  *
- * The tolerance is expressed in the same unit. It is the ground length of clickTolerance
+ * The tolerance is expressed in the same unit. It is the ground length of clickTolerancePx
  * pixels along the screen x axis, measured with unproject, so it does not depend on the
  * bearing (the length of a displacement does not change when the map is turned) and follows
  * the local scale under pitch (the screen x axis is never foreshortened).

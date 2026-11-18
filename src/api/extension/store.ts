@@ -47,7 +47,7 @@ export type UpdateSource =
  *   notification carries as read-only, and the Store never changes such an object: a change
  *   stores a new object.
  * - The stacking order (`getLayerOrder()`) is part of the document. It may hold entries that
- *   are not layers (a dataset with `order: 'layer-order'`, a separator of the application),
+ *   are not layers (a dataset with `order: 'layerOrder'`, a separator of the application),
  *   and its entries are distinct non-empty strings.
  * - One notification per outermost transaction: `subscribe` delivers one `DocumentChange`
  *   per outermost `transact` (or per write outside one), with its `source`. The transactions

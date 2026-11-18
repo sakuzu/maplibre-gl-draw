@@ -370,7 +370,7 @@ describe('SnapService', () => {
     /** A service with the built-in providers, drawing a line whose first point is ORIGIN */
     function drawingService(options: SnapOptions = {}): SnapService {
       const store = new MemoryStore();
-      store.setMode('draw_line');
+      store.setMode('drawLine');
       const anchor: Coordinate = [ORIGIN.lng, ORIGIN.lat];
       store.setTentative({
         type: 'LineString',

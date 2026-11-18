@@ -47,13 +47,13 @@ import { getModifiers } from './types.js';
  */
 export interface InputNormalizerOptions {
   /** Threshold for detecting a drag with the mouse (pixels) */
-  dragThreshold: number;
+  dragThresholdPx: number;
   /** Time threshold for detecting a click with the mouse (milliseconds) */
   clickTimeThreshold: number;
 }
 
 const DEFAULT_OPTIONS: InputNormalizerOptions = {
-  dragThreshold: 3,
+  dragThresholdPx: 3,
   clickTimeThreshold: 300,
 };
 
@@ -62,7 +62,7 @@ const DEFAULT_OPTIONS: InputNormalizerOptions = {
  */
 interface PointerProfile {
   /** Distance a press must move before it becomes a drag (pixels) */
-  dragThreshold: number;
+  dragThresholdPx: number;
   /** A press held longer than this is not a click (milliseconds; Infinity = no limit) */
   clickTimeThreshold: number;
   /**
@@ -106,17 +106,17 @@ const MAP_KEYS: ReadonlySet<string> = new Set([
 function createProfiles(opts: InputNormalizerOptions): Record<PointerType, PointerProfile> {
   return {
     mouse: {
-      dragThreshold: opts.dragThreshold,
+      dragThresholdPx: opts.dragThresholdPx,
       clickTimeThreshold: opts.clickTimeThreshold,
       longPressTime: null,
     },
     touch: {
-      dragThreshold: Math.max(opts.dragThreshold, TOUCH_DRAG_THRESHOLD),
+      dragThresholdPx: Math.max(opts.dragThresholdPx, TOUCH_DRAG_THRESHOLD),
       clickTimeThreshold: Number.POSITIVE_INFINITY,
       longPressTime: LONG_PRESS_TIME,
     },
     pen: {
-      dragThreshold: Math.max(opts.dragThreshold, PEN_DRAG_THRESHOLD),
+      dragThresholdPx: Math.max(opts.dragThresholdPx, PEN_DRAG_THRESHOLD),
       clickTimeThreshold: Number.POSITIVE_INFINITY,
       longPressTime: LONG_PRESS_TIME,
     },
@@ -363,7 +363,7 @@ export function createInputNormalizer(
     const dy = point.y - current.startPoint.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (current.dragging || distance > profiles[current.pointerType].dragThreshold) {
+    if (current.dragging || distance > profiles[current.pointerType].dragThresholdPx) {
       clearLongPress(current);
       const type = current.dragging ? 'dragmove' : 'dragstart';
       current.dragging = true;
@@ -757,7 +757,7 @@ export function createInputNormalizer(
   }
 
   const setDragThreshold = (px: number): void => {
-    opts.dragThreshold = px;
+    opts.dragThresholdPx = px;
     profiles = createProfiles(opts);
   };
 

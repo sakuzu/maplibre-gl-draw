@@ -69,7 +69,7 @@ export function createDrawOnEngine(
     layers: createLayers(
       deps,
       (id) =>
-        engine.datasets.get(id)?.order === 'layer-order' || context.isExternalEntry?.(id) === true,
+        engine.datasets.get(id)?.order === 'layerOrder' || context.isExternalEntry?.(id) === true,
     ),
     groups,
     datasets: createDatasets(engine.datasets, events, context.eventEmitter),
@@ -125,7 +125,7 @@ export function createDrawOnEngine(
       }
     },
   };
-  // After destroy, every method but destroy throws invalid-state
+  // After destroy, every method but destroy throws invalidState
   const draw = guardAfterDestroy(members, () => destroyed, {
     asyncMembers: ASYNC_MEMBERS,
     skip: new Set(['destroy']),

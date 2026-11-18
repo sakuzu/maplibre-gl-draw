@@ -70,7 +70,7 @@ export function createDocument(
       return await read(source, options, pending, createdLayers);
     } catch (error) {
       // Whatever went wrong, the promise rejects with a DrawError
-      throw asDrawError('invalid-input', error);
+      throw asDrawError('invalidInput', error);
     }
   };
 
@@ -85,7 +85,7 @@ export function createDocument(
     for (const { layer, group } of prepared) {
       for (const id of [layer?.layer.id, group?.id]) {
         if (id !== undefined && isTaken(store, id)) {
-          throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+          throw new DrawError('alreadyExists', `The ID ${JSON.stringify(id)} is already taken`, {
             id,
           });
         }
@@ -241,13 +241,13 @@ export function createDocument(
       try {
         return await prepareNative(data, { store });
       } catch (error) {
-        throw asDrawError('invalid-input', error);
+        throw asDrawError('invalidInput', error);
       }
     }
     const collection = toFeatureCollection(data);
     if (collection === null) {
       throw new DrawError(
-        'unsupported-format',
+        'unsupportedFormat',
         'The source is neither a document of the library nor GeoJSON',
       );
     }
@@ -284,7 +284,7 @@ async function readSource(source: LoadSource): Promise<ReadSource> {
     try {
       text = await source.text();
     } catch (error) {
-      throw asDrawError('unsupported-format', error);
+      throw asDrawError('unsupportedFormat', error);
     }
     return { kind: 'data', data: parseJSON(text) };
   }
@@ -297,12 +297,12 @@ function parseJSON(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch (error) {
-    throw asDrawError('unsupported-format', error);
+    throw asDrawError('unsupportedFormat', error);
   }
 }
 
 /** Wraps an error of a reader into a DrawError with the code */
-function asDrawError(code: 'invalid-input' | 'unsupported-format', error: unknown): DrawError {
+function asDrawError(code: 'invalidInput' | 'unsupportedFormat', error: unknown): DrawError {
   if (error instanceof DrawError) return error;
   const message = error instanceof Error ? error.message : String(error);
   return new DrawError(code, message, { cause: error });

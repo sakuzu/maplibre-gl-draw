@@ -43,7 +43,7 @@ export interface HitTestResult {
  */
 export interface HitTestOptions {
   /** Tolerance for the click test (pixels) */
-  clickTolerance: number;
+  clickTolerancePx: number;
   /** Tolerance for vertex handles (pixels) */
   vertexTolerance: number;
   /** Tolerance for midpoint handles (pixels) */
@@ -53,11 +53,11 @@ export interface HitTestOptions {
 /**
  * Default hit test options
  *
- * The only default of the click tolerance: the `clickTolerance` option of a draw instance
+ * The only default of the click tolerance: the `clickTolerancePx` option of a draw instance
  * falls back to it too.
  */
 export const DEFAULT_HIT_TEST_OPTIONS: HitTestOptions = {
-  clickTolerance: 6,
+  clickTolerancePx: 6,
   vertexTolerance: 8,
   midpointTolerance: 6,
 };

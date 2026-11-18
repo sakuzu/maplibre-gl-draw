@@ -519,7 +519,7 @@ describe('InputNormalizer', () => {
 
     it('takes the mouse threshold from the options and keeps the touch slop at least 10 px', () => {
       normalizer.detach();
-      normalizer = createInputNormalizer(map as unknown as MapLibreMap, { dragThreshold: 8 });
+      normalizer = createInputNormalizer(map as unknown as MapLibreMap, { dragThresholdPx: 8 });
       normalizer.on((e) => events.push(e));
       normalizer.attach();
 

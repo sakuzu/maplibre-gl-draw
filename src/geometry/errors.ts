@@ -12,10 +12,10 @@
  */
 
 /**
- * Why a geometry function failed: `invalid-input` for an input whose shape the function cannot
- * take, `engine-failure` for a boolean operation that could not compute a result.
+ * Why a geometry function failed: `invalidInput` for an input whose shape the function cannot
+ * take, `engineFailure` for a boolean operation that could not compute a result.
  */
-export type GeometryErrorCode = 'invalid-input' | 'engine-failure';
+export type GeometryErrorCode = 'invalidInput' | 'engineFailure';
 
 /**
  * The boolean operation that runs inside a function
@@ -41,7 +41,7 @@ export type GeometryOperation = 'union' | 'difference' | 'intersection';
  *   try {
  *     return union([a, b]);
  *   } catch (error) {
- *     if (error instanceof GeometryError && error.code === 'engine-failure') {
+ *     if (error instanceof GeometryError && error.code === 'engineFailure') {
  *       // Keep the inputs as they are and tell the user the merge failed
  *       return null;
  *     }
@@ -83,8 +83,8 @@ export class GeometryError extends Error {
 /**
  * Classifies an error thrown by polygon-clipping by its message
  *
- * The messages are those of polygon-clipping 0.15. An input it rejects is `invalid-input`;
- * everything else is `engine-failure`.
+ * The messages are those of polygon-clipping 0.15. An input it rejects is `invalidInput`;
+ * everything else is `engineFailure`.
  */
 function classify(error: unknown): GeometryErrorCode {
   const message = error instanceof Error ? error.message : String(error);
@@ -92,15 +92,15 @@ function classify(error: unknown): GeometryErrorCode {
     message.startsWith('Input geometry is not a valid') ||
     message.startsWith('Tried to create degenerate segment')
   ) {
-    return 'invalid-input';
+    return 'invalidInput';
   }
-  return 'engine-failure';
+  return 'engineFailure';
 }
 
 /** The message of each reason of a boolean operation */
 const MESSAGES: Record<GeometryErrorCode, string> = {
-  'invalid-input': 'the input is not a valid polygon',
-  'engine-failure': 'the boolean operation failed',
+  invalidInput: 'the input is not a valid polygon',
+  engineFailure: 'the boolean operation failed',
 };
 
 /**
@@ -119,7 +119,7 @@ export function toGeometryError(error: unknown, operation: GeometryOperation): G
  * @internal
  */
 export function invalidInput(operation: string, reason: string): GeometryError {
-  return new GeometryError('invalid-input', operation, `${operation}: ${reason}`);
+  return new GeometryError('invalidInput', operation, `${operation}: ${reason}`);
 }
 
 /**

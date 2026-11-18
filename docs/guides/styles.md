@@ -71,7 +71,7 @@ draw.features.update(featureId, {
 
 - Colors are CSS colors (`#1e88e5`, `rgb(30 136 229)`, `hsl(...)`,
   `tomato`); opacities run from 0 to 1. A value of the wrong type or
-  form throws a `DrawError` with the code `invalid-input`
+  form throws a `DrawError` with the code `invalidInput`
 - `lineStyle` is `solid`, `dashed` or `dotted`
 - `strokeWidth` is in pixels at the zoom the feature was drawn at, its
   reference zoom (the property `maplibre-gl-draw:createdZoom`). The line

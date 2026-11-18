@@ -56,7 +56,7 @@ function expectInvalid(fn: () => void): void {
     expect.unreachable();
   } catch (error) {
     expect(error).toBeInstanceOf(DrawError);
-    expect((error as DrawError).code).toBe('invalid-input');
+    expect((error as DrawError).code).toBe('invalidInput');
   }
 }
 
@@ -85,8 +85,8 @@ describe('the options at creation', () => {
       snapping: { tolerancePx: 20 },
       tracing: { enabled: false },
       topology: { sharedVertexDrag: true },
-      clickTolerance: 9,
-      dragThreshold: 7,
+      clickTolerancePx: 9,
+      dragThresholdPx: 7,
       rendering: { renderScale: 0.5, pixelRatio: 2, cacheGeometry: false, timeSlicing: false },
     });
     const { context } = engine;
@@ -96,8 +96,8 @@ describe('the options at creation', () => {
     expect(context.snapService.getOptions().tolerancePx).toBe(20);
     expect(context.trace.enabled).toBe(false);
     expect(context.topology.sharedVertexDrag).toBe(true);
-    expect(context.options.clickTolerance).toBe(9);
-    expect(context.options.dragThreshold).toBe(7);
+    expect(context.options.clickTolerancePx).toBe(9);
+    expect(context.options.dragThresholdPx).toBe(7);
     expect(context.pixelRatioSource.getScaleFactor()).toBe(0.5);
     expect(context.pixelRatioSource.resolve()).toBe(1);
     expect(context.renderingConfig.storeRetained).toBe(false);
@@ -113,7 +113,7 @@ describe('the options at creation', () => {
     first.destroy();
   });
 
-  it('createDraw throws invalid-input for an unknown option and for a wrong value', () => {
+  it('createDraw throws invalidInput for an unknown option and for a wrong value', () => {
     const map = createMapStub().map;
     for (const bad of [
       { what: 1 },
@@ -300,11 +300,11 @@ describe('options.update', () => {
   it('changes the click tolerance and the drag threshold', () => {
     const tolerance = vi.spyOn(engine.context.hitTestService, 'setClickTolerance');
     const threshold = vi.spyOn(engine.runtime, 'setDragThreshold');
-    options.update({ clickTolerance: 12, dragThreshold: 8 });
+    options.update({ clickTolerancePx: 12, dragThresholdPx: 8 });
     expect(tolerance).toHaveBeenCalledWith(12);
     expect(threshold).toHaveBeenCalledWith(8);
-    expect(engine.context.options.clickTolerance).toBe(12);
-    expect(options.get()).toMatchObject({ clickTolerance: 12, dragThreshold: 8 });
+    expect(engine.context.options.clickTolerancePx).toBe(12);
+    expect(options.get()).toMatchObject({ clickTolerancePx: 12, dragThresholdPx: 8 });
   });
 
   it('changes the switches of the drawing', () => {
@@ -350,7 +350,7 @@ describe('options.update', () => {
     expect(names.generateName('Point')).toBeUndefined();
   });
 
-  it('throws invalid-input and changes nothing for a wrong patch', () => {
+  it('throws invalidInput and changes nothing for a wrong patch', () => {
     const before = options.get();
     for (const bad of [
       null,
@@ -361,7 +361,7 @@ describe('options.update', () => {
       { style: { polygon: { fillColor: 'nope' } } },
       { style: { hexagon: {} } },
       { rendering: { pixelRatio: 'high' } },
-      { tracing: { enabled: false }, clickTolerance: Number.NaN },
+      { tracing: { enabled: false }, clickTolerancePx: Number.NaN },
     ]) {
       expectInvalid(() => options.update(bad as never));
     }

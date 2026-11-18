@@ -26,13 +26,13 @@ export interface EmbeddedFileContent {
 /**
  * Why an embedded image cannot be imported
  *
- * - `invalid-input`: the data URL is not an embedded PNG / JPEG / WebP / GIF of its declared
+ * - `invalidInput`: the data URL is not an embedded PNG / JPEG / WebP / GIF of its declared
  *   type, or its pixels cannot be decoded
- * - `unsupported-format`: it has to be scaled down and the browser cannot encode the result in
+ * - `unsupportedFormat`: it has to be scaled down and the browser cannot encode the result in
  *   a type the library accepts
  */
 export interface EmbeddedFileProblem {
-  code: 'invalid-input' | 'unsupported-format';
+  code: 'invalidInput' | 'unsupportedFormat';
   /** What went wrong, in English, to follow the name of the image in a message */
   detail: string;
   /** The error that was caught, when there was one */
@@ -55,7 +55,7 @@ export async function normalizeEmbeddedFile(
   const info = readEmbeddedImage(dataURL);
   if (!info || typeof dataURL !== 'string' || mimeType !== info.mimeType) {
     return {
-      code: 'invalid-input',
+      code: 'invalidInput',
       detail: 'is not an embedded PNG / JPEG / WebP / GIF data URL of its declared type',
     };
   }
@@ -67,9 +67,9 @@ export async function normalizeEmbeddedFile(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (error instanceof UnsupportedImageTypeError) {
-        return { code: 'unsupported-format', detail: `cannot be stored: ${message}`, cause: error };
+        return { code: 'unsupportedFormat', detail: `cannot be stored: ${message}`, cause: error };
       }
-      return { code: 'invalid-input', detail: `cannot be decoded: ${message}`, cause: error };
+      return { code: 'invalidInput', detail: `cannot be decoded: ${message}`, cause: error };
     }
     return { mimeType: processed.mimeType, dataURL: processed.dataUrl };
   }

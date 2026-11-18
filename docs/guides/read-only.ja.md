@@ -142,7 +142,7 @@ draw.hidden.clear(); // この端末が隠したものをすべて表示する
 - `features.list`、`document.toJSON()`、`document.toGeoJSON()` は
   これを無視します。変わるのはこの端末の見え方で、データではありません
 - `hidden.add` は文書の ID だけを受け取り、それ以外の ID にはコード
-  `not-found` の `DrawError` を投げます
+  `notFound` の `DrawError` を投げます
 - 地物、グループ、レイヤーを削除すると、その ID は集まりから外れます
 
 データセットはこれに加わりません。データセットは、その `setVisible` で

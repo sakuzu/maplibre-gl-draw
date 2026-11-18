@@ -70,7 +70,7 @@ export function createEventHub(): EventHub {
     once: boolean,
   ): (() => void) => {
     if (typeof listener !== 'function') {
-      throw new DrawError('invalid-input', 'The listener must be a function');
+      throw new DrawError('invalidInput', 'The listener must be a function');
     }
     const entry: Entry = { listener, once };
     const list = listeners.get(event) ?? [];
@@ -462,7 +462,7 @@ export function connectEngineEvents(
     });
   });
   listen('load.error', ({ source, featureId, error }) => {
-    hub.emit('error', { error: toDrawError(error), source, featureId });
+    hub.emit('image.failed', { error: toDrawError(error), source, featureId });
   });
   listen('drag.started', ({ kind, featureIds }) => {
     hub.emit('drag.started', { kind, featureIds: [...featureIds] });
@@ -499,5 +499,5 @@ function toSnapResult(result: EngineSignals['snap.change']): SnapResult {
 function toDrawError(error: unknown): DrawError {
   if (error instanceof DrawError) return error;
   const message = error instanceof Error ? error.message : String(error);
-  return new DrawError('unsupported-format', message, { cause: error });
+  return new DrawError('unsupportedFormat', message, { cause: error });
 }

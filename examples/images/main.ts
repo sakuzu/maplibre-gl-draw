@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // images: pictures placed on the map.
-// The Image tool of the toolbar (the mode `draw_image`) asks the page for a file with the
+// The Image tool of the toolbar (the mode `drawImage`) asks the page for a file with the
 // event image.requested; the page opens a file picker and loads the file where the map asked.
 // Code places an image the same way, from a Blob. The page opens with that image selected, so
 // the panel on the right shows its opacity; drag its corners to scale it.
@@ -25,7 +25,7 @@ const map = new maplibregl.Map({
 });
 const draw = createDraw(map);
 
-// 1. The library opens no file dialog. Entering `draw_image` (the Image tool, or the I key)
+// 1. The library opens no file dialog. Entering `drawImage` (the Image tool, or the I key)
 // emits image.requested with where to place the image, the zoom and the layer, and the mode
 // returns to `select`. The page picks a file and passes it to document.load with them
 draw.on('image.requested', ({ lngLat, zoom, layerId }) => {

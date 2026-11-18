@@ -100,11 +100,11 @@ to `setMode`.
 
 ```ts
 document.querySelector('#draw-polygon')?.addEventListener('click', () => {
-  draw.setMode('draw_polygon');
+  draw.setMode('drawPolygon');
 });
 ```
 
-In `draw_polygon` mode the user draws like this.
+In `drawPolygon` mode the user draws like this.
 
 | Action | Result |
 | --- | --- |
@@ -142,12 +142,12 @@ to `select`), listen to `mode.changed`.
 draw.on('mode.changed', ({ mode }) => {
   document
     .querySelector('#draw-polygon')
-    ?.classList.toggle('active', mode === 'draw_polygon');
+    ?.classList.toggle('active', mode === 'drawPolygon');
 });
 ```
 
-`draw_point`, `draw_line`, `draw_circle` and `draw_freehand` are used
-the same way; `draw_image` also asks your application for the image. The
+`drawPoint`, `drawLine`, `drawCircle` and `drawFreehand` are used
+the same way; `drawImage` also asks your application for the image. The
 [drawing guide](guides/drawing.md) has the actions of every mode.
 
 ## 4. Subscribe to changes

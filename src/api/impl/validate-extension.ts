@@ -5,7 +5,7 @@
  * The shape of an extension, checked before it is added
  *
  * `draw.extensions.*.add` hands every value to {@link validateExtension} before anything is
- * installed, so a value of the wrong shape is refused with `DrawError('invalid-input')` and
+ * installed, so a value of the wrong shape is refused with `DrawError('invalidInput')` and
  * nothing is added. The checks follow the contract types: a required member must be there with
  * the right type, and an optional member, when it is given, must have the right type too. The
  * name is checked by the collection itself.
@@ -102,7 +102,7 @@ const SHAPES: Readonly<
 /** The error for a value of the wrong shape */
 function wrongShape(kind: ExtensionKind, message: string, member?: string): DrawError {
   return new DrawError(
-    'invalid-input',
+    'invalidInput',
     `The ${kind} ${message}`,
     member === undefined ? { kind } : { kind, member },
   );
@@ -166,7 +166,7 @@ function optionalNumber(
  *
  * @param kind - The kind of extension the value is added as
  * @param value - The value given to `add`
- * @throws `DrawError` with the code `invalid-input` when the value does not have the shape
+ * @throws `DrawError` with the code `invalidInput` when the value does not have the shape
  * @internal
  */
 export function validateExtension(kind: ExtensionKind, value: unknown): void {

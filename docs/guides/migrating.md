@@ -48,8 +48,8 @@ Four rules hold everywhere:
 - A method on several items (`createMany`, `deleteMany`, `moveMany`)
   is one transaction: all of them change, or none
 - A wrong argument (an unknown ID, an input of the wrong shape) throws
-  a `DrawError` with a `code` (`not-found`, `already-exists`,
-  `invalid-input`, `unsupported-format`, `invalid-state`). A write
+  a `DrawError` with a `code` (`notFound`, `alreadyExists`,
+  `invalidInput`, `unsupportedFormat`, `invalidState`). A write
   refused because of the state (read-only, a lock) returns `null` or
   `false`. In both cases nothing changes
 - Events are named `resource.pastParticiple`: `feature.created`,
@@ -98,8 +98,8 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map, { defaultMode: 'select' });
 ```
 
-The mode names (`select`, `draw_point`, `draw_line`, `draw_polygon`,
-`draw_circle`, `draw_freehand`, `draw_image`) do not change. `setMode`
+The mode names (`select`, `drawPoint`, `drawLine`, `drawPolygon`,
+`drawCircle`, `drawFreehand`, `drawImage`) do not change. `setMode`
 throws a `DrawError` for a mode it does not know.
 
 ### Features
@@ -165,7 +165,7 @@ import { DrawError } from '@sakuzu/maplibre-gl-draw';
 try {
   draw.features.update(featureId, { visible: false });
 } catch (error) {
-  if (error instanceof DrawError && error.code === 'not-found') {
+  if (error instanceof DrawError && error.code === 'notFound') {
     console.warn('the feature is gone');
   } else {
     throw error;
@@ -668,7 +668,7 @@ through the API as well.
 | `new MapboxDraw()`, `map.addControl(draw)` | `createDraw(map)` |
 | `changeMode('simple_select')` | `setMode('select')` |
 | `changeMode('direct_select', ...)` | `setMode('select')` |
-| `changeMode('draw_line_string')` | `setMode('draw_line')` |
+| `changeMode('draw_line_string')` | `setMode('drawLine')` |
 | `add(featureCollection)` | `document.load(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
@@ -684,7 +684,7 @@ through the API as well.
 | terra-draw | This library |
 | --- | --- |
 | `new TerraDraw({ adapter, modes })` | `createDraw(map)` |
-| `setMode('linestring')` | `setMode('draw_line')` |
+| `setMode('linestring')` | `setMode('drawLine')` |
 | `getSnapshot()` | `document.toGeoJSON()` |
 | `addFeatures(features)` | `document.load(featureCollection)` |
 | `removeFeatures(ids)` | `features.deleteMany(ids)` |

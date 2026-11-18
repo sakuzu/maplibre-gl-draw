@@ -21,7 +21,7 @@
  * import { createDraw } from '@sakuzu/maplibre-gl-draw';
  *
  * const draw = createDraw(map);
- * draw.setMode('draw_polygon');
+ * draw.setMode('drawPolygon');
  * draw.on('feature.created', ({ feature }) => {
  *   console.log(feature.id, feature.geometry);
  * });

@@ -47,7 +47,7 @@ export interface FakeDocument {
   /** The datasets on the map, from the back */
   datasets?: FakeDatasetSpec[];
   /**
-   * The stacking order from the back, with the IDs of the `layer-order` datasets placed among the
+   * The stacking order from the back, with the IDs of the `layerOrder` datasets placed among the
    * layers; the layers in their order when left out
    */
   order?: string[];
@@ -56,7 +56,7 @@ export interface FakeDocument {
 /** A dataset of the stand-in */
 export interface FakeDatasetSpec {
   id: string;
-  /** `layer-order` when left out */
+  /** `layerOrder` when left out */
   order?: DatasetOrder;
   /** The number of its rows; 0 when left out */
   rows?: number;
@@ -80,7 +80,7 @@ function fakeDataset(spec: FakeDatasetSpec) {
   };
   return {
     id: spec.id,
-    order: spec.order ?? ('layer-order' as DatasetOrder),
+    order: spec.order ?? ('layerOrder' as DatasetOrder),
     interactive: true,
     get visible() {
       return visible;
@@ -430,16 +430,16 @@ export function fakeDraw(
       get: (id: string) => datasets.find((d) => d.id === id),
       // From the back: below the layers, among them, above them
       list: () =>
-        (['below-store', 'layer-order', 'above-store'] as const).flatMap((o) =>
+        (['belowLayers', 'layerOrder', 'aboveLayers'] as const).flatMap((o) =>
           datasets.filter((d) => d.order === o),
         ),
-      // Its order only, as core: a dataset that leaves `layer-order` leaves the stacking order,
+      // Its order only, as core: a dataset that leaves `layerOrder` leaves the stacking order,
       // and one that joins it is put on the order by the caller (`layers.reorder`)
       move: vi.fn((id: string, placement: { order?: DatasetOrder; index?: number }) => {
         const dataset = datasets.find((d) => d.id === id);
         if (!dataset) throw new Error(`no dataset ${id}`);
         const next = placement.order ?? dataset.order;
-        if (dataset.order === 'layer-order' && next !== 'layer-order') {
+        if (dataset.order === 'layerOrder' && next !== 'layerOrder') {
           order = order.filter((x) => x !== id);
         }
         dataset.order = next;

@@ -6,8 +6,8 @@
  *
  * They verify that it walks the features of the Store and the datasets in
  * a single stacking order and returns the single frontmost thing among those that are
- * visible. The traversal order is above-store -> the stacking order from the end (the
- * front) -> below-store.
+ * visible. The traversal order is aboveLayers -> the stacking order from the end (the
+ * front) -> belowLayers.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -105,7 +105,7 @@ function createFeature(feature: Feature): void {
 /** A dataset (it holds one point at the same position as the center) */
 function putDataset(
   id: string,
-  order: 'below-store' | 'above-store' | 'layer-order',
+  order: 'belowLayers' | 'aboveLayers' | 'layerOrder',
   interactive = true,
 ): ReturnType<DatasetManager['add']> {
   return manager.add({
@@ -143,8 +143,8 @@ describe('the order of the unified z traversal', () => {
     expect(createTester()(CENTER)).toEqual({ kind: 'store', feature: store.getFeature('f1') });
   });
 
-  it('places an above-store dataset in front of every layer', () => {
-    putDataset('above', 'above-store');
+  it('places an aboveLayers dataset in front of every layer', () => {
+    putDataset('above', 'aboveLayers');
 
     const top = createTester()(CENTER);
 
@@ -152,8 +152,8 @@ describe('the order of the unified z traversal', () => {
     expect(datasetFeature(top)?.id).toBe('above-f');
   });
 
-  it('places a below-store dataset behind every layer', () => {
-    putDataset('below', 'below-store');
+  it('places a belowLayers dataset behind every layer', () => {
+    putDataset('below', 'belowLayers');
 
     expect(createTester()(CENTER)?.kind).toBe('store');
   });
@@ -161,7 +161,7 @@ describe('the order of the unified z traversal', () => {
   it('a dataset inserted into the order wins or loses by its position in it', () => {
     createLayer('l2');
     createFeature(polygon('f2', 'l2'));
-    putDataset('middle', 'layer-order');
+    putDataset('middle', 'layerOrder');
 
     // l1 -> middle -> l2: the frontmost one is the feature of l2
     store.setLayerOrder(['l1', 'middle', 'l2']);
@@ -174,14 +174,14 @@ describe('the order of the unified z traversal', () => {
     expect(datasetFeature(top)?.id).toBe('middle-f');
   });
 
-  it('does not let a layer-order dataset that is not in the order occlude anything', () => {
-    putDataset('orphan', 'layer-order');
+  it('does not let a layerOrder dataset that is not in the order occlude anything', () => {
+    putDataset('orphan', 'layerOrder');
 
     expect(createTester()(CENTER)?.kind).toBe('store');
   });
 
   it('skips an unknown ID in the order', () => {
-    putDataset('middle', 'layer-order');
+    putDataset('middle', 'layerOrder');
     store.setLayerOrder(['l1', 'unknown-entry', 'middle']);
 
     const top = createTester()(CENTER);
@@ -191,14 +191,14 @@ describe('the order of the unified z traversal', () => {
   });
 
   it('does not let a hidden dataset occlude anything', () => {
-    const dataset = putDataset('above', 'above-store');
+    const dataset = putDataset('above', 'aboveLayers');
     dataset.setVisible(false);
 
     expect(createTester()(CENTER)?.kind).toBe('store');
   });
 
   it('returns null when nothing is hit', () => {
-    putDataset('above', 'above-store');
+    putDataset('above', 'aboveLayers');
 
     expect(createTester()({ x: 5000, y: -5000 })).toBeNull();
   });
@@ -211,7 +211,7 @@ describe('the meaning of interactive', () => {
   });
 
   it('lets a dataset with interactive: false occlude too (feature is null)', () => {
-    putDataset('above', 'above-store', false);
+    putDataset('above', 'aboveLayers', false);
 
     const top = createTester()(CENTER);
 
@@ -223,8 +223,8 @@ describe('the meaning of interactive', () => {
   });
 
   it('does not descend to the dataset behind even with interactive: false', () => {
-    putDataset('below', 'below-store');
-    putDataset('above', 'above-store', false);
+    putDataset('below', 'belowLayers');
+    putDataset('above', 'aboveLayers', false);
 
     const top = createTester()(CENTER);
     expect(top?.kind === 'dataset' && top.dataset.id).toBe('above');
@@ -255,7 +255,7 @@ describe('the short circuit when there is no dataset', () => {
   it('returns to the short circuit when a dataset is hidden', () => {
     createLayer('l1');
     createFeature(polygon('f1', 'l1'));
-    const dataset = putDataset('above', 'above-store');
+    const dataset = putDataset('above', 'aboveLayers');
     const getLayerOrder = vi.spyOn(store, 'getLayerOrder');
 
     dataset.setVisible(false);
@@ -270,7 +270,7 @@ describe('passing orderedFeatures in', () => {
   it('uses the list that was passed in as it is (it does not fetch from the Store again)', () => {
     createLayer('l1');
     createFeature(polygon('f1', 'l1'));
-    putDataset('below', 'below-store');
+    putDataset('below', 'belowLayers');
 
     const orderedFeatures = [store.getFeature('f1') as Feature];
     const top = createTester()(CENTER, { orderedFeatures });
@@ -382,7 +382,7 @@ describe('the z order and the consumption of the companions (feature companion)'
   it('picks them up in the same order on the path with datasets (stacking order)', () => {
     createLayer('l1');
     createFeature(awayPolygon('f1', 'l1'));
-    putDataset('below', 'below-store');
+    putDataset('below', 'belowLayers');
     registerCompanion(['f1']);
 
     expect(createTester()(CENTER)?.kind).toBe('companion');
@@ -391,7 +391,7 @@ describe('the z order and the consumption of the companions (feature companion)'
   it('lets a dataset in front win over the companions', () => {
     createLayer('l1');
     createFeature(awayPolygon('f1', 'l1'));
-    putDataset('above', 'above-store');
+    putDataset('above', 'aboveLayers');
     registerCompanion(['f1']);
 
     expect(createTester()(CENTER)?.kind).toBe('dataset');

@@ -77,7 +77,7 @@ function setup(): {
   let topmostCalls = 0;
 
   // A reduced version of the unified z scan. It returns store when a feature of the Store is in
-  // front, and otherwise the datasets from the front (above-store → below-store).
+  // front, and otherwise the datasets from the front (aboveLayers → belowLayers).
   const interactions = createDisplayInteractions({
     manager,
     hitTestTopmost: (event): TopHit | null => {
@@ -86,8 +86,8 @@ function setup(): {
 
       const coordinate: Coordinate = [event.lngLat.lng, event.lngLat.lat];
       const hit =
-        manager.hitTestSide('above-store', coordinate, 0.1, exactHit) ??
-        manager.hitTestSide('below-store', coordinate, 0.1, exactHit);
+        manager.hitTestSide('aboveLayers', coordinate, 0.1, exactHit) ??
+        manager.hitTestSide('belowLayers', coordinate, 0.1, exactHit);
       return hit
         ? { kind: 'dataset', dataset: hit.dataset, feature: hit.feature, row: hit.row }
         : null;
@@ -317,7 +317,7 @@ describe('the hover of a dataset', () => {
       id: 'above',
       rows: [point('a', [2, 2])],
       interactive: true,
-      order: 'above-store',
+      order: 'aboveLayers',
     });
     const belowHandler = vi.fn<(payload: DatasetHoverPayload) => void>();
     const aboveHandler = vi.fn<(payload: DatasetHoverPayload) => void>();
@@ -352,7 +352,7 @@ describe('the hover of a dataset', () => {
     manager.add({
       id: 'above',
       rows: [point('a', [1, 1])],
-      order: 'above-store',
+      order: 'aboveLayers',
     });
     const handler = vi.fn<(payload: DatasetHoverPayload) => void>();
     below.on('hover', handler);
@@ -430,7 +430,7 @@ describe('the hit testing of a hidden dataset', () => {
       id: 'above',
       rows: [point('a', [1, 1])],
       interactive: true,
-      order: 'above-store',
+      order: 'aboveLayers',
     });
     const belowHandler = vi.fn<(payload: DatasetClickPayload) => void>();
     below.on('click', belowHandler);
@@ -459,8 +459,8 @@ describe('the notification of the resolved click (the source of draw.dataset.cli
         if (storeHit) return { kind: 'store', feature: STORE_FEATURE };
         const coordinate: Coordinate = [event.lngLat.lng, event.lngLat.lat];
         const hit =
-          manager.hitTestSide('above-store', coordinate, 0.1, exactHit) ??
-          manager.hitTestSide('below-store', coordinate, 0.1, exactHit);
+          manager.hitTestSide('aboveLayers', coordinate, 0.1, exactHit) ??
+          manager.hitTestSide('belowLayers', coordinate, 0.1, exactHit);
         return hit
           ? { kind: 'dataset', dataset: hit.dataset, feature: hit.feature, row: hit.row }
           : null;

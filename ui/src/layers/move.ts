@@ -11,12 +11,12 @@
 // move), at that node's position in core's list plus one, or at the back (0) when nothing in the
 // tree is behind it.
 //
-// - a layer, or a dataset placed among the layers (`layer-order`): `layers.reorder` with the
+// - a layer, or a dataset placed among the layers (`layerOrder`): `layers.reorder` with the
 //   layers and those datasets in their new order from the back. The rows of the root that are
 //   not entries of the stacking order (the datasets in front of or behind every layer) are left
 //   out, and so are the entries the tree does not show, whose positions core keeps
-// - a dataset in front of or behind every layer (`above-store`, `below-store`): it joins the
-//   stacking order first (`join`: the panel moves it to `layer-order`, and back to its own order
+// - a dataset in front of or behind every layer (`aboveLayers`, `belowLayers`): it joins the
+//   stacking order first (`join`: the panel moves it to `layerOrder`, and back to its own order
 //   when the reorder is refused), then the same `layers.reorder` with it in its new place
 // - a group: `groups.move` to `{ layerId, index }`
 // - a feature: `features.move` to `{ layerId, index }`, or to `{ groupId, index }` in a group

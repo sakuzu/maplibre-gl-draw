@@ -184,7 +184,7 @@ function createManager(zoom = 10): DatasetManager {
 /** Draws frames until nothing is left to build */
 function drawAll(manager: DatasetManager, target: DisplayBatchTarget): void {
   for (let i = 0; i < 50; i++) {
-    manager.draw('below-store', target, {} as ProjectionData, 10);
+    manager.draw('belowLayers', target, {} as ProjectionData, 10);
     const pending = manager.listInternal().some((c) => c.hasPendingBuild);
     if (!pending) return;
   }
@@ -518,8 +518,8 @@ describe('reading the rows back', () => {
         [2.6, 0.6],
         [4.1, 2.1],
       ] as Coordinate[]) {
-        const a = manager.hitTestSide('below-store', probe, 0.3, insideBbox);
-        const b = asTable.hitTestSide('below-store', probe, 0.3, insideBbox);
+        const a = manager.hitTestSide('belowLayers', probe, 0.3, insideBbox);
+        const b = asTable.hitTestSide('belowLayers', probe, 0.3, insideBbox);
         expect(b?.feature).toEqual(a?.feature);
         // The row is the row of the table; the features left the rows without a geometry out
         if (b?.feature) expect(b.row).toBe(Number(b.feature.id.slice(1)));
@@ -781,8 +781,8 @@ describe('a mixed geometry column behaves as the same features', () => {
     for (let y = 0; y < 6; y++) {
       for (let x = 0; x < 6; x++) {
         const probe: Coordinate = [x * 2 + 0.2, y * 2 + 0.2];
-        const a = manager.hitTestSide('below-store', probe, 0.3, nearBbox);
-        const b = asTable.hitTestSide('below-store', probe, 0.3, nearBbox);
+        const a = manager.hitTestSide('belowLayers', probe, 0.3, nearBbox);
+        const b = asTable.hitTestSide('belowLayers', probe, 0.3, nearBbox);
         expect(b?.feature).toEqual(a?.feature);
         if (b?.feature) {
           hits++;
@@ -1058,7 +1058,7 @@ describe('reading by row matches the features', () => {
       interactive: true,
       ...style,
     });
-    const hit = manager.hitTestSide('below-store', [4.1, 2.1], 0.3, () => true);
+    const hit = manager.hitTestSide('belowLayers', [4.1, 2.1], 0.3, () => true);
 
     expect(hit).not.toBeNull();
     expect(dataset.getRow(hit?.row ?? -1)).toEqual(hit?.feature);

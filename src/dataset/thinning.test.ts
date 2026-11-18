@@ -133,7 +133,7 @@ function createManager(zoom = 10): {
 function drawnIds(manager: DatasetManager, zoom = 10): string[] {
   const { target, frames } = createBatchTarget();
   manager.beginFrame(zoom);
-  manager.draw('below-store', target, {} as ProjectionData, zoom);
+  manager.draw('belowLayers', target, {} as ProjectionData, zoom);
   return frames[0]?.map((feature) => feature.id) ?? [];
 }
 
@@ -671,7 +671,7 @@ describe('the application to a dataset', () => {
     });
 
     const at = (coord: Coordinate): string | null => {
-      const hit = manager.hitTestSide('below-store', coord, pxDeg(10) * 2, (feature, position) => {
+      const hit = manager.hitTestSide('belowLayers', coord, pxDeg(10) * 2, (feature, position) => {
         const [x, y] = coordinatesOf(feature) as Coordinate;
         return Math.hypot(x - position[0], y - position[1]) <= pxDeg(10) * 2;
       });
@@ -698,7 +698,7 @@ describe('the application to a dataset', () => {
 
     // The default marker is radius 6 + outline 2 = 8px. b, 5px away, covers the position of a
     const hit = manager.hitTestSide(
-      'below-store',
+      'belowLayers',
       [0, 0],
       pxDeg(10),
       (feature, position, tolerance) => {

@@ -72,7 +72,7 @@ GeoJSON の図形であるふつうの地物です。ほかの地物と同じよ
   ます。そのファイルを読み込むと、図形の種類にかかわらず型が戻ります
   ([データ形式](../reference/data-format.md))
 - 組み込みの型の名前は使われているので、
-  `draw.extensions.featureTypes.add` はそれらに `already-exists` を
+  `draw.extensions.featureTypes.add` はそれらに `alreadyExists` を
   投げます。組み込みの型の描き方を変えるには、その型を差し替えます
   ([組み込みの型の差し替え](#組み込みの型の差し替え))
 

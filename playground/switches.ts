@@ -171,7 +171,7 @@ function toggleCells(draw: Draw, map: maplibregl.Map): void {
       colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#3182bd', '#08519c'],
       other: '#cccccc',
     },
-    order: 'below-store',
+    order: 'belowLayers',
     interactive: true,
   });
   dataset.on('clicked', ({ row }) => console.info(`Cell ${row.id}:`, row.properties));

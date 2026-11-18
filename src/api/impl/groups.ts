@@ -229,7 +229,7 @@ export function prepareGroupShell(
   } else {
     id = requireId(input.id);
     if (isTaken(store, id) || pending.has(id)) {
-      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+      throw new DrawError('alreadyExists', `The ID ${JSON.stringify(id)} is already taken`, {
         id,
       });
     }

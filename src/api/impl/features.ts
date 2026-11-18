@@ -404,7 +404,7 @@ function prepareFeature(
   } else {
     id = requireId(input.id);
     if (isTaken(store, id) || pending.has(id)) {
-      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+      throw new DrawError('alreadyExists', `The ID ${JSON.stringify(id)} is already taken`, {
         id,
       });
     }
@@ -424,7 +424,7 @@ function prepareFeature(
   } else {
     layerId = deps.getActiveLayerId();
     if (!store.getLayer(layerId)) {
-      throw new DrawError('invalid-state', 'There is no layer to put the feature in');
+      throw new DrawError('invalidState', 'There is no layer to put the feature in');
     }
   }
 

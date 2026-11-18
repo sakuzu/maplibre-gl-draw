@@ -74,8 +74,8 @@ describe('read-only', () => {
     store.setReadOnly(true);
     store.setSelection('feature', ['f1']);
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
-    store.setMode('draw_point');
-    expect(store.getMode()).toBe('draw_point');
+    store.setMode('drawPoint');
+    expect(store.getMode()).toBe('drawPoint');
     store.setLocallyHidden('f1', true);
     expect(store.isHidden('f1')).toBe(true);
   });

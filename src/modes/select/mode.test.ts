@@ -200,7 +200,7 @@ describe('SelectMode.onDragStart interaction lock', () => {
 describe('clearing the selection in SelectMode.onStop', () => {
   it('a normal mode switch (to drawing, etc.) clears the selection', () => {
     store.setSelection('feature', ['f1']);
-    store.setMode('draw_line');
+    store.setMode('drawLine');
     mode.onStop();
     expect(store.getSelection()).toEqual({ type: null, ids: [] });
   });

@@ -73,7 +73,7 @@ it) and makes its own layers (1). The survey area and the route are
 features of two layers, there from the first frame (2). The cells are
 made in data.ts and given to `draw.datasets.add` as rows once the map
 has loaded, with a graduated rule on `value` and a base style without
-outlines. With the order `layer-order`, the dataset has a place in the
+outlines. With the order `layerOrder`, the dataset has a place in the
 stacking order of the layers, and `draw.layers.reorder` puts it at the
 back (3). They take no clicks, so the lines drawn snap to the buildings
 rather than to the cells. The points are made in typed arrays, with no

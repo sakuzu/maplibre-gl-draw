@@ -142,7 +142,7 @@ function setup(): void {
   modeManager = new ModeManagerImpl(store);
   modeManager.registerMode('select', () => ({ modeName: 'select' }));
   harness = createModeHarness({ store, map, modeManager, getWritableLayerId: () => 'l1' });
-  harness.register('draw_freehand', drawFreehandMode);
+  harness.register('drawFreehand', drawFreehandMode);
 
   snapService = createSnapService({ store, spatialIndex });
 
@@ -226,7 +226,7 @@ beforeEach(() => {
 
 describe('snapping of freehand', () => {
   it('does not snap inside a stroke to a dense boundary line (a straight line is not bent)', () => {
-    modeManager.setMode('draw_freehand');
+    modeManager.setMode('drawFreehand');
 
     const path = straightStroke(6);
     stroke(path);
@@ -243,7 +243,7 @@ describe('snapping of freehand', () => {
   });
 
   it('snaps the start point and the end point of the drag to vertices of the boundary line', () => {
-    modeManager.setMode('draw_freehand');
+    modeManager.setMode('drawFreehand');
 
     const path = straightStroke(6);
     stroke(path);
@@ -260,7 +260,7 @@ describe('snapping of freehand', () => {
   });
 
   it('the declaration of the mode refuses only the drag move', () => {
-    const mode = bridgeMode('draw_freehand', drawFreehandMode(harness.modeContext()), () => {});
+    const mode = bridgeMode('drawFreehand', drawFreehandMode(harness.modeContext()), () => {});
 
     expect(mode.isSnapEnabledFor?.('dragmove')).toBe(false);
     expect(mode.isSnapEnabledFor?.('dragstart')).toBe(true);
@@ -272,7 +272,7 @@ describe('snapping of freehand', () => {
 
 describe('cancel of a freehand stroke (dragcancel)', () => {
   it('a second finger discards the stroke in progress and gives dragPan back', () => {
-    modeManager.setMode('draw_freehand');
+    modeManager.setMode('drawFreehand');
     const points = straightStroke(6);
     const start = points[0];
     normalizer.emit({
@@ -314,7 +314,7 @@ describe('a press of freehand that draws nothing', () => {
   }
 
   it('gives dragPan back when the press is released without a drag', () => {
-    modeManager.setMode('draw_freehand');
+    modeManager.setMode('drawFreehand');
     const [at] = straightStroke(1);
     normalizer.emit(mouse('mousedown', at).event);
     expect(map.dragPan.isEnabled()).toBe(false);
@@ -325,7 +325,7 @@ describe('a press of freehand that draws nothing', () => {
   });
 
   it('keeps the map from zooming on a double click', () => {
-    modeManager.setMode('draw_freehand');
+    modeManager.setMode('drawFreehand');
     const [at] = straightStroke(1);
     const { event, original } = mouse('dblclick', at);
     normalizer.emit(event);

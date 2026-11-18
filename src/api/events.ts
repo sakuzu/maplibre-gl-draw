@@ -107,29 +107,38 @@ export interface DocumentChange {
  */
 export interface DrawEvents {
   /** A feature was created */
-  'feature.created': { feature: Feature; source: string };
+  'feature.created': { feature: Feature; source: UpdateSource };
   /** A feature changed; `intermediate` is true while a drag is in progress */
-  'feature.updated': { feature: Feature; previous: Feature; source: string; intermediate: boolean };
+  'feature.updated': {
+    feature: Feature;
+    previous: Feature;
+    source: UpdateSource;
+    intermediate: boolean;
+  };
   /** A feature was deleted */
-  'feature.deleted': { feature: Feature; source: string };
+  'feature.deleted': { feature: Feature; source: UpdateSource };
   /** A feature moved between layers or groups */
-  'feature.moved': { feature: Feature; from: MoveTarget; to: MoveTarget; source: string };
+  'feature.moved': { feature: Feature; from: MoveTarget; to: MoveTarget; source: UpdateSource };
   /** A layer was created */
-  'layer.created': { layer: Layer; source: string };
+  'layer.created': { layer: Layer; source: UpdateSource };
   /** A layer changed */
-  'layer.updated': { layer: Layer; previous: Layer; source: string };
+  'layer.updated': { layer: Layer; previous: Layer; source: UpdateSource };
   /** A layer was deleted */
-  'layer.deleted': { layer: Layer; source: string };
+  'layer.deleted': { layer: Layer; source: UpdateSource };
   /** The stacking order of the layers changed */
-  'layer.reordered': { order: readonly string[]; previous: readonly string[]; source: string };
+  'layer.reordered': {
+    order: readonly string[];
+    previous: readonly string[];
+    source: UpdateSource;
+  };
   /** A group was created */
-  'group.created': { group: Group; source: string };
+  'group.created': { group: Group; source: UpdateSource };
   /** A group changed */
-  'group.updated': { group: Group; previous: Group; source: string };
+  'group.updated': { group: Group; previous: Group; source: UpdateSource };
   /** A group was ungrouped */
-  'group.deleted': { group: Group; source: string };
+  'group.deleted': { group: Group; source: UpdateSource };
   /** The title or the description changed */
-  'metadata.updated': { metadata: Metadata; previous: Metadata; source: string };
+  'metadata.updated': { metadata: Metadata; previous: Metadata; source: UpdateSource };
   /**
    * Every change of one transaction that changed the document (features, layers, groups,
    * metadata or files); it arrives once per such transaction, after the events of the
@@ -138,7 +147,7 @@ export interface DrawEvents {
    */
   'document.changed': DocumentChange;
   /** A document was loaded */
-  'document.loaded': { result: LoadResult; source: string };
+  'document.loaded': { result: LoadResult; source: UpdateSource };
   /** The selection changed */
   'selection.changed': { selection: Selection; previous: Selection };
   /** The vertex selection changed */
@@ -210,7 +219,7 @@ export interface DrawEvents {
   /** The divisions of the stacking order changed */
   'layerStack.changed': { entries: readonly LayerStackEntry[] };
   /** Loading or reading an image failed */
-  error: { error: DrawError; source: string; featureId?: string };
+  'image.failed': { error: DrawError; source: string; featureId?: string };
 }
 
 /** A function that receives the payload of an event. */

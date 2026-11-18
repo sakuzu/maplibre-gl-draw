@@ -26,12 +26,12 @@ export interface DocumentResource {
    *
    * @returns What was read, or `null` when the document is read-only
    * @throws `DrawError` (the promise rejects; every failure is a `DrawError`) with the code
-   *   `unsupported-format` when the source cannot be read (text that is not JSON, data that is
+   *   `unsupportedFormat` when the source cannot be read (text that is not JSON, data that is
    *   neither a document of the library nor GeoJSON, an image file that cannot be decoded), or
-   *   `invalid-input` when the document is not valid (a document of the library that breaks
+   *   `invalidInput` when the document is not valid (a document of the library that breaks
    *   its format, an embedded image that is broken, an image without `coordinate`, `layer`
-   *   with `layerId`, `layer` or `group` with a document of the library), `not-found` for a
-   *   `layerId` the document does not have, or `already-exists` for an ID of `layer` or
+   *   with `layerId`, `layer` or `group` with a document of the library), `notFound` for a
+   *   `layerId` the document does not have, or `alreadyExists` for an ID of `layer` or
    *   `group` that is taken
    */
   load(source: LoadSource, options?: LoadOptions): Promise<LoadResult | null>;
@@ -53,8 +53,8 @@ export interface DocumentResource {
    * @returns What was read from each item, in the order of the items, or `null` when the
    *   document is read-only
    * @throws `DrawError` (the promise rejects) as `load` does, for the first item that cannot
-   *   be read (`not-found` for a `layerId` that neither the document nor an earlier item has);
-   *   nothing is written then. `invalid-input` when `items` is not an array of objects
+   *   be read (`notFound` for a `layerId` that neither the document nor an earlier item has);
+   *   nothing is written then. `invalidInput` when `items` is not an array of objects
    *   with a `source`
    */
   loadMany(

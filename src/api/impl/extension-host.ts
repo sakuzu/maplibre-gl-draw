@@ -129,7 +129,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const getDraw = (): Draw => {
     if (!attached) {
       throw new DrawError(
-        'invalid-state',
+        'invalidState',
         'The draw instance is not attached to its extensions yet',
       );
     }
@@ -146,7 +146,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     map,
     store,
     screen,
-    clickTolerancePx: context.options.clickTolerance,
+    clickTolerancePx: context.options.clickTolerancePx,
     hitTestService: context.hitTestService,
     boxSelectionRegistry: context.boxSelectionRegistry,
     selectionExtensions: context.selectionScope.extensions,
@@ -267,7 +267,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     ...services,
     hitTestTopmost(point, tolerancePx) {
       const tester =
-        tolerancePx === undefined || tolerancePx === context.options.clickTolerance
+        tolerancePx === undefined || tolerancePx === context.options.clickTolerancePx
           ? deps.hitTestTopmost
           : deps.hitTestTopmostWith(tolerancePx);
       return tester(point);

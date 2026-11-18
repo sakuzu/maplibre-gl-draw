@@ -21,14 +21,14 @@ export interface HiddenCollection {
   /**
    * Hides a feature, a group or a layer in this client only; the document does not change.
    *
-   * @throws `DrawError` with the code `not-found` when the ID is not a feature, a group or a
+   * @throws `DrawError` with the code `notFound` when the ID is not a feature, a group or a
    *   layer of the document
    */
   add(id: string): void;
   /**
    * Hides several items in this client only, all of them or none.
    *
-   * @throws `DrawError` with the code `not-found` when one of the IDs is not in the document;
+   * @throws `DrawError` with the code `notFound` when one of the IDs is not in the document;
    *   nothing is hidden then
    */
   addMany(ids: readonly string[]): void;

@@ -47,8 +47,8 @@ export interface GroupsCollection {
    * Creates a group of features and returns it as it was stored.
    *
    * @returns The new group, or `null` when the document is read-only
-   * @throws `DrawError` with the code `not-found` when one of the features does not exist,
-   *   `invalid-input` when the features are not in the same layer, or `already-exists` when
+   * @throws `DrawError` with the code `notFound` when one of the features does not exist,
+   *   `invalidInput` when the features are not in the same layer, or `alreadyExists` when
    *   its ID is taken
    */
   create(input: GroupInput): Group | null;
@@ -65,8 +65,8 @@ export interface GroupsCollection {
    * Changes the keys given in the patch and returns the group after the change.
    *
    * @returns The changed group, or `null` when the change is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no group with this ID, or
-   *   `invalid-input` when the patch has the wrong shape
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID, or
+   *   `invalidInput` when the patch has the wrong shape
    */
   update(id: string, patch: GroupPatch): Group | null;
   /**
@@ -82,7 +82,7 @@ export interface GroupsCollection {
    * Deletes a group; its features stay in the layer.
    *
    * @returns True when it was deleted, false when the deletion is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no group with this ID
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID
    */
   delete(id: string): boolean;
   /**
@@ -90,7 +90,7 @@ export interface GroupsCollection {
    * their layers.
    *
    * @returns True when they were deleted, false when the deletion is refused
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist; nothing
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing
    *   is deleted then
    */
   deleteMany(ids: readonly string[]): boolean;
@@ -98,8 +98,8 @@ export interface GroupsCollection {
    * Moves a group to another layer, or to another position in its layer.
    *
    * @returns True when it moved, false when the move is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when the group or the target does not
-   *   exist, or `invalid-input` when the target is a group
+   * @throws `DrawError` with the code `notFound` when the group or the target does not
+   *   exist, or `invalidInput` when the target is a group
    */
   move(id: string, to: MoveTarget): boolean;
   /**

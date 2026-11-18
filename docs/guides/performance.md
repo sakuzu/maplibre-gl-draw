@@ -162,7 +162,7 @@ draw.options.update({ rendering: { renderScale: 1 } });
 ```
 
 A value that is not a positive number throws a `DrawError` with the code
-`invalid-input` and changes nothing. The drawing follows at once. Sizes
+`invalidInput` and changes nothing. The drawing follows at once. Sizes
 that already grow and shrink with the zoom (a line drawn at its reference
 zoom) are not multiplied again. An overlay or a renderer of your own
 reads the ratio in effect, the scale included, from its context:

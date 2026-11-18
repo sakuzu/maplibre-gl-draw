@@ -55,16 +55,16 @@ export interface FeaturesCollection {
    * feature nor its group nor its layer is locked. A refused edit returns `null` or `false`
    * for the same reasons.
    *
-   * @throws `DrawError` with the code `not-found` when there is no feature with this ID
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID
    */
   isEditable(id: string): boolean;
   /**
    * Creates a feature and returns it as it was stored.
    *
    * @returns The new feature, or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape,
-   *   `already-exists` when its ID is taken, `not-found` when its layer or group does not
-   *   exist, or `invalid-state` when the input names no layer and the document has no layer
+   * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape,
+   *   `alreadyExists` when its ID is taken, `notFound` when its layer or group does not
+   *   exist, or `invalidState` when the input names no layer and the document has no layer
    *   to put it in
    */
   create(input: FeatureInput): Feature | null;
@@ -84,8 +84,8 @@ export interface FeaturesCollection {
    * removed.
    *
    * @returns The changed feature, or `null` when the change is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no feature with this ID, or
-   *   `invalid-input` when the patch has the wrong shape
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID, or
+   *   `invalidInput` when the patch has the wrong shape
    */
   update(id: string, patch: FeaturePatch): Feature | null;
   /**
@@ -101,14 +101,14 @@ export interface FeaturesCollection {
    * Deletes a feature.
    *
    * @returns True when it was deleted, false when the deletion is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when there is no feature with this ID
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID
    */
   delete(id: string): boolean;
   /**
    * Deletes several features in one transaction: all of them or none.
    *
    * @returns True when they were deleted, false when the deletion is refused
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist; nothing
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing
    *   is deleted then
    */
   deleteMany(ids: readonly string[]): boolean;
@@ -117,7 +117,7 @@ export interface FeaturesCollection {
    * target sets its position there.
    *
    * @returns True when it moved, false when the move is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when the feature or the target does not
+   * @throws `DrawError` with the code `notFound` when the feature or the target does not
    *   exist
    */
   move(id: string, to: MoveTarget): boolean;
@@ -125,7 +125,7 @@ export interface FeaturesCollection {
    * Moves several features in one transaction, keeping their order: all of them or none.
    *
    * @returns True when they moved, false when the move is refused
-   * @throws `DrawError` with the code `not-found` when one of the features or the target does
+   * @throws `DrawError` with the code `notFound` when one of the features or the target does
    *   not exist; nothing moves then
    */
   moveMany(ids: readonly string[], to: MoveTarget): boolean;
@@ -144,8 +144,8 @@ export interface FeaturesCollection {
    * Joins areas into one feature and returns it; the result replaces the features given.
    *
    * @returns The new feature, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when fewer than two areas are given or one of the features is not an
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when fewer than two areas are given or one of the features is not an
    *   area
    */
   union(ids: readonly string[]): Feature | null;
@@ -156,16 +156,16 @@ export interface FeaturesCollection {
    * @param id - The area to subtract from
    * @param subtractIds - The areas to subtract
    * @returns The resulting feature, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when one of the features is not an area
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when one of the features is not an area
    */
   difference(id: string, subtractIds: readonly string[]): Feature | null;
   /**
    * Keeps the part where areas overlap and returns it; the result replaces the features given.
    *
    * @returns The resulting feature, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when fewer than two areas are given or one of the features is not an
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when fewer than two areas are given or one of the features is not an
    *   area
    */
   intersection(ids: readonly string[]): Feature | null;
@@ -175,8 +175,8 @@ export interface FeaturesCollection {
    * @param id - The area to split
    * @param lineId - The line to split along
    * @returns The new features, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when the features are not an area and a line
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when the features are not an area and a line
    */
   split(id: string, lineId: string): Feature[] | null;
   /**
@@ -187,8 +187,8 @@ export interface FeaturesCollection {
    *   `segments` the number of segments of a full circle, as in the buffer of the geometry
    *   entry
    * @returns The new features, or `null` when the operation is refused (read-only, a lock)
-   * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when the distance is not a finite number
+   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist, or
+   *   `invalidInput` when the distance is not a finite number
    */
   buffer(
     ids: readonly string[],

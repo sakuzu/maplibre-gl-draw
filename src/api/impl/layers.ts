@@ -48,7 +48,7 @@ const FILTER_KEYS = ['visible', 'locked'] as const;
  * Creates `draw.layers`
  *
  * @param isStackEntry - Whether an ID that is not a layer may stand in the stacking order: a
- *   dataset whose order is `layer-order`, or an entry the `isExternalEntry` option recognizes
+ *   dataset whose order is `layerOrder`, or an entry the `isExternalEntry` option recognizes
  * @internal
  */
 export function createLayers(
@@ -272,7 +272,7 @@ export function prepareLayer(
   } else {
     id = requireId(input.id);
     if (isTaken(store, id) || pending.has(id) || store.getLayerOrder().includes(id)) {
-      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+      throw new DrawError('alreadyExists', `The ID ${JSON.stringify(id)} is already taken`, {
         id,
       });
     }

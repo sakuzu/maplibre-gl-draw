@@ -71,7 +71,7 @@ draw.features.update(featureId, {
 
 - 色は CSS の色 (`#1e88e5`、`rgb(30 136 229)`、`hsl(...)`、`tomato`)
   で、不透明度は 0 から 1 です。型や形の合わない値は、コード
-  `invalid-input` の `DrawError` を投げます
+  `invalidInput` の `DrawError` を投げます
 - `lineStyle` は `solid`、`dashed`、`dotted` のどれかです
 - `strokeWidth` は、地物を描いたときのズーム、つまり基準のズーム
   (プロパティー `maplibre-gl-draw:createdZoom`) での幅をピクセルで

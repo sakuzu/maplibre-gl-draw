@@ -68,15 +68,12 @@ describe('GeometryError from the boolean operations', () => {
   it.each([
     [
       'Unable to complete output ring starting at [0, 0]. Last matching segment found ends at [1, 1].',
-      'engine-failure',
+      'engineFailure',
     ],
-    ['Input geometry is not a valid Polygon or MultiPolygon', 'invalid-input'],
-    ['Tried to create degenerate segment at [0, 0]', 'invalid-input'],
-    [
-      'Infinite loop when passing sweep line over endpoints (queue size too big).',
-      'engine-failure',
-    ],
-    ['Unable to find segment #3 [0, 0] -> [1, 1] in SweepLine tree.', 'engine-failure'],
+    ['Input geometry is not a valid Polygon or MultiPolygon', 'invalidInput'],
+    ['Tried to create degenerate segment at [0, 0]', 'invalidInput'],
+    ['Infinite loop when passing sweep line over endpoints (queue size too big).', 'engineFailure'],
+    ['Unable to find segment #3 [0, 0] -> [1, 1] in SweepLine tree.', 'engineFailure'],
   ])('maps "%s" to the reason %s', (message, code) => {
     failure.message = message;
     const error = captureError(() => union(square, shifted));
@@ -137,13 +134,13 @@ describe('GeometryError from the public functions', () => {
       const error = captureError(run) as InstanceType<typeof GeometryError>;
       expect(error).toBeInstanceOf(GeometryError);
       expect(error.operation).toBe(name);
-      expect(error.code).toBe('engine-failure');
+      expect(error.code).toBe('engineFailure');
       expect(error.message).toBe(`${name}: the boolean operation failed`);
       expect((error.cause as Error).message).toBe(failure.message);
     }
   });
 
-  it('throws invalid-input for an input of the wrong shape', () => {
+  it('throws invalidInput for an input of the wrong shape', () => {
     const line = { type: 'LineString' as const, coordinates: [[0, 0] as [number, number]] };
     const cases: [string, () => unknown][] = [
       ['area', () => geometry.area(line as never)],
@@ -158,7 +155,7 @@ describe('GeometryError from the public functions', () => {
     for (const [name, run] of cases) {
       const error = captureError(run) as InstanceType<typeof GeometryError>;
       expect(error).toBeInstanceOf(GeometryError);
-      expect(error.code).toBe('invalid-input');
+      expect(error.code).toBe('invalidInput');
       expect(error.operation).toBe(name);
       expect(error.message.startsWith(`${name}: `)).toBe(true);
     }

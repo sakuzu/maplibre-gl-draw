@@ -116,7 +116,7 @@ input?.addEventListener('change', async () => {
 ```
 
 - 形式は中身から判断します。ライブラリーの文書、GeoJSON、画像ファイル
-  (後述) のどれでもなければ、コード `unsupported-format` の
+  (後述) のどれでもなければ、コード `unsupportedFormat` の
   `DrawError` で失敗します
 - `mode` で、文書を置き換える (`replace`。ライブラリーの文書の既定) か
   追加する (`merge`。GeoJSON の既定) かを選びます。ライブラリーの文書は
@@ -130,7 +130,7 @@ input?.addEventListener('change', async () => {
   手順です
 - ライブラリーの文書は、どこかの形が不正なとき、存在しないものを参照
   しているとき、ライブラリーが読めない major の版のときは、全体を
-  受け付けず、コード `invalid-input` で失敗します。前の major の版の
+  受け付けず、コード `invalidInput` で失敗します。前の major の版の
   文書は、読み込むときに新しい版に直します
 - 形状が使えない GeoJSON の地物 (形状が無い、対応していない、
   有限でない数を含む、位置が 1 つだけの線、閉じていないリングなど) は
@@ -139,9 +139,9 @@ input?.addEventListener('change', async () => {
   不透明度) は捨て、地物は残します
 - 埋め込まれた画像が、宣言した型の PNG、JPEG、WebP、GIF のデータ URL
   でないとき、または画素をデコードできないときは、読み込み全体を
-  `invalid-input` で受け付けません。縮小が必要な画像を、ブラウザーが
+  `invalidInput` で受け付けません。縮小が必要な画像を、ブラウザーが
   それらの型で書き出せないときは、画像ファイルと同じく
-  `unsupported-format` で受け付けません
+  `unsupportedFormat` で受け付けません
 - ID がすでに使われている GeoJSON の地物には新しい ID を振り
   ます。そのため、`toGeoJSON()` で書き出したファイルを同じ描画に
   読み戻せます
@@ -151,7 +151,7 @@ input?.addEventListener('change', async () => {
 - `options.layer` (`LayerInput`) を指定すると、同じトランザクションで
   レイヤーを作り、すべての地物をそこに入れます。その ID は
   `LoadResult.layerId` に載ります。`layerId` と一緒には指定できません
-  (`invalid-input`)
+  (`invalidInput`)
 - `options.group` (`featureIds` の無い `GroupInput`) を指定すると、
   読んだ地物をすべて、同じトランザクションで作る 1 つのグループに
   入れます。グループは地物が入った場所に置きます。このとき地物はすべて
@@ -267,10 +267,10 @@ draw.transact(() => {
   分けます
 - 地物に名前は付けません。地物は入力の順に並びます
 - 読み込みなら除く地物と、埋め込まれた画像を取り込めない地物は除き、
-  その番号、コード (`invalid-input`。ブラウザーが書き出せない画像は
-  `unsupported-format`)、理由を `skipped` に載せます。promise が失敗
-  するのは、入力がその形式でないとき (`unsupported-format`) と、
-  読み込みなら受け付けないライブラリーの文書のとき (`invalid-input`)
+  その番号、コード (`invalidInput`。ブラウザーが書き出せない画像は
+  `unsupportedFormat`)、理由を `skipped` に載せます。promise が失敗
+  するのは、入力がその形式でないとき (`unsupportedFormat`) と、
+  読み込みなら受け付けないライブラリーの文書のとき (`invalidInput`)
   だけです
 
 アプリケーションは、地物を書き込む前に、自分の参照を `idMap` で
@@ -382,7 +382,7 @@ await draw.document.load(imageFile, {
 プロパティー `maplibre-gl-draw:imageFileId` でそれを参照します。
 読み込むファイルに埋め込まれた画像は、宣言した型と一致する
 `data:image/(png|jpeg|webp|gif);base64,` のデータ URL だけを受け付け
-ます。`draw_image` モードは `image.requested` でアプリケーションに
+ます。`drawImage` モードは `image.requested` でアプリケーションに
 ファイルを求めます。このモードについては [描画と編集](drawing.ja.md) を
 参照してください。
 

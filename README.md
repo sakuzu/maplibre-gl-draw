@@ -197,7 +197,7 @@ const draw = createDraw(map);
 // Your own button starts drawing. Click to add vertices; click the first
 // vertex or press Enter to finish
 document.querySelector('#polygon')?.addEventListener('click', () => {
-  draw.setMode('draw_polygon');
+  draw.setMode('drawPolygon');
 });
 
 draw.on('feature.created', ({ feature }) => {

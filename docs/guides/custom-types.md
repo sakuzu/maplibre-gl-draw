@@ -77,7 +77,7 @@ other feature.
   whatever the kind of the geometry
   ([data format](../reference/data-format.md))
 - The names of the built-in types are taken:
-  `draw.extensions.featureTypes.add` throws `already-exists` for them.
+  `draw.extensions.featureTypes.add` throws `alreadyExists` for them.
   To change how a built-in type is drawn, override it
   ([overriding a built-in type](#overriding-a-built-in-type))
 

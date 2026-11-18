@@ -111,7 +111,7 @@ parcels.on('clicked', ({ row }) => {
 ## 行を渡す 3 つの方法
 
 手元のデータの形に合わせて選びます。渡せるのは 3 つのうち 1 つだけ
-で、2 つ渡すとコード `invalid-input` の `DrawError` になります。
+で、2 つ渡すとコード `invalidInput` の `DrawError` になります。
 どれも渡さなければ、データセットは空で始まります。すぐに置くことが
 でき、行は後から `setRows` か `setTable` で渡します。
 
@@ -414,14 +414,14 @@ parcels.setZoomScale((zoom) => ({
 
 | order | 位置 | 標準の UI のレイヤーパネル |
 | --- | --- | --- |
-| `below-store` | すべてのレイヤーの後ろ (既定) | 落とすと `layer-order` |
-| `above-store` | すべてのレイヤーの前 | 落とすと `layer-order` |
-| `layer-order` | 重なりの順の中の自分の ID の位置 | 重なりの順の中で移動 |
+| `belowLayers` | すべてのレイヤーの後ろ (既定) | 落とすと `layerOrder` |
+| `aboveLayers` | すべてのレイヤーの前 | 落とすと `layerOrder` |
+| `layerOrder` | 重なりの順の中の自分の ID の位置 | 重なりの順の中で移動 |
 
-`above-store` のデータセットは選択のハンドルの後ろに描かれます。標準の
+`aboveLayers` のデータセットは選択のハンドルの後ろに描かれます。標準の
 UI のレイヤーパネルでは、どのデータセットもレイヤーの間へドラッグでき
-ます。パネルは、レイヤーの間に落とされた `below-store` か
-`above-store` のデータセットを `draw.datasets.move` で `layer-order` に
+ます。パネルは、レイヤーの間に落とされた `belowLayers` か
+`aboveLayers` のデータセットを `draw.datasets.move` で `layerOrder` に
 移してから、`draw.layers.reorder` で置きます。並べ替えが断られたとき
 (読み取り専用) は、データセットを元の order に戻します。
 
@@ -434,14 +434,14 @@ UI のレイヤーパネルでは、どのデータセットもレイヤーの�
 出ません。
 
 ```ts
-draw.datasets.move('parcels', { order: 'above-store' });
+draw.datasets.move('parcels', { order: 'aboveLayers' });
 draw.datasets.move('parcels', { index: 0 }); // その側でいちばん後ろ
 ```
 
-`layer-order` のデータセットは、その ID が文書の重なりの順
+`layerOrder` のデータセットは、その ID が文書の重なりの順
 (`draw.getStore().getLayerOrder()`) にある間だけ描かれ、位置もその
 順だけで決まります。ID は `draw.layers.reorder` で入れます。このメソッドは
-レイヤーの ID のほかに `layer-order` のデータセットの ID を受け取り、
+レイヤーの ID のほかに `layerOrder` のデータセットの ID を受け取り、
 渡されなかった項目はその場に残します。この項目は、読み込んだ文書
 (その重なりの順は ID を位置ごと保ちます) か、`store` オプションで
 渡した自分の Store からも入ります。
@@ -453,7 +453,7 @@ declare const roads: import('@sakuzu/maplibre-gl-draw').Layer;
 
 ```ts
 // 行は後から setRows か setTable で渡すまで空
-draw.datasets.add({ id: 'parcels', order: 'layer-order' });
+draw.datasets.add({ id: 'parcels', order: 'layerOrder' });
 draw.layers.reorder([roads.id, 'parcels', notes.id]); // 2 つのレイヤーの間
 ```
 
@@ -738,7 +738,7 @@ async function whenPictureComplete(): Promise<void> {
   描いたものと並べて表示します。作った 100 万の点は見えている範囲の分を
   `provider` が渡して間引き、六角形のセル 25 万個は一度に渡します。
   Overture Maps の東京都心の建物と場所も置きます。建物は外形の面積で
-  塗り分け、`layer-order` で描いたものの 2 つのレイヤーの間に置き、
+  塗り分け、`layerOrder` で描いたものの 2 つのレイヤーの間に置き、
   セルはその奥に置きます。行のクリックを知らせ、描いた線は建物に
   スナップします
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.ja.md)

@@ -138,7 +138,7 @@ function createRetainedTarget(): {
 /** Draws once in immediate mode */
 function drawImmediate(manager: DatasetManager): Feature[][] {
   const { target, frames } = createBatchTarget();
-  manager.draw('below-store', target, {} as ProjectionData, 10);
+  manager.draw('belowLayers', target, {} as ProjectionData, 10);
   return frames;
 }
 
@@ -148,7 +148,7 @@ function drawRetained(manager: DatasetManager): {
   points: PointInstanceDataFull[];
 } {
   const { target, frames, points } = createRetainedTarget();
-  manager.draw('below-store', target, {} as ProjectionData, 10);
+  manager.draw('belowLayers', target, {} as ProjectionData, 10);
   return { frames, points };
 }
 

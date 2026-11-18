@@ -259,7 +259,7 @@ describe('a Store of the application with features the instance did not write', 
     const contract = new MemoryContractStore();
     populate(contract);
     const target = create(contract);
-    target.draw.datasets.add({ id: 'behind', rows: [], order: 'layer-order' });
+    target.draw.datasets.add({ id: 'behind', rows: [], order: 'layerOrder' });
     expect(target.draw.layers.reorder(['behind', LAYER.id])).toBe(true);
     expectEveryFeatureSelectable(target);
   });

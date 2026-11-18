@@ -38,7 +38,7 @@ export type ResolvedTarget =
 /**
  * Checks a move target and looks up what it names
  *
- * @throws DrawError `invalid-input` for a target of the wrong shape, `not-found` for a layer
+ * @throws DrawError `invalidInput` for a target of the wrong shape, `notFound` for a layer
  *   or a group that does not exist
  * @internal
  */

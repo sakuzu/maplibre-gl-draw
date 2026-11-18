@@ -387,7 +387,7 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
       const { draw } = window as unknown as E2EWindow;
       // No guide along the parallel: only the line being drawn is there
       draw.options.update({ snapping: { enabled: false } });
-      draw.setMode('draw_line');
+      draw.setMode('drawLine');
     });
     await click(page, west);
     await page.mouse.move(east.x, east.y, { steps: 4 });
@@ -699,7 +699,7 @@ describe('drawing across the antimeridian on the globe', () => {
   it('a freehand stroke across the antimeridian draws only the stroke', async () => {
     await show(page, []);
     const empty = await readPicture(page);
-    await page.evaluate(() => (window as unknown as E2EWindow).draw.setMode('draw_freehand'));
+    await page.evaluate(() => (window as unknown as E2EWindow).draw.setMode('drawFreehand'));
     // Out along a parallel of the east of Australia, round the east of the antimeridian and back
     const path: Array<[number, number]> = [
       [150, -12],
@@ -738,7 +738,7 @@ describe('drawing across the antimeridian on the globe', () => {
   });
 
   it('a line and an area drawn with clicks across the antimeridian are continuous', async () => {
-    for (const name of ['draw_line', 'draw_polygon']) {
+    for (const name of ['drawLine', 'drawPolygon']) {
       await show(page, []);
       const empty = await readPicture(page);
       await page.evaluate((m) => (window as unknown as E2EWindow).draw.setMode(m), name);
@@ -752,7 +752,7 @@ describe('drawing across the antimeridian on the globe', () => {
       }
       for (const p of points) await click(page, p);
       // A line ends with a click on its last vertex, an area with a click on its first
-      await click(page, name === 'draw_line' ? points[points.length - 1] : points[0]);
+      await click(page, name === 'drawLine' ? points[points.length - 1] : points[0]);
       await settle(page);
       const drawn = await readPicture(page);
 

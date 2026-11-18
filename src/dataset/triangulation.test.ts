@@ -389,7 +389,7 @@ describe('the wiring with a dataset', () => {
     const probe = createProbe();
 
     manager.add({ id: 'water', rows: [starPolygon('big', 400)] });
-    manager.draw('below-store', probe.target, {} as ProjectionData, 10);
+    manager.draw('belowLayers', probe.target, {} as ProjectionData, 10);
 
     // The first build shows no fill (only the outline)
     expect(probe.builds).toEqual([[]]);
@@ -402,7 +402,7 @@ describe('the wiring with a dataset', () => {
     expect(repaint).toHaveBeenCalled();
 
     // The next frame shows the fill (the rebuild is instant, from the cache)
-    manager.draw('below-store', probe.target, {} as ProjectionData, 10);
+    manager.draw('belowLayers', probe.target, {} as ProjectionData, 10);
     expect(probe.builds).toEqual([[], ['big']]);
   });
 
@@ -418,7 +418,7 @@ describe('the wiring with a dataset', () => {
     const probe = createProbe();
 
     manager.add({ id: 'water', rows: [starPolygon('big', 400)] });
-    manager.draw('below-store', probe.target, {} as ProjectionData, 10);
+    manager.draw('belowLayers', probe.target, {} as ProjectionData, 10);
     expect(scheduler.pendingCount).toBe(1);
 
     manager.remove('water');

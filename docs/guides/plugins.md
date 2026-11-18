@@ -55,8 +55,8 @@ The collections share the same methods: `add` and `addMany` register,
 removes what it added.
 
 A name that is taken throws a `DrawError` with the code
-`already-exists`, and `remove` with a name that is not there throws
-`not-found`. `addMany` and `removeMany` do all of it or none.
+`alreadyExists`, and `remove` with a name that is not there throws
+`notFound`. `addMany` and `removeMany` do all of it or none.
 
 ## The Plugin object
 
@@ -247,8 +247,8 @@ function createShortcuts(): Plugin {
     input: {
       onKeyDown(event) {
         if (!ctx || event.modifiers.ctrl || event.modifiers.meta) return false;
-        if (event.key === 'p') return ctx.draw.setMode('draw_point');
-        if (event.key === 'l') return ctx.draw.setMode('draw_line');
+        if (event.key === 'p') return ctx.draw.setMode('drawPoint');
+        if (event.key === 'l') return ctx.draw.setMode('drawLine');
         return false;
       },
     },
@@ -483,7 +483,7 @@ again does nothing. `remove(name)` does the same by name.
   through `ctx.extensions` and ends its subscriptions
 - Removing the active mode enters `select` first
 - The names of the built-in modes and feature types are taken, so
-  `add` throws `already-exists` for them
+  `add` throws `alreadyExists` for them
 - Extensions belong to the instance they are added to. Another draw
   instance on the page never sees them
 - `draw.destroy()` removes the plugins first, then every other

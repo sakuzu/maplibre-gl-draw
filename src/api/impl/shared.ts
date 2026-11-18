@@ -45,14 +45,14 @@ export interface ResourceDeps {
 
 /** The error for an ID that names nothing of its kind */
 export function notFound(kind: string, id: unknown): DrawError {
-  return new DrawError('not-found', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
+  return new DrawError('notFound', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
     id,
   });
 }
 
 /** The error for an input of the wrong shape or value */
 export function invalidInput(message: string, details?: unknown): DrawError {
-  return new DrawError('invalid-input', message, details);
+  return new DrawError('invalidInput', message, details);
 }
 
 // ============================================================================

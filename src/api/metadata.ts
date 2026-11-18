@@ -17,7 +17,7 @@ export interface MetadataResource {
    * Changes the fields given and returns the metadata after the change.
    *
    * @returns The changed metadata, or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalid-input` when a field has the wrong type
+   * @throws `DrawError` with the code `invalidInput` when a field has the wrong type
    */
   update(patch: Partial<Metadata>): Metadata | null;
 }

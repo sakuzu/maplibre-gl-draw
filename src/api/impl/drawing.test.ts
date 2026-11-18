@@ -61,7 +61,7 @@ describe('drawing', () => {
     expect(draw.drawing.addVertex([0, 0])).toBe(false);
     expect(draw.drawing.finish()).toBe(false);
 
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     expect(draw.drawing.isActive()).toBe(true);
     expect(draw.drawing.isDrawing()).toBe(false);
     expect(draw.drawing.addVertex([0, 0])).toBe(true);
@@ -85,7 +85,7 @@ describe('drawing', () => {
 
   it('draws an area, with the preview following moveTo and the vertices undone and redone', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     const previews: unknown[] = [];
     draw.on('preview.changed', ({ feature }) => previews.push(feature?.geometry));
     draw.drawing.addVertex([0, 0]);
@@ -115,7 +115,7 @@ describe('drawing', () => {
   it('writes the reference zoom while scaleWithZoom is on, and none after it is turned off', () => {
     draw = createDraw(createMapStub().map);
     const drawLine = () => {
-      draw.setMode('draw_line');
+      draw.setMode('drawLine');
       draw.drawing.addVertex([0, 0]);
       draw.drawing.addVertex([1, 0.5]);
       draw.drawing.finish();
@@ -132,7 +132,7 @@ describe('drawing', () => {
 
   it('places a point with one vertex, and cancels a shape in progress', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_point');
+    draw.setMode('drawPoint');
     expect(draw.drawing.isActive()).toBe(true);
     expect(draw.drawing.addVertex([0.25, -0.5])).toBe(true);
     expect(draw.features.list({ type: 'Point' })[0].geometry).toEqual({
@@ -140,7 +140,7 @@ describe('drawing', () => {
       coordinates: [0.25, -0.5],
     });
 
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([0, 0]);
     expect(draw.drawing.cancel()).toBe(true);
     expect(draw.drawing.isDrawing()).toBe(false);
@@ -167,7 +167,7 @@ describe('drawing', () => {
     });
     expect(contextDrawing).toBe(draw.drawing);
 
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([1, 1]);
     expect(clicks).toEqual([{ lngLat: [1, 1], snapped: { lngLat: [1, 1] }, point: [500, 200] }]);
     consume = true;
@@ -180,7 +180,7 @@ describe('drawing', () => {
   it('places the exact positions, with no click tolerance, and finishes wherever they are', () => {
     // One degree is 100 px on the stub: the vertices are 3 px apart on the screen
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([0, 0]);
     draw.drawing.moveTo([0.03, 0]);
     expect(draw.drawing.addVertex([0.03, 0])).toBe(true);
@@ -196,7 +196,7 @@ describe('drawing', () => {
     });
 
     // A vertex of an area 3 px from the first one does not close it
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     for (const position of [
       [0, 0],
       [1, 0],
@@ -227,7 +227,7 @@ describe('drawing', () => {
     const engine = createEngine(createMapStub().map);
     draw = createDrawOnEngine(engine);
     const input = createSyntheticInput(engine);
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     for (const position of [
       [0, 0],
       [1, 0],
@@ -256,7 +256,7 @@ describe('drawing', () => {
 
   it('ignores a vertex at exactly the last position, and closes an area on its first one', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     for (const position of [
       [0, 0],
       [1, 0],
@@ -283,7 +283,7 @@ describe('drawing', () => {
 
   it('refuses a position that is not two finite numbers', () => {
     draw = createDraw(createMapStub().map);
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     expect(() => draw.drawing.addVertex([Number.NaN, 0])).toThrow(DrawError);
     expect(() => draw.drawing.moveTo([0] as unknown as [number, number])).toThrow(DrawError);
   });

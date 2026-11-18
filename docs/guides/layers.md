@@ -17,7 +17,7 @@ const draw = createDraw(map);
 const notes = draw.layers.create({ name: 'Notes' });
 if (notes) {
   draw.layers.setActive(notes.id);
-  draw.setMode('draw_point');
+  draw.setMode('drawPoint');
 
   // Later: lock it, so that its features can be selected but not edited
   draw.layers.update(notes.id, { locked: true });
@@ -40,7 +40,7 @@ holds (the IDs of its features and groups, from the back), an optional
 `create` and `update` return the layer as it was stored. While the
 instance is read-only they change nothing and return `null`, and `delete`
 returns `false` ([Read-only](read-only.md)). An ID that does not exist
-throws a `DrawError` with the code `not-found`. The methods whose name ends
+throws a `DrawError` with the code `notFound`. The methods whose name ends
 in `Many` do the same for several layers in one transaction.
 
 ```ts
@@ -304,7 +304,7 @@ draw.on('layerStack.changed', placeMapLayers);
 - Without entries of your own there is one run, `maplibre-gl-draw-layer`
 - `layerStack.changed` fires when runs are added or removed or a range
   changes; place the map layers again then
-- A dataset with `order: 'layer-order'` is drawn at the position of its ID
+- A dataset with `order: 'layerOrder'` is drawn at the position of its ID
   in the same order ([Showing large data](large-data.md))
 
 ## Examples

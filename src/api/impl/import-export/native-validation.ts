@@ -19,7 +19,7 @@ import { describeGeometryProblem } from './geometry-validation.js';
 import { sanitizeFeatureStyle } from './style-validation.js';
 
 function fail(message: string): never {
-  throw new DrawError('invalid-input', `Invalid native data: ${message}`);
+  throw new DrawError('invalidInput', `Invalid native data: ${message}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

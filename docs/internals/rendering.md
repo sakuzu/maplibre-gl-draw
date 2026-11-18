@@ -326,7 +326,7 @@ picture, z-order included.
   pushed through the BatchManager
 
 ```typescript
-if (drawBelow) datasets?.draw('below-store', /* ... */);
+if (drawBelow) datasets?.draw('belowLayers', /* ... */);
 for (const entryId of layerOrder) { // the entries of this segment
   const layer = store.getLayer(entryId);
   if (!layer) { // a dataset in the sequence, or unknown
@@ -353,14 +353,14 @@ for (const entryId of layerOrder) { // the entries of this segment
   }
   // local tentative geometry, then layer-aware overlays (drawForLayer)
 }
-if (drawAbove) datasets?.draw('above-store', /* ... */);
+if (drawAbove) datasets?.draw('aboveLayers', /* ... */);
 ```
 
 The entries mix layer ids and dataset ids, and the
 stacking order alone decides the order:
 
 - An entry that is a layer is drawn in retained or immediate mode
-- An entry that is a dataset with `order: 'layer-order'` is drawn with
+- An entry that is a dataset with `order: 'layerOrder'` is drawn with
   `drawOne`
 - Any other entry is skipped, which is not an error. This is also how
   separators and stale ids are ignored
@@ -1285,16 +1285,16 @@ after which `hasPendingWork()` is false.
 
 A dataset is drawn at one of three places in the render loop:
 
-- `below-store`: before the layer loop, behind every Store layer
-- `above-store`: after the layer loop, in front of every Store layer but
+- `belowLayers`: before the layer loop, behind every Store layer
+- `aboveLayers`: after the layer loop, in front of every Store layer but
   behind the selection UI and the drawing preview
-- `layer-order`: inside the loop, at the position of the dataset's own
+- `layerOrder`: inside the loop, at the position of the dataset's own
   id in the stacking order (`store.getLayerOrder()`)
 
 All three are outside the per-layer `beginFrame` / `endFrame`, so the
 Store's batches and GL state never mix with a dataset's. Datasets on
 the same side are drawn in the order they were added, so the later one is
-in front. The rules of the `layer-order` position are in
+in front. The rules of the `layerOrder` position are in
 [Display order](#display-order).
 
 ### Provider tile cache
@@ -2074,13 +2074,13 @@ by its own id.
 
 - An element of `layerOrder` (a `string[]`) is a layer id or a dataset
   id. `DatasetOrder` is
-  `'below-store' | 'above-store' | 'layer-order'`
-- A `layer-order` dataset is drawn and hit-tested at the position of its
+  `'belowLayers' | 'aboveLayers' | 'layerOrder'`
+- A `layerOrder` dataset is drawn and hit-tested at the position of its
   id. The below and above sides and `DatasetPlacement.index`
-  (`moveDataset`) play no part in that order. `below-store` and
-  `above-store` are for uses that do not join the sequence, such as
+  (`moveDataset`) play no part in that order. `belowLayers` and
+  `aboveLayers` are for uses that do not join the sequence, such as
   previews
-- A `layer-order` dataset whose id is not in the sequence (forgotten,
+- A `layerOrder` dataset whose id is not in the sequence (forgotten,
   or racing a deletion) is not drawn, and is never demoted to a side
 - `setLayerOrder` keeps ids that are not layers; it drops only what is not
   a non-empty string and folds a repeated id to its first position.
@@ -2128,7 +2128,7 @@ sequence into segments and draws each with its own custom layer, a slot
 - Each slot's `render` passes only its own segment to `renderLayers`. The
   preparation of the frame (projection, terrain state, shaders, viewport)
   is done once by the first slot and shared
-- `below-store` datasets are drawn by the first slot and `above-store`
+- `belowLayers` datasets are drawn by the first slot and `aboveLayers`
   datasets by the last
 - The foreground (overlays, selection handles, the drawing preview) is
   drawn by the last slot. Nothing in the foreground can be placed above a

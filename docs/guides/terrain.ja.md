@@ -29,7 +29,7 @@ map.on('load', () => {
 });
 
 const draw = createDraw(map);
-draw.setMode('draw_polygon');
+draw.setMode('drawPolygon');
 ```
 
 多角形は斜面の上に描かれ、地図を傾けても回転してもそこに留まります。

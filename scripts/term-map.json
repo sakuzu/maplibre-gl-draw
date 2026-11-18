@@ -1,5 +1,5 @@
 {
-  "description": "Renames of public terms. scripts/rename-terms.mjs applies the rules in order; scripts/check-terms.mjs fails on every retired pattern. To rename a term again, append rules that turn the current name into the new one, add the current name to retired, and run the script. The `api` stage renames only identifiers and event names and is safe in any repository; the `term` stage also renames the word in prose and code, so a repository that uses the word in another sense takes only `api` (with --paths to leave its records of past work alone) and edits its own text by hand. The word `dataset` is also the DOM property `element.dataset`: protect `.dataset.` except in `draw.dataset.` before renaming it again.",
+  "description": "Renames of public terms. scripts/rename-terms.mjs applies the rules in order; scripts/check-terms.mjs fails on every retired pattern. To rename a term again, append rules that turn the current name into the new one, add the current name to retired, and run the script. The `api` stage renames only identifiers and event names and is safe in any repository; the `term` stage also renames the word in prose and code, so a repository that uses the word in another sense takes only `api` (with --paths to leave its records of past work alone) and edits its own text by hand. The word `dataset` is also the DOM property `element.dataset`: protect `.dataset.` except in `draw.dataset.` before renaming it again. The changelogs record the names of their versions, and check-terms.mjs reads them too: a retired name a changelog keeps between backticks is retired everywhere but between backticks.",
   "protect": [
     "FeatureCollection",
     "featureCollection",
@@ -98,6 +98,74 @@
       {
         "from": "\\b(set|clear|get)collectionconfig\\b",
         "to": "$1datasetconfig"
+      },
+      {
+        "from": "(['\"`])draw_point\\1",
+        "to": "$1drawPoint$1"
+      },
+      {
+        "from": "(['\"`])draw_line\\1",
+        "to": "$1drawLine$1"
+      },
+      {
+        "from": "(['\"`])draw_polygon\\1",
+        "to": "$1drawPolygon$1"
+      },
+      {
+        "from": "(['\"`])draw_image\\1",
+        "to": "$1drawImage$1"
+      },
+      {
+        "from": "(['\"`])draw_circle\\1",
+        "to": "$1drawCircle$1"
+      },
+      {
+        "from": "(['\"`])draw_freehand\\1",
+        "to": "$1drawFreehand$1"
+      },
+      {
+        "from": "(['\"`])not-found\\1",
+        "to": "$1notFound$1"
+      },
+      {
+        "from": "(['\"`])already-exists\\1",
+        "to": "$1alreadyExists$1"
+      },
+      {
+        "from": "(['\"`])invalid-input\\1",
+        "to": "$1invalidInput$1"
+      },
+      {
+        "from": "(['\"`])unsupported-format\\1",
+        "to": "$1unsupportedFormat$1"
+      },
+      {
+        "from": "(['\"`])invalid-state\\1",
+        "to": "$1invalidState$1"
+      },
+      {
+        "from": "(['\"`])engine-failure\\1",
+        "to": "$1engineFailure$1"
+      },
+      {
+        "from": "(['\"`])below-store\\1",
+        "to": "$1belowLayers$1"
+      },
+      {
+        "from": "(['\"`])above-store\\1",
+        "to": "$1aboveLayers$1"
+      },
+      {
+        "from": "(['\"`])layer-order\\1",
+        "to": "$1layerOrder$1"
+      },
+      {
+        "from": "\\bclickTolerance\\b",
+        "to": "clickTolerancePx"
+      },
+      {
+        "from": "\\bdragThreshold\\b",
+        "to": "dragThresholdPx"
       }
     ],
     "term": [
@@ -140,6 +208,66 @@
       {
         "from": "コレクション",
         "to": "データセット"
+      },
+      {
+        "from": "\\bdraw_point\\b",
+        "to": "drawPoint"
+      },
+      {
+        "from": "\\bdraw_line\\b",
+        "to": "drawLine"
+      },
+      {
+        "from": "\\bdraw_polygon\\b",
+        "to": "drawPolygon"
+      },
+      {
+        "from": "\\bdraw_image\\b",
+        "to": "drawImage"
+      },
+      {
+        "from": "\\bdraw_circle\\b",
+        "to": "drawCircle"
+      },
+      {
+        "from": "\\bdraw_freehand\\b",
+        "to": "drawFreehand"
+      },
+      {
+        "from": "\\bnot-found\\b",
+        "to": "notFound"
+      },
+      {
+        "from": "\\balready-exists\\b",
+        "to": "alreadyExists"
+      },
+      {
+        "from": "\\binvalid-input\\b",
+        "to": "invalidInput"
+      },
+      {
+        "from": "\\bunsupported-format\\b",
+        "to": "unsupportedFormat"
+      },
+      {
+        "from": "\\binvalid-state\\b",
+        "to": "invalidState"
+      },
+      {
+        "from": "\\bengine-failure\\b",
+        "to": "engineFailure"
+      },
+      {
+        "from": "\\bbelow-store\\b",
+        "to": "belowLayers"
+      },
+      {
+        "from": "\\babove-store\\b",
+        "to": "aboveLayers"
+      },
+      {
+        "from": "\\blayer-order\\b",
+        "to": "layerOrder"
       }
     ]
   },
@@ -167,6 +295,11 @@
     "\\b(set|is)DisplayEnabled\\b",
     "表示専用の?コレクション",
     "_COLLECTION",
-    "[Dd]isplay-only"
+    "[Dd]isplay-only",
+    "\\bdraw_(point|line|polygon|image|circle|freehand)\\b",
+    "\\b(not-found|already-exists|invalid-state|engine-failure)\\b",
+    "(?<!`)\\b(invalid-input|unsupported-format|below-store|above-store|layer-order)\\b|\\b(invalid-input|unsupported-format|below-store|above-store|layer-order)\\b(?!`)",
+    "(?<!`)\\b(clickTolerance|dragThreshold)\\b|\\b(clickTolerance|dragThreshold)\\b(?!`)",
+    "\\bdraw\\.(on|off|once)\\(\\s*['\"`]error['\"`]"
   ]
 }

@@ -3,7 +3,7 @@
 
 /**
  * Tests for the shape check of the extensions: every kind accepts the contract shape and refuses
- * a wrong one with DrawError('invalid-input'), both alone and through draw.extensions
+ * a wrong one with DrawError('invalidInput'), both alone and through draw.extensions
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -73,7 +73,7 @@ describe('validateExtension', () => {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(DrawError);
-    expect((thrown as DrawError).code).toBe('invalid-input');
+    expect((thrown as DrawError).code).toBe('invalidInput');
     expect((thrown as DrawError).details).toEqual(
       member === undefined ? { kind } : { kind, member },
     );
@@ -89,7 +89,7 @@ describe('draw.extensions refuses a wrong shape', () => {
 
   afterEach(() => draw.destroy());
 
-  it('with invalid-input from every collection, adding nothing', () => {
+  it('with invalidInput from every collection, adding nothing', () => {
     const { extensions } = draw;
     const attempts: Array<() => unknown> = [
       () => extensions.plugins.add({ name: 'p' } as never),
@@ -101,9 +101,7 @@ describe('draw.extensions refuses a wrong shape', () => {
       () => extensions.companionProviders.add({ name: 'c', has: noop } as never),
     ];
     for (const attempt of attempts) {
-      expect(attempt).toThrow(
-        expect.objectContaining({ name: 'DrawError', code: 'invalid-input' }),
-      );
+      expect(attempt).toThrow(expect.objectContaining({ name: 'DrawError', code: 'invalidInput' }));
     }
     expect(extensions.plugins.has('p')).toBe(false);
     expect(extensions.modes.has('m')).toBe(false);

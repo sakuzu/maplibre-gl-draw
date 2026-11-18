@@ -19,7 +19,7 @@ selected.
 
 ## Code
 
-The library opens no file dialog. Entering `draw_image` emits
+The library opens no file dialog. Entering `drawImage` emits
 `image.requested` with where to place the image, the zoom and the layer;
 the page opens a file picker and passes the file to
 `draw.document.load` with them (1). Code places an image the same way,

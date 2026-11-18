@@ -67,14 +67,14 @@ describe('createToolbar', () => {
     const fake = fakeDraw();
     bar = createToolbar(fake.asDraw, { target: fake.container });
     button('Polygon').click();
-    expect(fake.draw.setMode).toHaveBeenCalledWith('draw_polygon');
+    expect(fake.draw.setMode).toHaveBeenCalledWith('drawPolygon');
   });
 
   it('shows the current mode of draw, whoever changed it', () => {
-    const fake = fakeDraw({ mode: 'draw_line' });
+    const fake = fakeDraw({ mode: 'drawLine' });
     bar = createToolbar(fake.asDraw, { target: fake.container });
     expect(pressed('Line')).toBe('true');
-    fake.setModeFromOutside('draw_circle');
+    fake.setModeFromOutside('drawCircle');
     flushSync();
     expect(pressed('Line')).toBe('false');
     expect(pressed('Circle')).toBe('true');
@@ -85,7 +85,7 @@ describe('createToolbar', () => {
   });
 
   it('presses no tool for a mode it does not show', () => {
-    const fake = fakeDraw({ mode: 'draw_line' });
+    const fake = fakeDraw({ mode: 'drawLine' });
     bar = createToolbar(fake.asDraw, { target: fake.container, tools: ['select', 'polygon'] });
     for (const name of ['Select', 'Polygon']) expect(pressed(name)).toBe('false');
   });

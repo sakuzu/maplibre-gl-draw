@@ -50,9 +50,9 @@ GeoJSON の書き出しにもそのまま出ます。1.0 の名前はすべて�
   ごとに合わせ、`undefined` を渡した鍵は消えます
 - 複数を扱うメソッド (`createMany`、`deleteMany`、`moveMany`) は
   1 つの取引です。全部が変わるか、何も変わらないかのどちらかです
-- 引数の誤り (無い ID、形の合わない入力) は、`code` (`not-found`、
-  `already-exists`、`invalid-input`、`unsupported-format`、
-  `invalid-state`) を持つ `DrawError` を投げます。状態のために拒む
+- 引数の誤り (無い ID、形の合わない入力) は、`code` (`notFound`、
+  `alreadyExists`、`invalidInput`、`unsupportedFormat`、
+  `invalidState`) を持つ `DrawError` を投げます。状態のために拒む
   書き込み (読み取り専用、ロック) は `null` か `false` を返します。
   どちらのときも何も変わりません
 - イベントの名前は `資源.過去分詞` の形です。`feature.created`、
@@ -100,8 +100,8 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map, { defaultMode: 'select' });
 ```
 
-モードの名前 (`select`、`draw_point`、`draw_line`、`draw_polygon`、
-`draw_circle`、`draw_freehand`、`draw_image`) は変わりません。
+モードの名前 (`select`、`drawPoint`、`drawLine`、`drawPolygon`、
+`drawCircle`、`drawFreehand`、`drawImage`) は変わりません。
 知らないモードを `setMode` に渡すと `DrawError` を投げます。
 
 ### 地物
@@ -170,7 +170,7 @@ import { DrawError } from '@sakuzu/maplibre-gl-draw';
 try {
   draw.features.update(featureId, { visible: false });
 } catch (error) {
-  if (error instanceof DrawError && error.code === 'not-found') {
+  if (error instanceof DrawError && error.code === 'notFound') {
     console.warn('the feature is gone');
   } else {
     throw error;
@@ -679,7 +679,7 @@ API で行った書き込みでも発火します。
 | `new MapboxDraw()`, `map.addControl(draw)` | `createDraw(map)` |
 | `changeMode('simple_select')` | `setMode('select')` |
 | `changeMode('direct_select', ...)` | `setMode('select')` |
-| `changeMode('draw_line_string')` | `setMode('draw_line')` |
+| `changeMode('draw_line_string')` | `setMode('drawLine')` |
 | `add(featureCollection)` | `document.load(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
@@ -695,7 +695,7 @@ API で行った書き込みでも発火します。
 | terra-draw | このライブラリー |
 | --- | --- |
 | `new TerraDraw({ adapter, modes })` | `createDraw(map)` |
-| `setMode('linestring')` | `setMode('draw_line')` |
+| `setMode('linestring')` | `setMode('drawLine')` |
 | `getSnapshot()` | `document.toGeoJSON()` |
 | `addFeatures(features)` | `document.load(featureCollection)` |
 | `removeFeatures(ids)` | `features.deleteMany(ids)` |

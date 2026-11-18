@@ -86,7 +86,7 @@ beforeEach(() => {
   });
   spatialIndex = new RBushSpatialIndex();
   // A 5px tolerance (0.5 degrees on the test map) keeps the numbers below round
-  service = new HitTestServiceImpl(store, spatialIndex, { clickTolerance: 5 });
+  service = new HitTestServiceImpl(store, spatialIndex, { clickTolerancePx: 5 });
 });
 
 /** Registers into the Store and the index, and returns the array in draw order (from the
@@ -155,7 +155,7 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
   /**
    * A Point strategy that counts anything within 3 degrees (= 30px) of the center as a hit
    *
-   * It stands in for a type whose test area is wider than clickTolerance (5px), such as an
+   * It stands in for a type whose test area is wider than clickTolerancePx (5px), such as an
    * icon.
    */
   const wideStrategy: HitTestStrategy = {
@@ -167,7 +167,7 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
     distance: () => 0,
   };
 
-  it('keeps the search at clickTolerance when unregistered, so a far point misses it', () => {
+  it('keeps the search at clickTolerancePx when unregistered, so a far point misses it', () => {
     service.registerStrategy(wideStrategy);
     const ordered = load([point('pt', [5, 5])]);
     const findNear = vi.spyOn(spatialIndex, 'findNear');
@@ -232,7 +232,7 @@ describe('the marker of a point (pointMarkerReachPx)', () => {
   /** A service whose points are drawn with a marker reaching `reach` px from the position */
   function withMarker(reach: (feature: Feature) => number): HitTestServiceImpl {
     return new HitTestServiceImpl(store, spatialIndex, {
-      clickTolerance: 5,
+      clickTolerancePx: 5,
       pointMarkerReachPx: reach,
     });
   }
@@ -284,7 +284,7 @@ describe('the marker of a point (pointMarkerReachPx)', () => {
 
   it('widens the screen space test of the symbols by the marker as well', () => {
     const marked = new HitTestServiceImpl(store, spatialIndex, {
-      clickTolerance: 5,
+      clickTolerancePx: 5,
       pointMarkerReachPx: () => 8,
       anchorScreen: { project: () => ({ x: 100, y: 0 }) },
     });

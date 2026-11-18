@@ -100,11 +100,11 @@ const draw = createDraw(map);
 
 ```ts
 document.querySelector('#draw-polygon')?.addEventListener('click', () => {
-  draw.setMode('draw_polygon');
+  draw.setMode('drawPolygon');
 });
 ```
 
-`draw_polygon` モードでは、利用者は次のように描きます。
+`drawPolygon` モードでは、利用者は次のように描きます。
 
 | 操作 | 結果 |
 | --- | --- |
@@ -140,12 +140,12 @@ draw.on('feature.created', ({ feature }) => {
 draw.on('mode.changed', ({ mode }) => {
   document
     .querySelector('#draw-polygon')
-    ?.classList.toggle('active', mode === 'draw_polygon');
+    ?.classList.toggle('active', mode === 'drawPolygon');
 });
 ```
 
-`draw_point`、`draw_line`、`draw_circle`、`draw_freehand` も同じように
-使います。`draw_image` では、さらにアプリケーションに画像を求めます。
+`drawPoint`、`drawLine`、`drawCircle`、`drawFreehand` も同じように
+使います。`drawImage` では、さらにアプリケーションに画像を求めます。
 すべてのモードの操作は [描画の手引き](guides/drawing.ja.md) にあります。
 
 ## 4. 変更を受け取る

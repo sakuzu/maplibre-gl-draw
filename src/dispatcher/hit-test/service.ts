@@ -140,7 +140,7 @@ export interface HitTestService {
    * Registers, per feature type, the extra reach (in CSS pixels) for narrowing down the
    * candidates
    *
-   * The first stage narrows down the candidates with a radius equivalent to clickTolerance,
+   * The first stage narrows down the candidates with a radius equivalent to clickTolerancePx,
    * so a type whose per-type strategy tests a wider area than that (icons and the like)
    * would drop out of the candidates before it ever reaches the precise test. Widening the
    * search radius by the registered distance lets such a type reach the second stage
@@ -199,7 +199,7 @@ export class HitTestServiceImpl implements HitTestService {
   private drawnShape: DrawnShapeResolver;
 
   setClickTolerance(px: number): void {
-    this.options = { ...this.options, clickTolerance: px };
+    this.options = { ...this.options, clickTolerancePx: px };
   }
 
   constructor(store: Store, spatialIndex: SpatialIndex, options: HitTestServiceImplOptions = {}) {
@@ -292,7 +292,7 @@ export class HitTestServiceImpl implements HitTestService {
    * Widens the radius of the candidate search (degrees of longitude) by the extra reach
    *
    * The degrees per pixel are obtained by dividing the already computed toleranceLngLat by
-   * clickTolerance (so no additional call to unproject is made). Only when clickTolerance is
+   * clickTolerancePx (so no additional call to unproject is made). Only when clickTolerancePx is
    * 0 is one pixel measured directly.
    *
    * The radius is a square box in degrees. A latitude reach needs only radius * cos φ
@@ -369,9 +369,9 @@ export class HitTestServiceImpl implements HitTestService {
     const coordinate: Coordinate = [lngLat.lng, lngLat.lat];
 
     // The tolerance is a screen length. It is converted into degrees of longitude at the
-    // click latitude by measuring the ground length of clickTolerance pixels, so it does not
+    // click latitude by measuring the ground length of clickTolerancePx pixels, so it does not
     // depend on the bearing (see local-frame.ts)
-    const tolerance = this.options.clickTolerance;
+    const tolerance = this.options.clickTolerancePx;
     const toleranceLngLat = toleranceDegrees(unproject, screenPoint, tolerance);
 
     // Stage 1: narrow down the candidates with the spatial index.

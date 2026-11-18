@@ -49,8 +49,8 @@ const RUNTIME_KEYS = [
   'snapping',
   'tracing',
   'topology',
-  'clickTolerance',
-  'dragThreshold',
+  'clickTolerancePx',
+  'dragThresholdPx',
   'rendering',
   'isExternalEntry',
 ] as const satisfies ReadonlyArray<keyof RuntimeOptions>;
@@ -214,8 +214,8 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
   }),
   tracing: record({ enabled: bool }),
   topology: record({ sharedVertexDrag: bool }),
-  clickTolerance: nonNegative,
-  dragThreshold: nonNegative,
+  clickTolerancePx: nonNegative,
+  dragThresholdPx: nonNegative,
   rendering: record({
     renderScale: positive,
     pixelRatio: positive,
@@ -279,7 +279,7 @@ const STORE_METHODS = [
 /**
  * Checks the options of `createDraw`
  *
- * @throws `DrawError` with the code `invalid-input` for an unknown option or a value of the
+ * @throws `DrawError` with the code `invalidInput` for an unknown option or a value of the
  *   wrong type
  * @internal
  */
@@ -670,8 +670,8 @@ export function toEngineOptions(
   if (options.initDefaultLayer !== undefined) result.initDefaultLayer = options.initDefaultLayer;
   if (options.generateId !== undefined) result.generateId = options.generateId;
   if (runtime.scaleWithZoom !== undefined) result.scaleWithZoom = runtime.scaleWithZoom;
-  if (runtime.clickTolerance !== undefined) result.clickTolerance = runtime.clickTolerance;
-  if (runtime.dragThreshold !== undefined) result.dragThreshold = runtime.dragThreshold;
+  if (runtime.clickTolerancePx !== undefined) result.clickTolerancePx = runtime.clickTolerancePx;
+  if (runtime.dragThresholdPx !== undefined) result.dragThresholdPx = runtime.dragThresholdPx;
   if (options.store !== undefined) {
     // A Store of the library is used as it is; the Store of an application is read and written
     // through the public contract only, and the instance keeps the drawing state around it
@@ -796,13 +796,13 @@ export function createOptions(
     if (patch.topology?.sharedVertexDrag !== undefined) {
       context.topology.sharedVertexDrag = patch.topology.sharedVertexDrag;
     }
-    if (patch.clickTolerance !== undefined) {
-      context.options.clickTolerance = patch.clickTolerance;
-      context.hitTestService.setClickTolerance(patch.clickTolerance);
+    if (patch.clickTolerancePx !== undefined) {
+      context.options.clickTolerancePx = patch.clickTolerancePx;
+      context.hitTestService.setClickTolerance(patch.clickTolerancePx);
     }
-    if (patch.dragThreshold !== undefined) {
-      context.options.dragThreshold = patch.dragThreshold;
-      engine.runtime.setDragThreshold(patch.dragThreshold);
+    if (patch.dragThresholdPx !== undefined) {
+      context.options.dragThresholdPx = patch.dragThresholdPx;
+      engine.runtime.setDragThreshold(patch.dragThresholdPx);
     }
 
     const rendering = patch.rendering;
@@ -838,8 +838,8 @@ export function createOptions(
     const values: RuntimeOptions = {
       ...current,
       scaleWithZoom: context.options.scaleWithZoom,
-      clickTolerance: context.options.clickTolerance,
-      dragThreshold: context.options.dragThreshold,
+      clickTolerancePx: context.options.clickTolerancePx,
+      dragThresholdPx: context.options.dragThresholdPx,
       snapping: {
         ...current.snapping,
         enabled: snap.enabled,

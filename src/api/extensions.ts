@@ -32,17 +32,17 @@ export interface PluginsCollection {
    * Adds a plugin.
    *
    * @returns The function that removes it again
-   * @throws `DrawError` with the code `already-exists` when a plugin with the same name was
+   * @throws `DrawError` with the code `alreadyExists` when a plugin with the same name was
    *   added
-   *   or with `invalid-input` when the value does not have the shape of the contract
+   *   or with `invalidInput` when the value does not have the shape of the contract
    */
   add(plugin: Plugin): () => void;
   /**
    * Adds several plugins in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
-   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   * @throws `DrawError` with the code `alreadyExists` when one of the names is taken, or
+   *   `invalidInput` when a value does not have the shape of the contract; nothing is added
    *   then
    */
   addMany(plugins: readonly Plugin[]): () => void;
@@ -50,14 +50,14 @@ export interface PluginsCollection {
    * Removes a plugin, with everything it added.
    *
    * @returns True when it was removed
-   * @throws `DrawError` with the code `not-found` when there is no plugin with this name
+   * @throws `DrawError` with the code `notFound` when there is no plugin with this name
    */
   remove(name: string): boolean;
   /**
    * Removes several plugins, with everything they added: all of them or none.
    *
    * @returns True when they were removed
-   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   * @throws `DrawError` with the code `notFound` when one of the names does not exist;
    *   nothing is removed then
    */
   removeMany(names: readonly string[]): boolean;
@@ -87,16 +87,16 @@ export interface ModesCollection {
    * Adds a mode under a name.
    *
    * @returns The function that removes it again
-   * @throws `DrawError` with the code `already-exists` when the name is taken
-   *   or with `invalid-input` when the value does not have the shape of the contract
+   * @throws `DrawError` with the code `alreadyExists` when the name is taken
+   *   or with `invalidInput` when the value does not have the shape of the contract
    */
   add(name: string, factory: ModeFactory): () => void;
   /**
    * Adds several modes in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
-   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   * @throws `DrawError` with the code `alreadyExists` when one of the names is taken, or
+   *   `invalidInput` when a value does not have the shape of the contract; nothing is added
    *   then
    */
   addMany(entries: readonly { name: string; factory: ModeFactory }[]): () => void;
@@ -104,14 +104,14 @@ export interface ModesCollection {
    * Removes a mode.
    *
    * @returns True when it was removed
-   * @throws `DrawError` with the code `not-found` when there is no mode with this name
+   * @throws `DrawError` with the code `notFound` when there is no mode with this name
    */
   remove(name: string): boolean;
   /**
    * Removes several modes: all of them or none.
    *
    * @returns True when they were removed
-   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   * @throws `DrawError` with the code `notFound` when one of the names does not exist;
    *   nothing is removed then
    */
   removeMany(names: readonly string[]): boolean;
@@ -139,16 +139,16 @@ export interface FeatureTypesCollection {
    * it has one, is ignored.
    *
    * @returns The function that removes it again
-   * @throws `DrawError` with the code `already-exists` when the type name is taken
-   *   or with `invalid-input` when the value does not have the shape of the contract
+   * @throws `DrawError` with the code `alreadyExists` when the type name is taken
+   *   or with `invalidInput` when the value does not have the shape of the contract
    */
   add(definition: FeatureTypeDefinition): () => void;
   /**
    * Adds several custom feature types in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
-   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   * @throws `DrawError` with the code `alreadyExists` when one of the names is taken, or
+   *   `invalidInput` when a value does not have the shape of the contract; nothing is added
    *   then
    */
   addMany(definitions: readonly FeatureTypeDefinition[]): () => void;
@@ -168,9 +168,9 @@ export interface FeatureTypesCollection {
    * refusing the names of the built-in types.
    *
    * @returns The function that puts the built-in type back
-   * @throws `DrawError` with the code `invalid-input` when the type is not one of the
+   * @throws `DrawError` with the code `invalidInput` when the type is not one of the
    *   built-in types above, its `geometry` is not the one of the built-in type, or the value
-   *   does not have the shape of the contract, and `already-exists` when the type is already
+   *   does not have the shape of the contract, and `alreadyExists` when the type is already
    *   overridden
    */
   override(definition: FeatureTypeDefinition): () => void;
@@ -179,14 +179,14 @@ export interface FeatureTypesCollection {
    * built-in type comes back).
    *
    * @returns True when it was removed
-   * @throws `DrawError` with the code `not-found` when there is no type with this name
+   * @throws `DrawError` with the code `notFound` when there is no type with this name
    */
   remove(name: string): boolean;
   /**
    * Removes several custom feature types: all of them or none.
    *
    * @returns True when they were removed
-   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   * @throws `DrawError` with the code `notFound` when one of the names does not exist;
    *   nothing is removed then
    */
   removeMany(names: readonly string[]): boolean;
@@ -210,16 +210,16 @@ export interface OverlaysCollection {
    * Adds an overlay renderer.
    *
    * @returns The function that removes it again
-   * @throws `DrawError` with the code `already-exists` when the name is taken
-   *   or with `invalid-input` when the value does not have the shape of the contract
+   * @throws `DrawError` with the code `alreadyExists` when the name is taken
+   *   or with `invalidInput` when the value does not have the shape of the contract
    */
   add(renderer: OverlayRenderer): () => void;
   /**
    * Adds several overlay renderers in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
-   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   * @throws `DrawError` with the code `alreadyExists` when one of the names is taken, or
+   *   `invalidInput` when a value does not have the shape of the contract; nothing is added
    *   then
    */
   addMany(renderers: readonly OverlayRenderer[]): () => void;
@@ -227,14 +227,14 @@ export interface OverlaysCollection {
    * Removes an overlay renderer.
    *
    * @returns True when it was removed
-   * @throws `DrawError` with the code `not-found` when there is none with this name
+   * @throws `DrawError` with the code `notFound` when there is none with this name
    */
   remove(name: string): boolean;
   /**
    * Removes several overlay renderers: all of them or none.
    *
    * @returns True when they were removed
-   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   * @throws `DrawError` with the code `notFound` when one of the names does not exist;
    *   nothing is removed then
    */
   removeMany(names: readonly string[]): boolean;
@@ -262,16 +262,16 @@ export interface ProvidersCollection<T> {
    * Adds a provider.
    *
    * @returns The function that removes it again
-   * @throws `DrawError` with the code `already-exists` when the name is taken
-   *   or with `invalid-input` when the value does not have the shape of the contract
+   * @throws `DrawError` with the code `alreadyExists` when the name is taken
+   *   or with `invalidInput` when the value does not have the shape of the contract
    */
   add(provider: T): () => void;
   /**
    * Adds several providers in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
-   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   * @throws `DrawError` with the code `alreadyExists` when one of the names is taken, or
+   *   `invalidInput` when a value does not have the shape of the contract; nothing is added
    *   then
    */
   addMany(providers: readonly T[]): () => void;
@@ -279,14 +279,14 @@ export interface ProvidersCollection<T> {
    * Removes a provider.
    *
    * @returns True when it was removed
-   * @throws `DrawError` with the code `not-found` when there is no provider with this name
+   * @throws `DrawError` with the code `notFound` when there is no provider with this name
    */
   remove(name: string): boolean;
   /**
    * Removes several providers: all of them or none.
    *
    * @returns True when they were removed
-   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   * @throws `DrawError` with the code `notFound` when one of the names does not exist;
    *   nothing is removed then
    */
   removeMany(names: readonly string[]): boolean;

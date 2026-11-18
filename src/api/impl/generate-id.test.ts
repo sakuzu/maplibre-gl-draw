@@ -71,9 +71,9 @@ function documentIds(): string[] {
 describe('generateId', () => {
   it('makes every ID the library creates', async () => {
     // Draw a point, and a line through the pending ID of the drawing mode
-    draw.setMode('draw_point');
+    draw.setMode('drawPoint');
     draw.drawing.addVertex([0.5, 0.5]);
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     draw.drawing.addVertex([-1, 0.5]);
     draw.drawing.addVertex([2, 0.5]);
     expect(draw.drawing.finish()).toBe(true);
@@ -142,7 +142,7 @@ describe('generateId', () => {
 describe('without generateId', () => {
   it('makes the IDs with the built-in generator', () => {
     const other = createDraw(createMapStub().map);
-    other.setMode('draw_point');
+    other.setMode('drawPoint');
     other.drawing.addVertex([0, 0]);
     expect(other.features.list()[0].id).toBe('built-in');
     other.destroy();

@@ -4,8 +4,8 @@
 // The rows of the legend: for each layer and each dataset with a style rule, in the order of the
 // stack from the front, the rows core derives from the rule (`deriveLegend`), with the words of
 // the interface for the labels that are not values of the data. The datasets are placed as in the
-// layer panel: those of `above-store` in front of every layer, those of `layer-order` in their
-// place among the layers, those of `below-store` behind every layer.
+// layer panel: those of `aboveLayers` in front of every layer, those of `layerOrder` in their
+// place among the layers, those of `belowLayers` behind every layer.
 //
 // A layer without a rule has no rows: the colors of its features come from the default look of
 // each type and from the style of each feature, which a legend of the layer cannot sum up. A
@@ -120,7 +120,7 @@ export function datasetShape(dataset: LegendDataset): LegendShape {
 
 /**
  * The legend of every layer and every dataset with a style rule, in the order of the stack from
- * the front. A dataset of `layer-order` that the stacking order does not list is not drawn, and
+ * the front. A dataset of `layerOrder` that the stacking order does not list is not drawn, and
  * is left out
  */
 export function legendBlocks(source: LegendSource, m: Messages): LegendBlock[] {
@@ -143,14 +143,14 @@ export function legendBlocks(source: LegendSource, m: Messages): LegendBlock[] {
     for (const dataset of all.filter((d) => d.order === order).reverse()) ofDataset(dataset);
   };
   const seen = new Set<string>();
-  division('above-store');
+  division('aboveLayers');
   for (const id of [...source.layers.getOrder()].reverse()) {
     if (seen.has(id)) continue;
     seen.add(id);
     const layer = source.layers.get(id);
     if (!layer) {
       const dataset = source.datasets?.get(id);
-      if (dataset?.order === 'layer-order') ofDataset(dataset);
+      if (dataset?.order === 'layerOrder') ofDataset(dataset);
       continue;
     }
     if (!layer.styleRule) continue;
@@ -162,6 +162,6 @@ export function legendBlocks(source: LegendSource, m: Messages): LegendBlock[] {
       shape: legendShape(source.features.list({ layerId: layer.id })),
     });
   }
-  division('below-store');
+  division('belowLayers');
   return blocks;
 }

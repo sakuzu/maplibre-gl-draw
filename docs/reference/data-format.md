@@ -104,7 +104,7 @@ ungrouping move items in the order is described in
 The stacking order is part of the document: the native format saves it
 and a replaced Store holds it. It lists every layer once, and it can
 also hold entries of the application that are not layers: the ID of a
-dataset with `order: 'layer-order'`, drawn at that position, and the
+dataset with `order: 'layerOrder'`, drawn at that position, and the
 entries for which the `isExternalEntry` option returns true, which divide
 the stacking order so that MapLibre's own layers can go between the
 divisions. The meaning of such an entry is the application's. The library
@@ -433,9 +433,9 @@ serialize it with `JSON.stringify` and store it as `application/json`.
 ### Loading
 
 Loading the native format replaces the whole document; `mode: 'merge'` is
-refused with `invalid-input`. Everything is checked before anything is
+refused with `invalidInput`. Everything is checked before anything is
 changed, and the first problem rejects the load: the promise rejects with a
-`DrawError` whose code is `invalid-input` (or `unsupported-format` for an
+`DrawError` whose code is `invalidInput` (or `unsupportedFormat` for an
 image the browser cannot encode, see [Embedded images](#embedded-images)),
 and the document stays as it was.
 
@@ -695,8 +695,8 @@ native format and in `maplibre-gl-draw:imageData` of GeoJSON.
   WebP, it is stored as JPEG if none of its pixels is transparent, and
   otherwise in the format the browser returns (such as PNG)
 - An image that breaks one of the rules above, or whose pixels cannot be
-  decoded, fails with `invalid-input`. An image to scale down that the
-  browser returns in another type fails with `unsupported-format`, as an
+  decoded, fails with `invalidInput`. An image to scale down that the
+  browser returns in another type fails with `unsupportedFormat`, as an
   image file does. A load rejects with that code; `parseGeoJSON` and
   `parseNative` leave the feature out and list it in `skipped` with it
 

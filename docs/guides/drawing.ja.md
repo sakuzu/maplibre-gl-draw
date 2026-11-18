@@ -16,7 +16,7 @@ import { createDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createDraw(map);
 
 // クリックで頂点を足し、Enter か最初の頂点のクリックで終える
-draw.setMode('draw_polygon');
+draw.setMode('drawPolygon');
 
 draw.on('feature.created', ({ feature }) => {
   console.log(feature.type, feature.properties.name);
@@ -38,19 +38,19 @@ draw.on('mode.changed', ({ mode }) => {
 | モード | 作るもの | 操作 |
 | --- | --- | --- |
 | `select` | なし | 選択、移動、拡縮、回転、頂点の編集 |
-| `draw_point` | `Point` | 1 回クリック |
-| `draw_line` | `LineString` | 何度かクリックして終える |
-| `draw_polygon` | `Polygon` | 何度かクリックして終える |
-| `draw_circle` | `Circle` | 中心をクリックし、半径の位置をクリック |
-| `draw_freehand` | `Freehand` | ドラッグで 1 本の線を引く |
-| `draw_image` | `Image` | アプリケーションがファイルを選ぶ (後述) |
+| `drawPoint` | `Point` | 1 回クリック |
+| `drawLine` | `LineString` | 何度かクリックして終える |
+| `drawPolygon` | `Polygon` | 何度かクリックして終える |
+| `drawCircle` | `Circle` | 中心をクリックし、半径の位置をクリック |
+| `drawFreehand` | `Freehand` | ドラッグで 1 本の線を引く |
+| `drawImage` | `Image` | アプリケーションがファイルを選ぶ (後述) |
 
 `draw.setMode(mode)` は、呼んだ後のモードが `mode` なら `true` を返し
 ます。操作ロック中に描画モードを指定したときと、書き込めるレイヤーが
 無いとき (すべてのレイヤーがロックか非表示のとき。
 [レイヤーとグループ](layers.ja.md) を参照) に描画モードを指定したときは、
 `false` を返し、何も変わりません。モードの無い名前を渡すと、コード
-`not-found` の `DrawError` を投げます。
+`notFound` の `DrawError` を投げます。
 
 今のモードは `draw.getMode()` で読めます。モードが変わるたびに、
 `mode.changed` が前のモードと合わせて届きます。独自のモードは
@@ -64,11 +64,11 @@ draw.on('mode.changed', ({ mode }) => {
 
 | モード | 頂点を足す | 終える | Escape | Backspace |
 | --- | --- | --- | --- | --- |
-| `draw_point` | クリック | そのクリック | select へ | - |
-| `draw_line` | クリック | Enter、最後の頂点 | 破棄 | 最後の頂点 |
-| `draw_polygon` | クリック | Enter、最初の頂点 | 破棄 | 最後の頂点 |
-| `draw_circle` | クリック、移動 | 2 回目のクリック | 破棄 | - |
-| `draw_freehand` | ドラッグ | 離す | 破棄 | - |
+| `drawPoint` | クリック | そのクリック | select へ | - |
+| `drawLine` | クリック | Enter、最後の頂点 | 破棄 | 最後の頂点 |
+| `drawPolygon` | クリック | Enter、最初の頂点 | 破棄 | 最後の頂点 |
+| `drawCircle` | クリック、移動 | 2 回目のクリック | 破棄 | - |
+| `drawFreehand` | ドラッグ | 離す | 破棄 | - |
 
 - 線は頂点が 2 つ、多角形は 3 つ揃ってから、Enter か、ダブルクリックか、
   最後 (線) または最初 (多角形) の頂点のクリックで終わります。その頂点の上ではカーソルが
@@ -119,7 +119,7 @@ draw.on('preview.changed', ({ feature }) => {
 1 回届きます。
 
 フリーハンドは違います。1 本の線 (押す、ドラッグする、離す) ごとに 1 つの
-地物になり、続けて線を引けるようにモードは `draw_freehand` の
+地物になり、続けて線を引けるようにモードは `drawFreehand` の
 ままで、新しい地物は選ばれません。線を引いている途中で 2 本目の
 指が触れたときや、ブラウザーがタッチを取り消したときは、その線を捨て
 ます。
@@ -136,7 +136,7 @@ draw.on('preview.changed', ({ feature }) => {
 
 ### 画像
 
-ライブラリーはファイルのダイアログを開きません。`draw_image` に入ると、
+ライブラリーはファイルのダイアログを開きません。`drawImage` に入ると、
 位置、ズーム、画像を置くレイヤーを載せた `image.requested` を出し、
 すぐに `select` に戻ります。位置は、クリックからこのモードに入った
 とき (`map.clicked` のリスナーが入ったとき) はクリックした位置、
@@ -156,7 +156,7 @@ draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
   input.click();
 });
 
-draw.setMode('draw_image');
+draw.setMode('drawImage');
 ```
 
 画像は `coordinate` を中心に置かれ、WebP に変換されます。ブラウザーが
@@ -402,7 +402,7 @@ draw.features.create({
 名前、基準のズームが付き、描き終えると選択されます。
 
 ```ts
-draw.setMode('draw_line');
+draw.setMode('drawLine');
 draw.drawing.addVertex([139.7, 35.68]); // その位置のクリックと同じ
 draw.drawing.moveTo([139.71, 35.69]); // プレビューが付いてくる
 draw.drawing.addVertex([139.71, 35.69]);
@@ -420,7 +420,7 @@ draw.drawing.finish(); // Enter と同じ。モードは select に戻る
   ときだけ形を描き終えます
 - `addVertex` は、描画モードが動いていないとき、またはクリックを
   受け取ったものがないときに `false` を返します。何が起きるかはモード
-  しだいです。`draw_point` では点を作り、線や面の閉じる頂点の上では形を
+  しだいです。`drawPoint` では点を作り、線や面の閉じる頂点の上では形を
   描き終えます
 - `finish` は、頂点が足りていれば、最後の頂点がどこにあっても形を
   完成させます。描いている途中の形がないとき、またはモードが形を完成

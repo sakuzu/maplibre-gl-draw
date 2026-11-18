@@ -36,12 +36,12 @@ export const BUILTIN_TOOLS: Readonly<
   Record<ToolId, { mode: Mode; shortcut: string; group: string }>
 > = Object.freeze({
   select: { mode: 'select', shortcut: 'V', group: 'select' },
-  point: { mode: 'draw_point', shortcut: 'P', group: 'draw' },
-  line: { mode: 'draw_line', shortcut: 'L', group: 'draw' },
-  polygon: { mode: 'draw_polygon', shortcut: 'A', group: 'draw' },
-  circle: { mode: 'draw_circle', shortcut: 'C', group: 'draw' },
-  freehand: { mode: 'draw_freehand', shortcut: 'F', group: 'draw' },
-  image: { mode: 'draw_image', shortcut: 'I', group: 'draw' },
+  point: { mode: 'drawPoint', shortcut: 'P', group: 'draw' },
+  line: { mode: 'drawLine', shortcut: 'L', group: 'draw' },
+  polygon: { mode: 'drawPolygon', shortcut: 'A', group: 'draw' },
+  circle: { mode: 'drawCircle', shortcut: 'C', group: 'draw' },
+  freehand: { mode: 'drawFreehand', shortcut: 'F', group: 'draw' },
+  image: { mode: 'drawImage', shortcut: 'I', group: 'draw' },
 });
 
 /** The IDs that the toolbar keeps for its own buttons */

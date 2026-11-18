@@ -101,11 +101,11 @@ describe('create and reading', () => {
 
   it('throws the codes of the contract, creating nothing', () => {
     groups.create({ id: 'g', featureIds: ['a'] });
-    expect(codeOf(() => groups.create({ featureIds: ['x'] }))).toBe('not-found');
-    expect(codeOf(() => groups.create({ featureIds: ['b', 'e'] }))).toBe('invalid-input');
-    expect(codeOf(() => groups.create({ featureIds: [] }))).toBe('invalid-input');
-    expect(codeOf(() => groups.create({ id: 'g', featureIds: ['b'] }))).toBe('already-exists');
-    expect(codeOf(() => groups.create({ id: 'a', featureIds: ['b'] }))).toBe('already-exists');
+    expect(codeOf(() => groups.create({ featureIds: ['x'] }))).toBe('notFound');
+    expect(codeOf(() => groups.create({ featureIds: ['b', 'e'] }))).toBe('invalidInput');
+    expect(codeOf(() => groups.create({ featureIds: [] }))).toBe('invalidInput');
+    expect(codeOf(() => groups.create({ id: 'g', featureIds: ['b'] }))).toBe('alreadyExists');
+    expect(codeOf(() => groups.create({ id: 'a', featureIds: ['b'] }))).toBe('alreadyExists');
     expect(
       codeOf(() =>
         groups.createMany([
@@ -113,7 +113,7 @@ describe('create and reading', () => {
           { id: 'i', featureIds: ['b'] },
         ]),
       ),
-    ).toBe('invalid-input');
+    ).toBe('invalidInput');
     expect(groups.count()).toBe(1);
   });
 
@@ -146,9 +146,9 @@ describe('update', () => {
     });
   });
 
-  it('throws not-found and invalid-input', () => {
-    expect(codeOf(() => groups.update('x', { name: 'x' }))).toBe('not-found');
-    expect(codeOf(() => groups.update('g', { featureIds: [] } as never))).toBe('invalid-input');
+  it('throws notFound and invalidInput', () => {
+    expect(codeOf(() => groups.update('x', { name: 'x' }))).toBe('notFound');
+    expect(codeOf(() => groups.update('g', { featureIds: [] } as never))).toBe('invalidInput');
   });
 
   it('refuses a change of a locked group but lets its lock change', () => {
@@ -192,8 +192,8 @@ describe('delete and deleteMany', () => {
     expect(store.getFeature('a')?.groupId).toBeUndefined();
   });
 
-  it('throws not-found, and refuses a locked group and read-only', () => {
-    expect(codeOf(() => groups.delete('x'))).toBe('not-found');
+  it('throws notFound, and refuses a locked group and read-only', () => {
+    expect(codeOf(() => groups.delete('x'))).toBe('notFound');
     expect(groups.delete('k')).toBe(false);
     store.setReadOnly(true);
     expect(groups.delete('g')).toBe(false);
@@ -201,7 +201,7 @@ describe('delete and deleteMany', () => {
   });
 
   it('deletes several in one notification, or none', () => {
-    expect(codeOf(() => groups.deleteMany(['g', 'x']))).toBe('not-found');
+    expect(codeOf(() => groups.deleteMany(['g', 'x']))).toBe('notFound');
     expect(groups.deleteMany(['g', 'k'])).toBe(false);
     expect(groups.deleteMany(['g', 'h'])).toBe(true);
     expect(groups.list().map((g) => g.id)).toEqual(['k']);
@@ -238,11 +238,11 @@ describe('move and moveMany', () => {
   });
 
   it('throws for a missing group or layer and for a group as the target', () => {
-    expect(codeOf(() => groups.move('x', { layerId: 'l2' }))).toBe('not-found');
-    expect(codeOf(() => groups.moveMany(['g', 'x'], { layerId: 'l2' }))).toBe('not-found');
-    expect(codeOf(() => groups.move('g', { layerId: 'x' }))).toBe('not-found');
-    expect(codeOf(() => groups.move('g', { groupId: 'h' }))).toBe('invalid-input');
-    expect(codeOf(() => groups.move('g', { groupId: null }))).toBe('invalid-input');
+    expect(codeOf(() => groups.move('x', { layerId: 'l2' }))).toBe('notFound');
+    expect(codeOf(() => groups.moveMany(['g', 'x'], { layerId: 'l2' }))).toBe('notFound');
+    expect(codeOf(() => groups.move('g', { layerId: 'x' }))).toBe('notFound');
+    expect(codeOf(() => groups.move('g', { groupId: 'h' }))).toBe('invalidInput');
+    expect(codeOf(() => groups.move('g', { groupId: null }))).toBe('invalidInput');
     expect(store.getGroup('g')?.layerId).toBe('l1');
   });
 

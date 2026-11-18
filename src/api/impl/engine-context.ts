@@ -68,9 +68,9 @@ export interface EngineOptions {
   /** The mode entered when the engine starts */
   defaultMode?: Mode;
   /** How far from a feature a click still hits it, in pixels */
-  clickTolerance?: number;
+  clickTolerancePx?: number;
   /** How far the mouse moves before a press becomes a drag, in pixels */
-  dragThreshold?: number;
+  dragThresholdPx?: number;
   /** The default look of the features */
   style?: Partial<FeatureStyleConfig>;
   /** The look of the selection */
@@ -108,8 +108,8 @@ export interface EngineOptions {
 export const DEFAULT_OPTIONS = {
   defaultMode: 'select' as Mode,
   // One default for the hit test and the topmost hit (see DEFAULT_HIT_TEST_OPTIONS)
-  clickTolerance: DEFAULT_HIT_TEST_OPTIONS.clickTolerance,
-  dragThreshold: 3,
+  clickTolerancePx: DEFAULT_HIT_TEST_OPTIONS.clickTolerancePx,
+  dragThresholdPx: 3,
   scaleWithZoom: true,
 };
 
@@ -224,8 +224,8 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     ...DEFAULT_OPTIONS,
     ...options,
     defaultMode: options.defaultMode ?? DEFAULT_OPTIONS.defaultMode,
-    clickTolerance: options.clickTolerance ?? DEFAULT_OPTIONS.clickTolerance,
-    dragThreshold: options.dragThreshold ?? DEFAULT_OPTIONS.dragThreshold,
+    clickTolerancePx: options.clickTolerancePx ?? DEFAULT_OPTIONS.clickTolerancePx,
+    dragThresholdPx: options.dragThresholdPx ?? DEFAULT_OPTIONS.dragThresholdPx,
     scaleWithZoom: options.scaleWithZoom ?? DEFAULT_OPTIONS.scaleWithZoom,
   };
 
@@ -265,7 +265,7 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // uses. When terrain is disabled, project returns null and the conventional longitude and
   // latitude path keeps working as before.
   const hitTestService: HitTestService = new HitTestServiceImpl(store, spatialIndex, {
-    clickTolerance: opts.clickTolerance,
+    clickTolerancePx: opts.clickTolerancePx,
     anchorScreen: {
       project: (coord) => getAnchorProjector(map)?.project(coord[0], coord[1]) ?? null,
     },

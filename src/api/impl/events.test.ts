@@ -60,7 +60,7 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'dataset.reordered',
   'image.requested',
   'layerStack.changed',
-  'error',
+  'image.failed',
 ];
 
 /** Records every event of an instance, in the order they arrive */
@@ -237,7 +237,7 @@ describe('document.changed', () => {
     draw.on('document.changed', (change) => received.push(change));
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'x' });
     draw.setMode('select');
     draw.hidden.add(a.id);
@@ -364,28 +364,28 @@ describe('the events of the state of this client', () => {
     const formatter = (typeName: string, n: number) => `${typeName} ${n}`;
     draw.options.update({ autoName: { formatter } });
     events.length = 0;
-    const { snapping, clickTolerance } = draw.options.get();
+    const { snapping, clickTolerancePx } = draw.options.get();
     draw.options.update({});
-    draw.options.update({ snapping: { enabled: snapping?.enabled }, clickTolerance });
+    draw.options.update({ snapping: { enabled: snapping?.enabled }, clickTolerancePx });
     draw.options.update({ autoName: { formatter } });
-    expect(() => draw.options.update({ clickTolerance: 'far' as never })).toThrow(DrawError);
+    expect(() => draw.options.update({ clickTolerancePx: 'far' as never })).toThrow(DrawError);
     expect(events).toEqual([]);
   });
 
   it('options.changed stops reaching a listener once the function on returned is called', () => {
     const heard: Array<number | undefined> = [];
-    const stop = draw.on('options.changed', ({ options }) => heard.push(options.dragThreshold));
-    draw.options.update({ dragThreshold: 7 });
+    const stop = draw.on('options.changed', ({ options }) => heard.push(options.dragThresholdPx));
+    draw.options.update({ dragThresholdPx: 7 });
     stop();
-    draw.options.update({ dragThreshold: 9 });
+    draw.options.update({ dragThresholdPx: 9 });
     expect(heard).toEqual([7]);
     expect(payloadsOf(events, 'options.changed')).toHaveLength(2);
   });
 
   it('mode.changed carries the mode and the one before it', () => {
-    draw.setMode('draw_polygon');
+    draw.setMode('drawPolygon');
     expect(payloadsOf(events, 'mode.changed')).toEqual([
-      { mode: 'draw_polygon', previous: 'select' },
+      { mode: 'drawPolygon', previous: 'select' },
     ]);
   });
 });
@@ -396,9 +396,9 @@ describe('on, off and once', () => {
     draw.once('mode.changed', ({ mode }) => heard.push(mode));
     const cancel = draw.once('mode.changed', ({ mode }) => heard.push(`cancelled ${mode}`));
     cancel();
-    draw.setMode('draw_line');
-    draw.setMode('draw_point');
-    expect(heard).toEqual(['draw_line']);
+    draw.setMode('drawLine');
+    draw.setMode('drawPoint');
+    expect(heard).toEqual(['drawLine']);
   });
 
   it('off removes a listener given to on or to once, and on returns the function that does it', () => {
@@ -409,10 +409,10 @@ describe('on, off and once', () => {
     draw.once('mode.changed', listener);
     draw.off('mode.changed', listener);
     const stop = draw.on('mode.changed', listener);
-    draw.setMode('draw_line');
+    draw.setMode('drawLine');
     stop();
-    draw.setMode('draw_point');
-    expect(heard).toEqual(['draw_line']);
+    draw.setMode('drawPoint');
+    expect(heard).toEqual(['drawLine']);
   });
 
   it('keeps calling the other listeners when one throws, and refuses a listener that is not a function', () => {
@@ -477,11 +477,11 @@ describe('the signals of the engine', () => {
     expect(payloadsOf(signals, 'layerStack.changed')).toEqual([
       { entries: [{ layerId: 'slot', from: 0, to: 2 }] },
     ]);
-    const [failure] = payloadsOf(signals, 'error');
+    const [failure] = payloadsOf(signals, 'image.failed');
     expect(failure.source).toBe('image');
     expect(failure.featureId).toBe('img');
     expect(failure.error).toBeInstanceOf(DrawError);
-    expect(failure.error.code).toBe('unsupported-format');
+    expect(failure.error.code).toBe('unsupportedFormat');
     expect(failure.error.details).toEqual({ cause });
   });
 
@@ -502,7 +502,7 @@ describe('the signals of the engine', () => {
     expect(clicks[1]).toEqual({ lngLat: [-0.5, -0.5], point: [350, 350], hit: null });
 
     // Not in a drawing mode
-    draw.setMode('draw_point');
+    draw.setMode('drawPoint');
     input.click([0.5, 0.5]);
     expect(payloadsOf(signals, 'map.clicked')).toHaveLength(2);
   });
@@ -600,7 +600,7 @@ describe('preview.changed', () => {
     );
 
   it('fires at each change of the shape being drawn, and null when it is created', () => {
-    local.setMode('draw_line');
+    local.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.5, 0.5]);
@@ -624,7 +624,7 @@ describe('preview.changed', () => {
   });
 
   it('fires null once when the drawing is cancelled, and nothing when there was none', () => {
-    local.setMode('draw_line');
+    local.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.5, 0.5]);
@@ -674,7 +674,7 @@ describe('preview.changed', () => {
   });
 
   it('carries the placed vertices of a built-in line', () => {
-    local.setMode('draw_line');
+    local.setMode('drawLine');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.5, 0.5]);
@@ -683,7 +683,7 @@ describe('preview.changed', () => {
   });
 
   it('carries the radius of a circle', () => {
-    local.setMode('draw_circle');
+    local.setMode('drawCircle');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.01, 0]);

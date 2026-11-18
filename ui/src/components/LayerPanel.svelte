@@ -55,7 +55,7 @@
   //
   // A dataset is a row of the stack, not an item of the document: it has the eye and no lock, and
   // a press on it does nothing (the selection stays). It is dragged among the layers: one in front
-  // of or behind every layer is moved to `layer-order` (`datasets.move`) before the reorder, and
+  // of or behind every layer is moved to `layerOrder` (`datasets.move`) before the reorder, and
   // back to its own order when the reorder is refused. A layer of more
   // features than the limit lists none: its one child counts them, and has no eye, no lock and no
   // grip, and a press on it does nothing. The eye and the lock are drawn here (LayerTree's
@@ -241,10 +241,10 @@
     else if (kind === 'feature') draw.features.update(id, { locked });
   }
 
-  // A dataset in front of or behind every layer joins the stacking order (layer-order) before the
+  // A dataset in front of or behind every layer joins the stacking order (layerOrder) before the
   // reorder, and goes back to its own order when the reorder is refused
   function reorderLayers(order: string[], join?: MoveJoin) {
-    if (join) draw.datasets.move(join.id, { order: 'layer-order' });
+    if (join) draw.datasets.move(join.id, { order: 'layerOrder' });
     let done = false;
     try {
       done = draw.layers.reorder(order);

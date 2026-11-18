@@ -90,7 +90,7 @@ export async function prepareNative(data: Data, deps: { store: Store }): Promise
     retainedLayerIds,
   );
   // A file whose image cannot be imported refuses the whole load, as a malformed field does;
-  // an image the browser cannot encode is refused as unsupported-format, the same as when an
+  // an image the browser cannot encode is refused as unsupportedFormat, the same as when an
   // image file is loaded
   for (const [key, problem] of fileProblems) {
     throw new DrawError(
