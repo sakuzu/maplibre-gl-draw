@@ -5,11 +5,15 @@
  * Helpers shared by the tests. This file is not part of the build.
  */
 
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { Geometry } from 'geojson';
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
-import { vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import type { Draw } from './api/draw.js';
+import { createDraw } from './api/draw.js';
+import type { DocumentChange, DrawEvents } from './api/events.js';
 import type { ModeFactory } from './api/extension/mode.js';
+import type { Store as PublicStore } from './api/extension/store.js';
 import type { ExtensionsCollections } from './api/extensions.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
@@ -24,7 +28,16 @@ import { checkDrawOptions, toEngineOptions } from './api/impl/options.js';
 import { createSelection } from './api/impl/selection.js';
 import type { ResourceDeps } from './api/impl/shared.js';
 import { withLocksIgnored } from './api/impl/shared.js';
+import type {
+  FeatureFilter,
+  Group,
+  GroupFilter,
+  Layer,
+  LayerFilter,
+  Feature as PublicFeature,
+} from './api/model.js';
 import type { DrawOptions } from './api/options.js';
+import type { Selection } from './api/state.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
@@ -37,7 +50,7 @@ import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import { type WorkCounts, workCountsOf } from './shared/work-counts.js';
 import type { SnapResult } from './snapping/types.js';
-import { MemoryStore } from './store/memory.js';
+import { MemoryContractStore, MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import type { TerrainContext } from './view/terrain/context.js';
 import { createSelectionExtensionRegistry } from './view/ui/selection-ui/extension-registry.js';
@@ -1104,3 +1117,1236 @@ export function createSyntheticDrag(engine: Pick<Engine, 'map' | 'inputRouter'>)
     },
   };
 }
+
+// ============================================================================
+// The table of what the instance does
+//
+// Before the Store under the instance is replaced, what the instance does is written down once,
+// scene by scene, in src/parity/records/ (one JSON line per row: a scene and one thing read after
+// it). A run compares every row with its record, so a rework of the internals that keeps what the
+// instance does keeps every row. The results are read in one place, `readParity`: a rework that
+// renames a public member or changes the type it hands out changes the lines of the reader that
+// read it, never the records. A row whose result a decided change of the public API changes
+// carries a mark in src/parity/marks.json, with the number of the change and the value after it.
+//
+// The scenes use the public API only: `createDraw` on a map stub that delivers the input as
+// maplibre does (`createParityMap`), the `store` option with a Store of the application
+// (`createApplicationStore`), and plugins.
+// ============================================================================
+
+/** A map stub that delivers the pointer and the keyboard as maplibre does */
+export interface ParityMap {
+  map: MapLibreMap;
+  /** A move of the pointer, with no button down */
+  move(lngLat: [number, number], modifiers?: SyntheticModifiers): void;
+  /** A press, a release and the click maplibre fires after them, at one place */
+  click(lngLat: [number, number], modifiers?: SyntheticModifiers): void;
+  /** Two clicks and the double click maplibre fires after them */
+  dblclick(lngLat: [number, number]): void;
+  /** A press of the left button (after a move there) */
+  press(lngLat: [number, number], modifiers?: SyntheticModifiers): void;
+  /** A move with the left button down */
+  pull(lngLat: [number, number], modifiers?: SyntheticModifiers): void;
+  /** A release of the left button */
+  release(lngLat: [number, number], modifiers?: SyntheticModifiers): void;
+  /** A press, moves in steps with the button down, and a release */
+  drag(
+    from: [number, number],
+    to: [number, number],
+    options?: { steps?: number; modifiers?: SyntheticModifiers },
+  ): void;
+  /** A key pressed and let go on the canvas */
+  key(key: string, modifiers?: SyntheticModifiers): void;
+  /** Draws one frame of the layers on the counting GL (a map made with `drawing` only) */
+  render(): void;
+}
+
+/**
+ * The map stub of `createMapStub` around a center (100 px to the degree), with the input of a
+ * real map: the listeners the instance adds to the map and to its canvas receive the events a
+ * real map gives them. With `drawing`, it is the stub of `createDrawingMapStub` on a counting GL,
+ * whose layers draw a frame with `render()`.
+ */
+export function createParityMap(
+  options: { center?: [number, number]; drawing?: boolean } = {},
+): ParityMap {
+  const drawing = options.drawing ? createDrawingMapStub(createCountingGL().gl) : null;
+  const stub = drawing ?? createMapStub();
+  const [cx, cy] = options.center ?? [0, 0];
+  const mapListeners = new Map<string, Set<Listener>>();
+  const canvasListeners = new Map<string, Set<Listener>>();
+  const add = (to: Map<string, Set<Listener>>, type: string, fn: Listener) => {
+    if (!to.has(type)) to.set(type, new Set());
+    to.get(type)?.add(fn);
+  };
+  const map = stub.map as unknown as Record<string, unknown>;
+  const on = map.on as (type: string, fn: Listener) => unknown;
+  const off = map.off as (type: string, fn: Listener) => unknown;
+  const project = (lngLat: { lng: number; lat: number } | [number, number]) => {
+    const [lng, lat] = Array.isArray(lngLat) ? lngLat : [lngLat.lng, lngLat.lat];
+    return { x: (lng - cx) * 100 + 400, y: 300 - (lat - cy) * 100 };
+  };
+  Object.assign(map, {
+    on: (type: string, fn: Listener) => {
+      add(mapListeners, type, fn);
+      on(type, fn);
+      return map;
+    },
+    off: (type: string, fn: Listener) => {
+      mapListeners.get(type)?.delete(fn);
+      off(type, fn);
+      return map;
+    },
+    project,
+    unproject: (p: [number, number] | { x: number; y: number }) => {
+      const [x, y] = Array.isArray(p) ? p : [p.x, p.y];
+      return { lng: (x - 400) / 100 + cx, lat: (300 - y) / 100 + cy };
+    },
+    getCenter: () => ({ lng: cx, lat: cy }),
+    getBounds: () => ({
+      getWest: () => cx - 4,
+      getEast: () => cx + 4,
+      getSouth: () => cy - 3,
+      getNorth: () => cy + 3,
+      getSouthWest: () => ({ lng: cx - 4, lat: cy - 3 }),
+      getNorthEast: () => ({ lng: cx + 4, lat: cy + 3 }),
+    }),
+  });
+  const canvas = stub.canvas as unknown as Record<string, unknown>;
+  const addEventListener = canvas.addEventListener as (type: string, fn: Listener) => void;
+  const removeEventListener = canvas.removeEventListener as (type: string, fn: Listener) => void;
+  Object.assign(canvas, {
+    addEventListener: (type: string, fn: Listener) => {
+      add(canvasListeners, type, fn);
+      addEventListener(type, fn);
+    },
+    removeEventListener: (type: string, fn: Listener) => {
+      canvasListeners.get(type)?.delete(fn);
+      removeEventListener(type, fn);
+    },
+  });
+
+  const fire = (
+    type: string,
+    lngLat: [number, number],
+    buttons: number,
+    modifiers: SyntheticModifiers = {},
+  ) => {
+    const point = project(lngLat);
+    const originalEvent = {
+      type,
+      button: 0,
+      buttons,
+      clientX: point.x,
+      clientY: point.y,
+      target: stub.canvas,
+      shiftKey: modifiers.shift ?? false,
+      ctrlKey: modifiers.ctrl ?? false,
+      altKey: modifiers.alt ?? false,
+      metaKey: modifiers.meta ?? false,
+      sourceCapabilities: { firesTouchEvents: false },
+      defaultPrevented: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+      stopPropagation() {},
+      stopImmediatePropagation() {},
+    };
+    const event = {
+      type,
+      point,
+      lngLat: { lng: lngLat[0], lat: lngLat[1] },
+      originalEvent,
+      preventDefault() {},
+    };
+    for (const fn of [...(mapListeners.get(type) ?? [])]) fn(event);
+  };
+  const keyEvent = (type: string, key: string, modifiers: SyntheticModifiers = {}) => {
+    const code = /^[a-zA-Z]$/.test(key)
+      ? `Key${key.toUpperCase()}`
+      : /^[0-9]$/.test(key)
+        ? `Digit${key}`
+        : key;
+    const event = {
+      type,
+      key,
+      code,
+      repeat: false,
+      target: stub.canvas,
+      shiftKey: modifiers.shift ?? false,
+      ctrlKey: modifiers.ctrl ?? false,
+      altKey: modifiers.alt ?? false,
+      metaKey: modifiers.meta ?? false,
+      defaultPrevented: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+      stopPropagation() {},
+    };
+    for (const fn of [...(canvasListeners.get(type) ?? [])]) fn(event);
+  };
+
+  const parity: ParityMap = {
+    map: stub.map,
+    move: (lngLat, modifiers) => fire('mousemove', lngLat, 0, modifiers),
+    click: (lngLat, modifiers) => {
+      fire('mousemove', lngLat, 0, modifiers);
+      fire('mousedown', lngLat, 1, modifiers);
+      fire('mouseup', lngLat, 0, modifiers);
+      fire('click', lngLat, 0, modifiers);
+    },
+    dblclick: (lngLat) => {
+      parity.click(lngLat);
+      parity.click(lngLat);
+      fire('dblclick', lngLat, 0);
+    },
+    press: (lngLat, modifiers) => {
+      fire('mousemove', lngLat, 0, modifiers);
+      fire('mousedown', lngLat, 1, modifiers);
+    },
+    pull: (lngLat, modifiers) => fire('mousemove', lngLat, 1, modifiers),
+    release: (lngLat, modifiers) => fire('mouseup', lngLat, 0, modifiers),
+    drag: (from, to, { steps = 4, modifiers } = {}) => {
+      parity.press(from, modifiers);
+      for (let i = 1; i <= steps; i++) {
+        const f = i / steps;
+        parity.pull([from[0] + (to[0] - from[0]) * f, from[1] + (to[1] - from[1]) * f], modifiers);
+      }
+      parity.release(to, modifiers);
+    },
+    key: (key, modifiers) => {
+      keyEvent('keydown', key, modifiers);
+      keyEvent('keyup', key, modifiers);
+    },
+    render: () => {
+      if (!drawing) throw new Error('the map stub was made without drawing');
+      drawing.render();
+    },
+  };
+  return parity;
+}
+
+/** Every member of the public Store of the main entry */
+export const PARITY_STORE_MEMBERS: readonly (keyof PublicStore)[] = [
+  'getFeature',
+  'listFeatures',
+  'listFeaturesInOrder',
+  'getLayer',
+  'listLayers',
+  'getLayerOrder',
+  'getGroup',
+  'listGroups',
+  'getFile',
+  'listFiles',
+  'getMetadata',
+  'getSelection',
+  'getEditingIds',
+  'getVertexSelection',
+  'getMode',
+  'isReadOnly',
+  'isInteractionLocked',
+  'isHidden',
+  'listHidden',
+  'subscribe',
+  'transact',
+  'createFeature',
+  'updateFeature',
+  'abortIntermediateUpdates',
+  'deleteFeature',
+  'createLayer',
+  'updateLayer',
+  'deleteLayer',
+  'setLayerOrder',
+  'reorderInLayer',
+  'reorderInGroup',
+  'createGroup',
+  'updateGroup',
+  'deleteGroup',
+  'createFile',
+  'deleteFile',
+  'setMetadata',
+  'setSelection',
+  'startEditing',
+  'endEditing',
+  'setSelectedVertices',
+  'setMode',
+  'setReadOnly',
+  'setInteractionLock',
+  'setLocallyHidden',
+  'getMaxNameNumber',
+  'recordNameNumber',
+];
+
+/** The members of the public Store an application may leave out */
+const OPTIONAL_STORE_MEMBERS: ReadonlySet<string> = new Set([
+  'abortIntermediateUpdates',
+  'getMaxNameNumber',
+  'recordNameNumber',
+]);
+
+/**
+ * A Store of the application, kept in memory, with the members of the public Store only
+ *
+ * `store` is given to `createDraw`; `scene` is the same Store for the scene, which writes to it
+ * from outside the instance as an application that keeps the document elsewhere does. What the
+ * scene calls on `scene`, and the optional members the instance calls, are the uses of the row.
+ * `calls` lists the calls of the instance to the optional members.
+ */
+export interface ApplicationStore {
+  store: PublicStore;
+  scene: PublicStore;
+  calls: string[];
+}
+
+/**
+ * Makes a Store of the application
+ *
+ * @param options.nameNumbers The largest number of an automatic name the Store knows of, by
+ *   type: given, the Store has `getMaxNameNumber` and `recordNameNumber`
+ * @param options.abort Whether the Store has `abortIntermediateUpdates`
+ */
+export function createApplicationStore(
+  options: { nameNumbers?: Record<string, number>; abort?: boolean } = {},
+): ApplicationStore {
+  const inner = new MemoryContractStore() as unknown as Record<string, unknown>;
+  const calls: string[] = [];
+  const optional: Record<string, unknown> = {};
+  if (options.nameNumbers) {
+    const numbers = { ...options.nameNumbers };
+    optional.getMaxNameNumber = (type: string) => {
+      calls.push(`getMaxNameNumber ${type}`);
+      return numbers[type];
+    };
+    optional.recordNameNumber = (type: string, n: number) => {
+      calls.push(`recordNameNumber ${type} ${n}`);
+      numbers[type] = Math.max(numbers[type] ?? 0, n);
+    };
+  }
+  if (options.abort) {
+    optional.abortIntermediateUpdates = (ids: string[]) => {
+      calls.push(`abortIntermediateUpdates ${ids.join(',')}`);
+    };
+  }
+  const members = new Set<string>(PARITY_STORE_MEMBERS);
+  const view = (recordAll: boolean) =>
+    new Proxy(inner, {
+      get(target, key) {
+        if (typeof key !== 'string' || !members.has(key)) return undefined;
+        const value = OPTIONAL_STORE_MEMBERS.has(key) ? optional[key] : Reflect.get(target, key);
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          if (recordAll || OPTIONAL_STORE_MEMBERS.has(key)) useParity(`Store.${key}`);
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      },
+      has(_target, key) {
+        return (
+          typeof key === 'string' &&
+          members.has(key) &&
+          (!OPTIONAL_STORE_MEMBERS.has(key) || key in optional)
+        );
+      },
+    }) as unknown as PublicStore;
+  return { store: view(false), scene: view(true), calls };
+}
+
+/** The same Store for the scene: what it calls on it are the uses of the row */
+export function parityStoreView<S extends object>(store: S): S {
+  return new Proxy(store, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target) as unknown;
+      if (typeof key !== 'string' || typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        useParity(`Store.${key}`);
+        return (value as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+}
+
+/** The public resources of the instance whose methods the rows use, by field */
+const PARITY_RESOURCES: Readonly<Record<string, string>> = {
+  features: 'FeaturesCollection',
+  layers: 'LayersCollection',
+  groups: 'GroupsCollection',
+  hidden: 'HiddenCollection',
+  selection: 'SelectionResource',
+  vertexSelection: 'VertexSelectionResource',
+  metadata: 'MetadataResource',
+  document: 'DocumentResource',
+};
+
+/** The uses of the row being run, and whether the reader is reading the state around it */
+const parityUses: { current: Set<string> | null; quiet: number } = { current: null, quiet: 0 };
+
+/** Notes a use of a public member by the row being run */
+function useParity(name: string): void {
+  if (parityUses.quiet === 0) parityUses.current?.add(name);
+}
+
+/** The instance as the scene sees it: the methods it calls on its resources are its uses */
+function recordingDraw(draw: Draw): Draw {
+  const resources = new Map<string, unknown>();
+  return new Proxy(draw, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target) as unknown;
+      if (typeof key !== 'string') return value;
+      const resource = PARITY_RESOURCES[key];
+      if (resource && value && typeof value === 'object') {
+        if (!resources.has(key)) {
+          resources.set(
+            key,
+            new Proxy(value, {
+              get(r, method) {
+                const member = Reflect.get(r, method, r) as unknown;
+                if (typeof method !== 'string' || typeof member !== 'function') return member;
+                return (...args: unknown[]) => {
+                  useParity(`${resource}.${method}`);
+                  return (member as (...a: unknown[]) => unknown).apply(r, args);
+                };
+              },
+            }),
+          );
+        }
+        return resources.get(key);
+      }
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        useParity(`Draw.${key}`);
+        return (value as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+}
+
+/** An event of the instance as it arrived */
+export type ParityEvent = { [K in keyof DrawEvents]: [K, DrawEvents[K]] }[keyof DrawEvents];
+
+/** A scene's instance: the instance as the scene sees it, its map and the events it gave */
+export interface ParityInstance {
+  /** The instance; what the scene calls on it are the uses of the row */
+  draw: Draw;
+  map: ParityMap;
+  /** The events since the scene started its action, in the order they arrived */
+  log: ParityEvent[];
+  /** The Store of the application under the instance, when the scene gave one */
+  app?: ApplicationStore;
+}
+
+/** The instances of the scene being run, destroyed after it */
+const parityInstances: Draw[] = [];
+
+/**
+ * Makes the instance of a scene on a map stub, with IDs `id1`, `id2` and so on
+ *
+ * @param options.center The center of the map stub (0, 0 when left out)
+ * @param options.drawing Whether the map stub draws on a counting GL (`map.render()`)
+ * @param options.app A Store of the application to give the instance
+ */
+export function createParityInstance(
+  options: DrawOptions & {
+    center?: [number, number];
+    drawing?: boolean;
+    app?: ApplicationStore;
+  } = {},
+): ParityInstance {
+  const { center, drawing, app, ...drawOptions } = options;
+  const map = createParityMap({ center, drawing });
+  let n = 0;
+  const draw = createDraw(map.map, {
+    generateId: () => `id${++n}`,
+    ...drawOptions,
+    ...(app ? { store: app.store } : {}),
+  });
+  parityInstances.push(draw);
+  const log: ParityEvent[] = [];
+  for (const name of Object.keys(PARITY_EVENT_READS) as (keyof DrawEvents)[]) {
+    draw.on(name, (payload) => log.push([name, payload] as ParityEvent));
+  }
+  return { draw: recordingDraw(draw), map, log, app };
+}
+
+/** Runs the timers the instance has set (deferred work and notifications) */
+export function settleParity(): void {
+  vi.advanceTimersByTime(1000);
+}
+
+/** A thrown error as a record: its name and its code */
+function thrownRecord(error: unknown): unknown {
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    return { $throws: error.name, ...(code !== undefined ? { code } : {}) };
+  }
+  return { $throws: String(error) };
+}
+
+/**
+ * What a scene's action did, read after it: what it returned (or threw), the document, the
+ * state of this client, the events other than `document.changed`, the `document.changed`
+ * notifications and the order of every event
+ */
+export async function observeParity(
+  t: ParityInstance,
+  act: () => unknown,
+): Promise<Record<string, unknown>> {
+  settleParity();
+  t.log.length = 0;
+  let returned: unknown;
+  try {
+    const value = act();
+    returned = readParity(t.draw, 'value', value instanceof Promise ? await value : value);
+  } catch (error) {
+    returned = thrownRecord(error);
+  }
+  settleParity();
+  return {
+    returned,
+    document: readParity(t.draw, 'document'),
+    client: readParity(t.draw, 'client'),
+    events: readParity(t.log, 'events'),
+    changes: readParity(t.log, 'changes'),
+    order: readParity(t.log, 'order'),
+  };
+}
+
+/** What a call returned, or the error it threw, as a record */
+export function attemptParity(fn: () => unknown): unknown {
+  try {
+    return fn();
+  } catch (error) {
+    return thrownRecord(error);
+  }
+}
+
+const readFeature = (f: PublicFeature) => ({
+  id: f.id,
+  type: f.type,
+  geometry: f.geometry,
+  layerId: f.layerId,
+  groupId: f.groupId,
+  properties: f.properties,
+  style: f.style,
+  visible: f.visible,
+  locked: f.locked,
+});
+const readLayer = (l: Layer) => ({
+  id: l.id,
+  name: l.name,
+  visible: l.visible,
+  locked: l.locked,
+  opacity: l.opacity,
+  items: [...l.items],
+  styleRule: l.styleRule,
+  metadata: l.metadata,
+});
+const readGroup = (g: Group) => ({
+  id: g.id,
+  layerId: g.layerId,
+  name: g.name,
+  featureIds: [...g.featureIds],
+  visible: g.visible,
+  locked: g.locked,
+});
+const readSelection = (s: Selection) => ({ type: s.type, ids: [...s.ids] });
+const maybe =
+  <T, R>(read: (v: T) => R) =>
+  (v: T | undefined | null) =>
+    v === undefined || v === null ? v : read(v);
+
+/** How each event is read: every event of the instance, by name */
+const PARITY_EVENT_READS: { [K in keyof DrawEvents]-?: (p: DrawEvents[K]) => unknown } = {
+  'feature.created': (p) => ({ feature: readFeature(p.feature), source: p.source }),
+  'feature.updated': (p) => ({
+    feature: readFeature(p.feature),
+    previous: readFeature(p.previous),
+    source: p.source,
+    intermediate: p.intermediate,
+  }),
+  'feature.deleted': (p) => ({ feature: readFeature(p.feature), source: p.source }),
+  'feature.moved': (p) => ({
+    feature: readFeature(p.feature),
+    from: p.from,
+    to: p.to,
+    source: p.source,
+  }),
+  'layer.created': (p) => ({ layer: readLayer(p.layer), source: p.source }),
+  'layer.updated': (p) => ({
+    layer: readLayer(p.layer),
+    previous: readLayer(p.previous),
+    source: p.source,
+  }),
+  'layer.deleted': (p) => ({ layer: readLayer(p.layer), source: p.source }),
+  'layer.reordered': (p) => ({ order: [...p.order], previous: [...p.previous], source: p.source }),
+  'group.created': (p) => ({ group: readGroup(p.group), source: p.source }),
+  'group.updated': (p) => ({
+    group: readGroup(p.group),
+    previous: readGroup(p.previous),
+    source: p.source,
+  }),
+  'group.deleted': (p) => ({ group: readGroup(p.group), source: p.source }),
+  'metadata.updated': (p) => ({ metadata: p.metadata, previous: p.previous, source: p.source }),
+  'document.changed': (p) => readChange(p),
+  'document.loaded': (p) => ({ result: p.result, source: p.source }),
+  'selection.changed': (p) => ({
+    selection: readSelection(p.selection),
+    previous: readSelection(p.previous),
+  }),
+  'vertexSelection.changed': (p) => ({ selection: p.selection, previous: p.previous }),
+  'drag.started': (p) => ({ kind: p.kind, featureIds: [...p.featureIds] }),
+  'drag.ended': (p) => ({ kind: p.kind, featureIds: [...p.featureIds], cancelled: p.cancelled }),
+  'mode.changed': (p) => ({ mode: p.mode, previous: p.previous }),
+  'hidden.changed': (p) => ({ ids: [...p.ids] }),
+  'readOnly.changed': (p) => ({ readOnly: p.readOnly }),
+  'interactionLock.changed': (p) => ({ locked: p.locked }),
+  'options.changed': (p) => ({ options: p.options, previous: p.previous }),
+  'snap.changed': (p) => ({ result: p.result }),
+  'preview.changed': (p) => ({
+    feature: p.feature,
+    confirmedVertices: p.confirmedVertices,
+    highlightVertex: p.highlightVertex,
+  }),
+  'map.clicked': (p) => ({ lngLat: p.lngLat, point: p.point, hit: p.hit }),
+  'dataset.clicked': (p) => ({
+    datasetId: p.datasetId,
+    rowIndex: p.rowIndex,
+    row: p.row,
+    lngLat: p.lngLat,
+    point: p.point,
+  }),
+  'dataset.added': (p) => ({ datasetId: p.dataset.id }),
+  'dataset.removed': (p) => ({ datasetId: p.datasetId }),
+  'dataset.reordered': (p) => ({ order: [...p.order], previous: [...p.previous] }),
+  'image.requested': (p) => ({ lngLat: p.lngLat, zoom: p.zoom, layerId: p.layerId }),
+  'layerStack.changed': (p) => ({ entries: p.entries }),
+  'image.failed': (p) => ({
+    error: { name: p.error.name, code: p.error.code },
+    source: p.source,
+    featureId: p.featureId,
+  }),
+};
+
+/** The names of every event of the instance */
+export const PARITY_EVENT_NAMES = Object.keys(PARITY_EVENT_READS) as readonly (keyof DrawEvents)[];
+
+/** A `document.changed` notification (and a notification of the Store), field by field */
+function readChange(p: DocumentChange) {
+  const features = p.features && {
+    created: p.features.created?.map(readFeature),
+    updated: p.features.updated?.map((u) => ({
+      id: u.id,
+      feature: readFeature(u.feature),
+      previous: readFeature(u.previous),
+      isIntermediate: u.isIntermediate,
+    })),
+    deleted: p.features.deleted?.map(readFeature),
+  };
+  const layers = p.layers && {
+    created: p.layers.created?.map(readLayer),
+    updated: p.layers.updated?.map((u) => ({
+      id: u.id,
+      layer: readLayer(u.layer),
+      previous: readLayer(u.previous),
+    })),
+    deleted: p.layers.deleted?.map(readLayer),
+    orderChanged: p.layers.orderChanged,
+  };
+  const groups = p.groups && {
+    created: p.groups.created?.map(readGroup),
+    updated: p.groups.updated?.map((u) => ({
+      id: u.id,
+      group: readGroup(u.group),
+      previous: readGroup(u.previous),
+    })),
+    deleted: p.groups.deleted?.map(readGroup),
+  };
+  return {
+    source: p.source,
+    reset: p.reset,
+    features,
+    layers,
+    groups,
+    layerReorder: p.layerReorder,
+    groupReorder: p.groupReorder,
+    selection: p.selection,
+    editing: p.editing,
+    mode: p.mode,
+    metadata: p.metadata,
+    files: p.files,
+  };
+}
+
+/** What the reader reads: the state around a row, one public member, a value, or the events */
+export type ParityView =
+  | 'document'
+  | 'client'
+  | 'value'
+  | 'events'
+  | 'changes'
+  | 'order'
+  | 'storeChanges'
+  | `features.${'get' | 'getMany' | 'list' | 'listSize' | 'count' | 'has' | 'isEditable' | 'getAppliedStyle'}`
+  | `layers.${'get' | 'getMany' | 'list' | 'count' | 'has' | 'getOrder' | 'getActive'}`
+  | `groups.${'get' | 'getMany' | 'list' | 'listSize' | 'count' | 'has'}`
+  | `hidden.${'get' | 'list' | 'count' | 'has'}`
+  | `selection.${'get' | 'features' | 'featuresSize'}`
+  | 'vertexSelection.get'
+  | 'metadata.get'
+  | `document.${'toJSON' | 'toGeoJSON'}`
+  | 'mode'
+  | 'readOnly'
+  | 'interactionLocked'
+  | `store.${
+      | 'getFeature'
+      | 'listFeatures'
+      | 'listFeaturesInOrder'
+      | 'getLayer'
+      | 'listLayers'
+      | 'getLayerOrder'
+      | 'getGroup'
+      | 'listGroups'
+      | 'getFile'
+      | 'listFiles'
+      | 'getMetadata'
+      | 'getSelection'
+      | 'getEditingIds'
+      | 'getVertexSelection'
+      | 'getMode'
+      | 'isReadOnly'
+      | 'isInteractionLocked'
+      | 'isHidden'
+      | 'listHidden'}`;
+
+/** A long list as a record: its length and its first and last IDs */
+const sizeOf = (items: readonly { id: string }[]) => ({
+  length: items.length,
+  first: items[0]?.id,
+  last: items[items.length - 1]?.id,
+});
+
+/**
+ * The reader: the one place that reads the public API for the table
+ *
+ * `target` is the instance (`ParityInstance.draw`), a Store (for the views `store.*`), or the
+ * events of a scene (for `events`, `changes` and `order`). What it returns is plain data,
+ * written to the records as JSON (`parityRecord`). A thrown error is read as `{ $throws, code }`.
+ */
+export function readParity(target: unknown, view: ParityView, ...args: unknown[]): unknown {
+  const draw = target as Draw;
+  const store = target as PublicStore;
+  const log = target as ParityEvent[];
+  const [a] = args;
+  const read = (fn: () => unknown) => attemptParity(fn);
+  const quiet = (fn: () => unknown) => {
+    parityUses.quiet += 1;
+    try {
+      return read(fn);
+    } finally {
+      parityUses.quiet -= 1;
+    }
+  };
+  switch (view) {
+    case 'document':
+      return quiet(() => ({
+        order: [...draw.layers.getOrder()],
+        active: draw.layers.getActive()?.id ?? null,
+        layers: draw.layers.list().map(readLayer),
+        groups: draw.groups.list().map(readGroup),
+        features: draw.features.list().map(readFeature),
+        metadata: draw.metadata.get(),
+      }));
+    case 'client':
+      return quiet(() => ({
+        mode: draw.getMode(),
+        readOnly: draw.isReadOnly(),
+        interactionLocked: draw.isInteractionLocked(),
+        selection: readSelection(draw.selection.get()),
+        vertexSelection: draw.vertexSelection.get(),
+        hidden: [...draw.hidden.list()],
+      }));
+    case 'value':
+      return a;
+    case 'events':
+      return log
+        .filter(([name]) => name !== 'document.changed')
+        .map(([name, payload]) => [
+          name,
+          (PARITY_EVENT_READS[name] as (p: unknown) => unknown)(payload),
+        ]);
+    case 'changes':
+      return log
+        .filter(([name]) => name === 'document.changed')
+        .map(([, payload]) => readChange(payload as DocumentChange));
+    case 'order':
+      return log.map(([name]) => name);
+    case 'storeChanges':
+      return (target as DocumentChange[]).map(readChange);
+    case 'features.get':
+      return read(() => maybe(readFeature)(draw.features.get(a as string)));
+    case 'features.getMany':
+      return read(() => draw.features.getMany(a as string[]).map(maybe(readFeature)));
+    case 'features.list':
+      return read(() => draw.features.list(a as FeatureFilter).map(readFeature));
+    case 'features.listSize':
+      return read(() => sizeOf(draw.features.list(a as FeatureFilter)));
+    case 'features.count':
+      return read(() => draw.features.count(a as FeatureFilter));
+    case 'features.has':
+      return read(() => draw.features.has(a as string));
+    case 'features.isEditable':
+      return read(() => draw.features.isEditable(a as string));
+    case 'features.getAppliedStyle':
+      return read(() => draw.features.getAppliedStyle(a as string));
+    case 'layers.get':
+      return read(() => maybe(readLayer)(draw.layers.get(a as string)));
+    case 'layers.getMany':
+      return read(() => draw.layers.getMany(a as string[]).map(maybe(readLayer)));
+    case 'layers.list':
+      return read(() => draw.layers.list(a as LayerFilter).map(readLayer));
+    case 'layers.count':
+      return read(() => draw.layers.count(a as LayerFilter));
+    case 'layers.has':
+      return read(() => draw.layers.has(a as string));
+    case 'layers.getOrder':
+      return read(() => [...draw.layers.getOrder()]);
+    case 'layers.getActive':
+      return read(() => maybe(readLayer)(draw.layers.getActive()));
+    case 'groups.get':
+      return read(() => maybe(readGroup)(draw.groups.get(a as string)));
+    case 'groups.getMany':
+      return read(() => draw.groups.getMany(a as string[]).map(maybe(readGroup)));
+    case 'groups.list':
+      return read(() => draw.groups.list(a as GroupFilter).map(readGroup));
+    case 'groups.listSize':
+      return read(() => sizeOf(draw.groups.list(a as GroupFilter)));
+    case 'groups.count':
+      return read(() => draw.groups.count(a as GroupFilter));
+    case 'groups.has':
+      return read(() => draw.groups.has(a as string));
+    case 'hidden.get':
+      return read(() => draw.hidden.get(a as string));
+    case 'hidden.list':
+      return read(() => [...draw.hidden.list()]);
+    case 'hidden.count':
+      return read(() => draw.hidden.count());
+    case 'hidden.has':
+      return read(() => draw.hidden.has(a as string));
+    case 'selection.get':
+      return read(() => readSelection(draw.selection.get()));
+    case 'selection.features':
+      return read(() => draw.selection.features().map(readFeature));
+    case 'selection.featuresSize':
+      return read(() => sizeOf(draw.selection.features()));
+    case 'vertexSelection.get':
+      return read(() => draw.vertexSelection.get());
+    case 'metadata.get':
+      return read(() => draw.metadata.get());
+    case 'document.toJSON':
+      return read(() => {
+        const doc = draw.document.toJSON();
+        return {
+          ...doc,
+          layers: doc.layers?.map(readLayer),
+          groups: doc.groups?.map(readGroup),
+          features: doc.features.map(readFeature),
+        };
+      });
+    case 'document.toGeoJSON':
+      return read(() => draw.document.toGeoJSON());
+    case 'mode':
+      return read(() => draw.getMode());
+    case 'readOnly':
+      return read(() => draw.isReadOnly());
+    case 'interactionLocked':
+      return read(() => draw.isInteractionLocked());
+    case 'store.getFeature':
+      return read(() => maybe(readFeature)(store.getFeature(a as string)));
+    case 'store.listFeatures':
+      return read(() => store.listFeatures().map(readFeature));
+    case 'store.listFeaturesInOrder':
+      return read(() => store.listFeaturesInOrder().map(readFeature));
+    case 'store.getLayer':
+      return read(() => maybe(readLayer)(store.getLayer(a as string)));
+    case 'store.listLayers':
+      return read(() => store.listLayers().map(readLayer));
+    case 'store.getLayerOrder':
+      return read(() => [...store.getLayerOrder()]);
+    case 'store.getGroup':
+      return read(() => maybe(readGroup)(store.getGroup(a as string)));
+    case 'store.listGroups':
+      return read(() => store.listGroups().map(readGroup));
+    case 'store.getFile':
+      return read(() => store.getFile(a as string));
+    case 'store.listFiles':
+      return read(() => store.listFiles());
+    case 'store.getMetadata':
+      return read(() => store.getMetadata());
+    case 'store.getSelection':
+      return read(() => readSelection(store.getSelection()));
+    case 'store.getEditingIds':
+      return read(() => [...store.getEditingIds()]);
+    case 'store.getVertexSelection':
+      return read(() => store.getVertexSelection());
+    case 'store.getMode':
+      return read(() => store.getMode());
+    case 'store.isReadOnly':
+      return read(() => store.isReadOnly());
+    case 'store.isInteractionLocked':
+      return read(() => store.isInteractionLocked());
+    case 'store.isHidden':
+      return read(() => store.isHidden(a as string));
+    case 'store.listHidden':
+      return read(() => [...store.listHidden()]);
+  }
+}
+
+/** The value marking `undefined` in a record (JSON has none) */
+const UNDEFINED_RECORD = '$undefined';
+
+/**
+ * A value as it is written to a record: plain JSON, with `undefined` as `"$undefined"` where it
+ * is a value of its own (a result, an entry of an array) and left out where it is a field,
+ * numbers that are not whole to 12 significant digits, and a set or a map as its entries
+ */
+export function parityRecord(value: unknown): unknown {
+  if (value === undefined) return UNDEFINED_RECORD;
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return `$${value}`;
+    if (value === 0) return 0;
+    return Number.isInteger(value) ? value : Number(value.toPrecision(12));
+  }
+  if (typeof value === 'function') return '$function';
+  if (typeof value !== 'object') return String(value);
+  if (Array.isArray(value)) return value.map((v) => parityRecord(v));
+  if (value instanceof Set) return { $set: [...value].map((v) => parityRecord(v)) };
+  if (value instanceof Map) {
+    return { $map: [...value].map(([k, v]) => [parityRecord(k), parityRecord(v)]) };
+  }
+  if (ArrayBuffer.isView(value)) return { $bytes: value.byteLength };
+  if (value instanceof Error) return thrownRecord(value);
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) {
+    const v = (value as Record<string, unknown>)[key];
+    if (v !== undefined) out[key] = parityRecord(v);
+  }
+  return out;
+}
+
+/** One line of a record file: a row and its value, or a scene and the public members it used */
+type RecordLine = { row: string; value: unknown } | { scene: string; uses: string[] };
+
+/** The records of an axis of the table, as they were written (empty when there are none) */
+export async function readParityRecords(axis: string): Promise<{
+  rows: Map<string, unknown>;
+  scenes: Map<string, string[]>;
+}> {
+  const file = new URL(`./parity/records/${axis}.jsonl`, import.meta.url);
+  const rows = new Map<string, unknown>();
+  const scenes = new Map<string, string[]>();
+  let text: string;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch {
+    return { rows, scenes };
+  }
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const entry = JSON.parse(line) as RecordLine;
+    if ('row' in entry) rows.set(entry.row, entry.value);
+    else scenes.set(entry.scene, entry.uses);
+  }
+  return { rows, scenes };
+}
+
+/** The axes of the table, each a file of scenes in src/parity/ and a record file */
+export const PARITY_AXES = [
+  'reads',
+  'writes',
+  'selection',
+  'hits',
+  'snapping',
+  'drag',
+  'events',
+  'client',
+  'extension',
+] as const;
+
+/**
+ * The scenes of one axis of the table
+ *
+ * `scene(name, fn)` is one test: `fn` runs the scene and returns what it read, by the name of
+ * what was read (each pair of the scene and a name is a row). With `PARITY_RECORD=1` the run
+ * writes the records of the axis (done once, on the published version); otherwise every row is
+ * compared with its record. `end()` adds the test that every recorded scene still has its test.
+ * Each scene runs on the fake clock, from 2026-01-01, and its instances are destroyed after it.
+ */
+export function parityTable(axis: (typeof PARITY_AXES)[number]) {
+  const recording = process.env.PARITY_RECORD === '1';
+  const file = new URL(`./parity/records/${axis}.jsonl`, import.meta.url);
+  let recorded: Awaited<ReturnType<typeof readParityRecords>> = {
+    rows: new Map(),
+    scenes: new Map(),
+  };
+  const lines: string[] = [];
+  const names = new Set<string>();
+
+  beforeAll(async () => {
+    recorded = await readParityRecords(axis);
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-01-01T00:00:00.000Z') });
+  });
+  afterEach(() => {
+    for (const draw of parityInstances.splice(0)) draw.destroy();
+    vi.useRealTimers();
+  });
+
+  return {
+    scene(name: string, fn: () => Record<string, unknown> | Promise<Record<string, unknown>>) {
+      if (names.has(name)) throw new Error(`two scenes are named ${name}`);
+      names.add(name);
+      it(name, async () => {
+        parityUses.current = new Set();
+        let views: Record<string, unknown>;
+        try {
+          views = await fn();
+        } finally {
+          settleParity();
+        }
+        const uses = [...parityUses.current].sort();
+        parityUses.current = null;
+        const rows = Object.entries(views).map(([view, value]) => ({
+          row: `${name} | ${view}`,
+          value: JSON.parse(JSON.stringify(parityRecord(value))) as unknown,
+        }));
+        if (recording) {
+          lines.push(JSON.stringify({ scene: name, uses }));
+          for (const r of rows) lines.push(JSON.stringify(r));
+          return;
+        }
+        const recordedViews = [...recorded.rows.keys()].filter((r) => r.startsWith(`${name} | `));
+        expect(
+          rows.map((r) => r.row),
+          `the rows of the scene ${name}`,
+        ).toEqual(recordedViews);
+        for (const r of rows) expect(r.value, r.row).toEqual(recorded.rows.get(r.row));
+      });
+    },
+    end() {
+      if (recording) {
+        afterAll(async () => {
+          await mkdir(new URL('./parity/records/', import.meta.url), { recursive: true });
+          await writeFile(file, `${lines.join('\n')}\n`);
+        });
+        return;
+      }
+      it('every recorded scene of the axis has its test', () => {
+        expect([...names].sort()).toEqual([...recorded.scenes.keys()].sort());
+      });
+    },
+  };
+}
+
+/** Runs `fn` without noting its calls as uses of the row (the building of a scene) */
+export function parityQuiet<T>(fn: () => T): T {
+  parityUses.quiet += 1;
+  try {
+    return fn();
+  } finally {
+    parityUses.quiet -= 1;
+  }
+}
+
+/** A square ring from (x, y), `size` degrees wide */
+export function parityRing(x: number, y: number, size: number): [number, number][] {
+  return [
+    [x, y],
+    [x + size, y],
+    [x + size, y + size],
+    [x, y + size],
+    [x, y],
+  ];
+}
+
+/**
+ * The document most scenes start from, written through the public API
+ *
+ * - Layer `la` holds one feature of each type (`pt`, `ln`, `pg`, `hole` (a polygon with a hole),
+ *   `mpt`, `mln`, `mpg`, `cir`, `fh`, `img`), a hidden one (`hid`), a locked one (`lck`), and the
+ *   group `g1` of `ga` and `gb`
+ * - Layer `lb` (half opaque, with a style rule) holds `pb` and `pb2`
+ * - Layer `lc` is locked and holds `pc`; layer `ld` is hidden and holds `pd`
+ * - `loc` is in `la` and hidden by this client; the metadata has a title
+ *
+ * The map shows (-4, -3) to (4, 3) around (0, 0), 100 px to the degree.
+ */
+export function fillParityDocument(t: ParityInstance): void {
+  parityQuiet(() => {
+    const { draw } = t;
+    draw.layers.create({ id: 'la', name: 'A' });
+    draw.layers.create({
+      id: 'lb',
+      name: 'B',
+      opacity: 0.5,
+      styleRule: {
+        kind: 'categorical',
+        property: 'kind',
+        map: { x: '#ff0000' },
+        other: '#00ff00',
+      },
+    });
+    draw.layers.create({ id: 'lc', name: 'C' });
+    draw.layers.create({ id: 'ld', name: 'D', visible: false });
+    draw.layers.setActive('la');
+    const inA = (input: FeatureInputLike) => draw.features.create({ layerId: 'la', ...input });
+    inA({
+      id: 'pt',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [-3, 2] },
+      style: { pointColor: '#123456', pointShape: 'square' },
+      properties: { name: 'the point', n: 1 },
+    });
+    inA({
+      id: 'ln',
+      type: 'LineString',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-2, 2],
+          [-1, 2],
+          [-1, 2.5],
+        ],
+      },
+      style: { strokeColor: '#ff0000', strokeWidth: 4, lineStyle: 'dashed' },
+    });
+    inA({
+      id: 'pg',
+      type: 'Polygon',
+      geometry: { type: 'Polygon', coordinates: [parityRing(-3, 0, 1)] },
+      style: { fillColor: '#00ff00', fillOpacity: 0.4 },
+    });
+    inA({
+      id: 'hole',
+      type: 'Polygon',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [parityRing(0, 0, 2), parityRing(0.5, 0.5, 1).reverse()],
+      },
+    });
+    inA({
+      id: 'mpt',
+      type: 'MultiPoint',
+      geometry: {
+        type: 'MultiPoint',
+        coordinates: [
+          [3, 2],
+          [3.5, 2.5],
+        ],
+      },
+    });
+    inA({
+      id: 'mln',
+      type: 'MultiLineString',
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [-3.5, -1],
+            [-2.5, -1],
+          ],
+          [
+            [-3.5, -1.5],
+            [-2.5, -1.5],
+          ],
+        ],
+      },
+    });
+    inA({
+      id: 'mpg',
+      type: 'MultiPolygon',
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [[parityRing(-1.5, -1, 0.5)], [parityRing(-0.75, -1, 0.5)]],
+      },
+    });
+    inA({
+      id: 'cir',
+      type: 'Circle',
+      geometry: { type: 'Point', coordinates: [-3, -2.5] },
+      properties: { 'maplibre-gl-draw:radiusMeters': 20_000 },
+    });
+    inA({
+      id: 'fh',
+      type: 'Freehand',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-1.5, -2],
+          [-1.2, -2.2],
+          [-0.9, -2],
+          [-0.6, -2.3],
+        ],
+      },
+    });
+    inA({
+      id: 'img',
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [2.5, -2] },
+      properties: {
+        'maplibre-gl-draw:imageFileId': 'file-1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 50,
+        'maplibre-gl-draw:createdZoom': 10,
+      },
+    });
+    inA({
+      id: 'hid',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 2.5] },
+      visible: false,
+    });
+    inA({
+      id: 'lck',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [2, 2.5] },
+      locked: true,
+    });
+    inA({ id: 'ga', type: 'Point', geometry: { type: 'Point', coordinates: [3, -1] } });
+    inA({ id: 'gb', type: 'Point', geometry: { type: 'Point', coordinates: [3.5, -1] } });
+    draw.groups.create({ id: 'g1', name: 'G', featureIds: ['ga', 'gb'] });
+    inA({ id: 'loc', type: 'Point', geometry: { type: 'Point', coordinates: [0, 2.5] } });
+    draw.hidden.add('loc');
+    draw.features.create({
+      id: 'pb',
+      layerId: 'lb',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, -2.5] },
+      properties: { kind: 'x' },
+    });
+    draw.features.create({
+      id: 'pb2',
+      layerId: 'lb',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1.5, -2.5] },
+      properties: { kind: 'y' },
+    });
+    draw.features.create({
+      id: 'pc',
+      layerId: 'lc',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [-0.5, 1.5] },
+    });
+    draw.layers.update('lc', { locked: true });
+    draw.features.create({
+      id: 'pd',
+      layerId: 'ld',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [-1.5, 1.5] },
+    });
+    draw.metadata.update({ title: 'The document' });
+  });
+}
+
+/** What `fillParityDocument` gives `features.create` */
+type FeatureInputLike = Parameters<Draw['features']['create']>[0];
