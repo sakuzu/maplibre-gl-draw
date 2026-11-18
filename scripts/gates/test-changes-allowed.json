@@ -380,6 +380,11 @@
       "path": "src/index.test.ts",
       "change": "CHANGES 138 (the parts that build pages added to the names of the store entry)",
       "unit": "the pages and the worker of the standard store"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "the list of the scenes of the editing benchmark gains the scene of the pages built in a worker",
+      "unit": "the pages and the worker of the standard store"
     }
   ]
 }
