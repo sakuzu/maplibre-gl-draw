@@ -21,12 +21,12 @@ const pending = (samples) => ({
 
 describe('the gate of the samples', () => {
   it('passes when every sample type-checks against the build', () => {
-    const root = packageTree({ 'api/samples/sample-move.ts': SAMPLE, ...pending([]) });
+    const root = packageTree({ 'api/samples/sample-move.ts': SAMPLE, ...pending({}) });
     expect(check({ root }).errors).toEqual([]);
   });
 
   it('fails when the build loses a member a sample uses', () => {
-    const root = packageTree({ 'api/samples/sample-move.ts': SAMPLE, ...pending([]) });
+    const root = packageTree({ 'api/samples/sample-move.ts': SAMPLE, ...pending({}) });
     const file = join(root, 'dist/api/thing.d.ts');
     write(root, {
       'dist/api/thing.d.ts': readFileSync(file, 'utf8').replace(
@@ -43,7 +43,7 @@ describe('the gate of the samples', () => {
     const broken = SAMPLE.replace('thing.move(1,', 'thing.turn(1,');
     const root = packageTree({
       'api/samples/sample-move.ts': broken,
-      ...pending(['sample-move.ts']),
+      ...pending({ 'sample-move.ts': 1 }),
     });
     const r = check({ root });
     expect(r.errors).toEqual([]);
@@ -53,8 +53,19 @@ describe('the gate of the samples', () => {
   it('fails when a waiting sample type-checks, so that its row is removed', () => {
     const root = packageTree({
       'api/samples/sample-move.ts': SAMPLE,
-      ...pending(['sample-move.ts']),
+      ...pending({ 'sample-move.ts': 1 }),
     });
     expect(check({ root }).errors.join('\n')).toContain('sample-move.ts type-checks now');
+  });
+
+  it('fails when a waiting sample has more type errors than its row allows', () => {
+    const broken = SAMPLE.replace('thing.move(1,', 'thing.turn(1,');
+    const root = packageTree({
+      'api/samples/sample-move.ts': broken.replace("makeThing('a')", 'makeThing(1)'),
+      ...pending({ 'sample-move.ts': 1 }),
+    });
+    expect(check({ root }).errors.join('\n')).toContain(
+      'sample-move.ts has 2 type errors, its row in api-pending.json allows 1',
+    );
   });
 });

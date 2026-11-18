@@ -9,11 +9,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { digestOfRecord } from '../lib/declarations.mjs';
 
 const GATES = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = join(GATES, '..', '..');
 
 const roots = [];
+
+/** The digest of a waiting row whose declaration the build does not have */
+export const ABSENT = digestOfRecord(undefined);
 
 /**
  * Writes a tree of files into a new temporary folder
@@ -168,8 +172,10 @@ export function packageTree(extra = {}) {
     'api/core.store.d.ts': `/** Where the things are kept. */\nexport interface Keeper {\n  /** Keeps a thing. */\n  keep(name: string): void;\n}\n`,
     'scripts/gates/api-pending.json': {
       entries: ['./store'],
-      samples: [],
-      declarations: { 1: ['store:added:Keeper', 'store:added:Keeper.keep'] },
+      samples: {},
+      declarations: {
+        1: { 'store:added:Keeper': ABSENT, 'store:added:Keeper.keep': ABSENT },
+      },
     },
     ...extra,
   });

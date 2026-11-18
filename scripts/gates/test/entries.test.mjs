@@ -10,7 +10,7 @@ afterEach(cleanUp);
 const pkg = (names, waiting = []) =>
   tree({
     'package.json': { exports: Object.fromEntries(names.map((n) => [n, `./dist/${n}.js`])) },
-    'scripts/gates/api-pending.json': { entries: waiting, samples: [], declarations: {} },
+    'scripts/gates/api-pending.json': { entries: waiting, samples: {}, declarations: {} },
   });
 
 describe('the gate of the entries', () => {

@@ -18,6 +18,7 @@
 // The build side is read with the type checker: every export of the entry, and every declaration
 // of the package an export refers to that no other entry exports, as the fixed file holds them.
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { loadTypeScript } from './ts.mjs';
@@ -540,20 +541,58 @@ function isExportedTop(records, key) {
 }
 
 /**
+ * The digest of the normal form of one record: its signature, its TSDoc and whether it is
+ * exported. The digest of a record that is not there is that of `null`.
+ *
+ * @param {{ sig: string, doc: string, exported?: boolean } | undefined} record
+ * @returns {string} The SHA-256 of it, in hexadecimal
+ */
+export function digestOfRecord(record) {
+  const shape = record
+    ? { sig: record.sig, doc: record.doc, exported: record.exported ?? null }
+    : null;
+  return createHash('sha256').update(JSON.stringify(shape)).digest('hex');
+}
+
+/**
+ * The top-level names each entry of the build exports
+ *
+ * @param {Record<string, Record<string, any>>} entries The records of the build, by entry
+ * @returns {Map<string, Set<string>>}
+ */
+export function exportedNames(entries) {
+  const out = new Map();
+  for (const [id, records] of Object.entries(entries)) {
+    const names = new Set();
+    for (const [k, r] of Object.entries(records)) {
+      if (!/[.{#]/.test(k) && !k.startsWith('export:') && r.exported === true) names.add(k);
+    }
+    out.set(id, names);
+  }
+  return out;
+}
+
+/**
  * The differences between the records of the build and of the fixed file of one entry
+ *
+ * A declaration of the package the entry only reaches (it does not export it) is left out
+ * when the fixed file takes it from another entry, and when another entry of the build exports it
+ * and the fixed file of this entry does not declare it: it is compared where it is exported.
  *
  * @param {string} id The entry
  * @param {Record<string, any> | null} built Null when the build has no such entry
  * @param {Record<string, any>} fixed
+ * @param {Set<string>} [elsewhere] The names other entries of the build export
  * @returns {{ key: string, text: string }[]} One item per difference; `key` names it
  */
-export function diffRecords(id, built, fixed) {
+export function diffRecords(id, built, fixed, elsewhere = new Set()) {
   const out = [];
   const taken = fixed[OWN_IMPORTS] ?? new Set();
   const top = (k) => k.split(/[.{#]/)[0];
-  const b = Object.fromEntries(
-    Object.entries(built ?? {}).filter(([k]) => !(taken.has(top(k)) && !isExportedTop(built, k))),
-  );
+  const reachedOnly = (k) =>
+    !isExportedTop(built, k) &&
+    (taken.has(top(k)) || (elsewhere.has(top(k)) && !(top(k) in fixed)));
+  const b = Object.fromEntries(Object.entries(built ?? {}).filter(([k]) => !reachedOnly(k)));
   const short = (s) => (s.length > 200 ? `${s.slice(0, 200)}…` : s);
   for (const k of Object.keys(b)) {
     if (!(k in fixed))

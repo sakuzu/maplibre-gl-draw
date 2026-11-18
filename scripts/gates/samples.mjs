@@ -5,8 +5,9 @@
 //
 // Type-checks every sample against the package as the build left it: the samples import the
 // package by its name, which resolves through the `exports` of package.json to dist/. A sample
-// that does not pass yet waits in the `samples` of scripts/gates/api-pending.json; a waiting
-// sample that passes fails the gate, so that the change that made it pass removes its row.
+// that does not pass yet waits in the `samples` of scripts/gates/api-pending.json with the number
+// of its type errors, which may not grow; a waiting sample that passes fails the gate, so that the
+// change that made it pass removes its row.
 
 import { existsSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -68,22 +69,39 @@ export function check(ctx) {
     out.errors.push('dist/ is missing: run the build first');
     return out;
   }
-  const waiting = new Set(readList(root, 'api-pending.json').samples ?? []);
+  const rows = readList(root, 'api-pending.json').samples ?? {};
+  if (typeof rows !== 'object' || Array.isArray(rows)) {
+    out.errors.push(
+      'the samples of api-pending.json are not an object of the files and their numbers of type errors',
+    );
+    return out;
+  }
+  const waiting = new Map(Object.entries(rows));
   const byFile = typeCheckSamples(root);
   for (const [file, errors] of byFile) {
     if (waiting.has(file)) {
-      if (errors.length === 0) {
+      const allowed = waiting.get(file);
+      if (!Number.isInteger(allowed) || allowed < 1) {
+        out.errors.push(`${file} of api-pending.json has no number of type errors`);
+      } else if (errors.length === 0) {
         out.errors.push(
           `${file} type-checks now; remove it from the samples of scripts/gates/api-pending.json`,
         );
+      } else if (errors.length > allowed) {
+        out.errors.push(
+          `${file} has ${errors.length} type errors, its row in api-pending.json allows ${allowed}:`,
+          ...errors.map((e) => `  api/samples/${e}`),
+        );
       } else {
-        out.notes.push(`${file} waits (${errors.length} type errors)`);
+        out.notes.push(
+          `${file} waits (${errors.length} type errors${errors.length < allowed ? `, fewer than the ${allowed} of its row` : ''})`,
+        );
       }
       continue;
     }
     for (const e of errors) out.errors.push(`api/samples/${e}`);
   }
-  for (const file of waiting) {
+  for (const file of waiting.keys()) {
     if (!byFile.has(file))
       out.errors.push(`${file} of api-pending.json is not a sample of api/samples/`);
   }

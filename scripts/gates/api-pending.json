@@ -1,744 +1,961 @@
 {
-  "description": "What the build does not match yet. `declarations`: the differences between the declarations the build emits and the fixed files of api/, by the number of the change that explains them; a key is <entry>:<kind>:<declaration>, the kind being removed (the build has it, the fixed file does not), added (the fixed file has it, the build does not), sig (the type differs), doc (only the TSDoc differs) or export. `samples`: the samples of api/samples/ that do not type-check against the build yet. `entries`: the entries of package.json that are not there yet. The list only gets shorter: the work that makes the build match removes its rows.",
+  "description": "What the build does not match yet. `declarations`: the differences between the declarations the build emits and the fixed files of api/, by the number of the change that explains them; a key is <entry>:<kind>:<declaration>, the kind being removed (the build has it, the fixed file does not), added (the fixed file has it, the build does not), sig (the type differs), doc (only the TSDoc differs) or export, and its value is the digest of what the build has there now (scripts/gates/api.mjs prints it), so that a waiting declaration keeps the form it has until its change gives it the fixed form. `samples`: the samples of api/samples/ that do not type-check against the build yet, with the number of their type errors, which may not grow. `entries`: the entries of package.json that are not there yet. The list only gets shorter: the work that makes the build match removes its rows.",
   "entries": ["./store"],
-  "samples": [
-    "sample-custom-transforms.ts",
-    "sample-follow-drag.ts",
-    "sample-main-usage.ts",
-    "sample-persist-store.ts",
-    "sample-presence-events.ts",
-    "sample-remote-changes.ts",
-    "sample-save-on-change.ts",
-    "sample-undo-plugin.ts"
-  ],
+  "samples": {
+    "sample-custom-transforms.ts": 7,
+    "sample-follow-drag.ts": 4,
+    "sample-main-usage.ts": 30,
+    "sample-persist-store.ts": 7,
+    "sample-presence-events.ts": 21,
+    "sample-remote-changes.ts": 11,
+    "sample-save-on-change.ts": 5,
+    "sample-undo-plugin.ts": 18
+  },
   "declarations": {
-    "1": ["main:doc:(entry)"],
-    "2": ["main:doc:createDraw"],
-    "3": ["main:doc:DrawOptions.store"],
-    "4": ["main:added:DrawOptions.acceptsId"],
-    "5": ["main:doc:DrawOptions.generateId", "main:doc:RuntimeOptions"],
-    "6": [
-      "main:doc:DrawProperties{0}.maplibre-gl-draw:rotation",
-      "main:doc:DrawProperties{0}.maplibre-gl-draw:scale"
-    ],
-    "7": ["main:sig:MODES"],
-    "8": ["main:sig:Draw.getStore"],
-    "9": ["main:doc:Draw.transact", "main:doc:TransactOptions.source"],
-    "10": ["main:doc:Draw.setReadOnly"],
-    "11": ["main:added:Draw.waitForWrites"],
-    "12": [
-      "main:added:Draw.editingFeatures",
-      "main:added:EditingFeaturesResource",
-      "main:added:EditingFeaturesResource.add",
-      "main:added:EditingFeaturesResource.get",
-      "main:added:EditingFeaturesResource.remove"
-    ],
-    "13": ["main:added:Draw.rendered", "main:added:Draw.sketches"],
-    "14": ["main:doc:Draw.destroy"],
-    "15": ["main:doc:UpdateSource"],
-    "16": ["main:doc:FeaturesCollection"],
-    "17": ["main:doc:FeaturesCollection.list"],
-    "18": ["main:added:FeaturesCollection.iterate"],
-    "19": ["main:added:FeaturesCollection.updateAll", "main:doc:FeaturesCollection.updateMany"],
-    "20": ["main:sig:FeaturesCollection.deleteMany"],
-    "21": ["main:added:FeaturesCollection.translate"],
-    "22": ["main:added:FeaturesCollection.rotate"],
-    "23": ["main:added:FeaturesCollection.scale"],
-    "24": ["main:added:FeaturesCollection.duplicate"],
-    "25": ["main:added:FeaturesCollection.restore"],
-    "26": ["main:added:FeaturesCollection.releaseValues"],
-    "27": ["main:doc:FeaturesCollection.create"],
-    "28": ["main:added:LayersCollection.countItems"],
-    "29": ["main:added:LayersCollection.listItemIds"],
-    "30": ["main:doc:Layer", "main:removed:Layer.items"],
-    "31": [
-      "main:doc:LayersCollection",
-      "main:doc:LayersCollection.create",
-      "main:sig:LayersCollection.delete",
-      "main:sig:LayersCollection.deleteMany"
-    ],
-    "32": ["main:doc:GroupsCollection.list"],
-    "33": ["main:added:GroupsCollection.iterate"],
-    "34": ["main:added:GroupsCollection.countFeatures"],
-    "35": ["main:added:GroupsCollection.listFeatureIds"],
-    "36": ["main:doc:Group", "main:removed:Group.featureIds"],
-    "37": ["main:sig:HiddenCollection.list"],
-    "38": ["main:doc:FeaturePatch", "main:doc:MoveTarget"],
-    "39": [
-      "main:added:DuplicateOptions",
-      "main:added:DuplicateOptions.offset",
-      "main:added:EditCounts",
-      "main:added:EditCounts.changedCount",
-      "main:added:EditCounts.createdIds",
-      "main:added:EditCounts.lockedCount",
-      "main:added:EditCounts.missingCount",
-      "main:added:EditCounts.operationId",
-      "main:added:EditCounts.skippedVertexCount",
-      "main:added:EditCounts.stopped",
-      "main:added:EditOptions",
-      "main:added:EditOptions.ignoreLocks",
-      "main:added:EditOptions.source",
-      "main:added:FeatureTarget",
-      "main:added:FeatureTarget{0}.selection",
-      "main:added:FeatureTarget{1}.layerIds",
-      "main:added:FeatureValues",
-      "main:added:FeatureValues.[featureValuesBrand]",
-      "main:added:FeatureValues.byteLength",
-      "main:added:FeatureValues.featureCount",
-      "main:added:IdSet",
-      "main:added:IdSet.count",
-      "main:added:IdSet.has",
-      "main:added:IdSet.iterate",
-      "main:added:IdSet.toArray",
-      "main:added:IndexRange",
-      "main:added:IndexRange.end",
-      "main:added:IndexRange.start",
-      "main:added:Rotation",
-      "main:added:Rotation.center",
-      "main:added:Rotation.counterclockwiseDegrees",
-      "main:added:Scaling",
-      "main:added:Scaling.center",
-      "main:added:Scaling.eastFactor",
-      "main:added:Scaling.northFactor",
-      "main:added:Scaling.sizeFactor",
-      "main:added:TransformOperation",
-      "main:added:TransformOperation{0}.kind",
-      "main:added:TransformOperation{1}.kind",
-      "main:added:TransformOperation{2}.kind",
-      "main:added:Translation",
-      "main:added:Translation.from",
-      "main:added:Translation.to",
-      "main:added:createIdSet"
-    ],
-    "40": ["main:doc:SelectionResource.get"],
-    "41": [
-      "main:sig:SelectionResource.add",
-      "main:sig:SelectionResource.remove",
-      "main:sig:SelectionResource.set"
-    ],
-    "42": ["main:doc:SelectionResource.features"],
-    "43": ["main:sig:SelectionResource.delete"],
-    "45": ["main:sig:Selection.ids"],
-    "46": [
-      "main:added:Sketch",
-      "main:added:Sketch.edit",
-      "main:added:Sketch.id",
-      "main:added:Sketch.style",
-      "main:added:SketchEdit",
-      "main:added:SketchEdit{0}.kind",
-      "main:added:SketchEdit{0}.operation",
-      "main:added:SketchEdit{0}.target",
-      "main:added:SketchInput",
-      "main:added:SketchInput.edit",
-      "main:added:SketchInput.id",
-      "main:added:SketchInput.style",
-      "main:added:SketchesCollection",
-      "main:added:SketchesCollection.add",
-      "main:added:SketchesCollection.get",
-      "main:added:SketchesCollection.list",
-      "main:added:SketchesCollection.remove"
-    ],
-    "47": [
-      "main:added:RenderedResource",
-      "main:added:RenderedResource.get",
-      "main:added:RenderedResource.getMany"
-    ],
-    "48": ["main:doc:FeatureTypeDefinition.onHandleDrag", "main:doc:HandleProvider.onDrag"],
-    "51": [
-      "main:doc:DocumentResource.load",
-      "main:doc:LoadOptions.group",
-      "main:doc:LoadOptions.layer"
-    ],
-    "52": ["main:doc:DocumentResource.loadMany"],
-    "53": [
-      "main:added:DocumentResource.subscribe",
-      "main:added:DocumentSubscribeOptions",
-      "main:added:DocumentSubscribeOptions.previousValues",
-      "main:doc:Draw.document"
-    ],
-    "54": ["main:doc:DocumentChange"],
-    "55": ["main:doc:DocumentResource.toGeoJSON", "main:doc:DocumentResource.toJSON"],
-    "56": ["main:sig:LoadResult", "main:sig:LoadResult.featureIds"],
-    "57": ["main:sig:DrawDocument.groups", "main:sig:DrawDocument.layers"],
-    "58": ["main:added:DocumentLayer", "main:added:DocumentLayer.items"],
-    "59": ["main:added:DocumentGroup", "main:added:DocumentGroup.featureIds"],
-    "61": ["main:doc:DrawEvents.feature.deleted"],
-    "62": [
-      "main:added:DrawEvents.feature.updated.hasMoreParts",
-      "main:doc:DrawEvents.feature.updated",
-      "main:removed:DrawEvents.feature.updated.intermediate"
-    ],
-    "63": [
-      "main:added:DocumentChange.groups.moved",
-      "main:added:DocumentChange.hasMoreParts",
-      "main:added:DocumentChange.operationId",
-      "main:added:DocumentChange.previousValues",
-      "main:added:DocumentChange.stopped",
-      "main:doc:DocumentChange.groups",
-      "main:doc:DocumentChange.layers",
-      "main:removed:DocumentChange.editing",
-      "main:removed:DocumentChange.editing.ended",
-      "main:removed:DocumentChange.editing.started",
-      "main:removed:DocumentChange.features.created",
-      "main:removed:DocumentChange.features.deleted",
-      "main:removed:DocumentChange.features.updated",
-      "main:removed:DocumentChange.groupReorder",
-      "main:removed:DocumentChange.groupReorder.featureIds",
-      "main:removed:DocumentChange.groupReorder.groupId",
-      "main:removed:DocumentChange.groupReorder.previous",
-      "main:removed:DocumentChange.layerReorder",
-      "main:removed:DocumentChange.layerReorder.layerId",
-      "main:removed:DocumentChange.layerReorder.order",
-      "main:removed:DocumentChange.layerReorder.previous",
-      "main:removed:DocumentChange.mode",
-      "main:removed:DocumentChange.mode.mode",
-      "main:removed:DocumentChange.mode.previous",
-      "main:removed:DocumentChange.selection",
-      "main:removed:DocumentChange.selection.ids",
-      "main:removed:DocumentChange.selection.previousIds",
-      "main:removed:DocumentChange.selection.previousType",
-      "main:removed:DocumentChange.selection.type",
-      "main:sig:DocumentChange.features",
-      "main:sig:DocumentChange.reset",
-      "main:sig:DocumentChange.source"
-    ],
-    "64": [
-      "main:added:ChangedIds",
-      "main:added:ChangedIds.created",
-      "main:added:ChangedIds.deleted",
-      "main:added:ChangedIds.moved",
-      "main:added:ChangedIds.updated"
-    ],
-    "65": ["main:doc:DrawEvents.feature.moved"],
-    "66": ["main:doc:DrawEvents.group.updated", "main:doc:DrawEvents.layer.updated"],
-    "67": [
-      "main:added:DrawEvents.group.moved",
-      "main:added:DrawEvents.group.moved.from",
-      "main:added:DrawEvents.group.moved.group",
-      "main:added:DrawEvents.group.moved.source",
-      "main:added:DrawEvents.group.moved.to"
-    ],
-    "68": [
-      "main:added:DrawEvents.selection.changed.operationId",
-      "main:doc:DrawEvents.selection.changed"
-    ],
-    "69": [
-      "main:added:DrawEvents.editingFeatures.changed",
-      "main:added:DrawEvents.editingFeatures.changed.ids"
-    ],
-    "70": [
-      "main:added:DrawEvents.drag.started.operationId",
-      "main:added:DrawEvents.drag.started.selection",
-      "main:sig:DrawEvents.drag.started.featureIds"
-    ],
-    "71": [
-      "main:added:DrawEvents.drag.changed",
-      "main:added:DrawEvents.drag.changed.featureIds",
-      "main:added:DrawEvents.drag.changed.kind",
-      "main:added:DrawEvents.drag.changed.operation",
-      "main:added:DrawEvents.drag.changed.operationId",
-      "main:added:DrawEvents.drag.changed.selection",
-      "main:added:DrawEvents.drag.changed.vertices"
-    ],
-    "72": [
-      "main:added:DrawEvents.drag.ended.operation",
-      "main:added:DrawEvents.drag.ended.operationId",
-      "main:added:DrawEvents.drag.ended.selection",
-      "main:doc:DrawEvents.drag.ended",
-      "main:sig:DrawEvents.drag.ended.featureIds"
-    ],
-    "73": ["main:sig:DrawEvents.hidden.changed.ids"],
-    "74": [
-      "main:added:DrawEvents.image.failed",
-      "main:added:DrawEvents.image.failed.error",
-      "main:added:DrawEvents.image.failed.featureId",
-      "main:added:DrawEvents.image.failed.source",
-      "main:removed:DrawEvents.error",
-      "main:removed:DrawEvents.error.error",
-      "main:removed:DrawEvents.error.featureId",
-      "main:removed:DrawEvents.error.source"
-    ],
-    "75": [
-      "main:sig:DrawEvents.document.loaded.source",
-      "main:sig:DrawEvents.feature.created.source",
-      "main:sig:DrawEvents.feature.deleted.source",
-      "main:sig:DrawEvents.feature.moved.source",
-      "main:sig:DrawEvents.feature.updated.source",
-      "main:sig:DrawEvents.group.created.source",
-      "main:sig:DrawEvents.group.deleted.source",
-      "main:sig:DrawEvents.group.updated.source",
-      "main:sig:DrawEvents.layer.created.source",
-      "main:sig:DrawEvents.layer.deleted.source",
-      "main:sig:DrawEvents.layer.reordered.source",
-      "main:sig:DrawEvents.layer.updated.source",
-      "main:sig:DrawEvents.metadata.updated.source"
-    ],
-    "76": ["main:doc:DrawEvents.document.changed"],
-    "77": ["main:doc:DrawEvents.drag.started"],
-    "80": [
-      "main:doc:DatasetOptions",
-      "main:doc:LayersCollection.getOrder",
-      "main:doc:LayersCollection.reorder",
-      "main:sig:DatasetOrder"
-    ],
-    "81": ["main:added:ExtensionsCollections.fileProviders"],
-    "82": [
-      "main:added:FileProvider",
-      "main:added:FileProvider.getFile",
-      "main:added:FileProvider.name"
-    ],
-    "83": [
-      "main:added:ExtensionsCollections.getTransformProvider",
-      "main:added:ExtensionsCollections.setTransformProvider"
-    ],
-    "84": [
-      "main:added:TransformInput",
-      "main:added:TransformInput.bearingDegrees",
-      "main:added:TransformInput.coordinates",
-      "main:added:TransformInput.featureCount",
-      "main:added:TransformInput.isScaledUniformly",
-      "main:added:TransformInput.operationId",
-      "main:added:TransformInput.positionStarts",
-      "main:added:TransformInput.rotationDegrees",
-      "main:added:TransformInput.size",
-      "main:added:TransformInput.valuesPerPosition",
-      "main:added:TransformOutput",
-      "main:added:TransformOutput.bearingDegrees",
-      "main:added:TransformOutput.coordinates",
-      "main:added:TransformOutput.rotationDegrees",
-      "main:added:TransformOutput.size",
-      "main:added:TransformProvider",
-      "main:added:TransformProvider.accepts",
-      "main:added:TransformProvider.apply",
-      "main:added:TransformProvider.name"
-    ],
-    "85": ["main:added:ModesCollection.override"],
-    "86": [
-      "main:doc:ModesCollection.count",
-      "main:doc:ModesCollection.get",
-      "main:doc:ModesCollection.has",
-      "main:doc:ModesCollection.list",
-      "main:doc:ModesCollection.remove"
-    ],
-    "87": ["main:sig:ExtensionContext.store"],
-    "88": ["main:doc:ProvidersCollection"],
-    "89": ["main:doc:RenderContext.terrain"],
-    "90": ["main:sig:Plugin.interaction.filterSelection"],
-    "91": ["main:sig:FeatureTypeDefinition.appliesTo"],
-    "92": [
-      "main:added:FeatureTypeDefinition.transformFields",
-      "main:added:TransformFields",
-      "main:added:TransformFields.bearingDegreesKey",
-      "main:added:TransformFields.isScaledUniformly",
-      "main:added:TransformFields.rotationDegreesKey",
-      "main:added:TransformFields.sizeKey"
-    ],
-    "93": [
-      "main:added:FeatureCandidate",
-      "main:added:FeatureCandidate.getProperty",
-      "main:added:FeatureCandidate.style",
-      "main:added:FeatureCandidate.type"
-    ],
-    "94": ["main:doc:FeatureTypesCollection.override"],
-    "95": ["main:doc:ExtensionContext.drawing"],
-    "96": ["main:doc:CompanionProvider.hitTest"],
-    "98": ["main:doc:LegendEntry", "main:doc:deriveLegend"],
-    "99": [
-      "main:doc:DatasetsCollection.add",
-      "main:doc:DatasetsCollection.move",
-      "main:doc:DatasetsCollection.remove",
-      "main:doc:DatasetsCollection.removeMany",
-      "main:doc:Draw.setMode",
-      "main:doc:DrawingResource.addVertex",
-      "main:doc:DrawingResource.moveTo",
-      "main:doc:FeatureTypesCollection.add",
-      "main:doc:FeatureTypesCollection.addMany",
-      "main:doc:FeatureTypesCollection.remove",
-      "main:doc:FeatureTypesCollection.removeMany",
-      "main:doc:FeaturesCollection.buffer",
-      "main:doc:FeaturesCollection.delete",
-      "main:doc:FeaturesCollection.difference",
-      "main:doc:FeaturesCollection.intersection",
-      "main:doc:FeaturesCollection.isEditable",
-      "main:doc:FeaturesCollection.move",
-      "main:doc:FeaturesCollection.moveMany",
-      "main:doc:FeaturesCollection.split",
-      "main:doc:FeaturesCollection.union",
-      "main:doc:FeaturesCollection.update",
-      "main:doc:GroupsCollection.create",
-      "main:doc:GroupsCollection.delete",
-      "main:doc:GroupsCollection.deleteMany",
-      "main:doc:GroupsCollection.move",
-      "main:doc:GroupsCollection.update",
-      "main:doc:HiddenCollection.add",
-      "main:doc:HiddenCollection.addMany",
-      "main:doc:LayersCollection.setActive",
-      "main:doc:LayersCollection.update",
-      "main:doc:ModesCollection.add",
-      "main:doc:ModesCollection.addMany",
-      "main:doc:ModesCollection.removeMany",
-      "main:doc:OptionsResource.update",
-      "main:doc:OverlaysCollection.add",
-      "main:doc:OverlaysCollection.addMany",
-      "main:doc:OverlaysCollection.remove",
-      "main:doc:OverlaysCollection.removeMany",
-      "main:doc:PluginsCollection.add",
-      "main:doc:PluginsCollection.addMany",
-      "main:doc:PluginsCollection.remove",
-      "main:doc:PluginsCollection.removeMany",
-      "main:doc:ProvidersCollection.add",
-      "main:doc:ProvidersCollection.addMany",
-      "main:doc:ProvidersCollection.remove",
-      "main:doc:ProvidersCollection.removeMany",
-      "main:doc:SelectionResource.move",
-      "main:doc:VertexSelectionResource.set",
-      "main:doc:parseGeoJSON",
-      "main:doc:parseNative",
-      "main:sig:DrawErrorCode"
-    ],
-    "101": ["main:doc:DrawError"],
-    "102": ["main:doc:PreparedTable", "main:doc:Table"],
-    "103": ["main:added:featureValuesBrand"],
-    "104": [
-      "main:removed:Store",
-      "main:removed:Store.createFile",
-      "main:removed:Store.createGroup",
-      "main:removed:Store.createLayer",
-      "main:removed:Store.deleteFile",
-      "main:removed:Store.deleteGroup",
-      "main:removed:Store.deleteLayer",
-      "main:removed:Store.setLayerOrder",
-      "main:removed:Store.setMetadata",
-      "main:removed:Store.updateGroup",
-      "main:removed:Store.updateLayer",
-      "main:removed:StoreView",
-      "main:removed:StoreView.getFile",
-      "main:removed:StoreView.getGroup",
-      "main:removed:StoreView.getLayer",
-      "main:removed:StoreView.getLayerOrder",
-      "main:removed:StoreView.getMetadata",
-      "main:removed:StoreView.listFiles",
-      "main:removed:StoreView.listGroups",
-      "main:removed:StoreView.listLayers",
-      "main:removed:StoreView.subscribe",
-      "main:removed:StoreView.transact",
-      "store:added:Store.createFile",
-      "store:added:Store.deleteFile",
-      "store:added:Store.setLayerOrder",
-      "store:added:StoreView.getFile",
-      "store:added:StoreView.getLayerOrder",
-      "store:added:StoreView.getMetadata",
-      "store:added:StoreView.listFiles"
-    ],
-    "105": ["store:added:Store"],
-    "106": [
-      "main:removed:StoreView.getFeature",
-      "main:removed:StoreView.listFeatures",
-      "main:removed:StoreView.listFeaturesInOrder"
-    ],
-    "107": [
-      "main:removed:Store.abortIntermediateUpdates",
-      "main:removed:Store.createFeature",
-      "main:removed:Store.deleteFeature",
-      "main:removed:Store.updateFeature"
-    ],
-    "108": ["store:added:Store.createRows"],
-    "109": ["store:added:Store.writeRows"],
-    "110": ["store:added:Store.createRowsFromPages"],
-    "111": ["store:added:Store.releaseDeletedRows"],
-    "112": ["store:added:Store.clear"],
-    "113": ["store:added:Store.newOperationId"],
-    "114": [
-      "store:added:LayerRowOptions",
-      "store:added:LayerRowOptions.thirdValue",
-      "store:added:LayerRowOptions.valuesPerPosition",
-      "store:added:Store.createLayer"
-    ],
-    "115": ["store:added:Store.deleteLayer"],
-    "116": [
-      "store:added:Store.createGroup",
-      "store:added:Store.updateGroup",
-      "store:added:StoreGroup",
-      "store:added:StoreGroup.orderKey",
-      "store:added:StoreView.getGroup",
-      "store:added:StoreView.listGroups"
-    ],
-    "117": ["store:added:Store.deleteGroup"],
-    "118": ["main:removed:Store.reorderInGroup", "main:removed:Store.reorderInLayer"],
-    "119": [
-      "main:removed:Store.endEditing",
-      "main:removed:Store.setInteractionLock",
-      "main:removed:Store.setLocallyHidden",
-      "main:removed:Store.setMode",
-      "main:removed:Store.setReadOnly",
-      "main:removed:Store.setSelectedVertices",
-      "main:removed:Store.setSelection",
-      "main:removed:Store.startEditing",
-      "main:removed:StoreView.getEditingIds",
-      "main:removed:StoreView.getMode",
-      "main:removed:StoreView.getSelection",
-      "main:removed:StoreView.getVertexSelection",
-      "main:removed:StoreView.isHidden",
-      "main:removed:StoreView.isInteractionLocked",
-      "main:removed:StoreView.isReadOnly",
-      "main:removed:StoreView.listHidden"
-    ],
-    "120": ["main:removed:Store.getMaxNameNumber", "main:removed:Store.recordNameNumber"],
-    "121": [
-      "store:added:FeatureTables",
-      "store:added:FeatureTables.findGroup",
-      "store:added:FeatureTables.findRow",
-      "store:added:FeatureTables.get",
-      "store:added:FeatureTables.getGroupId",
-      "store:added:FeatureTables.getRowId",
-      "store:added:FeatureTables.getRowRef",
-      "store:added:FeatureTables.getValuesPerPosition",
-      "store:added:FeatureTables.readValues",
-      "store:added:FeatureTables.scan",
-      "store:added:StoreView.tables"
-    ],
-    "122": [
-      "store:added:LayerTableView",
-      "store:added:LayerTableView.countGroupMembers",
-      "store:added:LayerTableView.getDrawnRowsRevision",
-      "store:added:LayerTableView.getPointPosition",
-      "store:added:LayerTableView.getRowBBox",
-      "store:added:LayerTableView.getRowProperty",
-      "store:added:LayerTableView.getRowStyle",
-      "store:added:LayerTableView.getRowType",
-      "store:added:LayerTableView.itemCount",
-      "store:added:LayerTableView.layerId",
-      "store:added:LayerTableView.listGroupMembers",
-      "store:added:LayerTableView.listItemRefs",
-      "store:added:LayerTableView.listRowRefs",
-      "store:added:LayerTableView.rowCount"
-    ],
-    "123": [
-      "store:added:ItemRefs",
-      "store:added:ItemRefs.kinds",
-      "store:added:ItemRefs.refs",
-      "store:added:RowCursor",
-      "store:added:RowCursor.next",
-      "store:added:RowRef",
-      "store:added:TableScanOptions",
-      "store:added:TableScanOptions.batchSize",
-      "store:added:TableScanOptions.bbox",
-      "store:added:TableScanOptions.layerIds"
-    ],
-    "124": ["store:added:StoreView.listPropertyKeys"],
-    "125": [
-      "store:added:Store.updateLayer",
-      "store:added:StoreView.getLayer",
-      "store:added:StoreView.listLayers"
-    ],
-    "126": ["store:added:StoreView.subscribe"],
-    "127": ["store:added:StoreView.transact"],
-    "128": [
-      "store:added:StoreTransactOptions",
-      "store:added:StoreTransactOptions.hasMoreParts",
-      "store:added:StoreTransactOptions.operationId",
-      "store:added:StoreTransactOptions.stopped"
-    ],
-    "129": ["store:added:FeatureRowField"],
-    "130": [
-      "store:added:RowValues",
-      "store:added:RowValues.deleted",
-      "store:added:RowValues.fields",
-      "store:added:RowValues.geometry",
-      "store:added:RowValues.rows"
-    ],
-    "131": [
-      "store:added:GEOMETRY_TYPES",
-      "store:added:GeometryColumn",
-      "store:added:GeometryColumn.coordinates",
-      "store:added:GeometryColumn.partStarts",
-      "store:added:GeometryColumn.positionStarts",
-      "store:added:GeometryColumn.ringStarts",
-      "store:added:GeometryColumn.types",
-      "store:added:GeometryColumn.valuesPerPosition"
-    ],
-    "132": [
-      "store:added:NewRows",
-      "store:added:NewRows.fields",
-      "store:added:NewRows.geometry",
-      "store:added:NewRows.ids"
-    ],
-    "133": [
-      "store:added:StoreChange",
-      "store:added:StoreChange.deletedRowsToken",
-      "store:added:StoreChange.files",
-      "store:added:StoreChange.files.created",
-      "store:added:StoreChange.files.deleted",
-      "store:added:StoreChange.groups",
-      "store:added:StoreChange.groups.created",
-      "store:added:StoreChange.groups.deleted",
-      "store:added:StoreChange.groups.updated",
-      "store:added:StoreChange.hasMoreParts",
-      "store:added:StoreChange.layers",
-      "store:added:StoreChange.layers.created",
-      "store:added:StoreChange.layers.deleted",
-      "store:added:StoreChange.layers.orderChanged",
-      "store:added:StoreChange.layers.orderChanged.order",
-      "store:added:StoreChange.layers.orderChanged.previous",
-      "store:added:StoreChange.layers.updated",
-      "store:added:StoreChange.metadata",
-      "store:added:StoreChange.metadata.metadata",
-      "store:added:StoreChange.metadata.previous",
-      "store:added:StoreChange.operationId",
-      "store:added:StoreChange.previousValues",
-      "store:added:StoreChange.reset",
-      "store:added:StoreChange.rows",
-      "store:added:StoreChange.source",
-      "store:added:StoreChange.stopped"
-    ],
-    "134": [
-      "store:added:LayerRowsChange",
-      "store:added:LayerRowsChange.created",
-      "store:added:LayerRowsChange.deleted",
-      "store:added:LayerRowsChange.fields",
-      "store:added:LayerRowsChange.updated",
-      "store:added:RowsChange",
-      "store:added:RowsChange.layers"
-    ],
-    "135": [
-      "store:added:DeletedRowsToken",
-      "store:added:DeletedRowsToken{0}.[deletedRowsTokenBrand]",
-      "store:added:SubscribeOptions",
-      "store:added:SubscribeOptions.keepDeletedRows",
-      "store:added:SubscribeOptions.previousValues",
-      "store:added:deletedRowsTokenBrand"
-    ],
-    "136": [
-      "store:added:RowSpatialIndexing",
-      "store:added:RowSpatialIndexing.rowBox",
-      "store:added:RowSpatialIndexing.sortKey",
-      "store:added:StoreOptions",
-      "store:added:StoreOptions.spatialIndexing",
-      "store:added:StoreOptions.worker",
-      "store:added:createStore"
-    ],
-    "138": [
-      "store:added:RowInput",
-      "store:added:RowInput.geometry",
-      "store:added:RowInput.groupId",
-      "store:added:RowInput.id",
-      "store:added:RowInput.locked",
-      "store:added:RowInput.orderKey",
-      "store:added:RowInput.properties",
-      "store:added:RowInput.style",
-      "store:added:RowInput.type",
-      "store:added:RowInput.visible",
-      "store:added:RowPage",
-      "store:added:RowPage.[rowPageBrand]",
-      "store:added:RowPage.length",
-      "store:added:RowPageBuilder",
-      "store:added:RowPageBuilder.addRow",
-      "store:added:RowPageBuilder.finish",
-      "store:added:RowPageBuilder.length",
-      "store:added:RowPageBuilderOptions",
-      "store:added:RowPageBuilderOptions.groups",
-      "store:added:RowPageBuilderOptions.spatialIndexing",
-      "store:added:RowPageBuilderOptions.valuesPerPosition",
-      "store:added:RowPageMergeTask",
-      "store:added:RowPageMergeTask.[rowPageMergeTaskBrand]",
-      "store:added:RowPageWorker",
-      "store:added:RowPageWorker.build",
-      "store:added:RowPageWorker.merge",
-      "store:added:createRowPageBuilder",
-      "store:added:getRowPageTransferList",
-      "store:added:mergeRowPages",
-      "store:added:rowPageBrand",
-      "store:added:rowPageMergeTaskBrand"
-    ],
-    "140": ["store:added:StoreView"],
-    "143": ["store:added:(entry)"],
-    "150": [
-      "geometry:doc:GeometryError",
-      "geometry:doc:along",
-      "geometry:doc:area",
-      "geometry:doc:bbox",
-      "geometry:doc:bearing",
-      "geometry:doc:buffer",
-      "geometry:doc:centroid",
-      "geometry:doc:circle",
-      "geometry:doc:contains",
-      "geometry:doc:destination",
-      "geometry:doc:difference",
-      "geometry:doc:distance",
-      "geometry:doc:intersection",
-      "geometry:doc:length",
-      "geometry:doc:makeValid",
-      "geometry:doc:midpoint",
-      "geometry:doc:nearestPointOnLine",
-      "geometry:doc:overlaps",
-      "geometry:doc:perimeter",
-      "geometry:doc:pointInPolygon",
-      "geometry:doc:pointOnSurface",
-      "geometry:doc:rewind",
-      "geometry:doc:simplify",
-      "geometry:doc:split",
-      "geometry:doc:union",
-      "geometry:sig:GeometryErrorCode"
-    ],
-    "151": ["geometry:doc:(entry)"],
-    "152": [
-      "main:added:RuntimeOptions.clickTolerancePx",
-      "main:added:RuntimeOptions.dragThresholdPx",
-      "main:removed:RuntimeOptions.clickTolerance",
-      "main:removed:RuntimeOptions.dragThreshold"
-    ],
-    "153": ["main:added:DragResource", "main:added:DragResource.remove", "main:added:Draw.drag"],
-    "154": ["main:added:FeaturesCollection.getProperty"],
-    "156": [
-      "main:added:SketchEdit{1}.kind",
-      "main:added:SketchEdit{1}.vertices",
-      "main:added:VertexPlacement",
-      "main:added:VertexPlacement.added",
-      "main:added:VertexPlacement.featureId",
-      "main:added:VertexPlacement.position",
-      "main:added:VertexPlacement.vertex"
-    ],
-    "157": ["main:added:Sketch.isBeingWritten", "main:added:SketchInput.isBeingWritten"],
-    "158": [
-      "main:doc:CompanionProvider.draw",
-      "main:doc:FeatureRenderer.draw",
-      "main:doc:FeatureTypeDefinition.bounds",
-      "main:doc:FeatureTypeDefinition.boxSelect",
-      "main:doc:FeatureTypeDefinition.handles",
-      "main:doc:FeatureTypeDefinition.hitTest",
-      "main:doc:FeatureTypeDefinition.outline",
-      "main:doc:FeatureTypeDefinition.snapCandidates",
-      "main:doc:ModeContext.hitTest",
-      "main:doc:ModeContext.snap",
-      "main:doc:ScreenContext.bounds",
-      "main:doc:ScreenContext.outline"
-    ],
-    "159": ["main:doc:VertexRef", "main:doc:VertexSelectionResource"],
-    "160": ["main:added:DocumentResource.stringify"],
-    "161": [
-      "main:added:DrawEvents.feature.created.hasMoreParts",
-      "main:added:DrawEvents.feature.deleted.hasMoreParts",
-      "main:added:DrawEvents.feature.moved.hasMoreParts",
-      "main:doc:DrawEvents.feature.created"
-    ],
-    "162": ["main:doc:NameGenerator"],
-    "163": ["store:added:validateRowValues"],
-    "164": ["store:added:createOrderKeyBetween"],
-    "165": ["store:added:FeatureTables.getThirdValue"],
-    "167": ["store:added:Store.setMetadata"],
-    "168": ["store:added:LayerTableView.listDrawnRows"],
-    "171": [
-      "main:added:DrawEvents.drag.changed.patch",
-      "main:added:SketchEdit{2}.featureId",
-      "main:added:SketchEdit{2}.kind",
-      "main:added:SketchEdit{2}.patch"
-    ],
-    "172": [
-      "main:added:Metadata.[index]",
-      "main:doc:Metadata",
-      "main:doc:MetadataResource.get",
-      "main:doc:MetadataResource.update"
-    ],
-    "173": ["main:added:DocumentChange.metadata.keys", "store:added:StoreChange.metadata.keys"]
+    "1": {
+      "main:doc:(entry)": "72230deb7c8466472c279707803e7ba15cff0fb4b92be3ecdb403c92f5608855"
+    },
+    "2": {
+      "main:doc:createDraw": "fe951a5ea03201a46fc150c6079c9d0a0ed99c46a0c07b985b5fb29ee006ef5e"
+    },
+    "3": {
+      "main:doc:DrawOptions.store": "ef2f46d084bb446477f485255f2823829bf30e1b81632e5eda41a57c7a4127e2"
+    },
+    "4": {
+      "main:added:DrawOptions.acceptsId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "5": {
+      "main:doc:DrawOptions.generateId": "e65c6824c5494c1ba63ca2140df1d7f05846a6e3e8bf4afe7079e28d80e55b73",
+      "main:doc:RuntimeOptions": "0862bc11072641012241f70f831bc1b0e57aae8bd38da8f5fc59f7247f37175e"
+    },
+    "6": {
+      "main:doc:DrawProperties{0}.maplibre-gl-draw:rotation": "dd91426b461df5b79b54903796238dee9051fb791295389239d64f7315d99388",
+      "main:doc:DrawProperties{0}.maplibre-gl-draw:scale": "3e20fa66ad593d19a1df83fb23b018d4479f67cebb712747772ac25f744e1251"
+    },
+    "7": {
+      "main:sig:MODES": "3768b7f9d2a90492df1c0c3ef732bcd48d0ebe799bb167bbf5d066c465a34312"
+    },
+    "8": {
+      "main:sig:Draw.getStore": "919b287cc9d135667bdd2f5aa1f27620f67a281d39e09791594a99d479833a58"
+    },
+    "9": {
+      "main:doc:Draw.transact": "f167130fa610c2386d18c8b77878a83df10adaa0d68595d76e9bac712120056e",
+      "main:doc:TransactOptions.source": "110bcbaa693679d510edbc911a6e3a59b3fa5699d54cbc30df2c7d00e1edb360"
+    },
+    "10": {
+      "main:doc:Draw.setReadOnly": "661287166143e84fe483c71f6194691250bc2094a03ecec5037c25234f65b824"
+    },
+    "11": {
+      "main:added:Draw.waitForWrites": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "12": {
+      "main:added:Draw.editingFeatures": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditingFeaturesResource": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditingFeaturesResource.add": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditingFeaturesResource.get": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditingFeaturesResource.remove": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "13": {
+      "main:added:Draw.rendered": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "14": {
+      "main:doc:Draw.destroy": "49ab5ee3fc1615a68faf7694cf2340972ba7c5eae9037d698ba69fd00b1e5c7a"
+    },
+    "15": {
+      "main:doc:UpdateSource": "6e60e44086ce5845aa8bd9f957350c053895b87cb18021e957c27e0c01ee85ae"
+    },
+    "16": {
+      "main:doc:FeaturesCollection": "0e6f62745b5f12d748824eb2c4db02e121e50dc6322ba8f3ba8e9a3b438576de"
+    },
+    "17": {
+      "main:doc:FeaturesCollection.list": "f6d0971bcf022b082576487cf8564e2f44cf811eefcae6aa8ceaae2e9f4a2a58"
+    },
+    "18": {
+      "main:added:FeaturesCollection.iterate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "19": {
+      "main:added:FeaturesCollection.updateAll": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:FeaturesCollection.updateMany": "81ae92828a76a7a55648c489cfa8a4192d995db2416c459c613fcb1825a36210"
+    },
+    "20": {
+      "main:sig:FeaturesCollection.deleteMany": "644b3931ffbc918da5dc16707025ec7770f59ae30140fd318ede2fa2566ecb11"
+    },
+    "21": {
+      "main:added:FeaturesCollection.translate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "22": {
+      "main:added:FeaturesCollection.rotate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "23": {
+      "main:added:FeaturesCollection.scale": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "24": {
+      "main:added:FeaturesCollection.duplicate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "25": {
+      "main:added:FeaturesCollection.restore": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "26": {
+      "main:added:FeaturesCollection.releaseValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "27": {
+      "main:doc:FeaturesCollection.create": "fc1b87469014835bfdee47bf84435308c931d4b4054917e47b3e4c07982231b3"
+    },
+    "28": {
+      "main:added:LayersCollection.countItems": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "29": {
+      "main:added:LayersCollection.listItemIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "30": {
+      "main:doc:Layer": "66117ffc22d0e5419363d339539216e538a4538fd99c7bb26b2b09b4a09c8ba0",
+      "main:removed:Layer.items": "7721a17ce5f427fa1f2aa469c7ff1799bf9be384365b2a9bd637beef5a864b54"
+    },
+    "31": {
+      "main:doc:LayersCollection": "18d5bfbc804ca40e2e790c77185a46eda5a25988f6e77328ba5cde5c198164a1",
+      "main:doc:LayersCollection.create": "a09ff252a47f277437981f29111d312bc262d55be01c28568a7ea519d3f81513",
+      "main:sig:LayersCollection.delete": "2020fec827e6c8b081e4568899f582fc8fa7d3720bdb28ef6686627feb8f0791",
+      "main:sig:LayersCollection.deleteMany": "40559420d2932a433689f546fbd166c5ffee8f7718bf87a602b64737105c0e72"
+    },
+    "32": {
+      "main:doc:GroupsCollection.list": "b66f33793d0e9332d88cab47f2cb483ef5f55826d7547c57f6460311cf23b342"
+    },
+    "33": {
+      "main:added:GroupsCollection.iterate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "34": {
+      "main:added:GroupsCollection.countFeatures": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "35": {
+      "main:added:GroupsCollection.listFeatureIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "36": {
+      "main:doc:Group": "3d6ba2e6c9e59cbcf31c8cd4edf4263f102ef48f9e94fd4923d1cd87adf80951",
+      "main:removed:Group.featureIds": "d203f0f29488cb000ec82defc0ed1669d5ebc31894bd60a470d78bd73e77cb4b"
+    },
+    "37": {
+      "main:sig:HiddenCollection.list": "046eb1216559924e1d9a883ff8bb021a644a65b80803cabb57a55ce539c734ea"
+    },
+    "38": {
+      "main:doc:FeaturePatch": "d6fe9f5f81a481f9b14600aa56b5ccb3e36a9bebc58238968fa6a2f8b66b0323",
+      "main:doc:MoveTarget": "c5aed41ec76e3fb8e950764501d9fecb8c0f06fcf6b4611c696a52dd5a1c3e21"
+    },
+    "39": {
+      "main:added:DuplicateOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DuplicateOptions.offset": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts.changedCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts.createdIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts.lockedCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts.missingCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts.skippedVertexCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditCounts.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditOptions.ignoreLocks": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:EditOptions.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureTarget": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureTarget{0}.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureTarget{1}.layerIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureValues.[featureValuesBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureValues.byteLength": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureValues.featureCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IdSet": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IdSet.count": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IdSet.has": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IdSet.iterate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IdSet.toArray": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IndexRange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IndexRange.end": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:IndexRange.start": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Rotation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Rotation.center": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Rotation.counterclockwiseDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Scaling": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Scaling.center": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Scaling.eastFactor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Scaling.northFactor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Scaling.sizeFactor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOperation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOperation{0}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOperation{1}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOperation{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Translation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Translation.from": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Translation.to": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:createIdSet": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "40": {
+      "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
+    },
+    "41": {
+      "main:sig:SelectionResource.add": "0d6d6af9a70b80dca5a9c5c7a1fd80f8b7324cc4c10ff33e6a5b7d70b2567d47",
+      "main:sig:SelectionResource.remove": "10f6e51e2aefb4404569788f630ef3ae41a0739ff71afbba1dda959bc708d387",
+      "main:sig:SelectionResource.set": "c8ff77df689199badfb650410b1225ec2e6f58c5ab8a05c57abec71a01187a9f"
+    },
+    "42": {
+      "main:doc:SelectionResource.features": "82a883a363b740238c7618842518d0241fd0e8693b70f838e7b837cbc8566721"
+    },
+    "43": {
+      "main:sig:SelectionResource.delete": "58fb0181546e5243436982a3cb766939dba9c8a84aed96b360b2a9d302715e59"
+    },
+    "45": {
+      "main:sig:Selection.ids": "c0a5450b3c7a652735df67132a69ff11b49753fb85d21c801450fa3fd9d3904c"
+    },
+    "46": {
+      "main:added:Sketch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Sketch.edit": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Sketch.id": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Sketch.style": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit{0}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit{0}.operation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit{0}.target": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchInput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchInput.edit": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchInput.id": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchInput.style": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchesCollection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchesCollection.add": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchesCollection.get": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchesCollection.list": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchesCollection.remove": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "47": {
+      "main:added:RenderedResource": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:RenderedResource.get": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:RenderedResource.getMany": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "48": {
+      "main:doc:FeatureTypeDefinition.onHandleDrag": "64b8e7a74c9984c409347915a75845fbb7fbb9f3975014dc4b5c7db811a2aa15",
+      "main:doc:HandleProvider.onDrag": "00697b529f8315fbda3a2710df116639d4b78057518405f9d92ba25ddb323ce7"
+    },
+    "51": {
+      "main:doc:DocumentResource.load": "95653b3dfab2c24cd3c1653aa6f48d924cd7b040a12f53cf09d3697bc582dba5",
+      "main:doc:LoadOptions.group": "81f30a0603f59c5ceafc904aacf8f4b0c3569e0da6e2cf298e741913329dd1eb",
+      "main:doc:LoadOptions.layer": "19b74f4dc6be91c58cb984a25e24062fc90c3b6424e2c95af584b18ae774b301"
+    },
+    "52": {
+      "main:doc:DocumentResource.loadMany": "51880f4894d93dc6b85b16c490ca99c3e228ae1753ce40c748c08c7be3c09d7a"
+    },
+    "53": {
+      "main:added:DocumentResource.subscribe": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentSubscribeOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentSubscribeOptions.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:Draw.document": "66afa72934d0c174b5076ad435261979cb4ccbc0d53e9fe33789604780c70c64"
+    },
+    "54": {
+      "main:doc:DocumentChange": "9ff72e02218bcde368cda0183566ab27ff2add18ee8a027d9962bcda7069cfe4"
+    },
+    "55": {
+      "main:doc:DocumentResource.toGeoJSON": "47229ec11e5ad2a57dab7325385667ab8933ceae546fd0ce86e4b0df73e0bda5",
+      "main:doc:DocumentResource.toJSON": "6191e3a013210741c7395c56a4f0493296334db1d3810b9d29f03a355a74a3ba"
+    },
+    "56": {
+      "main:sig:LoadResult": "a742979caebe2244f118e5655841a1ef0fcd6447a7231511688b04bcd541ace4",
+      "main:sig:LoadResult.featureIds": "06d150abae2e13d278d37344acc9fa5b40fd72b73056e3bc115dda322bd4f10a"
+    },
+    "57": {
+      "main:sig:DrawDocument.groups": "2628aa8227d0b8346c85cf3778bccf96feee993d20384464fd63fb6d009d907f",
+      "main:sig:DrawDocument.layers": "98f2447710d4756225aeab6858c836c0457fb95123cb6072eb16ed055f6fc3cc"
+    },
+    "58": {
+      "main:added:DocumentLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentLayer.items": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "59": {
+      "main:added:DocumentGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentGroup.featureIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "61": {
+      "main:doc:DrawEvents.feature.deleted": "288a4a9ac3fe66ec1240ec1d056161c304f8e433c2b2ed66399993d87f5abe9e"
+    },
+    "62": {
+      "main:added:DrawEvents.feature.updated.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:DrawEvents.feature.updated": "a6c2a6184be3f3293608ede5898aa5fa009ee51f8bfce2bfd4d4937badc754a1",
+      "main:removed:DrawEvents.feature.updated.intermediate": "7a206dc4ca10db38dd404e389c3037c3cb36bdf295f14bd17a370b9084f0a2cc"
+    },
+    "63": {
+      "main:added:DocumentChange.groups.moved": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentChange.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentChange.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentChange.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DocumentChange.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:DocumentChange.groups": "df94503796b80a3ef1d9280f64040d2ab33cf2753cfe66d0b11253359346e2d7",
+      "main:doc:DocumentChange.layers": "2b2cea680e537f31067c18b21361558aaaa02bdac4d8e6dd89ad5cdd9b45a98a",
+      "main:removed:DocumentChange.editing": "92c091ca3c0ae5841c81080e284ce2457475f924507d1b07da526a9af5a94aea",
+      "main:removed:DocumentChange.editing.ended": "49bd6eac5cddcd68ba97829ab514fb4c66317c7601e5f8aceff07bbe7ba7cf6b",
+      "main:removed:DocumentChange.editing.started": "219143f205e5c75565146782fa7791d1d95617ef1e7d5d7f0c77406d9cdf8530",
+      "main:removed:DocumentChange.features.created": "de9a09e471a3976f31cb7d1c337639c7fb8549812cdcdd96a16f9b96db070d5c",
+      "main:removed:DocumentChange.features.deleted": "dc88a0afd94920a9e1a5bfb65e664c43d7b6c1e41d3cf8b0c83e0f904f633cb1",
+      "main:removed:DocumentChange.features.updated": "09c5ecbd39ab67f821f2d926ff44386da48f7b057b9d19afee8df52712c010ce",
+      "main:removed:DocumentChange.groupReorder": "dc22383f69b652d2231cadc8637f8431041ef80a4f7279b3627be0961419bb54",
+      "main:removed:DocumentChange.groupReorder.featureIds": "a82b9cd87b0c51aeec801915ca1cff93ba939048fad913847549ef3b40afc7ab",
+      "main:removed:DocumentChange.groupReorder.groupId": "4232cba8d0ee3cad97196e2a4271eb13c94ab0d98369b777f79a267d62f2edcf",
+      "main:removed:DocumentChange.groupReorder.previous": "61eb914746d9bbadbb09dc76902a95fa37e2dacb623174a867bbb42fd99300c3",
+      "main:removed:DocumentChange.layerReorder": "00c18d9fa5235661a5deb92e4e85bf4fddad13872aeddf102f022d19a4485719",
+      "main:removed:DocumentChange.layerReorder.layerId": "3b5be0c552fe616459b47981c55939d56126a651042eb4d27f29d6f0d322ceda",
+      "main:removed:DocumentChange.layerReorder.order": "553357ceeeb80b20b4382621df53e8b12220fe7d3b98d9320d0bd80682091503",
+      "main:removed:DocumentChange.layerReorder.previous": "61eb914746d9bbadbb09dc76902a95fa37e2dacb623174a867bbb42fd99300c3",
+      "main:removed:DocumentChange.mode": "cfd0002c5b38e2fb8e91326a878964bc867dd5f0a3b885543836eb76ea172e38",
+      "main:removed:DocumentChange.mode.mode": "e5fb9b679669cb66c142cf7e3609b8cb1259098fc08549376ff60b9c3ea1081b",
+      "main:removed:DocumentChange.mode.previous": "f5db86e9b824e36a3ba38fef343feb28c27b11a0a27f969ede67385162f1a052",
+      "main:removed:DocumentChange.selection": "bdd697d815e037c48d062622a4e7576cfba4c009790aca939ebe2591f161e256",
+      "main:removed:DocumentChange.selection.ids": "d3baed24c84d8ebae0905eb85b2f0a9731b948ad1baccc10198248d2f3e83639",
+      "main:removed:DocumentChange.selection.previousIds": "4a0f09a18eaa91f6bf5600f9a21392acd65598a946a1eb1fbf0f0ce7d038f758",
+      "main:removed:DocumentChange.selection.previousType": "655390f1b50c8ed3bd7cf081f22bf98c95ae28fd434c08e699df04c801fe8aff",
+      "main:removed:DocumentChange.selection.type": "99b5dba6ed70c2a890aacbc29ffb6e3c9aa4f07c352d291c1069866482842130",
+      "main:sig:DocumentChange.features": "c30fd38adc38abe928436cf9121c3cfacfd8d309da7c01f43bafd40d0aba30cc",
+      "main:sig:DocumentChange.reset": "3ded069a5155fc3d39eef7a41d4cec08fc91d4d144d22cacfb39f7765dfe9932",
+      "main:sig:DocumentChange.source": "b6b95ea5b82d7a5d3cdab9e9b05f29b929c2742d44e5208343ce09833b270b6b"
+    },
+    "64": {
+      "main:added:ChangedIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:ChangedIds.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:ChangedIds.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:ChangedIds.moved": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:ChangedIds.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "65": {
+      "main:doc:DrawEvents.feature.moved": "de255dbe597693bf686d9af2d0f9d186a479dfc295df390b9b7dab59e9c5a809"
+    },
+    "66": {
+      "main:doc:DrawEvents.group.updated": "a2b9063188692a6048f8fc8de4cd78fee6ad4835132e7f5a3e23d11287df89f8",
+      "main:doc:DrawEvents.layer.updated": "d4835a4470f61c049cd649d8620c77c23555f1fd176b4e53765b33898336cb7a"
+    },
+    "67": {
+      "main:added:DrawEvents.group.moved": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.group.moved.from": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.group.moved.group": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.group.moved.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.group.moved.to": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "68": {
+      "main:added:DrawEvents.selection.changed.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:DrawEvents.selection.changed": "0a9c40a1ece0c6f4f2581597127bb46ee4354db2c2a8717b247a09cbf95e1c6b"
+    },
+    "69": {
+      "main:added:DrawEvents.editingFeatures.changed": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.editingFeatures.changed.ids": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "70": {
+      "main:added:DrawEvents.drag.started.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.started.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:sig:DrawEvents.drag.started.featureIds": "a82b9cd87b0c51aeec801915ca1cff93ba939048fad913847549ef3b40afc7ab"
+    },
+    "71": {
+      "main:added:DrawEvents.drag.changed": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.changed.featureIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.changed.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.changed.operation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.changed.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.changed.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.changed.vertices": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "72": {
+      "main:added:DrawEvents.drag.ended.operation": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.ended.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.drag.ended.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:DrawEvents.drag.ended": "a5927735907d5a63ffd3b7c20bb44aaf4c946196891a094caa23d38ebb8ab7cf",
+      "main:sig:DrawEvents.drag.ended.featureIds": "a82b9cd87b0c51aeec801915ca1cff93ba939048fad913847549ef3b40afc7ab"
+    },
+    "73": {
+      "main:sig:DrawEvents.hidden.changed.ids": "48ddcfa3accfef0910ceb58904bb21acf9467c54383ddc65f8770cbc3d7637e3"
+    },
+    "74": {
+      "main:added:DrawEvents.image.failed": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.image.failed.error": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.image.failed.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.image.failed.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:removed:DrawEvents.error": "c0e62d9e1b12bea26506ffee98f4feaffd58ca32fac2b80348809da3dad200af",
+      "main:removed:DrawEvents.error.error": "d2b4d82c818d5504b9c475f426b954c2467f31d3c2a57491a147e2c84ffb09e4",
+      "main:removed:DrawEvents.error.featureId": "c70d3af38509f039df5f15cfed8e673c42354ddaec8fb119010d4b8723089b4f",
+      "main:removed:DrawEvents.error.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d"
+    },
+    "75": {
+      "main:sig:DrawEvents.document.loaded.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.feature.created.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.feature.deleted.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.feature.moved.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.feature.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.group.created.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.group.deleted.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.group.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.layer.created.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.layer.deleted.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.layer.reordered.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.layer.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d",
+      "main:sig:DrawEvents.metadata.updated.source": "c569913d64987aabee0157b0f01d79d1970f4330850315894fbd12e275ee117d"
+    },
+    "76": {
+      "main:doc:DrawEvents.document.changed": "bbd11a39515f863f3d85c57862fd5d26afc05bc7e7c430902a94720848b971cd"
+    },
+    "77": {
+      "main:doc:DrawEvents.drag.started": "13702fa2996e30d4e4607741d913d6c237ee7eb3e1d8ffe47d6083b9cf2751e8"
+    },
+    "80": {
+      "main:doc:DatasetOptions": "964bc05ce1fbd6b96e04a66507bc55367e2fafcdb1eb094938e6ced3861d8cf5",
+      "main:doc:LayersCollection.getOrder": "7db6e5a96a905cae0bce5239960a8f44a5ea6f6bc9cb13c0e7b020224ba0d90d",
+      "main:doc:LayersCollection.reorder": "d22c00a9d3fda6e7ab1b3b48c551802fbb7519b33a57858e6ada5a9e3eef51ae",
+      "main:sig:DatasetOrder": "130dfdede598fc8b0cfe233875ccd1d5eef60c679da8059d5d52cca1e0b9e0af"
+    },
+    "81": {
+      "main:added:ExtensionsCollections.fileProviders": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "82": {
+      "main:added:FileProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FileProvider.getFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FileProvider.name": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "83": {
+      "main:added:ExtensionsCollections.getTransformProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:ExtensionsCollections.setTransformProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "84": {
+      "main:added:TransformInput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.bearingDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.coordinates": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.featureCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.isScaledUniformly": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.positionStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.rotationDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.size": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformInput.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOutput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOutput.bearingDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOutput.coordinates": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOutput.rotationDegrees": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformOutput.size": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformProvider": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformProvider.accepts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformProvider.apply": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformProvider.name": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "85": {
+      "main:added:ModesCollection.override": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "86": {
+      "main:doc:ModesCollection.count": "f4835781996b95449608cec9bc7045ed217c04ae4b7829bc2d94fde61003e1d3",
+      "main:doc:ModesCollection.get": "4bff4095651d2d3cec75843a95914b6b300179f719fd952ac7052018e8e26231",
+      "main:doc:ModesCollection.has": "ed4ef94c0e3c8dafc2a2abdae025047c0f9adcf46649c791d8a9f3cd4cf9eb87",
+      "main:doc:ModesCollection.list": "4725b2bbf2195216f840d28266fd4c8ca3d4c2367a5745bf4b24a1339c816384",
+      "main:doc:ModesCollection.remove": "dbebaea0baa712fe2c7adcfbacea1ae05e688ac8cec3d709df89b7c3d819df5a"
+    },
+    "87": {
+      "main:sig:ExtensionContext.store": "43625a59df07d09e439370d9cc09fbe60b0e6990fa3a90b7d3dcba8ebd121638"
+    },
+    "88": {
+      "main:doc:ProvidersCollection": "ce72041d917b2c787efde42c59fd0cafafe5b9fb6e3258cf5391dc004edbd22a"
+    },
+    "89": {
+      "main:doc:RenderContext.terrain": "e498e4d1428c5164730eb260c2d36162f32c4f80f49b6ba4afe845d085f7d354"
+    },
+    "90": {
+      "main:sig:Plugin.interaction.filterSelection": "8abbaaa06dff0216dc297e28a54b96303c78e867da499928ef9fd1f30132d236"
+    },
+    "91": {
+      "main:sig:FeatureTypeDefinition.appliesTo": "c41cbb00276f90b9d43ff4b9fc614e3898f026f0381f70b28bfe1eb584bc2308"
+    },
+    "92": {
+      "main:added:FeatureTypeDefinition.transformFields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformFields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformFields.bearingDegreesKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformFields.isScaledUniformly": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformFields.rotationDegreesKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:TransformFields.sizeKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "93": {
+      "main:added:FeatureCandidate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureCandidate.getProperty": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureCandidate.style": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:FeatureCandidate.type": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "94": {
+      "main:doc:FeatureTypesCollection.override": "e4899d8d150baf66486cf8c1af4dd1cef7b6146b0526f5c41c2268f747f8fb7e"
+    },
+    "95": {
+      "main:doc:ExtensionContext.drawing": "c03660d39649ddeba03d010593d07340fcc961f260379d05070f20559c7e15d8"
+    },
+    "96": {
+      "main:doc:CompanionProvider.hitTest": "59f1e23bf9a8f9f0686cc5ccf19a983d2d84ae7112e43ed1179653b716776af8"
+    },
+    "98": {
+      "main:doc:LegendEntry": "86d71933a72dccc9f6633e637aac3beca6749a2863f4aa90f0adf1f74544064c",
+      "main:doc:deriveLegend": "3965705d865b929397bb9e4d1597f5e2416abf2d0b2e379edf06301878fdc1c3"
+    },
+    "99": {
+      "main:doc:DatasetsCollection.add": "e185d6181038b8535afb43747c970765220662234135950eae1ec81ee51b56a9",
+      "main:doc:DatasetsCollection.move": "7a85f9ebeb0708acc467dc322e7f273bdb2630bdd09f196d22a260247fb80dae",
+      "main:doc:DatasetsCollection.remove": "36e3b6ddaee41624edf95bb527058c059b20f23dd1e62f59fb4dc94d78b1e803",
+      "main:doc:DatasetsCollection.removeMany": "1c31f8d297bec7599120af1aba79f47d52e5ddaba7f85391e2d713837f9d9c67",
+      "main:doc:Draw.setMode": "fd35abd31abfcef9e8f0042c5dfec4bcfc58648a4ca67084d79f60b0c9284c84",
+      "main:doc:DrawingResource.addVertex": "81173413c9e5a6b37a257d7763737db624b184c4e4f2c56cb06a0fe7ab88b4ce",
+      "main:doc:DrawingResource.moveTo": "f3fdf0a50f62cac27b92cf39bc10c1e548be2b7a850ff9d82c9132ca58eea4cb",
+      "main:doc:FeatureTypesCollection.add": "cb37aa5ca3010380ccc0bceac77eaaed781443534e5ec0d4cf58abc6bb47a709",
+      "main:doc:FeatureTypesCollection.addMany": "dbdedc9828ecf3d11949a1b8a1e3a739f87968a632f945ce8bd101cd0ce97b66",
+      "main:doc:FeatureTypesCollection.remove": "34207a9706bf83c31ec1383aea3091fbaafc7f9bdc0fe24ea4d49c6c2f4ad8e6",
+      "main:doc:FeatureTypesCollection.removeMany": "77bd63391d0a4d9348b23bf754848c3eaf7b92b05a7920875e658b5d4372f84e",
+      "main:doc:FeaturesCollection.buffer": "0ac7aa14fa927210446951e8f3dcccbf43c6a46100222bb57c101e7f21b3ec18",
+      "main:doc:FeaturesCollection.delete": "c092f1180594c7e9d0cd3223837f403040b131955aebfab5fac6d6762c9159b3",
+      "main:doc:FeaturesCollection.difference": "0b7646061e333904a74b5a77af2e88885b05445f31f9813ac83c56c0d2213404",
+      "main:doc:FeaturesCollection.intersection": "abf5c55d44b4571624a37f5f63ba89443ef957bad66ed42b92b5266cc16ba49b",
+      "main:doc:FeaturesCollection.isEditable": "a8223bf7149349af2334bcc3a89ae4adba60e11f6645b47b6504e737ff7d55b2",
+      "main:doc:FeaturesCollection.move": "7b1f63b1804ba2371f9b337ec4f6b781da3557a832759013950329ffa9e9f481",
+      "main:doc:FeaturesCollection.moveMany": "3c13e89bba3bee977535aa787eaeb4c901c3446f2a83f271dedc4460ed64ade2",
+      "main:doc:FeaturesCollection.split": "d782c9717ea9a89bfa273eff0ac9c54ffa2b2ab69484ac3023d087adc8c5616a",
+      "main:doc:FeaturesCollection.union": "2c382e3be8ee0eb50f0d38a0a781eca72e2c32a6992ac913c67dfdfd1d43e8fb",
+      "main:doc:FeaturesCollection.update": "df57698c5b3870fa9b67f5c5d3852fded33d1e940ece585021cb20eb6bbdeab9",
+      "main:doc:GroupsCollection.create": "7b0bfcc77b60853189b05f12f941a78a9d2cb48294742f95957532f3119e9a30",
+      "main:doc:GroupsCollection.delete": "0ec257e1162337e47f567dec97b8fa6510f4632a3db4e955732cf2e24039dbab",
+      "main:doc:GroupsCollection.deleteMany": "3a49349ebf0c8f2d53deb4662ba410bcf9131501c8c2243c994c8fe942c68464",
+      "main:doc:GroupsCollection.move": "169a25c48baba8eef77283e28b990d85a98bcec5fff7bfe0a8d6fe93b226c0e5",
+      "main:doc:GroupsCollection.update": "28ddcb4812294b4ef95200b5eddf94fc3cb236ebb36e1bfe06a36560f05b5f85",
+      "main:doc:HiddenCollection.add": "ccf6b8694810141ab31680bda044fca457c835381f40b2c23c8460db3e3f539f",
+      "main:doc:HiddenCollection.addMany": "bbd88009f53e79b9f30c3ff95a24cb060d12040130959609518014d42fd91309",
+      "main:doc:LayersCollection.setActive": "a8afbf91e3cf245aef303198b909a3329f402d22442e93da964c540291eb2f5c",
+      "main:doc:LayersCollection.update": "dee80808bfebe5dda5c7c2abfdcd6c8a6c66444ac81f9f6dd007d25752e4a181",
+      "main:doc:ModesCollection.add": "4e39846dcd3889dda3941ab349566a9a1ed1b21cdd72b738f5f235b8e456059a",
+      "main:doc:ModesCollection.addMany": "ed315bb32aec2ea20d03b456c226c6b976ad65761fd2b68e5fd1646875e4177c",
+      "main:doc:ModesCollection.removeMany": "e5403497ea64a1f4c36be173378d6750391272bdf5ccc2c9a6233cbef2d07be0",
+      "main:doc:OptionsResource.update": "e5d091c8f8a9b46b7f6dc64878d226da6ee9aa729e8ff0a3645a0668a97232ea",
+      "main:doc:OverlaysCollection.add": "d92dd05ec4169ba5e88b35ee2ccc2dc86f07a86e6f6c43dea401492ad2b49e0f",
+      "main:doc:OverlaysCollection.addMany": "ecd0ed7b7068e2821545d21991bace3ca2b8ec44564485e14cb819f0e8c79108",
+      "main:doc:OverlaysCollection.remove": "ee4854fa6e5fbf68b986bca8e2ff163164cacc0daf8c3cb86a53f3faf6ea8930",
+      "main:doc:OverlaysCollection.removeMany": "492b98ed4b274cf1bb10c26c61031d1565af23da40683fd4ebb408421f684988",
+      "main:doc:PluginsCollection.add": "2539b598af21d333855711f2402d2010c04d50e68d1da9e2a45611fdd308066b",
+      "main:doc:PluginsCollection.addMany": "adf55d14768cc29763a138702e49ec2633f9d814d07f1693a037d27260bb118c",
+      "main:doc:PluginsCollection.remove": "7bc7ff0e755efb286850b012931f00e995cbeda24b0aeef1c49cff7186e2d303",
+      "main:doc:PluginsCollection.removeMany": "6d44031f2a7399b8222167c3b552b1644f62985152ea441e2763e51b6d5bc1b6",
+      "main:doc:ProvidersCollection.add": "6d7867f8a25ed46ba0781b7c003fae98dbaab40b97ade1f60e75a27a2a2b7ec6",
+      "main:doc:ProvidersCollection.addMany": "0bf4f0fdc370c49afe2941699c2c258792ed7911d8cfcdec3d85d6fb1298eef3",
+      "main:doc:ProvidersCollection.remove": "98992253a8a449b2af7e7c0f01a63e8fb5ba87ac13a067054f5b65103ee34bc2",
+      "main:doc:ProvidersCollection.removeMany": "1f31d215e99e77673c0b60c314612ee23dfe40e46dc9093bdfe2fb5df1637d67",
+      "main:doc:SelectionResource.move": "bc60b8b4145bbffcd5d38c8badcabab55df5f0c9baf9b722f8698e0a49134add",
+      "main:doc:VertexSelectionResource.set": "951b61cbacac1fe2ec4ad55bddea7fb0b18cadba9b1a635e0f56962143e6b015",
+      "main:doc:parseGeoJSON": "f760cc2ce6d7967d73f2eabd06bda678c6c9ae0bb5051a0ae5ca5c5ae81d99fd",
+      "main:doc:parseNative": "67633f71da601b7ecba94bfdd22ae23cddfe1f2969a9ded3597fef4b4cbc8f27",
+      "main:sig:DrawErrorCode": "ca0e1b851705cc62037a6aa1784218a00c8604315c8627ccd77a07033d0bb3db"
+    },
+    "101": {
+      "main:doc:DrawError": "5d6d16364674af6498bf5c20e7ef7923572b8f186e76c27930cfa60eb02dc5f7"
+    },
+    "102": {
+      "main:doc:PreparedTable": "a093a5b970e9d3c9a949b432c73f46200662726e89acf726949635ee0e851c4b",
+      "main:doc:Table": "625bf817f234ee6926316d82932aaf9a10a28e1d8700db7fda8ae0d1a5dc7ced"
+    },
+    "103": {
+      "main:added:featureValuesBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "104": {
+      "main:removed:Store": "50a51512bbd1a50ba8a6670784bd70e2c374813bea9ff39c1efaff20539255b4",
+      "main:removed:Store.createFile": "914efb0d91028bd7f392e07ae10c316a74b54f41818dd3c5676586c95c631eba",
+      "main:removed:Store.createGroup": "d15676c7c06cba657c54f81bbf59c9acace2939779b2991b7ba1b0ebe238fdc2",
+      "main:removed:Store.createLayer": "eda60ca36c113318a0d3bd4e19003951b11c834044ae73cc7bf215749b98127d",
+      "main:removed:Store.deleteFile": "248feb3290d87b30ceedc0897ea1a81e58ded67d7f30df7113ba19a25fd80ab5",
+      "main:removed:Store.deleteGroup": "59bc611cef2740bf10e6b8bbc459881ea4175a6341f247e60373be188bc2d551",
+      "main:removed:Store.deleteLayer": "dda372a7be6196f793680f0848625d829755a398f1f2008f07f2ab84dc520bdf",
+      "main:removed:Store.setLayerOrder": "1ec8098946c36782b036a4c7efcb8f0810dc1f3bacc53f67b5323a8c5620c55c",
+      "main:removed:Store.setMetadata": "912f767a4a777dee6e2054bba54f85c43f13fd56d949390e7088ba327755e899",
+      "main:removed:Store.updateGroup": "8005c17de145d6da89a1d534ba718920549545a9872479fda119b22a9348a3bc",
+      "main:removed:Store.updateLayer": "fbdfc954c5b654d9d99509ce742fd890d707080daff1416daebfddad8292c485",
+      "main:removed:StoreView": "7df2e44dbdfd9617da84bf63e10fa7f7e8b6d1167f22cd3933bff441e832f202",
+      "main:removed:StoreView.getFile": "500aa118ee80bd7a360b7365026e8955dabe1a522f2b719dc6324c160f43abff",
+      "main:removed:StoreView.getGroup": "464ba49e92125651e77109dd19304e34192483afcb41b9484363db1228ae867f",
+      "main:removed:StoreView.getLayer": "e838d9e527f71f75dfb2aa9fa26bca07e31a5c5c9f7757b9613646f841c7e276",
+      "main:removed:StoreView.getLayerOrder": "7f6ea946ac0db35876d2ccb3790b6a605c76a7e1efd23e573e5b91334ffeeaa3",
+      "main:removed:StoreView.getMetadata": "6f830ff3524533e6d9c368f7b2f39f170779de92926148bfef84343ea3644d69",
+      "main:removed:StoreView.listFiles": "5620519ae96417c094eaa1bbe3e2e023eebaa5f329bcc36887865271a78ceae2",
+      "main:removed:StoreView.listGroups": "91bcbbb33af211dc9fa82a8fa0bb1f80a947e794534b6d6ce4a5346285e0bb7d",
+      "main:removed:StoreView.listLayers": "dba542850070341a6479f618d659cb620cd93f906f8aa55b68dca0994077ef09",
+      "main:removed:StoreView.subscribe": "2891ca996fe9e6fd78ff0079c4cae8e0d4b9d73dd12b5271f0f96c2ddcbbc009",
+      "main:removed:StoreView.transact": "1a394771ab37c3514d7af0872745ad0d57b103b0aa01858f7db313ec54df820e",
+      "store:added:Store.createFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:Store.deleteFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:Store.setLayerOrder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.getFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.getLayerOrder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.getMetadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.listFiles": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "105": {
+      "store:added:Store": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "106": {
+      "main:removed:StoreView.getFeature": "c58d9aaf3b8c940fe5d25cec8078309205595f5cc96eeb28e0b927d61db707ad",
+      "main:removed:StoreView.listFeatures": "acb9971433dec86c18319c0b4a370492e492447e33b793fdb558e02af5700cb6",
+      "main:removed:StoreView.listFeaturesInOrder": "e681c53e09e4d1b39d7e03ae74191805d4aa2c8eb69ef035604526d54645a21d"
+    },
+    "107": {
+      "main:removed:Store.abortIntermediateUpdates": "198c162da7fbe38dabf31c6f4f9c6b7befd8614a1b4698259dbb8a2f7038758f",
+      "main:removed:Store.createFeature": "3541ce4b4d39e1bf6b60e8af8eb9462e0a15017e85be3b9c4c0b107dfc5ac568",
+      "main:removed:Store.deleteFeature": "cf4666c7893500a2f5518a49bc5b80a9eb06fc087bbb68b8a4d3c73f1ea22a46",
+      "main:removed:Store.updateFeature": "646667cb5ddcf64781a1eaaedcefe570bbc0c068b3d1365ca1f7a31d5f662130"
+    },
+    "108": {
+      "store:added:Store.createRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "109": {
+      "store:added:Store.writeRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "110": {
+      "store:added:Store.createRowsFromPages": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "111": {
+      "store:added:Store.releaseDeletedRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "112": {
+      "store:added:Store.clear": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "113": {
+      "store:added:Store.newOperationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "114": {
+      "store:added:LayerRowOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerRowOptions.thirdValue": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerRowOptions.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:Store.createLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "115": {
+      "store:added:Store.deleteLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "116": {
+      "store:added:Store.createGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:Store.updateGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreGroup.orderKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.getGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.listGroups": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "117": {
+      "store:added:Store.deleteGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "118": {
+      "main:removed:Store.reorderInGroup": "668dfe6e629f378a98b07990cb2b0edb319971fcf5ed07bd4b7eb8ebd03fdd49",
+      "main:removed:Store.reorderInLayer": "e08de45d43190858e95e1574efe8da926310d46551a02263f5501bb2a0b0b962"
+    },
+    "119": {
+      "main:removed:Store.endEditing": "2158163ebca2bc157a038c9e5312c23a4022c6d349268d63b938ed9698c71585",
+      "main:removed:Store.setInteractionLock": "c3c49944d7fd9b0e2bf16ee09a9425017308875d545c891a3fe64ec66c0e0a46",
+      "main:removed:Store.setLocallyHidden": "6788d7fa0f52d5b1d3bac1ec8947ff45b42cb02c8430262000538c85dfcf4013",
+      "main:removed:Store.setMode": "eb001180a5f17c51f827ee8ced31f5b78d400df83094025e687386cedeecae30",
+      "main:removed:Store.setReadOnly": "661287166143e84fe483c71f6194691250bc2094a03ecec5037c25234f65b824",
+      "main:removed:Store.setSelectedVertices": "610c0d16885bbc329d116cf3f07861aba8bc712cd4f1d32e6af9adeb4e928b55",
+      "main:removed:Store.setSelection": "d5ae97971ec5cac78ccf4e332f1224748c725a87e5dff0d3f3d0d33634d1819f",
+      "main:removed:Store.startEditing": "51b5d0fbdd5cc5d48b4d8f59325b57b847b442537a35992970ddca9ab452d0ef",
+      "main:removed:StoreView.getEditingIds": "c858ea6e7f597bafc9c21ec94d9717f980e2b88f500fafc131725dc97b87b165",
+      "main:removed:StoreView.getMode": "85565364024a70d61caf3dc46134edc781eb114819b63d228643f2a930bdd947",
+      "main:removed:StoreView.getSelection": "62a913716d9257801a7650c417d8b252a3ec3f0754228370e008a64eeecef5b8",
+      "main:removed:StoreView.getVertexSelection": "622df1957cd77953184e560702767bd1e3295b4d554f2c17c811cb114f6ae8a4",
+      "main:removed:StoreView.isHidden": "89f7b6185db9a9cb2d2388deea4ab2ab64d8431aa1f40caf95b4cd4b320c4888",
+      "main:removed:StoreView.isInteractionLocked": "a04fe9b7b49943c25066815eab8eb4a9e1f2cc62c397af75c057e59c1f34e5a4",
+      "main:removed:StoreView.isReadOnly": "72ad2765eaf1e3f55ce667f4429c9f69a1acb4e3a8eceffd8292a8eda2a979b5",
+      "main:removed:StoreView.listHidden": "754ae16adea10b2bc91a0b175c160c42c72e34faf0fe4b9084419a2323565a30"
+    },
+    "120": {
+      "main:removed:Store.getMaxNameNumber": "cf6ee1c217428e3f865b2dc13caffb9587426a6403df40d244d0fba795e72eff",
+      "main:removed:Store.recordNameNumber": "73d296d1fd274967463f6e5ce1e799b1befb985499510dd8849d765fe1b4c184"
+    },
+    "121": {
+      "store:added:FeatureTables": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.findGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.findRow": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.get": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.getGroupId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.getRowId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.getRowRef": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.getValuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.readValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:FeatureTables.scan": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.tables": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "122": {
+      "store:added:LayerTableView": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.countGroupMembers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.getDrawnRowsRevision": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.getPointPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.getRowBBox": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.getRowProperty": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.getRowStyle": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.getRowType": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.itemCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.layerId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.listGroupMembers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.listItemRefs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.listRowRefs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerTableView.rowCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "123": {
+      "store:added:ItemRefs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:ItemRefs.kinds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:ItemRefs.refs": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowCursor": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowCursor.next": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowRef": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:TableScanOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:TableScanOptions.batchSize": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:TableScanOptions.bbox": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:TableScanOptions.layerIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "124": {
+      "store:added:StoreView.listPropertyKeys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "125": {
+      "store:added:Store.updateLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.getLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreView.listLayers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "126": {
+      "store:added:StoreView.subscribe": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "127": {
+      "store:added:StoreView.transact": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "128": {
+      "store:added:StoreTransactOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreTransactOptions.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreTransactOptions.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreTransactOptions.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "129": {
+      "store:added:FeatureRowField": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "130": {
+      "store:added:RowValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowValues.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowValues.fields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowValues.geometry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowValues.rows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "131": {
+      "store:added:GEOMETRY_TYPES": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:GeometryColumn": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:GeometryColumn.coordinates": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:GeometryColumn.partStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:GeometryColumn.positionStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:GeometryColumn.ringStarts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:GeometryColumn.types": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:GeometryColumn.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "132": {
+      "store:added:NewRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:NewRows.fields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:NewRows.geometry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:NewRows.ids": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "133": {
+      "store:added:StoreChange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.deletedRowsToken": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.files": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.files.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.files.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.groups": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.groups.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.groups.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.groups.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.layers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.layers.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.layers.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.layers.orderChanged": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.layers.orderChanged.order": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.layers.orderChanged.previous": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.layers.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.metadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.metadata.metadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.metadata.previous": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.reset": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.rows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "134": {
+      "store:added:LayerRowsChange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerRowsChange.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerRowsChange.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerRowsChange.fields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:LayerRowsChange.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowsChange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowsChange.layers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "135": {
+      "store:added:DeletedRowsToken": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:DeletedRowsToken{0}.[deletedRowsTokenBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:SubscribeOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:SubscribeOptions.keepDeletedRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:SubscribeOptions.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:deletedRowsTokenBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "136": {
+      "store:added:RowSpatialIndexing": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowSpatialIndexing.rowBox": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowSpatialIndexing.sortKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreOptions.spatialIndexing": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreOptions.worker": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:createStore": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "138": {
+      "store:added:RowInput": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.geometry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.groupId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.id": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.locked": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.orderKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.properties": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.style": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.type": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowInput.visible": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPage": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPage.[rowPageBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPage.length": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilder.addRow": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilder.finish": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilder.length": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilderOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilderOptions.groups": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilderOptions.spatialIndexing": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageBuilderOptions.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageMergeTask": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageMergeTask.[rowPageMergeTaskBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageWorker": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageWorker.build": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:RowPageWorker.merge": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:createRowPageBuilder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:getRowPageTransferList": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:mergeRowPages": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:rowPageBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:rowPageMergeTaskBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "140": {
+      "store:added:StoreView": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "143": {
+      "store:added:(entry)": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "150": {
+      "geometry:doc:GeometryError": "30fea0fb5b5309266c2e382ea6d06c942decf89ac65d1d71a8e8995b145927be",
+      "geometry:doc:along": "ef7a8e4a92b9819ddc8269a3e29f7e25aedb89c2e82c7518fad3d556cfb8fbb2",
+      "geometry:doc:area": "e8f23733a004284d186dd7f1f0f753d27287cc044a06911c32a20449d1a72fcc",
+      "geometry:doc:bbox": "78e732a078c35fe11ca98972d821b75def8d4533e71275cb9fd600343473a17f",
+      "geometry:doc:bearing": "f82df6c97f114c7e4fc4b71d639b351fbc1f1ad8706e2c97d9279fc7b2589e7c",
+      "geometry:doc:buffer": "9b7afea672fbda91aa11b4d507c741c778a16be6db8807d73457cc8534e7414e",
+      "geometry:doc:centroid": "425040b625b194e13a3b658a0ac97f744f9ae57c6ae6be56e5174c8af2443c45",
+      "geometry:doc:circle": "dd66c8fa7f2fd003cb4a2ab0160b797baace0826edb6a885786786764accbe87",
+      "geometry:doc:contains": "462076284885dc6c77c41d78f86d309ce92a7c2e1194705b03e7205679c7bcd4",
+      "geometry:doc:destination": "ec3a3d0e1399aac3474e6a177e652cc2bea5082c394affebf4730f8fa5b66bec",
+      "geometry:doc:difference": "197c1a97c03bb5e2364f9abfc66ccb61b0487becc050a08d90ddbf2dd30dd06e",
+      "geometry:doc:distance": "b273a8cda9f6ee30beeff0eedd1f3394c9b452bed2a478ee8df2689071041acf",
+      "geometry:doc:intersection": "0c70925a2ed9d6c0d0a98bd1ab167a28e0d0919d7a6c9927968f5b421a9f5d9a",
+      "geometry:doc:length": "9f4e48f7d1d7275feaee0aaab03fa9e81fa384ab651e2d021b6d98cac5e9450f",
+      "geometry:doc:makeValid": "8b0144b9c090841de0fe176a6ba18edb1a51dc42786e09676dbe5b9d522ae74d",
+      "geometry:doc:midpoint": "da37e70e45d1a4bde2f6e46cbe683dbbea746719271f1848b75629d91e7c417e",
+      "geometry:doc:nearestPointOnLine": "ad0d4c30d58623253c728e31d1962785b54152ab1066857de5a34f72efcf6ec3",
+      "geometry:doc:overlaps": "34a2121be027f939e6c4ec2bb92f6e2f7ba9319f4e5f572de517edc9c2695139",
+      "geometry:doc:perimeter": "2e80c7b7865dff803a3859eee2e46f2335f9bbfff39a595a7399710d5af394b2",
+      "geometry:doc:pointInPolygon": "0ffa7838b8d7ac3d8796408a47570e7dc6854d5a93a0cb97bb943f2bc684713d",
+      "geometry:doc:pointOnSurface": "026e91f7ca1c2d078b889a5097bb77de6cdd82b854fd2f33d3bf40384b00768c",
+      "geometry:doc:rewind": "123b3a60b3bedeec8443f1b943ff008018f31ec77a3e4ceee49861e1e301c42c",
+      "geometry:doc:simplify": "663003adef7f7fd9baa81a890dfecd52bfb5786745ff90533e41c2c0e819542d",
+      "geometry:doc:split": "1d1989e6376d4e0369a9a4cd9ccb7f8c5b5cb5c7e939ff0c45ad2122e1d4d73d",
+      "geometry:doc:union": "4c39a578dea6781bcaa390038717609bbde4c852d25625190255e2ecf4c28e2f",
+      "geometry:sig:GeometryErrorCode": "1cbebf6f6ba4269db7b9d3f6f7da7577f3fa3936af639dd5191eabc9860fbb88"
+    },
+    "151": {
+      "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"
+    },
+    "152": {
+      "main:added:RuntimeOptions.clickTolerancePx": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:RuntimeOptions.dragThresholdPx": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:removed:RuntimeOptions.clickTolerance": "1d43be5e0cd85619cf8e8717068abe8e607998ec8ab4954b321caa4dc475c70a",
+      "main:removed:RuntimeOptions.dragThreshold": "ff5b646b7d1363ab51904190c7999a55c746c7ac61e2bf855d9d72a128b92b5f"
+    },
+    "153": {
+      "main:added:DragResource": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DragResource.remove": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:Draw.drag": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "154": {
+      "main:added:FeaturesCollection.getProperty": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "156": {
+      "main:added:SketchEdit{1}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit{1}.vertices": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:VertexPlacement": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:VertexPlacement.added": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:VertexPlacement.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:VertexPlacement.position": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:VertexPlacement.vertex": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "157": {
+      "main:added:Sketch.isBeingWritten": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchInput.isBeingWritten": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "158": {
+      "main:doc:CompanionProvider.draw": "b126c6263e97534f0ee4ff62725cbe26165f95bcfd074ef90283a048f3af3fa1",
+      "main:doc:FeatureRenderer.draw": "f0da635993c2626f987fb9d9d27feb54fced1d503faa3d90edc97db23844fd20",
+      "main:doc:FeatureTypeDefinition.bounds": "c37bf13f0f126017e5ecd10295b45b8ac58d6238abfb041c035855a8d539053e",
+      "main:doc:FeatureTypeDefinition.boxSelect": "b89f2bb08fed711c9e26575e9366802a1cc60a90b3c304b3b18152dd158ab192",
+      "main:doc:FeatureTypeDefinition.handles": "d6b9237ff6886c01bc1ce44d7bb26423c86d77a874b23c3000c7d879f5363458",
+      "main:doc:FeatureTypeDefinition.hitTest": "303041e3ce73c235450812ed54ab497279688e9db0b30e288e86dcd49d6a3871",
+      "main:doc:FeatureTypeDefinition.outline": "1b6995cb919f4194741ba090d5250e1c46f882ea19374bdf2fd4b9250b256f2b",
+      "main:doc:FeatureTypeDefinition.snapCandidates": "a84339ef5315ff0ffdac5ae9a168a2a50cc2df4df0b0ba391d8885c69b21d245",
+      "main:doc:ModeContext.hitTest": "8227ea0be60d234129c99c0aef3b6ace4e752cc41d53d49c331f3710ec484887",
+      "main:doc:ModeContext.snap": "9bad42aa55b213e2388387e1d8c608be30cb8634a256654eea0eef6f78483fe1",
+      "main:doc:ScreenContext.bounds": "a990f54c719a7f39a05d8675ae586fa3853fbe3a26e97a0a5a404d90e2a38311",
+      "main:doc:ScreenContext.outline": "1f834ad50703e47d718cdcb7cd47e75b5abf22e714fdb386dc110f4e30df4673"
+    },
+    "159": {
+      "main:doc:VertexRef": "d7666c63543d7762774c2a28b61dd94bfda6f907f2b2c98f5ff9dd5204817689",
+      "main:doc:VertexSelectionResource": "96905e3cbd56a18f53296648244ed30d621dbdba88cbfaf2620bd1d3457b411d"
+    },
+    "160": {
+      "main:added:DocumentResource.stringify": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "161": {
+      "main:added:DrawEvents.feature.created.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.feature.deleted.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:DrawEvents.feature.moved.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:DrawEvents.feature.created": "05c07f12f6f232e41812e279d8c278b18e6ddbaa9b2f504f8a1b41144cf02734"
+    },
+    "162": {
+      "main:doc:NameGenerator": "37ab835d682a911f1bd3ef1e10883ba4cc05056de63ef090975410bfc6629557"
+    },
+    "163": {
+      "store:added:validateRowValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "164": {
+      "store:added:createOrderKeyBetween": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "165": {
+      "store:added:FeatureTables.getThirdValue": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "167": {
+      "store:added:Store.setMetadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "168": {
+      "store:added:LayerTableView.listDrawnRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "171": {
+      "main:added:DrawEvents.drag.changed.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit{2}.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:added:SketchEdit{2}.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "172": {
+      "main:added:Metadata.[index]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "main:doc:Metadata": "dd83b18ce737274f65647ede09ff7f5a10bfb2a3f3946ed2c0a4ef640ec0acac",
+      "main:doc:MetadataResource.get": "e284ea27a2e4f162423e15313d968534c5c46991b856d4f9f00ab7a65124d709",
+      "main:doc:MetadataResource.update": "2c5831df74e2bdde46a96f28aa53190e516cec4e4ea3fc151f0d009ae69252aa"
+    },
+    "173": {
+      "main:added:DocumentChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "store:added:StoreChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    }
   }
 }
