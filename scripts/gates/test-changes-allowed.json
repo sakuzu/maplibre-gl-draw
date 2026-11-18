@@ -1,4 +1,10 @@
 {
   "description": "The test files a piece of work may change or delete: the path, the number of the change it follows from (or the work that names the internal module it deletes), and the work that changes it. Only the maintainer adds a row, copied from the description of the work.",
-  "allowed": []
+  "allowed": [
+    {
+      "path": "src/test-utils.ts",
+      "change": "the description of the work names this file as a place to add tools to (the tools of counting work); the tests themselves do not change",
+      "unit": "the base of the tests that count work"
+    }
+  ]
 }
