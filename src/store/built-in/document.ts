@@ -135,8 +135,12 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing) {
     nextGroupRef: 1,
     /** The amounts of work done */
     counts,
-    /** The transactions and the listeners */
-    changes: createChanges(counts),
+    /** The transactions, the listeners, and the deleted rows kept for them */
+    changes: createChanges(
+      counts,
+      rowWrites,
+      (layerId) => (layerPositions.get(layerId) ?? PLANE_POSITIONS).valuesPerPosition,
+    ),
   };
 }
 

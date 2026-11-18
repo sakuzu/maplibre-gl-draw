@@ -23,6 +23,13 @@
  * value before the transaction with the value after it.
  *
  * A change does not carry the values written: they are read from the tables while it is told.
+ * What a listener asked for besides the rows it is given in its own change: the values the rows
+ * had before (`previousValues`, read only for a transaction a listener asked them for, see
+ * `values-before.ts`), and a token that keeps the rows the change deleted (`keepDeletedRows`, see
+ * `kept-rows.ts`). Whether a listener asks for the values before is asked once per transaction,
+ * before it writes; the listeners that keep the deleted rows are those subscribed when it starts.
+ * The listeners share the arrays of the values before, and the tokens one entry that keeps the
+ * rows: nothing is copied per listener.
  *
  * @internal
  */
@@ -31,14 +38,26 @@ import type { TableRowsChange, RowsChange as TablesRowsChange } from '@sakuzu/ka
 import type { UpdateSource } from '../../api/extension/store.js';
 import type { FileData, Layer, Metadata } from '../../api/model.js';
 import { DrawError } from '../../shared/errors.js';
-import { countWork, type WorkCounts } from '../../shared/work-counts.js';
+import { countWork, createWorkCounts, type WorkCounts } from '../../shared/work-counts.js';
+import { createKeptRows, type KeptRows, markDeletion, settleKept } from './kept-rows.js';
 import type {
+  DeletedRowsToken,
   FeatureRowField,
   LayerRowsChange,
+  RowValues,
   StoreChange,
   StoreGroup,
   StoreTransactOptions,
+  SubscribeOptions,
 } from './types.js';
+import {
+  createValuesBefore,
+  type ReadBefore,
+  readBeforeWrite,
+  shareValuesBefore,
+  type ValuesBefore,
+  valuesBeforeOf,
+} from './values-before.js';
 
 /** The rows of one layer a transaction wrote, being folded */
 interface LayerFold {
@@ -99,11 +118,34 @@ interface Transaction {
   readonly hasMoreParts: boolean;
   readonly stopped: boolean;
   readonly pending: PendingChange;
+  /** The listeners whose changes of this transaction carry the values before */
+  readonly asking: ReadonlySet<Subscription>;
+  /** The listeners that keep the rows this transaction deletes */
+  readonly keeping: readonly Subscription[];
+  /** The values read before the writes (null when no listener asked for them) */
+  readonly before: ValuesBefore | null;
+  /** The token of the tables the writes give, to keep what they delete (when a listener keeps it) */
+  readonly tablesToken: number | undefined;
+  /** The rows the writes gave the token of the tables */
+  readonly keptRows: Int32Array[];
 }
 
 /** A listener, as it subscribed */
 interface Subscription {
   readonly listener: (change: StoreChange) => void;
+  /** Whether a change of a source and an operation carries the values before (null: never) */
+  readonly previousValues: ((source: UpdateSource, operationId: number) => boolean) | null;
+  readonly keepDeletedRows: boolean;
+}
+
+/**
+ * The tokens of the tables that keep the rows a write deletes: a new one, and letting go of one
+ *
+ * @internal
+ */
+export interface TablesTokens {
+  createRestoreToken(): number;
+  release(token: number): void;
 }
 
 /**
@@ -120,6 +162,8 @@ export interface Changes {
   transaction: Transaction | null;
   /** Whether the listeners are being told a change */
   notifying: boolean;
+  /** Whether a listener is being asked whether its change carries the values before */
+  asking: boolean;
   /** The number the next operation is given */
   nextOperation: number;
   /**
@@ -129,6 +173,16 @@ export interface Changes {
   readonly openOperations: Set<number>;
   /** The numbers of the work of the Store */
   readonly counts: WorkCounts;
+  /** The numbers of the work done for the values before only (counted in `counts` as well) */
+  readonly beforeCounts: WorkCounts;
+  /** The deleted rows kept, and the tokens given */
+  readonly kept: KeptRows;
+  /** The tokens of the tables of the rows that keep deleted rows */
+  readonly tables: TablesTokens;
+  /** How the values before are read (given by the writes of the Store) */
+  readBefore: ReadBefore | null;
+  /** The number of values of a position of a layer */
+  readonly valuesPerPosition: (layerId: string) => number;
 }
 
 /**
@@ -136,15 +190,25 @@ export interface Changes {
  *
  * @internal
  */
-export function createChanges(counts: WorkCounts): Changes {
+export function createChanges(
+  counts: WorkCounts,
+  tables: TablesTokens,
+  valuesPerPosition: (layerId: string) => number,
+): Changes {
   return {
     subscriptions: [],
     depth: 0,
     transaction: null,
     notifying: false,
+    asking: false,
     nextOperation: 1,
     openOperations: new Set(),
     counts,
+    beforeCounts: createWorkCounts(),
+    kept: createKeptRows(),
+    tables,
+    readBefore: null,
+    valuesPerPosition,
   };
 }
 
@@ -178,7 +242,10 @@ export function newOperationId(changes: Changes): number {
   return id;
 }
 
-/** Throws unless the Store may be written now: not while its listeners are told a change */
+/**
+ * Throws unless the Store may be written now: not while its listeners are told a change, nor
+ * while one is asked whether its change carries the values before
+ */
 function checkNotNotifying(changes: Changes, what: string): void {
   if (changes.notifying) {
     throw new DrawError(
@@ -186,6 +253,37 @@ function checkNotNotifying(changes: Changes, what: string): void {
       `${what}: the Store is not written while its listeners are told a change; write after it, in a task of your own`,
     );
   }
+  if (changes.asking) {
+    throw new DrawError(
+      'invalidState',
+      `${what}: the Store is not written while a listener is asked whether its changes carry the values before`,
+    );
+  }
+}
+
+/**
+ * The listeners whose changes of a transaction carry the values before, each asked once, before
+ * the transaction writes; a function that throws is reported, and answers no
+ */
+function askingOf(changes: Changes, source: UpdateSource, operationId: number): Set<Subscription> {
+  const asking = new Set<Subscription>();
+  changes.asking = true;
+  try {
+    for (const subscription of changes.subscriptions) {
+      const asks = subscription.previousValues;
+      if (!asks) continue;
+      let answer = false;
+      try {
+        answer = asks(source, operationId);
+      } catch (error) {
+        console.error('Error in a listener of the Store asked for the values before:', error);
+      }
+      if (answer) asking.add(subscription);
+    }
+  } finally {
+    changes.asking = false;
+  }
+  return asking;
 }
 
 /** Throws unless the options of a transaction are options */
@@ -252,13 +350,21 @@ export function transact<T>(
   }
   checkOptions(options);
   const givenOperation = options?.operationId !== undefined;
+  const operationId = givenOperation ? (options?.operationId as number) : newOperationId(changes);
+  const asking = askingOf(changes, source, operationId);
+  const keeping = changes.subscriptions.filter((subscription) => subscription.keepDeletedRows);
   const transaction: Transaction = {
     source,
-    operationId: givenOperation ? (options?.operationId as number) : newOperationId(changes),
+    operationId,
     givenOperation,
     hasMoreParts: options?.hasMoreParts ?? false,
     stopped: options?.stopped ?? false,
     pending: emptyPending(),
+    asking,
+    keeping,
+    before: asking.size > 0 ? createValuesBefore() : null,
+    tablesToken: keeping.length > 0 ? changes.tables.createRestoreToken() : undefined,
+    keptRows: [],
   };
   changes.transaction = transaction;
   changes.depth = 1;
@@ -297,15 +403,111 @@ function pendingOf(changes: Changes): PendingChange {
 }
 
 /**
+ * Reads the values rows have before a write of the transaction under way writes the fields given,
+ * when a listener asked for the values before
+ *
+ * @internal
+ */
+export function readValuesBefore(
+  changes: Changes,
+  rows: Int32Array,
+  fields: Iterable<FeatureRowField>,
+): void {
+  const before = changes.transaction?.before;
+  const read = changes.readBefore;
+  if (before && read) readBeforeWrite(before, read, rows, fields);
+}
+
+/**
+ * Whether the transaction under way reads the values before
+ *
+ * @internal
+ */
+export function readsValuesBefore(changes: Changes): boolean {
+  return (changes.transaction?.before ?? null) !== null;
+}
+
+/**
+ * The token of the tables the writes of the transaction under way give, to keep the rows they
+ * delete (undefined when no listener keeps them)
+ *
+ * @internal
+ */
+export function tablesTokenOf(changes: Changes): number | undefined {
+  return changes.transaction?.tablesToken;
+}
+
+/**
+ * Marks the deletion a write of the transaction under way wrote: a row written not deleted is not
+ * kept any more, and a row deleted is kept by the token of the tables of the transaction
+ *
+ * @internal
+ */
+export function markDeletionWritten(changes: Changes, rows: Int32Array, deleted: Uint8Array): void {
+  const tablesToken = changes.transaction?.tablesToken;
+  markDeletion(changes.kept, rows, deleted, tablesToken);
+  if (tablesToken !== undefined) changes.transaction?.keptRows.push(rows);
+}
+
+/** Throws unless the sources given are strings, and gives a set of them */
+function sourcesOf(what: string, sources: unknown): Set<UpdateSource> {
+  if (!Array.isArray(sources) || sources.some((source) => typeof source !== 'string')) {
+    throw new DrawError('invalidInput', `subscribe: ${what} is not an array of sources`);
+  }
+  return new Set(sources);
+}
+
+/** Whether the changes of a source and an operation carry the values before, as asked */
+function previousValuesOf(
+  previousValues: SubscribeOptions['previousValues'],
+): Subscription['previousValues'] {
+  if (previousValues === undefined || previousValues === false) return null;
+  if (previousValues === true) return () => true;
+  if (typeof previousValues === 'function') {
+    return (source, operationId) => previousValues({ source, operationId }) === true;
+  }
+  if (Array.isArray(previousValues)) {
+    const sources = sourcesOf('previousValues', previousValues);
+    return (source) => sources.has(source);
+  }
+  if (typeof previousValues === 'object' && previousValues !== null) {
+    const sources = sourcesOf(
+      'previousValues.except',
+      (previousValues as { except?: unknown }).except,
+    );
+    return (source) => !sources.has(source);
+  }
+  throw new DrawError(
+    'invalidInput',
+    'subscribe: previousValues is neither a boolean, sources, { except } nor a function',
+  );
+}
+
+/**
  * Subscribes a listener (see `StoreView.subscribe`)
  *
  * @internal
  */
-export function subscribe(changes: Changes, listener: (change: StoreChange) => void): () => void {
+export function subscribe(
+  changes: Changes,
+  listener: (change: StoreChange) => void,
+  options?: SubscribeOptions,
+): () => void {
   if (typeof listener !== 'function') {
     throw new DrawError('invalidInput', 'subscribe: the listener is not a function');
   }
-  const subscription: Subscription = { listener };
+  if (options !== undefined && (typeof options !== 'object' || options === null)) {
+    throw new DrawError('invalidInput', 'subscribe: the options are not an object');
+  }
+  const keepDeletedRows = options?.keepDeletedRows ?? false;
+  if (typeof keepDeletedRows !== 'boolean') {
+    throw new DrawError('invalidInput', 'subscribe: keepDeletedRows is not a boolean');
+  }
+  const subscription: Subscription = {
+    listener,
+    previousValues: previousValuesOf(options?.previousValues),
+    keepDeletedRows,
+  };
   changes.subscriptions.push(subscription);
   return () => {
     const at = changes.subscriptions.indexOf(subscription);
@@ -355,8 +557,16 @@ function takeFrom(
   return null;
 }
 
-/** Folds the rows one write of the tables wrote in one table into the writes before it */
-function foldTable(pending: PendingChange, layerId: string, written: TableRowsChange): void {
+/**
+ * Folds the rows one write of the tables wrote in one table into the writes before it: a deleted
+ * row brought back, which the tables tell as created, is updated
+ */
+function foldTable(
+  pending: PendingChange,
+  layerId: string,
+  written: TableRowsChange,
+  broughtBack?: ReadonlySet<number>,
+): void {
   let fold = pending.rows.get(layerId);
   if (!fold) {
     fold = { parts: [], sets: null, fields: new Set() };
@@ -373,7 +583,13 @@ function foldTable(pending: PendingChange, layerId: string, written: TableRowsCh
     for (const [otherId, other] of pending.rows) if (otherId !== layerId) others.push(other);
   }
   const { created, updated, deleted } = written;
-  if (fold.parts && updated.length === 0 && deleted.length === 0 && !deletedIn(others)) {
+  if (
+    fold.parts &&
+    updated.length === 0 &&
+    deleted.length === 0 &&
+    !broughtBack &&
+    !deletedIn(others)
+  ) {
     if (created.length > 0) fold.parts.push(created);
     return;
   }
@@ -383,7 +599,7 @@ function foldTable(pending: PendingChange, layerId: string, written: TableRowsCh
     if (!sets.created.delete(row)) sets.deleted.add(row);
   }
   for (const row of created) {
-    if (sets.deleted.delete(row)) sets.updated.add(row);
+    if (sets.deleted.delete(row) || broughtBack?.has(row)) sets.updated.add(row);
     else if (others.length > 0 && takeFrom(others, row, ['deleted']) !== null)
       sets.updated.add(row);
     else sets.created.add(row);
@@ -400,12 +616,17 @@ function foldTable(pending: PendingChange, layerId: string, written: TableRowsCh
 /**
  * Adds the rows a write of the tables wrote to the change of the transaction under way
  *
+ * @param broughtBack - The deleted rows the write brought back (none when it is left out)
  * @internal
  */
-export function addRows(changes: Changes, written: TablesRowsChange): void {
+export function addRows(
+  changes: Changes,
+  written: TablesRowsChange,
+  broughtBack?: ReadonlySet<number>,
+): void {
   if (written.tables.size === 0) return;
   const pending = pendingOf(changes);
-  for (const [layerId, rows] of written.tables) foldTable(pending, layerId, rows);
+  for (const [layerId, rows] of written.tables) foldTable(pending, layerId, rows, broughtBack);
 }
 
 /** The rows of a fold, joined */
@@ -734,14 +955,24 @@ function tell(changes: Changes, transaction: Transaction): void {
       if (open !== operationId) changes.openOperations.delete(open);
     }
   }
-  if (!changedDocument(change) && !(givenOperation && !hasMoreParts)) return;
+  const told = changedDocument(change) || (givenOperation && !hasMoreParts);
+  const listeners = told ? changes.subscriptions.slice() : [];
+  const tokens = keptFor(changes, transaction, change, listeners);
+  if (!told) return;
+  const before = valuesBeforeFor(changes, transaction, change);
   countWork(changes.counts, 'notifications');
   changes.notifying = true;
   try {
     // Every listener is told: one that throws is reported, and the ones after it still are
-    for (const subscription of changes.subscriptions.slice()) {
+    for (const subscription of listeners) {
+      let own = change;
+      if (before && transaction.asking.has(subscription)) {
+        own = { ...own, previousValues: shareValuesBefore(before, countsOf(changes)) };
+      }
+      const token = tokens?.get(subscription);
+      if (token !== undefined) own = { ...own, deletedRowsToken: token };
       try {
-        subscription.listener(change);
+        subscription.listener(own);
       } catch (error) {
         console.error('Error in a listener of the Store:', error);
       }
@@ -749,4 +980,59 @@ function tell(changes: Changes, transaction: Transaction): void {
   } finally {
     changes.notifying = false;
   }
+}
+
+/** Where the work for the values before is counted: the numbers of the Store, and its own */
+function countsOf(changes: Changes): readonly WorkCounts[] {
+  return [changes.counts, changes.beforeCounts];
+}
+
+/**
+ * Settles what the token of the tables of a transaction keeps: the rows its change deleted, for
+ * the listeners told that keep them, each given a token (none for a change with `reset`)
+ */
+function keptFor(
+  changes: Changes,
+  transaction: Transaction,
+  change: StoreChange,
+  listeners: readonly Subscription[],
+): Map<Subscription, DeletedRowsToken> | null {
+  const { tablesToken } = transaction;
+  if (tablesToken === undefined) return null;
+  const keeping = transaction.keeping.filter((subscription) => listeners.includes(subscription));
+  const deleted: Int32Array[] = [];
+  if (!change.reset) {
+    for (const rows of change.rows?.layers.values() ?? []) {
+      if (rows.deleted.length > 0) deleted.push(rows.deleted);
+    }
+  }
+  const tokens = settleKept(
+    changes.kept,
+    tablesToken,
+    transaction.keptRows,
+    deleted,
+    keeping.length,
+    (token) => changes.tables.release(token),
+  );
+  if (tokens.length === 0) return null;
+  return new Map(keeping.map((subscription, i) => [subscription, tokens[i]]));
+}
+
+/** The values before of the change of a transaction a listener asked them for */
+function valuesBeforeFor(
+  changes: Changes,
+  transaction: Transaction,
+  change: StoreChange,
+): Map<string, RowValues> | null {
+  const { before } = transaction;
+  const read = changes.readBefore;
+  if (!before || !read || !change.rows) return null;
+  const values = valuesBeforeOf(
+    before,
+    read,
+    change.rows.layers,
+    changes.valuesPerPosition,
+    countsOf(changes),
+  );
+  return values.size > 0 ? values : null;
 }

@@ -21,6 +21,12 @@
  * the fields under the names of the columns, and the geometries as the columns of their shapes.
  * Nothing is made per row.
  *
+ * While a listener asks for the values before, each write of rows reads the values its rows have
+ * before it writes them (`values-before.ts`); while a listener keeps the deleted rows, each write
+ * gives the token of the tables of its transaction, and marks the rows it deleted and brought back
+ * (`kept-rows.ts`). A deleted row is written only when something keeps it, and only to bring it
+ * back (`deleted` 0); its id stays in use while it is kept.
+ *
  * @internal
  */
 
@@ -41,12 +47,18 @@ import {
   addMetadata,
   addOrderChanged,
   addRows,
+  markDeletionWritten,
   newOperationId,
+  readsValuesBefore,
+  readValuesBefore,
   subscribe,
+  tablesTokenOf,
   transact,
   write,
 } from './changes.js';
 import { dimensionsOfPositions, positionsOf, type StoreDocument } from './document.js';
+import { readRowValues } from './feature-tables.js';
+import { forgetKept, isKept, releaseToken } from './kept-rows.js';
 import { shapeValuesOf } from './shape-values.js';
 import type {
   FeatureRowField,
@@ -203,11 +215,22 @@ export function storeWritesOf(
   | 'getMetadata'
 > {
   const { changes, counts, rowWrites } = document;
+  const { kept } = changes;
 
-  /** Whether an id is that of a row that is not deleted */
-  const isLiveRow = (id: string): boolean => {
+  // The values before are read as the tables hold the rows, the deleted rows nothing keeps
+  // included, with their deletion
+  changes.readBefore = (rows, fields) =>
+    tables(() =>
+      readRowValues(document, rows, fields, { deleted: true, unkept: true }, [
+        counts,
+        changes.beforeCounts,
+      ]),
+    );
+
+  /** Whether an id is that of a row in use: a row that is not deleted, or a deleted row kept */
+  const isRowInUse = (id: string): boolean => {
     const found = tables(() => rowWrites.lookup(id));
-    return found !== undefined && !found.deleted;
+    return found !== undefined && (!found.deleted || isKept(kept, found.row));
   };
 
   /**
@@ -252,13 +275,23 @@ export function storeWritesOf(
     return out;
   };
 
-  /** Writes values of rows to the tables, and adds what they wrote to the change */
+  /** The fields a write of rows writes, for the values before: its fields, and the geometry */
+  const fieldsWritten = (
+    fields: ReadonlyMap<FeatureRowField, readonly unknown[]>,
+    geometry: GeometryColumn | undefined,
+  ): FeatureRowField[] => [...fields.keys(), ...(geometry ? (['geometry'] as const) : [])];
+
+  /**
+   * Writes values of rows to the tables, and adds what they wrote to the change: the rows brought
+   * back are updated, and the rows deleted and brought back are marked as kept or not
+   */
   const writeTables = (
     rows: Int32Array,
     fields: ReadonlyMap<FeatureRowField, readonly unknown[]>,
     geometry: GeometryColumn | undefined,
     layerId: string,
     deleted: Uint8Array | undefined,
+    broughtBack?: ReadonlySet<number>,
   ): void => {
     const values: TablesRowValues = {
       rows,
@@ -273,8 +306,15 @@ export function storeWritesOf(
       }),
       ...(deleted && { deleted }),
     };
-    const written = tables(() => rowWrites.writeRows(values));
-    addRows(changes, written.rows);
+    const tablesToken = tablesTokenOf(changes);
+    const written = tables(() =>
+      rowWrites.writeRows(
+        values,
+        tablesToken === undefined ? undefined : { restoreToken: tablesToken },
+      ),
+    );
+    if (deleted) markDeletionWritten(changes, rows, deleted);
+    addRows(changes, written.rows, broughtBack);
     countWork(counts, 'rowsWritten', rows.length);
     countWork(counts, 'rowsTouched', rows.length);
   };
@@ -318,16 +358,22 @@ export function storeWritesOf(
         layerId === undefined ? 2 : positionsOf(document, layerId).valuesPerPosition;
       checkValues(what, rows, valuesPerPosition);
       if (ids.length === 0 || layerId === undefined) return true;
-      // The ids are those of no row and no group, and are not given twice
+      // The ids are those of no row in use and no group, and are not given twice
       const seen = new Set<string>();
+      let again = false;
       for (const id of ids) {
-        if (seen.has(id) || document.groups.has(id) || isLiveRow(id)) return false;
+        if (seen.has(id) || document.groups.has(id)) return false;
+        const found = tables(() => rowWrites.lookup(id));
+        if (found && (!found.deleted || isKept(kept, found.row))) return false;
+        // The id of a deleted row nothing keeps: the transaction may have deleted it
+        if (found) again = true;
         seen.add(id);
       }
       countWork(counts, 'objectsCreated');
       const column = idColumnOf(ids);
       countWork(counts, 'objectsCreated', 3);
       const refs = tables(() => rowWrites.allocateRowRefs(column));
+      if (again) readValuesBefore(changes, refs, fieldsWritten(fields, geometry as GeometryColumn));
       writeTables(refs, fields, geometry as GeometryColumn, layerId, undefined);
       return true;
     });
@@ -344,13 +390,25 @@ export function storeWritesOf(
         checkValues(what, values, 2);
         return true;
       }
-      // Where the rows are now: rows there, in one layer
+      // Where the rows are now: rows there, in one layer (a deleted row kept, to be brought back)
       const now = tables(() => document.rows.readValues(rows, ['parent', 'deleted']));
       countWork(counts, 'objectsCreated', 3);
       const parentsNow = now.fields.get('parent') ?? [];
       let layerId: string | undefined;
+      let broughtBack: Set<number> | undefined;
       for (let i = 0; i < rows.length; i++) {
-        if (now.deleted?.[i]) notFound(`${what}: no row has the reference ${rows[i]}`);
+        if (now.deleted?.[i]) {
+          if (!isKept(kept, rows[i])) {
+            notFound(`${what}: no row has the reference ${rows[i]}, or nothing keeps it deleted`);
+          }
+          if (!(deleted instanceof Uint8Array) || deleted[i] !== 0) {
+            notFound(
+              `${what}: the row ${rows[i]} is deleted; it is written only to be brought back (deleted 0)`,
+            );
+          }
+          broughtBack ??= new Set();
+          broughtBack.add(rows[i]);
+        }
         const layer = layerNamed(parentsNow[i]);
         if (layer === undefined) notFound(`${what}: no row has the reference ${rows[i]}`);
         if (layerId === undefined) layerId = layer;
@@ -382,7 +440,8 @@ export function storeWritesOf(
         }
       }
       checkValues(what, values, valuesPerPosition);
-      writeTables(rows, fields, geometry, layerNamed(parents?.[0]) ?? layer, deleted);
+      readValuesBefore(changes, rows, fieldsWritten(fields, geometry));
+      writeTables(rows, fields, geometry, layerNamed(parents?.[0]) ?? layer, deleted, broughtBack);
       return true;
     });
 
@@ -406,6 +465,10 @@ export function storeWritesOf(
           at += batch.length;
         }
         rows.set(layerId, refs);
+      }
+      // The values before: the deletion of every row there is
+      if (readsValuesBefore(changes)) {
+        for (const refs of rows.values()) readValuesBefore(changes, refs, []);
       }
       addCleared(changes, {
         rows,
@@ -431,6 +494,8 @@ export function storeWritesOf(
         );
       }
       tables(() => rowWrites.clear());
+      // The tables keep no deleted row any more: the tokens keep nothing
+      forgetKept(kept);
       document.layers.clear();
       document.groups.clear();
       document.files.clear();
@@ -497,13 +562,16 @@ export function storeWritesOf(
           refs.set(batch, at);
           at += batch.length;
         }
+        readValuesBefore(changes, refs, []);
+        const deleted = new Uint8Array(length).fill(1);
+        const tablesToken = tablesTokenOf(changes);
         const written = tables(() =>
-          rowWrites.writeRows({
-            rows: refs,
-            fields: new Map(),
-            deleted: new Uint8Array(length).fill(1),
-          }),
+          rowWrites.writeRows(
+            { rows: refs, fields: new Map(), deleted },
+            tablesToken === undefined ? undefined : { restoreToken: tablesToken },
+          ),
         );
+        markDeletionWritten(changes, refs, deleted);
         addRows(changes, written.rows);
         countWork(counts, 'rowsWritten', length);
       }
@@ -552,7 +620,7 @@ export function storeWritesOf(
         invalid(`${what}: the layer of the group is not an id`);
       if (!isId(group.orderKey)) invalid(`${what}: the key of the order is not a non-empty string`);
       const { id } = group;
-      if (document.groups.has(id) || document.layers.has(id) || isLiveRow(id)) return false;
+      if (document.groups.has(id) || document.layers.has(id) || isRowInUse(id)) return false;
       if (!document.layers.has(group.layerId)) return false;
       const created: StoreGroup = Object.freeze({ ...group });
       // A group the tables still know by its id (its deleted rows name it) keeps its reference
@@ -678,8 +746,10 @@ export function storeWritesOf(
     createFile,
     deleteFile,
     setMetadata,
+    releaseDeletedRows: (token) =>
+      releaseToken(kept, token, (tablesToken) => tables(() => rowWrites.release(tablesToken))),
     newOperationId: () => newOperationId(changes),
-    subscribe: (listener) => subscribe(changes, listener),
+    subscribe: (listener, options) => subscribe(changes, listener, options),
     transact: (fn, source, options) => transact(changes, fn, source, options),
   };
 }

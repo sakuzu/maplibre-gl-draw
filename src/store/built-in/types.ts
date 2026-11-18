@@ -119,6 +119,12 @@ export interface Store extends StoreView {
    */
   writeRows(values: RowValues): boolean;
   /**
+   * Lets go of the rows a token keeps ({@link StoreChange.deletedRowsToken}): they go for good, and
+   * their ids may be taken again. A token let go of, or one the Store does not know, keeps nothing.
+   * The Store itself, and the rows that are not deleted, are not touched.
+   */
+  releaseDeletedRows(token: DeletedRowsToken): void;
+  /**
    * Takes everything out of the document: the rows, the groups, the layers, the stacking order,
    * the files, and the metadata (which becomes `{}`). It is how the whole document is replaced
    * (read again from the start): write the new content after it, and the change of its
@@ -670,6 +676,23 @@ export interface StoreChange {
    * `tables.getRowId` while the change is delivered.
    */
   rows?: RowsChange;
+  /**
+   * The values the rows had before the transaction, by the id of the layer they are in (as
+   * `rows` lists them), so that the geometries of one layer have one number of values per
+   * position: for every field the transaction wrote (`parent` and `orderKey` included, and the
+   * keys of the style written), with `deleted` for the rows it deleted or brought back. A row
+   * created by the transaction has none. Only for a listener that asked for them, for this
+   * source ({@link SubscribeOptions.previousValues}).
+   */
+  previousValues?: ReadonlyMap<string, RowValues>;
+  /**
+   * What keeps the rows the transaction deleted (its own deletions, and the rows of a layer it
+   * deleted), so that writing them with `deleted` 0 brings them back where they were. The listener
+   * lets go of it with `store.releaseDeletedRows` once it no longer needs them. Only for a listener
+   * that asked for it (`keepDeletedRows`), and only when the transaction deleted rows; a change
+   * with `reset` has none.
+   */
+  deletedRowsToken?: DeletedRowsToken;
   /** The layers created, updated and deleted, and the change of the stacking order */
   layers?: {
     created?: Layer[];
@@ -730,8 +753,48 @@ export interface LayerRowsChange {
 }
 
 /** What the changes a listener receives carry besides the rows written ({@link StoreView.subscribe}). */
-// biome-ignore lint/suspicious/noEmptyInterface: what the changes carry besides the rows is added with the values before and the deleted rows kept
-export interface SubscribeOptions {}
+export interface SubscribeOptions {
+  /**
+   * Whether its changes carry the values the rows had before ({@link StoreChange.previousValues}):
+   * true for the changes of every source, the sources whose changes carry them (a listener that
+   * keeps its own edits leaves out `'remote'`), `{ except }` with the sources whose changes do
+   * not carry them (every other source, those an extension names included), or a function that
+   * answers for each change from its source and the number of its operation, as
+   * `DocumentSubscribeOptions.previousValues` of the main entry does (a caller that writes
+   * changes made outside the instance under operation numbers it took answers false for those,
+   * and true for the changes other callers write with the same source). The function is asked
+   * before the transaction writes, once per transaction; it answers at once and writes nothing.
+   * False when it is left out.
+   */
+  readonly previousValues?:
+    | boolean
+    | readonly UpdateSource[]
+    | {
+        readonly except: readonly UpdateSource[];
+      }
+    | ((change: { readonly source: UpdateSource; readonly operationId: number }) => boolean);
+  /**
+   * Whether the rows its changes delete are kept for it, until it lets go of them
+   * ({@link StoreChange.deletedRowsToken}). False when it is left out.
+   */
+  readonly keepDeletedRows?: boolean;
+}
+
+declare const deletedRowsTokenBrand: unique symbol;
+
+/**
+ * What keeps the rows one change deleted, so that they can be brought back, for the listener it
+ * was given to
+ * ({@link StoreChange.deletedRowsToken}).
+ *
+ * The rows stay as they were, with their values, their references and their places, until the
+ * listener lets go of them (`store.releaseDeletedRows(token)`); their ids stay in use until then.
+ * Written with `deleted` 0, they come back where they were. A listener that keeps a token for long
+ * keeps the memory of its rows: it lets go of the tokens it no longer needs.
+ */
+export type DeletedRowsToken = number & {
+  readonly [deletedRowsTokenBrand]: true;
+};
 
 /** The options of {@link createStore}. */
 export interface StoreOptions {

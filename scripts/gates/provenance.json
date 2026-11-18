@@ -196,6 +196,20 @@
       "from": "src/feature-table/feature-tables-writer.ts",
       "to": "src/store/built-in/writes.ts",
       "note": "only the check that the parent of a row names a layer or a group before anything is written, and the errors of the tables made into errors of the library; the shapes made per row and the changes of the order are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/store/row-values-before.ts",
+      "to": "src/store/built-in/values-before.ts",
+      "note": "only the values before of a transaction taken from the first read of each row and field of its writes, and one write given as it is; read only for a transaction a listener asked them for, held by the layer the change lists each row in, the geometries gathered as the columns of their positions in place of a shape per row, the fields a later write brings read for the rows read before, and the arrays shared by the listeners"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/store/memory/change-bus.ts",
+      "to": "src/store/built-in/changes.ts",
+      "note": "only the values before and the token that keeps the deleted rows carried by the change of a transaction, one token of the tables per transaction; asked per listener and per transaction, given to each listener in a change of its own with a token of its own over one counted entry, and the name DeletedRowsToken in place of restoreToken"
     }
   ]
 }

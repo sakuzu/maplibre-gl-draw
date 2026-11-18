@@ -219,6 +219,7 @@ const TABLE = [
 const STORE = [
   'createOrderKeyBetween',
   'createStore',
+  'DeletedRowsToken',
   'FeatureRowField',
   'FeatureTables',
   'GEOMETRY_TYPES',

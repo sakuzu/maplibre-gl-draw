@@ -11,6 +11,10 @@
  * whatever group, layer or place it moves to. The numbers of the work count the rows each read
  * touches and the objects it hands out.
  *
+ * A deleted row is read while something keeps it (see `kept-rows.ts`); one that nothing keeps is
+ * not there, though the tables hold it until its page is built again, and the references of the
+ * rows of a layer leave out every deleted row.
+ *
  * An error of the tables is thrown as a `DrawError` of the same code.
  *
  * @internal
@@ -19,9 +23,10 @@
 import { KasaneError, type RowField, type TableView } from '@sakuzu/kasane';
 import type { FeatureStyle, FeatureType } from '../../api/model.js';
 import { DrawError } from '../../shared/errors.js';
-import { countWork } from '../../shared/work-counts.js';
+import { countWork, type WorkCounts } from '../../shared/work-counts.js';
 import { layerOfParent, positionsOf, type StoreDocument } from './document.js';
 import { geometryColumnOf } from './geometry-column.js';
+import { isKept } from './kept-rows.js';
 import type {
   FeatureRowField,
   FeatureTables,
@@ -48,6 +53,9 @@ const PROPERTY_FIELD = 'properties:';
 /** The start of the fields of the keys of the style */
 const STYLE_KEY_FIELD = 'style:';
 
+/** The number of references of a layer read at a time to leave the deleted rows out */
+const ROW_BATCH = 1024;
+
 /**
  * Runs a read of the tables, throwing an error of the tables as a `DrawError` of the same code
  */
@@ -58,6 +66,117 @@ function read<T>(fn: () => T): T {
     if (error instanceof KasaneError) throw new DrawError(error.code, error.message, error);
     throw error;
   }
+}
+
+/**
+ * What a read of values of rows reads besides their fields
+ *
+ * @internal
+ */
+export interface ReadRowsOptions {
+  /** Whether the deletion is read (`RowValues.deleted`) */
+  readonly deleted?: boolean;
+  /**
+   * Whether a deleted row nothing keeps is read as the tables hold it, for the values before of a
+   * transaction (it is not there otherwise)
+   */
+  readonly unkept?: boolean;
+}
+
+/**
+ * The values the fields given have now, for rows of one layer (see `FeatureTables.readValues`)
+ *
+ * @param counts - Where the rows touched and the objects made are counted
+ * @internal
+ */
+export function readRowValues(
+  document: StoreDocument,
+  refs: Int32Array,
+  fields: readonly FeatureRowField[],
+  options: ReadRowsOptions,
+  counts: readonly WorkCounts[],
+): RowValues {
+  // The fields of the tables, in the order asked, and how each is read back
+  const asked: string[] = [];
+  let geometry = false;
+  for (const field of fields) {
+    const plain = PLAIN_FIELDS.get(field);
+    if (plain !== undefined) asked.push(plain);
+    else if (field === 'visible') asked.push('hidden');
+    else if (field === 'geometry') geometry = true;
+    else if (field.startsWith(PROPERTY_FIELD) && field.length > PROPERTY_FIELD.length) {
+      asked.push(field);
+    } else if (field.startsWith(STYLE_KEY_FIELD)) {
+      throw new DrawError(
+        'invalidInput',
+        `${JSON.stringify(field)}: a key of the style is not read on its own; read the field style`,
+      );
+    } else {
+      throw new DrawError('invalidInput', `${JSON.stringify(field)} is not a field of a row`);
+    }
+  }
+  // The deletion is read to leave out the deleted rows nothing keeps
+  const found = document.rows.readValues(
+    refs,
+    ['parent', ...asked, ...(geometry ? ['geometry'] : []), 'deleted'],
+    geometry ? { shapes: 'columns' } : undefined,
+  );
+  for (const list of counts) countWork(list, 'rowsTouched', refs.length);
+  const deletion = found.deleted ?? new Uint8Array(refs.length);
+  const shapes = found.shapes?.get('geometry');
+  if (!options.unkept) {
+    // A deleted row that nothing keeps is not there
+    for (let i = 0; i < refs.length; i++) {
+      if (deletion[i] === 0 || isKept(document.changes.kept, refs[i])) continue;
+      for (const list of found.fields.values()) (list as unknown[])[i] = undefined;
+      if (shapes) shapes.formIndex[i] = -1;
+    }
+  }
+
+  // The rows are those of one layer
+  let layerId: string | undefined;
+  const parents = found.fields.get('parent') ?? [];
+  for (let i = 0; i < parents.length; i++) {
+    const layer = layerOfParent(document, parents[i]);
+    if (layer === undefined) continue;
+    if (layerId === undefined) layerId = layer;
+    else if (layer !== layerId) {
+      throw new DrawError(
+        'invalidInput',
+        `readValues: the rows are in more than one layer (${JSON.stringify(layerId)} and ${JSON.stringify(layer)})`,
+      );
+    }
+  }
+
+  const out = new Map<FeatureRowField, readonly unknown[]>();
+  for (const field of fields) {
+    if (field === 'geometry' || out.has(field)) continue;
+    if (field === 'visible') {
+      const hidden = found.fields.get('hidden') ?? [];
+      const visible = new Array<unknown>(hidden.length);
+      for (let i = 0; i < hidden.length; i++) {
+        visible[i] = hidden[i] === undefined ? undefined : hidden[i] !== true;
+      }
+      out.set(field, visible);
+    } else {
+      out.set(field, found.fields.get(PLAIN_FIELDS.get(field) ?? field) ?? []);
+    }
+  }
+  const valuesPerPosition =
+    layerId === undefined ? 2 : positionsOf(document, layerId).valuesPerPosition;
+  const values: RowValues = {
+    rows: found.rows,
+    fields: out,
+    ...(geometry && {
+      geometry: geometryColumnOf(shapes, refs.length, valuesPerPosition),
+    }),
+    ...(options.deleted && { deleted: deletion }),
+  };
+  // The values, the map of the fields and an array per field; the geometry and its arrays
+  for (const list of counts) {
+    countWork(list, 'objectsCreated', 2 + out.size + (geometry ? 6 : 0));
+  }
+  return values;
 }
 
 /**
@@ -85,6 +204,31 @@ export function featureTablesOf(document: StoreDocument): FeatureTables {
     const touched = (refs: Int32Array): Int32Array => {
       countWork(counts, 'rowsTouched', refs.length);
       return refs;
+    };
+    /**
+     * `count` rows from the `start`-th one, the deleted rows left out: the references the tables
+     * hold, read a batch at a time from the first one to leave out the deleted rows among them,
+     * when there are deleted rows the tables still hold
+     */
+    const listRowRefs = (view: TableView, start: number, count: number): Int32Array => {
+      const held = view.rowCountWithDeleted;
+      const rowCount = view.rowCount;
+      if (held === rowCount) return touched(view.listRowRefs(start, count));
+      const from = Math.max(0, Math.floor(start));
+      const out = new Int32Array(Math.max(0, Math.min(Math.floor(count), rowCount - from)));
+      let seen = 0;
+      let at = 0;
+      for (let next = 0; next < held && at < out.length; next += ROW_BATCH) {
+        const batch = view.listRowRefs(next, ROW_BATCH);
+        const deleted = rows.readValues(batch, ['deleted']).deleted ?? new Uint8Array(0);
+        countWork(counts, 'rowsTouched', batch.length);
+        for (let i = 0; i < batch.length && at < out.length; i++) {
+          if (deleted[i]) continue;
+          if (seen >= from) out[at++] = batch[i];
+          seen += 1;
+        }
+      }
+      return at === out.length ? out : out.slice(0, at);
     };
     return {
       layerId,
@@ -129,7 +273,7 @@ export function featureTablesOf(document: StoreDocument): FeatureTables {
           if (row.layerId !== layerId) return undefined;
           return row.values.fields.get('style')?.[0] as Readonly<FeatureStyle> | undefined;
         }),
-      listRowRefs: (start, count) => read(() => touched(view.listRowRefs(start, count))),
+      listRowRefs: (start, count) => read(() => listRowRefs(view, start, count)),
       listItemRefs: (start, count): ItemRefs =>
         read(() => {
           const items = view.listItems(start, count);
@@ -144,81 +288,7 @@ export function featureTablesOf(document: StoreDocument): FeatureTables {
   };
 
   const readValues: FeatureTables['readValues'] = (refs, fields, options) =>
-    read(() => {
-      // The fields of the tables, in the order asked, and how each is read back
-      const asked: string[] = [];
-      let geometry = false;
-      for (const field of fields) {
-        const plain = PLAIN_FIELDS.get(field);
-        if (plain !== undefined) asked.push(plain);
-        else if (field === 'visible') asked.push('hidden');
-        else if (field === 'geometry') geometry = true;
-        else if (field.startsWith(PROPERTY_FIELD) && field.length > PROPERTY_FIELD.length) {
-          asked.push(field);
-        } else if (field.startsWith(STYLE_KEY_FIELD)) {
-          throw new DrawError(
-            'invalidInput',
-            `${JSON.stringify(field)}: a key of the style is not read on its own; read the field style`,
-          );
-        } else {
-          throw new DrawError('invalidInput', `${JSON.stringify(field)} is not a field of a row`);
-        }
-      }
-      const found = rows.readValues(
-        refs,
-        [
-          'parent',
-          ...asked,
-          ...(geometry ? ['geometry'] : []),
-          ...(options?.deleted ? ['deleted'] : []),
-        ],
-        geometry ? { shapes: 'columns' } : undefined,
-      );
-      countWork(counts, 'rowsTouched', refs.length);
-
-      // The rows are those of one layer
-      let layerId: string | undefined;
-      const parents = found.fields.get('parent') ?? [];
-      for (let i = 0; i < parents.length; i++) {
-        const layer = layerOfParent(document, parents[i]);
-        if (layer === undefined) continue;
-        if (layerId === undefined) layerId = layer;
-        else if (layer !== layerId) {
-          throw new DrawError(
-            'invalidInput',
-            `readValues: the rows are in more than one layer (${JSON.stringify(layerId)} and ${JSON.stringify(layer)})`,
-          );
-        }
-      }
-
-      const out = new Map<FeatureRowField, readonly unknown[]>();
-      for (const field of fields) {
-        if (field === 'geometry' || out.has(field)) continue;
-        if (field === 'visible') {
-          const hidden = found.fields.get('hidden') ?? [];
-          const visible = new Array<unknown>(hidden.length);
-          for (let i = 0; i < hidden.length; i++) {
-            visible[i] = hidden[i] === undefined ? undefined : hidden[i] !== true;
-          }
-          out.set(field, visible);
-        } else {
-          out.set(field, found.fields.get(PLAIN_FIELDS.get(field) ?? field) ?? []);
-        }
-      }
-      const valuesPerPosition =
-        layerId === undefined ? 2 : positionsOf(document, layerId).valuesPerPosition;
-      const values: RowValues = {
-        rows: found.rows,
-        fields: out,
-        ...(geometry && {
-          geometry: geometryColumnOf(found.shapes?.get('geometry'), refs.length, valuesPerPosition),
-        }),
-        ...(found.deleted && { deleted: found.deleted }),
-      };
-      // The values, the map of the fields and an array per field; the geometry and its arrays
-      countWork(counts, 'objectsCreated', 2 + out.size + (geometry ? 6 : 0));
-      return values;
-    });
+    read(() => readRowValues(document, refs, fields, options ?? {}, [counts]));
 
   return {
     get: (layerId) =>

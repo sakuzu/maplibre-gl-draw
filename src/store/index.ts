@@ -71,6 +71,7 @@ export type {
 
 // The changes
 export type {
+  DeletedRowsToken,
   LayerRowsChange,
   RowsChange,
   StoreChange,
