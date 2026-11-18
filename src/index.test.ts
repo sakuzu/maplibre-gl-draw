@@ -217,22 +217,31 @@ const TABLE = [
 
 /** The store entry (layer 1) */
 const STORE = [
+  'createOrderKeyBetween',
   'createStore',
   'FeatureRowField',
   'FeatureTables',
   'GEOMETRY_TYPES',
   'GeometryColumn',
   'ItemRefs',
+  'LayerRowOptions',
+  'LayerRowsChange',
   'LayerTableView',
+  'NewRows',
   'RowCursor',
   'RowRef',
+  'RowsChange',
   'RowSpatialIndexing',
   'RowValues',
   'Store',
+  'StoreChange',
   'StoreGroup',
   'StoreOptions',
+  'StoreTransactOptions',
   'StoreView',
+  'SubscribeOptions',
   'TableScanOptions',
+  'validateRowValues',
 ];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */

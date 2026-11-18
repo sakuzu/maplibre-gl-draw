@@ -31,6 +31,8 @@ export interface WorkCounts {
   rowsWritten: number;
   /** The notifications given to the listeners of the Store */
   notifications: number;
+  /** The entries of a change looked up to fold a write into the writes before it of its transaction */
+  changeLookups: number;
 }
 
 /** The field of the Store that holds its numbers */
@@ -42,7 +44,7 @@ const WORK_COUNTS = Symbol('work counts');
  * @internal
  */
 export function createWorkCounts(): WorkCounts {
-  return { rowsTouched: 0, objectsCreated: 0, rowsWritten: 0, notifications: 0 };
+  return { rowsTouched: 0, objectsCreated: 0, rowsWritten: 0, notifications: 0, changeLookups: 0 };
 }
 
 /**

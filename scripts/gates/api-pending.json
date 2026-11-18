@@ -443,10 +443,7 @@
       "main:removed:StoreView.listGroups": "91bcbbb33af211dc9fa82a8fa0bb1f80a947e794534b6d6ce4a5346285e0bb7d",
       "main:removed:StoreView.listLayers": "dba542850070341a6479f618d659cb620cd93f906f8aa55b68dca0994077ef09",
       "main:removed:StoreView.subscribe": "2891ca996fe9e6fd78ff0079c4cae8e0d4b9d73dd12b5271f0f96c2ddcbbc009",
-      "main:removed:StoreView.transact": "1a394771ab37c3514d7af0872745ad0d57b103b0aa01858f7db313ec54df820e",
-      "store:added:Store.createFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:Store.deleteFile": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:Store.setLayerOrder": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "main:removed:StoreView.transact": "1a394771ab37c3514d7af0872745ad0d57b103b0aa01858f7db313ec54df820e"
     },
     "106": {
       "main:removed:StoreView.getFeature": "c58d9aaf3b8c940fe5d25cec8078309205595f5cc96eeb28e0b927d61db707ad",
@@ -459,39 +456,11 @@
       "main:removed:Store.deleteFeature": "cf4666c7893500a2f5518a49bc5b80a9eb06fc087bbb68b8a4d3c73f1ea22a46",
       "main:removed:Store.updateFeature": "646667cb5ddcf64781a1eaaedcefe570bbc0c068b3d1365ca1f7a31d5f662130"
     },
-    "108": {
-      "store:added:Store.createRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "109": {
-      "store:added:Store.writeRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "110": {
       "store:added:Store.createRowsFromPages": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "111": {
       "store:added:Store.releaseDeletedRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "112": {
-      "store:added:Store.clear": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "113": {
-      "store:added:Store.newOperationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "114": {
-      "store:added:LayerRowOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerRowOptions.thirdValue": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerRowOptions.valuesPerPosition": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:Store.createLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "115": {
-      "store:added:Store.deleteLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "116": {
-      "store:added:Store.createGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:Store.updateGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "117": {
-      "store:added:Store.deleteGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "118": {
       "main:removed:Store.reorderInGroup": "668dfe6e629f378a98b07990cb2b0edb319971fcf5ed07bd4b7eb8ebd03fdd49",
@@ -522,68 +491,13 @@
     "124": {
       "store:added:StoreView.listPropertyKeys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "125": {
-      "store:added:Store.updateLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "126": {
-      "store:added:StoreView.subscribe": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "127": {
-      "store:added:StoreView.transact": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "128": {
-      "store:added:StoreTransactOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreTransactOptions.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreTransactOptions.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreTransactOptions.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "132": {
-      "store:added:NewRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:NewRows.fields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:NewRows.geometry": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:NewRows.ids": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "133": {
-      "store:added:StoreChange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:StoreChange.deletedRowsToken": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.files": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.files.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.files.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.groups": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.groups.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.groups.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.groups.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.layers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.layers.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.layers.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.layers.orderChanged": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.layers.orderChanged.order": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.layers.orderChanged.previous": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.layers.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.metadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.metadata.metadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.metadata.previous": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.reset": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.rows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "134": {
-      "store:added:LayerRowsChange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerRowsChange.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerRowsChange.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerRowsChange.fields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:LayerRowsChange.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowsChange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:RowsChange.layers": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "store:added:StoreChange.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "135": {
       "store:added:DeletedRowsToken": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:DeletedRowsToken{0}.[deletedRowsTokenBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:SubscribeOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:SubscribeOptions.keepDeletedRows": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:SubscribeOptions.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "store:added:deletedRowsTokenBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -678,15 +592,6 @@
     "162": {
       "main:doc:NameGenerator": "37ab835d682a911f1bd3ef1e10883ba4cc05056de63ef090975410bfc6629557"
     },
-    "163": {
-      "store:added:validateRowValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "164": {
-      "store:added:createOrderKeyBetween": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "167": {
-      "store:added:Store.setMetadata": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "171": {
       "main:added:DrawEvents.drag.changed.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -700,8 +605,7 @@
       "main:doc:MetadataResource.update": "733327115cc185b343deb9d31a6f5f9bf9ec976001d8b820bec98e76a2f85843"
     },
     "173": {
-      "main:added:DocumentChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "store:added:StoreChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "main:added:DocumentChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     }
   }
 }

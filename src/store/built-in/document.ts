@@ -21,8 +21,12 @@
  * (its `orderKey`). A group of rows is a group of the tables too, with its id, its layer as its
  * parent, its key and its `hidden` flag; the rest of a group is its frozen object here.
  *
- * Nothing here is shared between two documents: every document has its own tables, objects and
- * numbers of work.
+ * The reference of a row is never taken from its id while the document is open: the id of a
+ * deleted row is read from its reference until the document is cleared, and after it (a row whose
+ * id comes back keeps its reference).
+ *
+ * Nothing here is shared between two documents: every document has its own tables, objects,
+ * transactions and numbers of work.
  *
  * @internal
  */
@@ -30,6 +34,7 @@
 import { createTables, type TableColumns } from '@sakuzu/kasane';
 import type { FileData, Layer, Metadata } from '../../api/model.js';
 import { createWorkCounts } from '../../shared/work-counts.js';
+import { createChanges } from './changes.js';
 import type { RowSpatialIndexing, StoreGroup } from './types.js';
 
 /**
@@ -108,6 +113,7 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing) {
       dimensionsOfPositions(layerPositions.get(layerId) ?? PLANE_POSITIONS),
     ...(spatialIndexing && { coordinateSystem: spatialIndexing }),
   });
+  const counts = createWorkCounts();
   return {
     /** The reading side of the tables of the rows */
     rows: tables,
@@ -125,8 +131,12 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing) {
     layerOrder: Object.freeze([]) as readonly string[],
     /** The metadata (a frozen object, replaced as a whole) */
     metadata: Object.freeze({}) as Metadata,
+    /** The reference the next group is given in the tables */
+    nextGroupRef: 1,
     /** The amounts of work done */
-    counts: createWorkCounts(),
+    counts,
+    /** The transactions and the listeners */
+    changes: createChanges(counts),
   };
 }
 

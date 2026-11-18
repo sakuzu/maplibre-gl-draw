@@ -7,6 +7,7 @@
  * built-in Store. The text of each declaration is that of the fixed declarations of the entry.
  */
 
+import type { UpdateSource } from '../../api/extension/store.js';
 import type {
   FeatureStyle,
   FeatureType,
@@ -77,7 +78,149 @@ import type {
  * the instance draws and hit tests the rows from: a Store of your own hands out those of a
  * built-in Store it wraps.
  */
-export interface Store extends StoreView {}
+export interface Store extends StoreView {
+  /**
+   * Creates rows: one feature per id, with the values given, in the layer or the group of its
+   * `parent`. The rows of one call are those of one layer, and their geometries have the number
+   * of values per position of that layer. The rows are given new references ({@link RowRef}),
+   * which the change lists (`rows`, as `created`).
+   *
+   * The fields `type`, `parent` and `orderKey` are needed, and the geometry; the others, and a
+   * value `undefined` in a field given, take the values of a new feature (visible, not locked, the
+   * style `{}`, no attributes). See {@link FeatureRowField} for the fields and their values.
+   *
+   * @param rows - The ids of the new rows, the values of their fields and their geometries, one
+   *   per id
+   * @returns False when an id is in use or the Store does not take the rows (none is created)
+   * @throws `DrawError` with the code `invalidInput` when a needed field is missing, a field is
+   *   not one of a row, a value is not one of its field, the rows are in more than one layer, or
+   *   the geometries have another number of values per position than the layer; nothing is
+   *   created then
+   */
+  createRows(rows: NewRows): boolean;
+  /**
+   * Writes values of rows there are, by their references: the fields given and the geometry, for
+   * the rows given ({@link RowValues}). `deleted` deletes a row (non-zero), or brings back a
+   * deleted row that a {@link DeletedRowsToken} keeps (zero), with its values and at its place as
+   * they were: it is how a change made outside the instance is written, deletions and the rows
+   * that come back included.
+   *
+   * A new `parent` puts a row in another layer or group (into the layer of the group), and a new
+   * `orderKey` puts it in another place there. The rows of one call are those of one layer.
+   *
+   * A deleted row that a {@link DeletedRowsToken} keeps, and one that values of features keep on
+   * the main entry (`FeatureValues`), are found by their ids with `tables.findRow`.
+   *
+   * @param values - The rows, the values of their fields, their geometries and their deletion
+   * @returns False when the Store does not take the write (nothing is written)
+   * @throws `DrawError` with the code `notFound` when a reference names no row (or a deleted row
+   *   that nothing keeps), or `invalidInput` when a field is not one of a row, a value is not one
+   *   of its field, or the rows are in more than one layer; nothing is written then
+   */
+  writeRows(values: RowValues): boolean;
+  /**
+   * Takes everything out of the document: the rows, the groups, the layers, the stacking order,
+   * the files, and the metadata (which becomes `{}`). It is how the whole document is replaced
+   * (read again from the start): write the new content after it, and the change of its
+   * transaction has `reset: true`. A replacement too large for one task is written in parts of
+   * one operation ({@link StoreTransactOptions}): `clear` in the first, and the instance takes what
+   * is gone out of the selection and the hidden items only once the operation ends, so that a row
+   * written again in a later part keeps them.
+   *
+   * A row whose id comes back keeps its reference, so what is kept by the references (the rows
+   * hidden on this client, the values a caller keeps per row) goes on. The tokens keep nothing
+   * afterwards.
+   */
+  clear(): void;
+  /**
+   * Creates a layer. It goes to the front of the stacking order unless the order holds its id.
+   *
+   * @param options - The number of values of the positions of its rows, read once (2 when it is
+   *   left out): a layer of positions with a height or a measure keeps them
+   * @returns False when the id is in use
+   */
+  createLayer(layer: Layer, options?: LayerRowOptions): boolean;
+  /** Changes the fields given of a layer. */
+  updateLayer(id: string, updates: Partial<Layer>): boolean;
+  /**
+   * Deletes a layer, with its rows and its groups, and takes it out of the stacking order. The
+   * rows are listed as deleted in the change, and a listener that asked for it keeps them
+   * (`keepDeletedRows`).
+   */
+  deleteLayer(id: string): boolean;
+  /** Replaces the stacking order. */
+  setLayerOrder(order: string[]): boolean;
+  /**
+   * Creates a group. Its members are the rows whose `parent` is its id: write theirs to make
+   * them members.
+   *
+   * @returns False when the id is in use, or its layer is not there
+   */
+  createGroup(group: StoreGroup): boolean;
+  /**
+   * Changes the fields given of a group. A new `layerId` puts the group, with its members, in that
+   * layer (the exception to the rule that the Store does nothing by itself); a new `orderKey` puts
+   * it in another place among the items of its layer.
+   */
+  updateGroup(id: string, updates: Partial<StoreGroup>): boolean;
+  /**
+   * Deletes a group. It does not move its members: write their `parent` and `orderKey` first, in
+   * the same transaction, or delete them.
+   *
+   * @returns False when a row that is not deleted still names it
+   */
+  deleteGroup(id: string): boolean;
+  /** Adds an embedded file. */
+  createFile(file: FileData): boolean;
+  /** Deletes an embedded file. */
+  deleteFile(id: string): boolean;
+  /**
+   * Changes the keys given of the metadata, the keys of the extensions included (see `Metadata` of
+   * the main entry); a key given as `undefined` is taken off, and the other keys keep what they
+   * have. The change tells the keys written (`StoreChange.metadata.keys`).
+   */
+  setMetadata(metadata: Partial<Metadata>): boolean;
+  /**
+   * A new number of an operation, never given before by this Store: for a caller that writes one
+   * change made outside the instance in several transactions, which give it in their options
+   * ({@link StoreTransactOptions.operationId}). The instance takes the numbers of its own
+   * operations here too.
+   *
+   * A large change is written so, in parts that each keep the map responsive (within 100 ms, the
+   * work of the listeners of the change included), as the bulk edits of the instance are. The
+   * caller closes the operation in a `finally`, so that it ends also when the writing fails:
+   *
+   * ```ts
+   * const operationId = store.newOperationId();
+   * let ended = false;
+   * try {
+   *   for (let i = 0; i < parts.length; i += 1) {
+   *     const hasMoreParts = i < parts.length - 1;
+   *     ended = !hasMoreParts; // the last part ends the operation, also when it throws
+   *     store.transact(() => store.writeRows(parts[i]), 'remote', { operationId, hasMoreParts });
+   *     if (hasMoreParts) await new Promise(requestAnimationFrame);
+   *   }
+   * } finally {
+   *   // A part that threw before the last leaves the operation open: a transaction that writes
+   *   // nothing ends it, and its change is told all the same
+   *   if (!ended) store.transact(() => {}, 'remote', { operationId, stopped: true });
+   * }
+   * ```
+   */
+  newOperationId(): number;
+}
+
+/** The options of {@link Store.createLayer}. */
+export interface LayerRowOptions {
+  /**
+   * The number of values of each position of the rows of the layer: 2 (longitude, latitude), 3
+   * (and the height in meters, or a measure) or 4 (both). 2 when it is left out; it does not change
+   * afterwards. The rows of a layer of 3 or 4 values are drawn and hit by their first two
+   */
+  readonly valuesPerPosition?: 2 | 3 | 4;
+  /** What the third value is when there are 3: `height` (Z, the default) or `measure` (M) */
+  readonly thirdValue?: 'height' | 'measure';
+}
 
 /**
  * The read side of the Store: the document, and the subscription to its changes.
@@ -145,6 +288,61 @@ export interface StoreView {
   listFiles(): FileData[];
   /** The title and the description */
   getMetadata(): Metadata;
+  /**
+   * Subscribes to the changes of the document, as rows: one change arrives per outermost
+   * transaction that changed it.
+   *
+   * A listener that asks for them gets more in its changes: the values the rows had before
+   * (`previousValues`, for the sources it names), and a token that keeps the rows the change
+   * deleted (`keepDeletedRows`). The Store reads and keeps them only while a listener asks, so they
+   * cost nothing otherwise.
+   *
+   * @param listener - Called with each change; it does not write to the Store while it is
+   *   called (`invalidState`), and writes after the change has been told, as the rules above say
+   * @param options - What the changes of this listener carry besides the rows written
+   * @returns The function that unsubscribes
+   */
+  subscribe(listener: (change: StoreChange) => void, options?: SubscribeOptions): () => void;
+  /**
+   * Runs `fn` as one transaction, so that its writes arrive as one change.
+   *
+   * A nested call with a source other than that of the outer call throws `DrawError` with the
+   * code `invalidState`, writing nothing; one with the same source folds into the outer call, and
+   * the options of the outermost call win. The transactions of an instance (`draw.transact`) are
+   * transactions of its Store, so this one rule holds between them and the transactions of the
+   * Store, whichever is inside the other. When `fn` throws, the writes it made before stay, and
+   * are told as one change before the error is thrown again.
+   *
+   * @param source - Where the writes come from, never left out, so that a write made directly is
+   *   not taken for an edit of the user: `'remote'` for a change made outside the instance (the
+   *   instance gives `'local'` and the sources of its edits)
+   * @param options - The operation the transaction is a part of, when one change is written in
+   *   several transactions
+   * @returns What `fn` returns
+   * @throws `DrawError` with the code `invalidState` when it is called inside a transaction (of
+   *   the Store or of an instance) of another source, or while a listener of the Store is
+   *   called, or the error `fn` throws
+   */
+  transact<T>(fn: () => T, source: UpdateSource, options?: StoreTransactOptions): T;
+}
+
+/** The options of {@link StoreView.transact}. */
+export interface StoreTransactOptions {
+  /**
+   * The operation the transaction is a part of ({@link Store.newOperationId}): the transactions
+   * that give the same number are told as the parts of one change, with that `operationId`. A new
+   * number is taken when it is left out
+   */
+  readonly operationId?: number;
+  /**
+   * True for every part of an operation but the last: its change has `hasMoreParts: true`. The
+   * caller always ends an operation with a transaction without it, also when it stops early
+   * (`stopped`), and in a `finally` (see {@link Store.newOperationId}): that transaction is told
+   * even when it writes nothing. False when it is left out
+   */
+  readonly hasMoreParts?: boolean;
+  /** True on the last part of an operation that stopped before it had written everything */
+  readonly stopped?: boolean;
 }
 
 /**
@@ -280,6 +478,16 @@ export const GEOMETRY_TYPES: readonly [
   'MultiLineString',
   'MultiPolygon',
 ] as const);
+
+/** New rows: their ids, and the values of their fields and their geometries ({@link Store.createRows}). */
+export interface NewRows {
+  /** The ids, one per new row, unique and not in use */
+  readonly ids: readonly string[];
+  /** The values of each field, one per id ({@link FeatureRowField}) */
+  readonly fields: ReadonlyMap<FeatureRowField, readonly unknown[]>;
+  /** The geometries, one per id */
+  readonly geometry: GeometryColumn;
+}
 
 /** Items of a layer, in their order: rows outside a group, and groups. */
 export interface ItemRefs {
@@ -424,6 +632,106 @@ export interface RowCursor {
   /** The references of the next rows (null once every row is read) */
   next(): Int32Array | null;
 }
+
+/**
+ * Everything one transaction changed in the document, as rows (the change `DocumentChange` of the
+ * main entry tells in the words of the features), as the listeners of the Store
+ * receive it: once per transaction, each category present only when the transaction changed it.
+ * The instance tells the same change to `draw.on('document.changed')` in the words of the
+ * features (the IDs), with the same `operationId`.
+ *
+ * It names the rows and the fields written, and carries the values they had before (for a
+ * listener that asks): the values written are read from `tables` while the change is told, when
+ * they are those right after the change (see {@link StoreView}). It does not tell which operation
+ * wrote them (a move, a rotation, a paste): two edits that write the same values make the same
+ * change.
+ */
+export interface StoreChange {
+  /** Where the writes came from: the source of the transaction, `'remote'` for a write outside one */
+  source: UpdateSource;
+  /** The number of the operation the change is a part of ({@link StoreTransactOptions}) */
+  operationId: number;
+  /** True when more changes of the same operation follow */
+  hasMoreParts: boolean;
+  /** True on the last change of an operation that stopped before it had written everything */
+  stopped: boolean;
+  /**
+   * True when the change replaces the whole document (`clear`, and what was written after it in
+   * the same transaction). The rows, layers, groups and files listed as deleted are those taken
+   * out; the ones created, those written after.
+   */
+  reset: boolean;
+  /**
+   * The rows written, by layer: the references of the rows created, updated and deleted, and the
+   * fields written. The rows created are those of `createRows` and `createRowsFromPages`; a row
+   * brought back (`deleted` written 0) is listed as updated. A row moved to another layer is
+   * listed as updated in the layer it is in now, and not in the one it left. A row the change left
+   * as it was (a locked one) is not listed. The id of a row deleted is still read with
+   * `tables.getRowId` while the change is delivered.
+   */
+  rows?: RowsChange;
+  /** The layers created, updated and deleted, and the change of the stacking order */
+  layers?: {
+    created?: Layer[];
+    updated?: Array<{
+      id: string;
+      layer: Layer;
+      previous: Layer;
+    }>;
+    deleted?: Layer[];
+    orderChanged?: {
+      order: string[];
+      previous: string[];
+    };
+  };
+  /** The groups created, updated and deleted (the rows that joined or left them are in `rows`) */
+  groups?: {
+    created?: StoreGroup[];
+    updated?: Array<{
+      id: string;
+      group: StoreGroup;
+      previous: StoreGroup;
+    }>;
+    deleted?: StoreGroup[];
+  };
+  /** The new metadata and the one before it */
+  metadata?: {
+    metadata: Metadata;
+    previous: Metadata;
+    /** The keys the transaction wrote, each once (a key taken off included) */
+    keys: readonly string[];
+  };
+  /** The embedded files created and deleted */
+  files?: {
+    created?: FileData[];
+    deleted?: FileData[];
+  };
+}
+
+/** The rows one change wrote, by layer. */
+export interface RowsChange {
+  /** The rows of each layer, by the id of the layer */
+  readonly layers: ReadonlyMap<string, LayerRowsChange>;
+}
+
+/** The rows of one layer one change wrote. */
+export interface LayerRowsChange {
+  /** The rows created */
+  readonly created: Int32Array;
+  /** The rows updated (a row that came from another layer, and a row brought back, included) */
+  readonly updated: Int32Array;
+  /** The rows deleted */
+  readonly deleted: Int32Array;
+  /**
+   * The fields written, for the rows updated: `style:<key>` and `properties:<key>` name the keys
+   * that changed
+   */
+  readonly fields: ReadonlySet<FeatureRowField>;
+}
+
+/** What the changes a listener receives carry besides the rows written ({@link StoreView.subscribe}). */
+// biome-ignore lint/suspicious/noEmptyInterface: what the changes carry besides the rows is added with the values before and the deleted rows kept
+export interface SubscribeOptions {}
 
 /** The options of {@link createStore}. */
 export interface StoreOptions {

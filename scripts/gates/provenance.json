@@ -161,6 +161,41 @@
       "from": "src/geometry/enu-transforms.test.ts",
       "to": "src/shared/math/enu-transform.test.ts",
       "note": "only the cases (the move to the point to, the twelve turns, the latitudes past the one of Web Mercator and the poles, the numbers past the longitude and the latitude, the fields, the features that keep their shape, the values taken), written again over the arrays; the ranges are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/store/order-keys.ts",
+      "to": "src/store/built-in/order-keys.ts",
+      "note": "the keys after, before and between keys, and their order by bytes, with the counting of the keys at an end written here in place of the functions of the format of the pages; the keys made many at a time are not brought, and createOrderKeyBetween is new"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/store/order-keys.test.ts",
+      "to": "src/store/built-in/order-keys.test.ts",
+      "note": "only the cases of the keys between two keys, of the keys that do not grow at an end over 100,000 items, of the keys after the rows of a page and of the keys made from any string, written again over createOrderKeyBetween; the cases of the keys made many at a time are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/store/memory/change-bus.ts",
+      "to": "src/store/built-in/changes.ts",
+      "note": "only the folding of the rows by layer (a row created and deleted not told, deleted and created updated, the writes that only create kept as they came), of the updates by id, and of the order and the metadata to their values before and after; the hold of the change until the last write, the values before, the settling of the features and the selection are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/store/table-memory.ts",
+      "to": "src/store/built-in/writes.ts",
+      "note": "only the writes of the layers, the groups, the files and the metadata over the tables (the rows of a layer deleted in one write, a group the tables still know keeping its reference); the class, the transforms, the edits, the state of the client, the groups the Store deletes by itself and the members it moves are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/feature-table/feature-tables-writer.ts",
+      "to": "src/store/built-in/writes.ts",
+      "note": "only the check that the parent of a row names a layer or a group before anything is written, and the errors of the tables made into errors of the library; the shapes made per row and the changes of the order are not brought"
     }
   ]
 }

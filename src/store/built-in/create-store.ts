@@ -12,9 +12,11 @@ import { holdWorkCounts } from '../../shared/work-counts.js';
 import { openDocument, type StoreDocument } from './document.js';
 import { featureTablesOf } from './feature-tables.js';
 import type { Store, StoreOptions } from './types.js';
+import { storeWritesOf } from './writes.js';
 
 /**
- * The built-in Store over a document: it reads the document, and holds the numbers of its work
+ * The built-in Store over a document: it reads and writes the document, tells the changes, and
+ * holds the numbers of its work
  *
  * @internal
  */
@@ -29,6 +31,7 @@ export function storeOf(document: StoreDocument): Store {
     getFile: (id) => document.files.get(id),
     listFiles: () => Array.from(document.files.values()),
     getMetadata: () => document.metadata,
+    ...storeWritesOf(document),
   };
   holdWorkCounts(store, document.counts);
   return store;

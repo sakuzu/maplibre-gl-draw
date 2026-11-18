@@ -501,6 +501,7 @@ export function workDuring(counts: WorkCounts, fn: () => void): WorkCounts {
     objectsCreated: counts.objectsCreated - before.objectsCreated,
     rowsWritten: counts.rowsWritten - before.rowsWritten,
     notifications: counts.notifications - before.notifications,
+    changeLookups: counts.changeLookups - before.changeLookups,
   };
 }
 

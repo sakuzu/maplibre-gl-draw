@@ -43,23 +43,36 @@
 // The Store
 export { createStore } from './built-in/create-store.js';
 export type {
+  LayerRowOptions,
   RowSpatialIndexing,
   Store,
   StoreGroup,
   StoreOptions,
+  StoreTransactOptions,
   StoreView,
 } from './built-in/types.js';
 
 // The rows and the tables
 export { GEOMETRY_TYPES } from './built-in/types.js';
+export { createOrderKeyBetween } from './built-in/order-keys.js';
+export { validateRowValues } from './built-in/validate.js';
 export type {
   FeatureRowField,
   FeatureTables,
   GeometryColumn,
   ItemRefs,
   LayerTableView,
+  NewRows,
   RowCursor,
   RowRef,
   RowValues,
   TableScanOptions,
+} from './built-in/types.js';
+
+// The changes
+export type {
+  LayerRowsChange,
+  RowsChange,
+  StoreChange,
+  SubscribeOptions,
 } from './built-in/types.js';
