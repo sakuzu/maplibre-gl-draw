@@ -4,9 +4,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { digestOfKey } from '../api.mjs';
+import { readCode } from '../lib/code-text.mjs';
+import { recordsOfBuild } from '../lib/declarations.mjs';
 import { wordsOf } from '../lib/words.mjs';
 import { check } from '../terms.mjs';
-import { cleanUp, packageTree, realList, write } from './fixture.mjs';
+import { ABSENT, cleanUp, packageTree, realList, write } from './fixture.mjs';
 
 afterEach(cleanUp);
 
@@ -167,13 +170,136 @@ describe('the gate of the forbidden terms', () => {
   it('lets a listed exception through, and fails on one that matches nothing', () => {
     const root = withTerms({
       allowed: [
-        { where: 'docs/guide.md', term: '\\bhistory', reason: 'the history of git' },
-        { where: 'docs/other.md', term: '\\bhistory', reason: 'gone' },
+        { where: 'docs/guide.md', term: '\\bhistory', reason: 'the history of git', hits: 1 },
+        { where: 'docs/other.md', term: '\\bhistory', reason: 'gone', hits: 1 },
       ],
     });
     write(root, { 'docs/guide.md': 'The history of the edits.\n' });
     const e = errors(root);
     expect(e).not.toContain('docs/guide.md:1');
     expect(e).toContain('matches nothing; remove it: docs/other.md');
+  });
+
+  it('reads the identifiers and comments after a template literal with a substitution', () => {
+    const root = withTerms();
+    write(root, {
+      'src/store/memory.ts': [
+        'export function label(id: string): string {',
+        `  return \`feature \${id} of the layer\`;`,
+        '}',
+        'export const yjsCrdtServerPeer = 1; // the CRDT server of the peer',
+        '',
+      ].join('\n'),
+    });
+    const e = errors(root);
+    for (const term of ['crdt', '\\byjs\\b', '\\bservers?\\b', '\\bpeers?\\b(?! dependenc)']) {
+      expect(e).toContain(`src/store/memory.ts:4: [${term}]`);
+    }
+  });
+
+  it('reads the string values and the parts of the template literals of src', () => {
+    const root = withTerms();
+    write(root, {
+      'src/view/kind.ts': [
+        "export const kind = 'remote-sync';",
+        `export const text = (n: number) => \`\${n} of the history\`;`,
+        '',
+      ].join('\n'),
+    });
+    const e = errors(root);
+    expect(e).toContain('src/view/kind.ts:1: [\\bsync');
+    expect(e).toContain('src/view/kind.ts:2: [\\bhistory]');
+  });
+
+  it('reads every identifier and comment of the syntax tree, and counts what it read', () => {
+    const code = readCode(
+      [
+        'class A {',
+        `  #first = \`a \${\`b \${/* inner note */ inner} c\`} d\`;`,
+        '  /** The size. */',
+        '  size = 1; // trailing note',
+        '}',
+        `export const after = \`\${A}\` + \`\${1}\`; /* last note */`,
+        '',
+      ].join('\n'),
+      'src/a.ts',
+    );
+    expect(code.identifiers).toBe(code.inTree);
+    expect(code.identifiers).toBe(6);
+    const text = [...code.lines.values()].join(' ');
+    for (const word of ['#first', 'inner note', 'inner', 'The size.', 'trailing note', 'after']) {
+      expect(text).toContain(word);
+    }
+    expect(text).toContain('last note');
+    expect(code.comments).toBe(4);
+  });
+
+  it('fails when a term is added once more to a place that has an exception for it', () => {
+    const root = withTerms({
+      allowed: [
+        { where: 'docs/guide.md', term: '\\bhistory', reason: 'the history of git', hits: 1 },
+      ],
+    });
+    write(root, { 'docs/guide.md': 'The history of git.\n\nAnd the history of the edits.\n' });
+    expect(errors(root)).toContain(
+      'docs/guide.md [\\bhistory]: 2 hits, the exception allows 1; new ones were added (the hits: 1, 3)',
+    );
+  });
+
+  it('fails when a place has fewer hits than its exception allows, and on a row without its number', () => {
+    const root = withTerms({
+      allowed: [
+        { where: 'docs/guide.md', term: '\\bhistory', reason: 'the history of git', hits: 2 },
+        { where: 'docs/notes.md', term: '\\bhistory', reason: 'the history of git' },
+      ],
+    });
+    write(root, { 'docs/guide.md': 'The history of git.\n', 'docs/notes.md': 'The history.\n' });
+    const e = errors(root);
+    expect(e).toContain(
+      'docs/guide.md [\\bhistory]: 1 hits, the exception allows 2; lower its hits to 1',
+    );
+    expect(e).toContain('an exception without the number of its hits: docs/notes.md [\\bhistory]');
+  });
+
+  it('reads the declarations that wait for their fixed form: their string values and TSDoc', () => {
+    const root = withTerms();
+    addMember(
+      root,
+      "    /** Keeps the things in sync with every copy. */\n    mode: 'send_to_backend_storage';",
+    );
+    const built = recordsOfBuild(root);
+    write(root, {
+      'scripts/gates/api-pending.json': {
+        entries: ['./store'],
+        samples: {},
+        declarations: {
+          1: { 'store:added:Keeper': ABSENT, 'store:added:Keeper.keep': ABSENT },
+          2: { 'main:removed:Thing.mode': digestOfKey(built, 'main:removed:Thing.mode') },
+        },
+      },
+    });
+    const e = errors(root);
+    for (const term of ['\\bsync', '\\bsend', '\\bbackend', '\\bstorage']) {
+      expect(e).toContain(`declarations/main/Thing.mode: [${term}]`);
+    }
+  });
+
+  it('reads the sources of the other packages and the changelog, but not the samples of api/', () => {
+    const root = withTerms();
+    write(root, {
+      'bench/measure.ts': 'export const syncedRows = 1;\n',
+      'playground/main.ts': '// shows the history of the edits\nexport {};\n',
+      'ui/src/Panel.svelte': '<script lang="ts">\n  let peer = 1;\n</script>\n',
+      'ui/src/rows.ts': 'export const kasaneRows = 1;\n',
+      'CHANGELOG.md': '# Changes\n\n- Works with a server.\n',
+      'api/samples/sample-keep.ts': '// keeps the history\nexport {};\n',
+    });
+    const e = errors(root);
+    expect(e).toContain('bench/measure.ts:1: [\\bsync');
+    expect(e).toContain('playground/main.ts:1: [\\bhistory]');
+    expect(e).toContain('ui/src/Panel.svelte:2: [\\bpeers?');
+    expect(e).toContain('ui/src/rows.ts:1: [kasane]');
+    expect(e).toContain('CHANGELOG.md:3: [\\bservers?\\b]');
+    expect(e).not.toContain('api/samples');
   });
 });
