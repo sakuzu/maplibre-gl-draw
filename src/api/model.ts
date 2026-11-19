@@ -842,6 +842,63 @@ export function createIdSet(ids: Iterable<string>): IdSet {
   return makeIdSet(ids);
 }
 
+declare const featureValuesBrand: unique symbol;
+
+/**
+ * What a change did to features, as the changes of a subscriber that asked for them carry it
+ * (`previousValues` of {@link DocumentChange}): what `features.restore` takes back. Its content
+ * is not read: it is given to `features.restore` as it is, and it costs no object per feature
+ * however many it holds.
+ *
+ * For the geometry of a feature, it keeps what the change did to it: the vertices it moved and
+ * where they were, the vertices it added, the vertices it deleted and where they were, or the
+ * whole geometry before, for a change that changed the whole geometry (a move, a rotation, a
+ * scaling, a geometry given whole, an edit that changed the number of rings). The
+ * instance has the geometry before and after every change, and tells the vertices changed by
+ * comparing them as {@link VertexRef} says. The values of a move of 100,000 features are kept
+ * as arrays of the geometries before, with no record per feature. For any other value (an
+ * attribute, a key of the look, a flag, the place), it keeps the value before of every key the
+ * change wrote.
+ *
+ * It keeps every change of the groups too (those it created, deleted and moved, and the values
+ * it changed), and where they were, so that `features.restore` takes them back with the features
+ * they hold.
+ *
+ * Every subscriber that asks gets values of its own. The values of a change that deleted
+ * features keep them (and the groups it deleted), so that `features.restore` can bring
+ * them back where they were, until every subscriber has let go of its values
+ * (`features.releaseValues`). A subscriber that keeps values for long keeps that memory:
+ * `byteLength` tells how much.
+ */
+export interface FeatureValues {
+  /** The memory the values and what they keep take, in bytes (an estimate) */
+  readonly byteLength: number;
+  /** The number of features they hold values of */
+  readonly featureCount: number;
+  /** Tells them from other objects */
+  readonly [featureValuesBrand]: true;
+}
+
+/**
+ * The IDs of the features one change created, updated, deleted and moved, as sets that read any
+ * number of them without an array of every ID. A feature is in one of `created`, `updated` and
+ * `deleted` at most, and in none when the change created and deleted it; it is in `moved` too
+ * when it was also put in another place.
+ */
+export interface ChangedIds {
+  /** Created, or brought back (a feature `features.restore` brings back is created again) */
+  created: IdSet;
+  /** Changed in its values (its geometry, its attributes, its look, its flags) */
+  updated: IdSet;
+  /** Deleted */
+  deleted: IdSet;
+  /**
+   * Put in another layer or group, or in another position in its layer or group: its place in
+   * the document, not its position on the map (a feature moved on the map is in `updated`)
+   */
+  moved: IdSet;
+}
+
 /**
  * The features this client marks as being edited: a mark of this client that the document does
  * not hold, as the selection. An extension that edits a feature in a field of its own marks it

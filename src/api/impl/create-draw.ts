@@ -83,8 +83,10 @@ export function createDrawOnEngine(
     drawing: createDrawingResource(engine),
     metadata: createMetadata(deps),
     options: { get: drawOptions.get, update: drawOptions.update },
-    document: createDocument(deps, (result, source) =>
-      events.emit('document.loaded', { result, source }),
+    document: createDocument(
+      deps,
+      (result, source) => events.emit('document.loaded', { result, source }),
+      (listener, subscribeOptions) => events.subscribe(listener, subscribeOptions),
     ),
     extensions: engine.extensions.collections,
 

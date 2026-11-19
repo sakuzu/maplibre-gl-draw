@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * `draw.document`: the whole document, to load and to write out
+ * `draw.document`: the whole document, to load, to follow its changes and to write out
  */
 
 import type { FeatureCollection } from 'geojson';
@@ -45,11 +45,13 @@ interface PreparedItem {
  *
  * @param onLoaded - Called after each load that read something, with the result and the source
  *   its writes carried
+ * @param subscribe - Subscribes to the changes of the document (the events of the instance)
  * @internal
  */
 export function createDocument(
   deps: Pick<ResourceDeps, 'store' | 'autoNameGenerator' | 'generateId' | 'getActiveLayerId'>,
   onLoaded?: (result: LoadResult, source: string) => void,
+  subscribe?: DocumentResource['subscribe'],
 ): DocumentResource {
   const { store } = deps;
 
@@ -114,6 +116,13 @@ export function createDocument(
   };
 
   return {
+    subscribe(listener, options) {
+      if (!subscribe) {
+        throw new DrawError('invalidState', 'The changes of this document are not followed');
+      }
+      return subscribe(listener, options);
+    },
+
     async load(source, options) {
       const prepared = await prepare(source, options, new Set(), new Set());
       return prepared ? (writeAll([prepared])?.[0] ?? null) : null;

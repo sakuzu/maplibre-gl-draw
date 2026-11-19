@@ -122,11 +122,15 @@ describe('the events of the features', () => {
     const updated = draw.features.update(created.id, { properties: { name: 'A' } }) as Feature;
     draw.features.delete(created.id);
 
-    expect(payloadsOf(events, 'feature.created')).toEqual([{ feature: created, source: 'local' }]);
+    expect(payloadsOf(events, 'feature.created')).toEqual([
+      { feature: created, source: 'local', hasMoreParts: false },
+    ]);
     expect(payloadsOf(events, 'feature.updated')).toEqual([
       { feature: updated, previous: created, source: 'local', intermediate: false },
     ]);
-    expect(payloadsOf(events, 'feature.deleted')).toEqual([{ feature: updated, source: 'local' }]);
+    expect(payloadsOf(events, 'feature.deleted')).toEqual([
+      { feature: updated, source: 'local', hasMoreParts: false },
+    ]);
   });
 
   it('feature.updated tells an update in the middle of a drag', () => {
@@ -232,7 +236,7 @@ describe('document.changed', () => {
     expect(changes).toHaveLength(1);
     expect(names(events)[events.length - 1]).toBe('document.changed');
     expect(changes[0].source).toBe('script');
-    expect(changes[0].features?.created).toHaveLength(1);
+    expect(changes[0].features.created.count()).toBe(1);
     expect(changes[0].layers?.created).toHaveLength(1);
     expect(changes[0].metadata?.metadata).toEqual({ title: 'Map' });
     for (const [name, payload] of events) {
@@ -271,8 +275,11 @@ describe('document.changed', () => {
       draw.selection.set('feature', [a.id]);
     });
     expect(received).toHaveLength(1);
-    expect(received[0].features?.created).toHaveLength(1);
-    expect(received[0].selection?.ids).toHaveLength(1);
+    expect(received[0].features.created.count()).toBe(1);
+    // The selection arrives in selection.changed, before the change, with its operation
+    const selections = payloadsOf(events, 'selection.changed');
+    expect(selections[selections.length - 1].selection.ids).toHaveLength(1);
+    expect(selections[selections.length - 1].operationId).toBe(received[0].operationId);
     expect(received[0]).not.toHaveProperty('tentative');
     expect(received[0]).not.toHaveProperty('uiStateChanged');
   });
@@ -308,8 +315,16 @@ describe('the events of the state of this client', () => {
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
     expect(payloadsOf(events, 'selection.changed')).toEqual([
-      { selection: { type: 'feature', ids: [a.id] }, previous: { type: null, ids: [] } },
-      { selection: { type: null, ids: [] }, previous: { type: 'feature', ids: [a.id] } },
+      {
+        selection: { type: 'feature', ids: [a.id] },
+        previous: { type: null, ids: [] },
+        operationId: null,
+      },
+      {
+        selection: { type: null, ids: [] },
+        previous: { type: 'feature', ids: [a.id] },
+        operationId: null,
+      },
     ]);
   });
 

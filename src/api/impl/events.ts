@@ -8,8 +8,8 @@
  * One transaction of the Store is one notification. From it come first the events of each
  * resource (features, layers, groups, metadata, selection, editing, vertex selection, mode, hidden,
  * read-only, interaction lock, the shape being drawn), in that order, and last one
- * `document.changed` with the whole
- * change when the transaction changed the document. The engine announces the rest
+ * `document.changed`, in the words of the features, when the transaction changed the document,
+ * with the changes of the subscribers of `draw.document.subscribe`. The engine announces the rest
  * on its internal emitter (snapping, clicks, images, the stacking order, failed loads,
  * drags), and each is passed on under its name here. `options.changed` comes from
  * `draw.options`, which emits it on the same hub.
@@ -18,6 +18,7 @@
 import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
+import { countWork, type WorkCounts } from '../../shared/work-counts.js';
 import type { InstanceDocument } from '../../store/document-access.js';
 import type {
   FeatureCoordinates,
@@ -26,11 +27,15 @@ import type {
   VertexSelection as StoredVertexSelection,
   TentativeState,
 } from '../../store/types.js';
+import type { DocumentSubscribeOptions } from '../document.js';
 import { DrawError } from '../errors.js';
 import type { DocumentChange, DrawEventListener, DrawEvents } from '../events.js';
 import type { Hit } from '../extension/provider.js';
-import type { Feature, FeatureInput, MoveTarget } from '../model.js';
+import type { UpdateSource } from '../extension/store.js';
+import type { ChangedIds, Feature, FeatureInput, Group, MoveTarget } from '../model.js';
 import type { SnapResult } from '../state.js';
+import { type ChangeSummary, summaryOfChange, watchChanges } from './document-access.js';
+import { SharedValues } from './feature-values.js';
 import { makeIdSet } from './id-set.js';
 import { toDatasetRow } from './rows.js';
 
@@ -50,8 +55,70 @@ export interface EventHub {
   emit<K extends keyof DrawEvents>(event: K, payload: DrawEvents[K]): void;
   /** Whether an event has a listener */
   has(event: keyof DrawEvents): boolean;
+  /**
+   * Subscribes to the changes of the document, as `draw.document.subscribe` does
+   *
+   * @returns The function that unsubscribes
+   * @throws `DrawError` with the code `invalidInput` for a listener that is not a function, or
+   *   options of the wrong shape
+   */
+  subscribe(
+    listener: (change: DocumentChange) => void,
+    options?: DocumentSubscribeOptions,
+  ): () => void;
+  /** The subscribers of the changes of the document, in the order they subscribed */
+  subscribers(): readonly DocumentSubscriber[];
   /** Drops every listener */
   clear(): void;
+}
+
+/**
+ * A subscriber of the changes of the document
+ *
+ * @internal
+ */
+export interface DocumentSubscriber {
+  /** Called with each change */
+  readonly listener: (change: DocumentChange) => void;
+  /** Whether the change carries the values the features had before it, asked before it writes */
+  asks(change: { readonly source: UpdateSource; readonly operationId: number }): boolean;
+}
+
+/** How a subscriber asks for the values before (see `DocumentSubscribeOptions.previousValues`) */
+function asksOf(previousValues: unknown): DocumentSubscriber['asks'] {
+  if (previousValues === undefined || previousValues === false) return () => false;
+  if (previousValues === true) return () => true;
+  if (typeof previousValues === 'function') {
+    return (change) => {
+      try {
+        return (previousValues as (change: object) => unknown)(change) === true;
+      } catch (error) {
+        console.error('Error in a subscriber of the document asked for the values before:', error);
+        return false;
+      }
+    };
+  }
+  const sourcesOf = (list: unknown, what: string): ReadonlySet<string> => {
+    if (!Array.isArray(list) || list.some((source) => typeof source !== 'string')) {
+      throw new DrawError('invalidInput', `subscribe: ${what} is not an array of sources`);
+    }
+    return new Set(list as string[]);
+  };
+  if (Array.isArray(previousValues)) {
+    const sources = sourcesOf(previousValues, 'previousValues');
+    return (change) => sources.has(change.source);
+  }
+  if (typeof previousValues === 'object' && previousValues !== null) {
+    const except = sourcesOf(
+      (previousValues as { except?: unknown }).except,
+      'previousValues.except',
+    );
+    return (change) => !except.has(change.source);
+  }
+  throw new DrawError(
+    'invalidInput',
+    'subscribe: previousValues is neither a boolean, sources, { except } nor a function',
+  );
 }
 
 interface Entry {
@@ -66,6 +133,7 @@ interface Entry {
  */
 export function createEventHub(): EventHub {
   const listeners = new Map<keyof DrawEvents, Entry[]>();
+  let subscribers: readonly DocumentSubscriber[] = [];
 
   const add = <K extends keyof DrawEvents>(
     event: K,
@@ -110,8 +178,27 @@ export function createEventHub(): EventHub {
       }
     },
     has: (event) => (listeners.get(event)?.length ?? 0) > 0,
+    subscribe(listener, options) {
+      if (typeof listener !== 'function') {
+        throw new DrawError('invalidInput', 'The listener must be a function');
+      }
+      if (options !== undefined && (typeof options !== 'object' || options === null)) {
+        throw new DrawError('invalidInput', 'subscribe: the options are not an object');
+      }
+      const subscriber: DocumentSubscriber = {
+        listener,
+        asks: asksOf(options?.previousValues),
+      };
+      // A new list each time: a change being told goes on with the subscribers it started with
+      subscribers = [...subscribers, subscriber];
+      return () => {
+        subscribers = subscribers.filter((candidate) => candidate !== subscriber);
+      };
+    },
+    subscribers: () => subscribers,
     clear() {
       listeners.clear();
+      subscribers = [];
     },
   };
 }
@@ -122,6 +209,11 @@ export function createEventHub(): EventHub {
 
 /**
  * Passes the notifications of the Store on as events
+ *
+ * Each change of the layer over the Store gives first the events of each resource, then
+ * `document.changed` and the changes of the subscribers of `draw.document.subscribe`, in the
+ * words of the features: the IDs of what changed, from the summary the layer keeps with the
+ * change. The events of one feature are made only while they have a listener.
  *
  * @returns The function that stops
  * @internal
@@ -134,10 +226,21 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
   let hidden: readonly string[] = Object.freeze([...client.listHidden()]);
   let readOnly = client.isReadOnly();
   let locked = client.isInteractionLocked();
-  // The orders before a change are kept only while `feature.moved` has a listener
-  store.watchMoves(() => hub.has('feature.moved'));
-  return store.subscribe((changes) => {
-    emitResourceEvents(hub, store, changes);
+  const readsChanges = (): boolean => hub.has('document.changed') || hub.subscribers().length > 0;
+  const counts = watchChanges(store, {
+    wanted: () => readsChanges() || hub.has('feature.moved') || hub.has('group.moved'),
+    asksValues(change) {
+      const asking = hub.subscribers().filter((subscriber) => subscriber.asks(change));
+      return asking.length > 0 ? asking : null;
+    },
+  });
+  // The orders before a change are kept only while the moves have a listener
+  store.watchMoves(() => hub.has('feature.moved') || hub.has('group.moved'));
+  const stop = store.subscribe((changes) => {
+    const summary = summaryOfChange(changes);
+    // The sets of IDs are made before any listener can write
+    const ids = summary && (readsChanges() || hub.has('feature.moved')) ? summary.ids() : null;
+    emitResourceEvents(hub, store, changes, summary, ids, counts);
 
     const nextVertexSelection = client.getVertexSelection();
     if (!sameVertexSelection(vertexSelection, nextVertexSelection)) {
@@ -170,9 +273,37 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
       hub.emit('preview.changed', toPreviewPayload(tentative.state));
     }
 
-    const change = toDocumentChange(changes);
-    if (change) hub.emit('document.changed', change);
+    if (!summary || !ids) return;
+    const change = toDocumentChange(changes, summary, ids, store);
+    hub.emit('document.changed', change);
+    tellSubscribers(hub, change, summary);
   });
+  return () => {
+    stop();
+    watchChanges(store, null);
+  };
+}
+
+/** The changes of the subscribers of `draw.document.subscribe`: each with values of its own */
+function tellSubscribers(hub: EventHub, change: DocumentChange, summary: ChangeSummary): void {
+  const subscribers = hub.subscribers();
+  if (subscribers.length === 0) return;
+  const asked = Array.isArray(summary.askedBy) ? (summary.askedBy as unknown[]) : [];
+  const before = summary.valuesBefore;
+  // Held once for every subscriber that asked for them; none for a change that wrote no feature
+  const shared =
+    asked.length > 0 && before && [...before.values()].some((values) => values.rows.length > 0)
+      ? new SharedValues(before)
+      : null;
+  for (const subscriber of subscribers) {
+    const own: DocumentChange =
+      shared && asked.includes(subscriber) ? { ...change, previousValues: shared.hold() } : change;
+    try {
+      subscriber.listener(own);
+    } catch (error) {
+      console.error('Error in a subscriber of the document:', error);
+    }
+  }
 }
 
 /**
@@ -223,41 +354,90 @@ function sameIds(list: readonly string[], set: ReadonlySet<string>): boolean {
   return list.length === set.size && list.every((id) => set.has(id));
 }
 
+/**
+ * Whether a layer or a group changed in one of its own values (not in the order of what it
+ * holds, which is not one of its fields)
+ */
+function ownValuesChanged(value: object, previous: object): boolean {
+  const a = value as Record<string, unknown>;
+  const b = previous as Record<string, unknown>;
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (a[key] === b[key]) continue;
+    if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) return true;
+  }
+  return false;
+}
+
 /** The events of each resource of one notification */
-function emitResourceEvents(hub: EventHub, store: InstanceDocument, changes: StoreChange): void {
+function emitResourceEvents(
+  hub: EventHub,
+  store: InstanceDocument,
+  changes: StoreChange,
+  summary: ChangeSummary | undefined,
+  ids: ChangedIds | null,
+  counts: WorkCounts | undefined,
+): void {
   const source = changes.source ?? 'local';
+  const hasMoreParts = summary?.hasMoreParts ?? false;
+  /** The payload of an event of one feature is an object made for its listeners */
+  const made = (): void => countWork(counts, 'objectsCreated');
 
   const { features, layers, groups } = changes;
-  for (const feature of features?.created ?? []) {
-    hub.emit('feature.created', { feature: feature as Feature, source });
+  if (hub.has('feature.created')) {
+    for (const feature of features?.created ?? []) {
+      made();
+      hub.emit('feature.created', { feature: feature as Feature, source, hasMoreParts });
+    }
   }
-  for (const update of features?.updated ?? []) {
-    hub.emit('feature.updated', {
-      feature: update.feature as Feature,
-      previous: update.previous as Feature,
-      source,
-      intermediate: update.isIntermediate === true,
-    });
-    if (!hub.has('feature.moved')) continue;
-    const move = describeMove(store, update.previous, update.feature);
-    if (move) hub.emit('feature.moved', { feature: update.feature as Feature, ...move, source });
+  const movesTold = hub.has('feature.moved');
+  /** The features whose move was told with their update */
+  const moved = new Set<string>();
+  if (hub.has('feature.updated') || movesTold) {
+    for (const update of features?.updated ?? []) {
+      if (hub.has('feature.updated')) {
+        made();
+        hub.emit('feature.updated', {
+          feature: update.feature as Feature,
+          previous: update.previous as Feature,
+          source,
+          intermediate: update.isIntermediate === true,
+        });
+      }
+      if (!movesTold) continue;
+      const move = describeMove(store, update.previous, update.feature);
+      if (!move) continue;
+      moved.add(update.id);
+      made();
+      hub.emit('feature.moved', {
+        feature: update.feature as Feature,
+        ...move,
+        source,
+        hasMoreParts,
+      });
+    }
   }
-  for (const feature of features?.deleted ?? []) {
-    hub.emit('feature.deleted', { feature: feature as Feature, source });
+  // The features that took another position in their layer or their group
+  if (movesTold && ids) {
+    for (const id of ids.moved.iterate()) {
+      if (moved.has(id)) continue;
+      const feature = store.getFeature(id);
+      if (!feature) continue;
+      const move = describeMoveWithin(store, feature);
+      made();
+      hub.emit('feature.moved', { feature, ...move, source, hasMoreParts });
+    }
+  }
+  if (hub.has('feature.deleted')) {
+    for (const feature of features?.deleted ?? []) {
+      made();
+      hub.emit('feature.deleted', { feature: feature as Feature, source, hasMoreParts });
+    }
   }
 
   for (const layer of layers?.created ?? []) hub.emit('layer.created', { layer, source });
-  const updatedLayers = new Set<string>();
-  for (const { id, layer, previous } of layers?.updated ?? []) {
-    updatedLayers.add(id);
-    hub.emit('layer.updated', { layer, previous, source });
-  }
-  // A reorder within a layer changes its items
-  if (changes.layerReorder && !updatedLayers.has(changes.layerReorder.layerId)) {
-    const layer = store.getLayer(changes.layerReorder.layerId);
-    if (layer) {
-      hub.emit('layer.updated', { layer, previous: layer, source });
-    }
+  for (const { layer, previous } of layers?.updated ?? []) {
+    // A change of the order of its items alone is told by the moves
+    if (ownValuesChanged(layer, previous)) hub.emit('layer.updated', { layer, previous, source });
   }
   for (const layer of layers?.deleted ?? []) hub.emit('layer.deleted', { layer, source });
   if (layers?.orderChanged) {
@@ -269,16 +449,13 @@ function emitResourceEvents(hub: EventHub, store: InstanceDocument, changes: Sto
   }
 
   for (const group of groups?.created ?? []) hub.emit('group.created', { group, source });
-  const updatedGroups = new Set<string>();
-  for (const { id, group, previous } of groups?.updated ?? []) {
-    updatedGroups.add(id);
-    hub.emit('group.updated', { group, previous, source });
+  for (const { group, previous } of groups?.updated ?? []) {
+    // A change of the order of its features alone is told by the moves
+    if (ownValuesChanged(group, previous)) hub.emit('group.updated', { group, previous, source });
   }
-  // A reorder within a group changes its features
-  if (changes.groupReorder && !updatedGroups.has(changes.groupReorder.groupId)) {
-    const group = store.getGroup(changes.groupReorder.groupId);
-    if (group) {
-      hub.emit('group.updated', { group, previous: group, source });
+  if (summary && hub.has('group.moved')) {
+    for (const entry of groupMoves(store, summary)) {
+      hub.emit('group.moved', { group: entry.group, from: entry.from, to: entry.to, source });
     }
   }
   for (const group of groups?.deleted ?? []) hub.emit('group.deleted', { group, source });
@@ -292,9 +469,11 @@ function emitResourceEvents(hub: EventHub, store: InstanceDocument, changes: Sto
   }
 
   if (changes.selection) {
+    // The operation of the change of the document it came with, or null for the selection alone
     hub.emit('selection.changed', {
       selection: { type: changes.selection.type, ids: [...changes.selection.ids] },
       previous: { type: changes.selection.previousType, ids: [...changes.selection.previousIds] },
+      operationId: summary ? summary.operationId : null,
     });
   }
 
@@ -305,6 +484,35 @@ function emitResourceEvents(hub: EventHub, store: InstanceDocument, changes: Sto
   if (changes.mode) {
     hub.emit('mode.changed', { mode: changes.mode.mode, previous: changes.mode.previous });
   }
+}
+
+/** The groups a change moved, where each was and where it is now */
+function groupMoves(
+  store: InstanceDocument,
+  summary: ChangeSummary,
+): Array<{ id: string; group: Group; from: MoveTarget; to: MoveTarget }> {
+  const out: Array<{ id: string; group: Group; from: MoveTarget; to: MoveTarget }> = [];
+  for (const [id, before] of summary.groupsMoved) {
+    const group = store.getGroup(id);
+    if (!group) continue;
+    out.push({
+      id,
+      group,
+      from: withIndex({ layerId: before.layerId }, store.getOrderBefore(before.layerId), id),
+      to: withIndex({ layerId: group.layerId }, itemsOf(store, group.layerId), id),
+    });
+  }
+  return out;
+}
+
+/** The IDs of the items of a layer, in order */
+function itemsOf(store: InstanceDocument, layerId: string): readonly string[] {
+  return store.listItemIds(layerId, 0, store.countItems(layerId));
+}
+
+/** The IDs of the features of a group, in order */
+function membersOf(store: InstanceDocument, groupId: string): readonly string[] {
+  return store.listGroupFeatureIds(groupId, 0, store.countGroupFeatures(groupId));
 }
 
 /**
@@ -325,22 +533,33 @@ function describeMove(
 
   let to: MoveTarget;
   if (feature.groupId) {
-    to = withIndex(
-      { groupId: feature.groupId },
-      store.getGroup(feature.groupId)?.featureIds,
-      feature.id,
-    );
+    to = withIndex({ groupId: feature.groupId }, membersOf(store, feature.groupId), feature.id);
   } else if (previous.groupId && previous.layerId === feature.layerId) {
     // Out of its group, in the same layer
-    to = withIndex({ groupId: null }, store.getLayer(feature.layerId)?.items, feature.id);
+    to = withIndex({ groupId: null }, itemsOf(store, feature.layerId), feature.id);
   } else {
-    to = withIndex(
-      { layerId: feature.layerId },
-      store.getLayer(feature.layerId)?.items,
-      feature.id,
-    );
+    to = withIndex({ layerId: feature.layerId }, itemsOf(store, feature.layerId), feature.id);
   }
   return { from, to };
+}
+
+/** Where a feature that took another position in its layer or its group was, and is now */
+function describeMoveWithin(
+  store: InstanceDocument,
+  feature: StoredFeature,
+): { from: MoveTarget; to: MoveTarget } {
+  if (feature.groupId) {
+    const { groupId } = feature;
+    return {
+      from: withIndex({ groupId }, store.getOrderBefore(groupId), feature.id),
+      to: withIndex({ groupId }, membersOf(store, groupId), feature.id),
+    };
+  }
+  const { layerId } = feature;
+  return {
+    from: withIndex({ layerId }, store.getOrderBefore(layerId), feature.id),
+    to: withIndex({ layerId }, itemsOf(store, layerId), feature.id),
+  };
 }
 
 /** A target with the position of the ID in the list, when the list holds it */
@@ -372,40 +591,71 @@ function sameVertexSelection(
   });
 }
 
-/** The categories of a notification that belong to the document */
-const DOCUMENT_KEYS = [
-  'features',
-  'layers',
-  'groups',
-  'layerReorder',
-  'groupReorder',
-  'metadata',
-  'files',
-] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
-
-/** The categories of the state of this client that `document.changed` carries along */
-const CLIENT_KEYS = ['selection', 'editing', 'mode'] as const satisfies ReadonlyArray<
-  keyof DocumentChange & keyof StoreChange
->;
-
 /**
- * The change a notification carries, without the state that only the drawing reads (the
- * geometry being drawn, the drag); null when the notification changed nothing of the document
+ * The change a notification carries, in the words of the features: the IDs of the features it
+ * wrote, the layers, the groups, the metadata and the files it changed
  *
  * @internal
  */
-export function toDocumentChange(changes: StoreChange): DocumentChange | null {
-  const reset = changes.reset === true;
-  if (!reset && !DOCUMENT_KEYS.some((key) => changes[key] !== undefined)) return null;
-  const change: DocumentChange = {};
-  // A replacement of the whole document is a change of the document, even with no category
-  if (reset) change.reset = true;
-  for (const key of [...DOCUMENT_KEYS, ...CLIENT_KEYS]) {
-    if (changes[key] === undefined) continue;
-    (change as Record<string, unknown>)[key] = changes[key];
+export function toDocumentChange(
+  changes: StoreChange,
+  summary: ChangeSummary,
+  ids: ChangedIds,
+  store: InstanceDocument,
+): DocumentChange {
+  const change: DocumentChange = {
+    source: changes.source ?? 'local',
+    operationId: summary.operationId,
+    hasMoreParts: summary.hasMoreParts,
+    stopped: summary.stopped,
+    reset: changes.reset === true,
+    features: ids,
+  };
+  const layers: NonNullable<DocumentChange['layers']> = {};
+  if (changes.layers?.created) layers.created = changes.layers.created;
+  const layersUpdated = changes.layers?.updated?.filter((entry) =>
+    ownValuesChanged(entry.layer, entry.previous),
+  );
+  if (layersUpdated && layersUpdated.length > 0) layers.updated = layersUpdated;
+  if (changes.layers?.deleted) layers.deleted = changes.layers.deleted;
+  // A change that creates or deletes a layer always carries the order, as the Store wrote it
+  const orderChanged =
+    changes.layers?.orderChanged ??
+    (layers.created || layers.deleted ? summary.layerOrder : undefined);
+  if (orderChanged) {
+    layers.orderChanged = { order: [...orderChanged.order], previous: [...orderChanged.previous] };
   }
-  change.source = changes.source ?? 'local';
+  if (Object.keys(layers).length > 0) change.layers = layers;
+
+  const groups: NonNullable<DocumentChange['groups']> = {};
+  if (changes.groups?.created) groups.created = changes.groups.created;
+  const groupsUpdated = changes.groups?.updated?.filter((entry) =>
+    ownValuesChanged(entry.group, entry.previous),
+  );
+  if (groupsUpdated && groupsUpdated.length > 0) groups.updated = groupsUpdated;
+  if (changes.groups?.deleted) groups.deleted = changes.groups.deleted;
+  const moved = groupMoves(store, summary);
+  if (moved.length > 0) groups.moved = moved;
+  if (Object.keys(groups).length > 0) change.groups = groups;
+
+  if (changes.metadata) {
+    change.metadata = {
+      metadata: changes.metadata.metadata,
+      previous: changes.metadata.previous,
+      keys: summary.metadataKeys ?? metadataKeysOf(changes.metadata),
+    };
+  }
+  if (changes.files) change.files = changes.files;
   return change;
+}
+
+/** The keys whose values differ between the metadata after and before a change */
+function metadataKeysOf(metadata: NonNullable<StoreChange['metadata']>): readonly string[] {
+  const after = metadata.metadata as unknown as Record<string, unknown>;
+  const before = metadata.previous as unknown as Record<string, unknown>;
+  return [...new Set([...Object.keys(after), ...Object.keys(before)])].filter(
+    (key) => JSON.stringify(after[key]) !== JSON.stringify(before[key]),
+  );
 }
 
 // ============================================================================

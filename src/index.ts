@@ -75,7 +75,7 @@ export type { EditingFeaturesResource } from './api/model.js';
 export type { SelectionResource, VertexSelectionResource } from './api/selection.js';
 export type { MetadataResource } from './api/metadata.js';
 export type { DrawingResource } from './api/drawing.js';
-export type { DocumentResource } from './api/document.js';
+export type { DocumentResource, DocumentSubscribeOptions } from './api/document.js';
 
 // Document model
 export type {
@@ -136,7 +136,7 @@ export type {
   VertexSelection,
 } from './api/state.js';
 export { MODES } from './api/state.js';
-export type { IdSet } from './api/model.js';
+export type { ChangedIds, FeatureValues, IdSet } from './api/model.js';
 export { createIdSet } from './api/model.js';
 
 // Events

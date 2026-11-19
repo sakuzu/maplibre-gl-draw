@@ -152,7 +152,7 @@ describe('transact', () => {
     expect(draw.features.update(locked.id, { properties: { a: 1 } })).toBeNull();
     expect(draw.transact(() => draw.features.delete(gone.id))).toBe(false);
 
-    const notifications: DocumentChange[] = [];
+    const notifications: StoreChange[] = [];
     draw.getStore().subscribe((changes) => notifications.push(changes));
     draw.transact(
       () => {

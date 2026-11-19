@@ -33,6 +33,7 @@ import type {
   FeatureRowField,
   StoreChange as RowChange,
   Store as RowStore,
+  RowValues,
   StoreGroup,
 } from '../../store/built-in/types.js';
 import type {
@@ -59,6 +60,7 @@ import type {
   UpdateSource,
   VertexSelection,
 } from '../../store/types.js';
+import type { ChangedIds, IdSet } from '../model.js';
 import {
   FEATURE_FIELDS,
   featuresOfValues,
@@ -69,6 +71,202 @@ import {
   PROPERTY_FIELD,
   updatedRowFields,
 } from './feature-rows.js';
+import { makeIdSet } from './id-set.js';
+import { RowIdSet, type RowIds } from './row-id-set.js';
+
+/**
+ * What a change told to the subscribers of the layer did, in the words of the features: kept
+ * with the change, in a field that is not enumerable, so that the change reads, copies and
+ * compares as before
+ */
+const NOTES = Symbol('the notes of a change');
+
+/** A feature a change wrote, by its ID: the reference of its row */
+type NotedRows = Map<string, number>;
+
+/** What the layer notes of a change (see `ChangeSummary`) */
+interface Notes {
+  operationId: number | undefined;
+  hasMoreParts: boolean;
+  stopped: boolean;
+  /** Whether the features were noted (only while the changes are read in their words) */
+  features: boolean;
+  readonly created: NotedRows;
+  readonly updated: NotedRows;
+  readonly moved: NotedRows;
+  readonly deleted: Set<string>;
+  /** The groups that moved, with the place each had before */
+  readonly groupsMoved: Map<string, { layerId: string; key: string }>;
+  layerOrder: { order: string[]; previous: string[] } | undefined;
+  metadataKeys: Set<string> | undefined;
+  valuesBefore: ReadonlyMap<string, RowValues> | undefined;
+  askedBy: unknown;
+}
+
+function newNotes(): Notes {
+  return {
+    operationId: undefined,
+    hasMoreParts: false,
+    stopped: false,
+    features: false,
+    created: new Map(),
+    updated: new Map(),
+    moved: new Map(),
+    deleted: new Set(),
+    groupsMoved: new Map(),
+    layerOrder: undefined,
+    metadataKeys: undefined,
+    valuesBefore: undefined,
+    askedBy: null,
+  };
+}
+
+/** The notes of a change, made for it when it has none */
+function notesFor(change: StoreChange): Notes {
+  const known = (change as { [NOTES]?: Notes })[NOTES];
+  if (known) return known;
+  const notes = newNotes();
+  Object.defineProperty(change, NOTES, { value: notes, enumerable: false });
+  return notes;
+}
+
+/** A feature created: one deleted before it in the change and created again is updated */
+function noteCreated(notes: Notes, id: string, ref: number): void {
+  if (notes.deleted.delete(id)) notes.updated.set(id, ref);
+  else notes.created.set(id, ref);
+}
+
+/** A feature whose values changed (not one the change created) */
+function noteUpdated(notes: Notes, id: string, ref: number): void {
+  if (!notes.created.has(id)) notes.updated.set(id, ref);
+}
+
+/** A feature put in another place (not one the change created) */
+function noteMoved(notes: Notes, id: string, ref: number): void {
+  if (!notes.created.has(id)) notes.moved.set(id, ref);
+}
+
+/** A feature deleted: one the change created is in none of the sets */
+function noteDeleted(notes: Notes, id: string): void {
+  notes.updated.delete(id);
+  notes.moved.delete(id);
+  if (!notes.created.delete(id)) notes.deleted.add(id);
+}
+
+/** Adds the notes of a change to those of the change being built */
+function mergeNotes(target: Notes, from: Notes): void {
+  if (from.operationId !== undefined) {
+    target.operationId = from.operationId;
+    target.hasMoreParts = from.hasMoreParts;
+    target.stopped = from.stopped;
+  }
+  if (from.features) target.features = true;
+  for (const id of from.deleted) noteDeleted(target, id);
+  for (const [id, ref] of from.created) noteCreated(target, id, ref);
+  for (const [id, ref] of from.updated) noteUpdated(target, id, ref);
+  for (const [id, ref] of from.moved) noteMoved(target, id, ref);
+  for (const [id, place] of from.groupsMoved) {
+    if (!target.groupsMoved.has(id)) target.groupsMoved.set(id, place);
+  }
+  if (from.layerOrder) {
+    target.layerOrder = target.layerOrder
+      ? { order: from.layerOrder.order, previous: target.layerOrder.previous }
+      : from.layerOrder;
+  }
+  if (from.metadataKeys) {
+    target.metadataKeys ??= new Set();
+    for (const key of from.metadataKeys) target.metadataKeys.add(key);
+  }
+  if (from.valuesBefore) target.valuesBefore = from.valuesBefore;
+  if (from.askedBy !== null) target.askedBy = from.askedBy;
+}
+
+/** Whether a feature changed in a value other than its place */
+function valuesChanged(feature: Feature, previous: Feature): boolean {
+  const a = feature as unknown as Record<string, unknown>;
+  const b = previous as unknown as Record<string, unknown>;
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (key === 'layerId' || key === 'groupId') continue;
+    if (a[key] !== b[key]) return true;
+  }
+  return false;
+}
+
+/**
+ * What a change told to the subscribers of the layer did, in the words of the features
+ *
+ * @internal
+ */
+export interface ChangeSummary {
+  /** The operation the change is a part of, as the Store told it */
+  readonly operationId: number;
+  /** Whether more changes of the same operation follow */
+  readonly hasMoreParts: boolean;
+  /** Whether it is the last change of an operation that stopped */
+  readonly stopped: boolean;
+  /**
+   * The sets of the IDs of the features created, updated, deleted and moved, made at the first
+   * call (the same sets afterwards): empty sets when the features were not noted
+   */
+  ids(): ChangedIds;
+  /** The groups that moved, with the layer and the key of the place each had before */
+  readonly groupsMoved: ReadonlyMap<string, { readonly layerId: string; readonly key: string }>;
+  /** The stacking order of the layers after and before the change, when the Store changed it */
+  readonly layerOrder: { readonly order: string[]; readonly previous: string[] } | undefined;
+  /** The keys of the metadata the change wrote */
+  readonly metadataKeys: readonly string[] | undefined;
+  /** The values the rows had before the change, when a watcher asked for them */
+  readonly valuesBefore: ReadonlyMap<string, RowValues> | undefined;
+  /** What the watcher answered when it was asked for the values before the change */
+  readonly askedBy: unknown;
+}
+
+/**
+ * Who reads the changes of the layer in the words of the features (the events of the instance)
+ *
+ * @internal
+ */
+export interface ChangeWatch {
+  /** Whether the features a change wrote are noted (the sets of IDs are made of them) */
+  wanted(): boolean;
+  /**
+   * Asked before a transaction writes, once: anything but null makes the change carry the values
+   * the rows had before it, and is carried with it (`ChangeSummary.askedBy`)
+   */
+  asksValues(change: { readonly source: UpdateSource; readonly operationId: number }): unknown;
+}
+
+/** The field of the layer that takes the watch of its changes */
+const WATCH = Symbol('the watch of the changes');
+
+/** The field of a change told that holds its summary */
+const SUMMARY = Symbol('the summary of a change');
+
+/**
+ * What a change told by the layer did, in the words of the features (undefined for a change that
+ * was not told by a layer, or that told the state of this client alone)
+ *
+ * @internal
+ */
+export function summaryOfChange(change: StoreChange): ChangeSummary | undefined {
+  return (change as { [SUMMARY]?: ChangeSummary })[SUMMARY];
+}
+
+/**
+ * Sets who reads the changes of a layer in the words of the features; nothing happens for a
+ * layer that was not made by `createDocumentAccess`
+ *
+ * @returns The numbers of the work of the Store under the layer (undefined for none)
+ * @internal
+ */
+export function watchChanges(
+  layer: InstanceDocument,
+  watch: ChangeWatch | null,
+): WorkCounts | undefined {
+  return (layer as { [WATCH]?: (watch: ChangeWatch | null) => WorkCounts | undefined })[WATCH]?.(
+    watch,
+  );
+}
 
 /** The number of features the layer keeps made */
 const FEATURE_CACHE_LIMIT = 1_024;
@@ -177,6 +375,8 @@ function appendChange(target: StoreChange, change: StoreChange, folds: Folds): v
     if (change.files.created) t.created = appended(t.created, change.files.created);
     if (change.files.deleted) t.deleted = appended(t.deleted, change.files.deleted);
   }
+  const notes = (change as { [NOTES]?: Notes })[NOTES];
+  if (notes) mergeNotes(notesFor(target), notes);
 }
 
 /** Whether a change tells a change of the document (not of the state of this client alone) */
@@ -390,7 +590,163 @@ export function createDocumentAccess(
   let toldOrdersBefore: Map<string, readonly string[]> | null = null;
   let watchingMoves: () => boolean = () => false;
 
+  // ==========================================================================
+  // The notes of the changes, in the words of the features
+  // ==========================================================================
+
+  /** Who reads the changes in the words of the features */
+  let watch: ChangeWatch | null = null;
+  /** Whether the features the changes write are noted */
+  const wanted = (): boolean => watch?.wanted() === true;
+  /** What the watcher answered for the transaction under way, and its operation */
+  let askedNow: unknown = null;
+  let operationNow: number | undefined;
+  const rowIds: RowIds = {
+    getRowId: (ref) => tables.getRowId(ref),
+    getRowRef: (id) => tables.getRowRef(id),
+  };
+  /**
+   * The sets of the rows handed out, held weakly: told the rows each change deletes, so that each
+   * keeps the IDs it was given
+   */
+  const liveSets = new Set<WeakReference<RowIdSet>>();
+  let setsMade = 0;
+
+  /** The sets handed out that are still there (the others are left out) */
+  const forgetGoneSets = (): void => {
+    for (const held of liveSets) if (!held.deref()) liveSets.delete(held);
+  };
+
+  /** A set of the rows noted, in the order they were noted */
+  const setOfRows = (rows: NotedRows): IdSet => {
+    const set = new RowIdSet(rowIds, Int32Array.from(rows.values()));
+    countWork(counts, 'objectsCreated', 2);
+    if (rows.size > 0) {
+      setsMade += 1;
+      if (setsMade % 256 === 0) forgetGoneSets();
+      liveSets.add(new (globalThis as unknown as WeakReferences).WeakRef(set));
+    }
+    return set;
+  };
+
+  /** The rows a change deleted leave the sets handed out: each copies the IDs of its own */
+  const rowsLeaveSets = (change: RowChange): void => {
+    if (liveSets.size === 0 || !change.rows) return;
+    const lists: Int32Array[] = [];
+    let count = 0;
+    for (const rows of change.rows.layers.values()) {
+      if (rows.deleted.length === 0) continue;
+      lists.push(rows.deleted);
+      count += rows.deleted.length;
+    }
+    if (count === 0) return;
+    for (const held of liveSets) {
+      const set = held.deref();
+      if (!set) {
+        liveSets.delete(held);
+        continue;
+      }
+      countWork(counts, 'objectsCreated', set.rowsDeleted(lists, count));
+    }
+  };
+
+  /** Notes the features a change of the instance wrote (`features` of the change) */
+  const noteOwnFeatures = (change: StoreChange): void => {
+    if (!change.features || !wanted()) return;
+    const notes = notesFor(documentPending);
+    notes.features = true;
+    for (const feature of change.features.created ?? []) {
+      const ref = tables.getRowRef(feature.id);
+      if (ref !== undefined) noteCreated(notes, feature.id, ref);
+    }
+    for (const { id, feature, previous } of change.features.updated ?? []) {
+      const ref = tables.getRowRef(id);
+      if (ref === undefined) continue;
+      const placeChanged =
+        previous.layerId !== feature.layerId || previous.groupId !== feature.groupId;
+      if (placeChanged) noteMoved(notes, id, ref);
+      if (valuesChanged(feature, previous) || (!placeChanged && !notes.moved.has(id))) {
+        noteUpdated(notes, id, ref);
+      }
+    }
+    for (const feature of change.features.deleted ?? []) noteDeleted(notes, feature.id);
+  };
+
+  /** The sets of IDs of a change whose features were not noted, read from its features */
+  const notesOfFeatures = (change: StoreChange): Notes => {
+    const notes = newNotes();
+    for (const feature of change.features?.created ?? []) {
+      const ref = tables.getRowRef(feature.id);
+      if (ref !== undefined) noteCreated(notes, feature.id, ref);
+    }
+    for (const { id, feature, previous } of change.features?.updated ?? []) {
+      const ref = tables.getRowRef(id);
+      if (ref === undefined) continue;
+      const placeChanged =
+        previous.layerId !== feature.layerId || previous.groupId !== feature.groupId;
+      if (placeChanged) noteMoved(notes, id, ref);
+      if (!placeChanged || valuesChanged(feature, previous)) noteUpdated(notes, id, ref);
+    }
+    for (const feature of change.features?.deleted ?? []) noteDeleted(notes, feature.id);
+    return notes;
+  };
+
+  /** The summary of a change told (see `ChangeSummary`) */
+  const summaryOf = (notes: Notes, change: StoreChange): ChangeSummary => {
+    let ids: ChangedIds | null = null;
+    const metadataKeys = notes.metadataKeys ? Object.freeze([...notes.metadataKeys]) : undefined;
+    return {
+      operationId: notes.operationId ?? operationNow ?? 0,
+      hasMoreParts: notes.hasMoreParts,
+      stopped: notes.stopped,
+      ids() {
+        if (ids) return ids;
+        const noted = notes.features || !change.features ? notes : notesOfFeatures(change);
+        ids = Object.freeze({
+          created: setOfRows(noted.created),
+          updated: setOfRows(noted.updated),
+          deleted: makeIdSet(noted.deleted),
+          moved: setOfRows(noted.moved),
+        });
+        return ids;
+      },
+      groupsMoved: notes.groupsMoved,
+      layerOrder: notes.layerOrder,
+      metadataKeys,
+      valuesBefore: notes.valuesBefore,
+      askedBy: notes.askedBy,
+    };
+  };
+
+  /** What a change of the Store did that the changes of the layer do not say, noted with it */
+  const notesOfRows = (change: RowChange): Notes => {
+    const notes = newNotes();
+    notes.operationId = change.operationId;
+    notes.hasMoreParts = change.hasMoreParts;
+    notes.stopped = change.stopped;
+    if (change.layers?.orderChanged) {
+      notes.layerOrder = {
+        order: [...change.layers.orderChanged.order],
+        previous: [...change.layers.orderChanged.previous],
+      };
+    }
+    if (change.metadata) notes.metadataKeys = new Set(change.metadata.keys);
+    const createdGroups = new Set((change.groups?.created ?? []).map((group) => group.id));
+    for (const { id, group, previous } of change.groups?.updated ?? []) {
+      if (createdGroups.has(id)) continue;
+      if (group.layerId === previous.layerId && group.orderKey === previous.orderKey) continue;
+      notes.groupsMoved.set(id, { layerId: previous.layerId, key: previous.orderKey });
+    }
+    if (askedNow !== null) {
+      notes.askedBy = askedNow;
+      notes.valuesBefore = change.previousValues;
+    }
+    askedNow = null;
+    return notes;
+  };
+
   const mergeDocument = (change: StoreChange): void => {
+    noteOwnFeatures(change);
     appendChange(documentPending, change, documentFolds);
   };
 
@@ -421,6 +777,9 @@ export function createDocumentAccess(
     change.source = busSource;
     pending = {};
     pendingFolds = newFolds();
+    if (changesDocument(change)) {
+      Object.defineProperty(change, SUMMARY, { value: summaryOf(notesFor(change), change) });
+    }
     toldOrdersBefore = ordersBefore;
     ordersBefore = new Map();
     // A notification of the state of this client alone is counted as the Store counts its own
@@ -482,14 +841,20 @@ export function createDocumentAccess(
   let ownOrder = false;
 
   /** Asked by the Store at the start of each outermost transaction */
-  const asksValuesBefore = (change: { readonly source: UpdateSource }): boolean => {
+  const asksValuesBefore = (change: {
+    readonly source: UpdateSource;
+    readonly operationId: number;
+  }): boolean => {
     // A new outermost transaction: the one the writes of the instance waited for has ended
     // without a change, and what waited is told now
     if (awaitingRows) releaseAwaiting(lastOuterSource ?? rowSource);
     lastOuterSource = change.source;
+    operationNow = change.operationId;
+    askedNow = watch ? (watch.asksValues(change) ?? null) : null;
     if (opening) {
       openedOutermost = true;
-      return false;
+      // The values before of the writes of the instance only for the watcher that asks for them
+      return askedNow !== null;
     }
     return true;
   };
@@ -1300,7 +1665,13 @@ export function createDocumentAccess(
     geometry?: Geometry,
   ): void => {
     if (fields.size === 0 && geometry === undefined) return;
-    if (fields.has('parent') || fields.has('orderKey')) placesWritten();
+    if (fields.has('parent') || fields.has('orderKey')) {
+      placesWritten();
+      if (wanted()) {
+        const id = tables.getRowId(ref);
+        if (id !== undefined) noteMoved(notesFor(documentPending), id, ref);
+      }
+    }
     ownRows.add(ref);
     wrote();
     if (pendingPlaces && geometry === undefined && isPlace(fields)) {
@@ -2217,7 +2588,7 @@ export function createDocumentAccess(
   };
 
   /** The rows a change deleted leave the iterators under way */
-  const noteDeleted = (change: RowChange): void => {
+  const rowsLeaveIterators = (change: RowChange): void => {
     if (iterators.size === 0 || !change.rows) return;
     const states = iteratorStates();
     for (const rows of change.rows.layers.values()) {
@@ -2261,6 +2632,9 @@ export function createDocumentAccess(
     /** The groups whose features the change deleted */
     const emptiedGroups = new Set<string>();
     const watching = watchingMoves();
+    // The features of the change in their own words, while they are read so
+    const notes = wanted() ? notesFor(out) : undefined;
+    if (notes) notes.features = true;
     for (const [layerId, rows] of change.rows?.layers ?? []) {
       const createdRefs = rows.created.filter((ref) => !ownRows.has(ref));
       const updatedRefs = rows.updated.filter((ref) => !ownRows.has(ref));
@@ -2318,6 +2692,7 @@ export function createDocumentAccess(
       for (const ref of deletedRefs) {
         const id = tables.getRowId(ref);
         if (id === undefined) continue;
+        if (notes) noteDeleted(notes, id);
         let feature = featureCache.get(id);
         featureCache.delete(id);
         if (!feature && change.deletedRowsToken !== undefined) {
@@ -2362,11 +2737,15 @@ export function createDocumentAccess(
       for (const ref of updatedRefs) {
         const id = tables.getRowId(ref);
         if (id === undefined) continue;
-        if (onlyPlaces) {
-          const parent = String(
-            tables.readValues(Int32Array.of(ref), ['parent']).fields.get('parent')?.[0],
-          );
-          if (placesBefore.get(id)?.container === parent) {
+        if (placed) {
+          const now = tables.readValues(Int32Array.of(ref), ['parent', 'orderKey']).fields;
+          const parent = String(now.get('parent')?.[0]);
+          const before = placesBefore.get(id);
+          // Put in another place: in another container, or under another key in its own
+          if (notes && (before?.container !== parent || before.key !== now.get('orderKey')?.[0])) {
+            noteMoved(notes, id, ref);
+          }
+          if (onlyPlaces && before?.container === parent) {
             // Not a change of the feature: a change of the order of its container
             reordered.add(parent);
             continue;
@@ -2378,6 +2757,13 @@ export function createDocumentAccess(
         const previous = cached ?? previousOf(ref, id, now) ?? now;
         remember(now);
         updated.push({ id, feature: now, previous });
+        if (notes) {
+          // A row moved to another layer with its group keeps its parent
+          if (previous.layerId !== now.layerId || previous.groupId !== now.groupId) {
+            noteMoved(notes, id, ref);
+          }
+          if (!onlyPlaces) noteUpdated(notes, id, ref);
+        }
         if (!placed) continue;
         if (watching && (previous.groupId ?? previous.layerId) !== (now.groupId ?? now.layerId)) {
           left.add(previous.groupId ?? previous.layerId);
@@ -2391,6 +2777,7 @@ export function createDocumentAccess(
       if (createdRefs.length > 0) {
         const ids = Array.from(createdRefs, (ref) => tables.getRowId(ref) ?? '');
         for (const id of ids) featureCache.delete(id);
+        if (notes) for (let i = 0; i < ids.length; i++) noteCreated(notes, ids[i], createdRefs[i]);
         const made = makeFeatures(createdRefs, ids);
         for (const feature of made) {
           created.push(feature);
@@ -2629,17 +3016,21 @@ export function createDocumentAccess(
     // Whoever wrote it, the document is no longer the one last read
     documentVersion += 1;
     try {
-      noteDeleted(change);
+      rowsLeaveIterators(change);
+      rowsLeaveSets(change);
       const own = wroteRows;
       const foreign = changeFromRows(change);
       forgetEndKeys(change, foreign);
       clearOwn();
+      // What the change of the Store says besides its rows, with the change it belongs to
+      const rowNotes = notesOfRows(change);
+      mergeNotes(notesFor(own ? documentPending : foreign), rowNotes);
       if (own && awaitingRows) {
         // The writes of the instance in a transaction opened from elsewhere end with it: told
         // once the Store has told its change (the layer holds its change back until then)
         awaitingRows = false;
         const { source } = change;
-        if (!isEmptyChange(foreign)) mergeDocument(foreign);
+        if (!isEmptyChange(foreign)) appendChange(documentPending, foreign, documentFolds);
         afterTold.push(() => {
           busDepth -= 1;
           busSource = source;
@@ -2649,7 +3040,7 @@ export function createDocumentAccess(
         return;
       }
       if (own) {
-        if (!isEmptyChange(foreign)) mergeDocument(foreign);
+        if (!isEmptyChange(foreign)) appendChange(documentPending, foreign, documentFolds);
         return;
       }
       if (isEmptyChange(foreign)) return;
@@ -3063,6 +3454,13 @@ export function createDocumentAccess(
       iterators.delete(held);
     }
   }
+
+  Object.defineProperty(layer, WATCH, {
+    value: (given: ChangeWatch | null): WorkCounts | undefined => {
+      watch = given;
+      return counts;
+    },
+  });
 
   client.attach({
     // The rules of the state of this client read where the features are and whether they are

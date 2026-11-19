@@ -33,10 +33,9 @@ const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBase
 
 // 5. Follow the changes: one event per transaction, whether a tool, the panel or code made it
 draw.on('document.changed', ({ features, source }) => {
-  if (!features) return;
   console.log(
-    `${features.created?.length ?? 0} created, ${features.updated?.length ?? 0} updated,`,
-    `${features.deleted?.length ?? 0} deleted (${source})`,
+    `${features.created.count()} created, ${features.updated.count()} updated,`,
+    `${features.deleted.count()} deleted, ${features.moved.count()} moved (${source})`,
   );
 });
 

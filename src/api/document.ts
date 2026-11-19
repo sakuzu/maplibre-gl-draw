@@ -6,6 +6,8 @@
  */
 
 import type { FeatureCollection } from 'geojson';
+import type { DocumentChange } from './events.js';
+import type { UpdateSource } from './extension/store.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from './model.js';
 
 /**
@@ -60,6 +62,25 @@ export interface DocumentResource {
   loadMany(
     items: readonly { source: LoadSource; options?: LoadOptions }[],
   ): Promise<LoadResult[] | null>;
+  /**
+   * Subscribes to the changes of the document, as `document.changed` delivers them, and asks
+   * for more in them: the values the features had before each change
+   * (`DocumentChange.previousValues`), for an extension that writes them back
+   * (`features.restore`). The library reads and keeps those values only while a subscriber
+   * asks for them, and only for the sources it names, so they cost nothing otherwise.
+   *
+   * A subscriber that asks for the values before lets go of the ones it no longer needs
+   * (`features.releaseValues`): the values of a deletion keep the features deleted.
+   *
+   * @param listener - Called with each change, after the events of the resources, and after
+   *   the Store has told every one of its listeners, so that it can write
+   * @param options - What the changes of this subscriber carry besides the IDs
+   * @returns The function that unsubscribes (an extension calls it in its `onRemove`)
+   */
+  subscribe(
+    listener: (change: DocumentChange) => void,
+    options?: DocumentSubscribeOptions,
+  ): () => void;
   /** The whole document in the format of the library. */
   toJSON(): DrawDocument;
   /**
@@ -67,4 +88,27 @@ export interface DocumentResource {
    * the prefixed keys.
    */
   toGeoJSON(): FeatureCollection;
+}
+
+/** What the changes of a subscriber of `draw.document.subscribe` carry besides the IDs. */
+export interface DocumentSubscribeOptions {
+  /**
+   * Whether the changes carry the values the features had before
+   * ({@link DocumentChange.previousValues}): true for the changes of every source, the sources
+   * whose changes carry them (an extension that writes back the edits of this client leaves out
+   * `'remote'` and `'load'`, which it never writes back), `{ except }` with the sources whose
+   * changes do not carry them (every other source, those an extension names included), or a
+   * function that answers for each change, from its source and the number of its operation
+   * (an extension that writes changes of its own, under operation numbers it took, and does not
+   * want their values, answers false for those). The function is asked before the change is
+   * written, once per change (once per part of a bulk edit), so that the values nobody asks for
+   * are never read; it answers at once and writes nothing. False when it is left out.
+   */
+  previousValues?:
+    | boolean
+    | readonly UpdateSource[]
+    | {
+        readonly except: readonly UpdateSource[];
+      }
+    | ((change: { readonly source: UpdateSource; readonly operationId: number }) => boolean);
 }

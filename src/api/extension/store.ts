@@ -8,11 +8,11 @@
  * option of `createDraw`, for example to keep the document somewhere shared.
  */
 
-import type { DocumentChange } from '../events.js';
+import type { StoreChange } from '../../store/types.js';
 import type { Feature, FeatureType, FileData, Group, Layer, Metadata } from '../model.js';
 
 /**
- * Where a write came from, as it arrives in {@link DocumentChange.source} and in the `source` of
+ * Where a write came from, as it arrives in the `source` of the changes and in the `source` of
  * the events.
  *
  * - `local`: an operation of the user or a call of the API (the default of `draw.transact`)
@@ -98,7 +98,7 @@ export interface StoreView {
    *
    * @returns The function that unsubscribes
    */
-  subscribe(listener: (changes: DocumentChange) => void): () => void;
+  subscribe(listener: (changes: StoreChange) => void): () => void;
   /**
    * Runs `fn` as one transaction, so that its writes arrive as one notification.
    *

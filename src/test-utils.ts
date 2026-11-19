@@ -42,6 +42,7 @@ import type {
   FeatureFilter,
   Group,
   GroupFilter,
+  IdSet,
   Layer,
   LayerFilter,
   Feature as PublicFeature,
@@ -2207,6 +2208,7 @@ const PARITY_EVENT_READS: { [K in keyof DrawEvents]-?: (p: DrawEvents[K]) => unk
     previous: readGroup(p.previous),
     source: p.source,
   }),
+  'group.moved': (p) => ({ group: readGroup(p.group), from: p.from, to: p.to, source: p.source }),
   'group.deleted': (p) => ({ group: readGroup(p.group), source: p.source }),
   'metadata.updated': (p) => ({ metadata: p.metadata, previous: p.previous, source: p.source }),
   'document.changed': (p) => readChange(p),
@@ -2261,18 +2263,9 @@ export const PARITY_EVENT_NAMES = (Object.keys(PARITY_EVENT_READS) as (keyof Dra
   (name) => !PARITY_EVENTS_AFTER.has(name),
 );
 
-/** A `document.changed` notification (and a notification of the Store), field by field */
+/** A `document.changed` notification, field by field: the sets of IDs as arrays */
 function readChange(p: DocumentChange) {
-  const features = p.features && {
-    created: p.features.created?.map(readFeature),
-    updated: p.features.updated?.map((u) => ({
-      id: u.id,
-      feature: readFeature(u.feature),
-      previous: readFeature(u.previous),
-      isIntermediate: u.isIntermediate,
-    })),
-    deleted: p.features.deleted?.map(readFeature),
-  };
+  const ids = (set: IdSet) => [...set.iterate()];
   const layers = p.layers && {
     created: p.layers.created?.map((l) => readLayer(l)),
     updated: p.layers.updated?.map((u) => ({
@@ -2291,18 +2284,27 @@ function readChange(p: DocumentChange) {
       previous: readGroup(u.previous),
     })),
     deleted: p.groups.deleted?.map((g) => readGroup(g)),
+    moved: p.groups.moved?.map((m) => ({
+      id: m.id,
+      group: readGroup(m.group),
+      from: m.from,
+      to: m.to,
+    })),
   };
   return {
     source: p.source,
+    operationId: p.operationId,
+    hasMoreParts: p.hasMoreParts,
+    stopped: p.stopped,
     reset: p.reset,
-    features,
+    features: {
+      created: ids(p.features.created),
+      updated: ids(p.features.updated),
+      deleted: ids(p.features.deleted),
+      moved: ids(p.features.moved),
+    },
     layers,
     groups,
-    layerReorder: p.layerReorder,
-    groupReorder: p.groupReorder,
-    selection: p.selection,
-    editing: p.editing,
-    mode: p.mode,
     metadata: p.metadata,
     files: p.files,
   };

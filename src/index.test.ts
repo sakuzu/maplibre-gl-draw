@@ -26,6 +26,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
+  'ChangedIds',
   'CompanionProvider',
   'createDraw',
   'createIdSet',
@@ -46,6 +47,7 @@ const MAIN = [
   'DocumentGroup',
   'DocumentLayer',
   'DocumentResource',
+  'DocumentSubscribeOptions',
   'Draw',
   'DRAW_PROPERTY_PREFIX',
   'DrawDocument',
@@ -75,6 +77,7 @@ const MAIN = [
   'FeatureType',
   'FeatureTypeDefinition',
   'FeatureTypesCollection',
+  'FeatureValues',
   'FileData',
   'FillRenderer',
   'ToGeoJSONOptions',
@@ -359,7 +362,7 @@ describeEntry('src/store/index.ts', STORE, () => import('./store/index.js'));
 
 describe('the four entries', () => {
   it('share no name', () => {
-    const all = [...MAIN, ...GEOMETRY, ...TABLE, ...WEBGL];
+    const all = [...MAIN, ...GEOMETRY, ...TABLE, ...WEBGL, ...STORE];
     expect(all.filter((name, index) => all.indexOf(name) !== index)).toEqual([]);
   });
 });

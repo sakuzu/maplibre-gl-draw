@@ -64,7 +64,7 @@ export interface Draw {
   readonly metadata: MetadataResource;
   /** The options that can change while the instance runs */
   readonly options: OptionsResource;
-  /** The whole document, to load and to write out */
+  /** The whole document, to load, to follow its changes and to write out */
   readonly document: DocumentResource;
   /** The plugins, modes, feature types, overlays and providers */
   readonly extensions: ExtensionsCollections;
