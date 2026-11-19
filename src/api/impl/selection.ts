@@ -52,7 +52,8 @@ export function createSelection(
   const requireItems = (type: SelectionType, ids: unknown): string[] => {
     const list = requireIds(ids);
     for (const id of list) {
-      if (!getItem(store, type, id)) throw notFound(type, id);
+      const there = type === 'feature' ? store.hasFeature(id) : getItem(store, type, id);
+      if (!there) throw notFound(type, id);
     }
     return list;
   };

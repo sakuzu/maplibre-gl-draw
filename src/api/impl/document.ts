@@ -99,7 +99,7 @@ export function createDocument(
   /** Writes one load: its new layer first, then its features, then the group of them */
   const writeItem = ({ load, layer, group }: PreparedItem): LoadResult => {
     if (layer) insertLayer(store, layer);
-    const result: LoadResult = load.write();
+    const result: LoadResult = load.write(store);
     if (layer) result.layerId = layer.layer.id;
     const first = store.getFeature(result.featureIds[0] ?? '');
     if (group && first) {
@@ -227,7 +227,7 @@ export function createDocument(
         replace ? () => deleteFeaturesAndGroups(store) : undefined,
       );
       if (!replace) return prepared;
-      return { write: () => ({ ...prepared.write(), replaced: true }) };
+      return { write: (document) => ({ ...prepared.write(document), replaced: true }) };
     }
 
     const { data } = read;

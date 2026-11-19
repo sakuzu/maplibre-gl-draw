@@ -28,7 +28,7 @@ export function createEditingFeatures(deps: Pick<ResourceDeps, 'store'>): Editin
       const list = requireIds(ids);
       // All of them or none
       for (const id of list) {
-        if (!store.getFeature(id)) throw notFound('feature', id);
+        if (!store.hasFeature(id)) throw notFound('feature', id);
       }
       client.startEditing(list);
     },

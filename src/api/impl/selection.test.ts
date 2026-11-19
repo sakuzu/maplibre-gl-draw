@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
+import type { GroupsCollection } from '../groups.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
@@ -17,6 +18,7 @@ import { createSelection, createVertexSelection } from './selection.js';
 let store: MemoryStore;
 let selection: SelectionResource;
 let vertices: VertexSelectionResource;
+let groups: GroupsCollection;
 
 function codeOf(fn: () => unknown): string | undefined {
   try {
@@ -47,7 +49,7 @@ beforeEach(() => {
   layer('l2');
   const deps = createResourceDeps(store);
   const features = createFeatures(deps);
-  const groups = createGroups(deps);
+  groups = createGroups(deps);
   features.createMany([
     { id: 'a', type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } },
     { id: 'b', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } },
@@ -133,7 +135,7 @@ describe('draw.selection', () => {
   it('groups the selected features and ungroups the selected groups', () => {
     selection.set('feature', ['a', 'line']);
     const group = selection.group();
-    expect(group?.featureIds).toEqual(['a', 'line']);
+    expect(groups.listFeatureIds(group?.id ?? '', { start: 0, end: 2 })).toEqual(['a', 'line']);
     selection.set('group', [group?.id ?? '']);
     expect(selection.ungroup()).toBe(true);
     expect(store.getGroup(group?.id ?? '')).toBeUndefined();

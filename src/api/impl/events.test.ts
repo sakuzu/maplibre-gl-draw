@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import type { EngineModeContext } from '../../modes/handler.js';
 import { SelectModeDragHandler } from '../../modes/select/drag-handler.js';
-import { MemoryStore } from '../../store/memory.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { Store } from '../../store/built-in/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { computeSelectionBoundingBox, getSelectedFeatures } from '../../view/ui/helper.js';
@@ -92,13 +93,20 @@ const lineInput = () => ({
   },
 });
 
-let store: MemoryStore;
+let store: Store;
 let draw: Draw;
 let events: Recorded[];
 
+/** An instance over the Store of the test, built on its engine, with its events recorded */
+function onEngine(): { engine: Engine; draw: Draw; events: Recorded[] } {
+  const engine = createEngine(createMapStub().map, { store: createStore() });
+  const local = createDrawOnEngine(engine);
+  return { engine, draw: local, events: record(local) };
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
-  store = new MemoryStore();
+  store = createStore();
   draw = createDraw(createMapStub().map, { store });
   events = record(draw);
 });
@@ -122,13 +130,16 @@ describe('the events of the features', () => {
   });
 
   it('feature.updated tells an update in the middle of a drag', () => {
-    const created = draw.features.create(pointInput()) as Feature;
-    store.updateFeature(
+    // The drag writes through the layer over the Store, which marks the write as one in the middle
+    const local = onEngine();
+    const created = local.draw.features.create(pointInput()) as Feature;
+    local.engine.context.store.updateFeature(
       created.id,
       { geometry: { type: 'Point', coordinates: [1, 1] } },
       { isIntermediate: true },
     );
-    expect(payloadsOf(events, 'feature.updated')[0].intermediate).toBe(true);
+    expect(payloadsOf(local.events, 'feature.updated')[0].intermediate).toBe(true);
+    local.draw.destroy();
   });
 
   it('feature.moved tells the layer or the group a feature left and entered', () => {
@@ -232,13 +243,15 @@ describe('document.changed', () => {
   });
 
   it('does not fire for a change of the selection, the mode or the drawing state alone', () => {
+    // The drawing state is held by the layer over the Store of the instance
+    const { engine, draw } = onEngine();
     const a = draw.features.create(pointInput()) as Feature;
     const received: DrawEvents['document.changed'][] = [];
     draw.on('document.changed', (change) => received.push(change));
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
     draw.setMode('drawLine');
-    store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'x' });
+    engine.context.store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'x' });
     draw.setMode('select');
     draw.hidden.add(a.id);
     draw.hidden.remove(a.id);
@@ -247,6 +260,7 @@ describe('document.changed', () => {
     draw.setInteractionLocked(true);
     draw.setInteractionLocked(false);
     expect(received).toEqual([]);
+    draw.destroy();
   });
 
   it('carries the selection of a transaction that also changed the document', () => {

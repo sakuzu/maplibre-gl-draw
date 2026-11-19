@@ -12,6 +12,7 @@
 
 import { afterEach, describe, it } from 'vitest';
 import type { WorkCounts } from '../../shared/work-counts.js';
+import type { FeatureRowField, Store } from '../../store/built-in/types.js';
 import {
   createCountedInstance,
   createSyntheticDrag,
@@ -35,6 +36,17 @@ function instanceOf(size: number) {
   instance.map.render();
   instances.push(instance);
   return instance;
+}
+
+/**
+ * Writes the attribute `changed` of a feature as a row, as a change made outside the instance:
+ * the points of the grid have no other attribute
+ */
+function writeChanged(store: Store, id: string): void {
+  store.writeRows({
+    rows: Int32Array.of(store.tables.getRowRef(id) as number),
+    fields: new Map<FeatureRowField, unknown[]>([['properties:changed', [true]]]),
+  });
 }
 
 /** The draw calls of one frame */
@@ -118,9 +130,7 @@ describe(WORK_SCENES.receiveChange, () => {
     const instance = instanceOf(size);
     const id = instance.draw.features.list()[5].id;
     // Written to the Store directly, as a change made outside the instance
-    return workDuring(instance.counts, () =>
-      instance.store.updateFeature(id, { properties: { changed: true } }),
-    );
+    return workDuring(instance.counts, () => writeChanged(instance.store, id));
   });
 
   it('makes as many features for a change of one feature', () => {
@@ -173,9 +183,7 @@ describe(WORK_SCENES.receiveChange, () => {
     const instance = instanceOf(size);
     const id = instance.draw.features.list()[5].id;
     // Written to the Store itself, not through the wrapper the instance was given
-    return storeWorkDuring(instance.storeWork, () =>
-      instance.store.updateFeature(id, { properties: { changed: true } }),
-    );
+    return storeWorkDuring(instance.storeWork, () => writeChanged(instance.store, id));
   });
 
   it('reads as many features through the Store for a change of one feature', () => {

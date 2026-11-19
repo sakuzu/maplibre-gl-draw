@@ -4,14 +4,15 @@
 /**
  * Tests for a Store of the application: the instance reaches it only through the members of the
  * public Store, and keeps the state of this client itself (the Store holds the document)
+ *
+ * The Store of the application is the built-in Store spread into an object of its own.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryContractStore } from '../../store/memory.js';
-import { createMapStub, createSyntheticInput } from '../../test-utils.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { Store, StoreChange } from '../../store/built-in/types.js';
+import { createMapStub, createSyntheticInput, rowWrites } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
-import type { DocumentChange } from '../events.js';
-import type { Store } from '../extension/store.js';
 import type { Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -19,9 +20,7 @@ import { createEngine } from './engine.js';
 
 /** Every member of the public Store */
 const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
-  'getFeature',
-  'listFeatures',
-  'listFeaturesInOrder',
+  'tables',
   'getLayer',
   'listLayers',
   'getLayerOrder',
@@ -30,26 +29,25 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'getFile',
   'listFiles',
   'getMetadata',
+  'listPropertyKeys',
   'subscribe',
   'transact',
-  'createFeature',
-  'updateFeature',
-  'abortIntermediateUpdates',
-  'deleteFeature',
+  'createRows',
+  'createRowsFromPages',
+  'writeRows',
+  'releaseDeletedRows',
+  'clear',
   'createLayer',
   'updateLayer',
   'deleteLayer',
   'setLayerOrder',
-  'reorderInLayer',
-  'reorderInGroup',
   'createGroup',
   'updateGroup',
   'deleteGroup',
   'createFile',
   'deleteFile',
   'setMetadata',
-  'getMaxNameNumber',
-  'recordNameNumber',
+  'newOperationId',
 ]);
 
 /**
@@ -57,7 +55,7 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
  * member fails the test, and the calls of the writes are recorded
  */
 function contractOnly(): { store: Store; calls: string[]; strays: string[] } {
-  const inner = new MemoryContractStore();
+  const inner: Store = { ...createStore() };
   const calls: string[] = [];
   const strays: string[] = [];
   const store = new Proxy(inner, {
@@ -166,46 +164,66 @@ describe('a Store of the application', () => {
   });
 });
 
-describe('a Store of the application that knows numbers of names beyond what it lists', () => {
-  it('numbers a new layer and a drawn point after them, and is told each number taken', () => {
-    const known: Record<string, number> = { Layer: 6, Point: 20 };
-    const recorded: Array<[string, number]> = [];
-    const store: Store = Object.assign(new MemoryContractStore(), {
-      getMaxNameNumber: (type: string): number | undefined => known[type],
-      recordNameNumber: (type: string, number: number) => {
-        recorded.push([type, number]);
-        known[type] = Math.max(known[type] ?? 0, number);
-      },
-    });
+describe('a Store of the application that holds names with numbers', () => {
+  it('numbers a new layer and a drawn point after them', () => {
+    // The Store holds a layer and a point whose names carry numbers before the instance is made
+    const store: Store = { ...createStore() };
+    store.transact(() => {
+      store.createLayer({
+        id: 'held',
+        name: 'Layer 6',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        styleRule: undefined,
+        metadata: undefined,
+      });
+      rowWrites(store).createFeature({
+        id: 'held-point',
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [0.6, 0.6] },
+        layerId: 'held',
+        groupId: undefined,
+        properties: { name: 'Point 20' },
+        style: {},
+        visible: true,
+        locked: false,
+      });
+    }, 'remote');
     const own = createEngine(createMapStub().map, { store }, { deferDefaultMode: true });
     const ownDraw = createDrawOnEngine(own, { store });
     own.enterDefaultMode();
 
+    const layer = ownDraw.layers.create({});
+    ownDraw.layers.setActive(layer?.id as string);
     ownDraw.setMode('drawPoint');
     createSyntheticInput(own).click([0.2, 0.2]);
 
-    expect(store.listLayers().map((layer) => layer.name)).toEqual(['Layer 7']);
-    expect(store.listFeatures().map((feature) => feature.properties.name)).toEqual(['Point 21']);
-    expect(recorded).toEqual([
-      ['Layer', 7],
-      ['Point', 21],
-    ]);
+    expect(store.listLayers().map((l) => l.name)).toContain('Layer 7');
+    expect(ownDraw.features.list().map((feature) => feature.properties.name)).toContain('Point 21');
     ownDraw.destroy();
   });
 });
 
 /** Undoes a change of the document in one transaction of the Store, from what it carries */
-function undo(store: Store, change: DocumentChange): void {
+function undo(store: Store, change: StoreChange): void {
   store.transact(() => {
+    for (const rows of change.rows?.layers.values() ?? []) {
+      if (rows.created.length === 0) continue;
+      store.writeRows({
+        rows: rows.created,
+        fields: new Map(),
+        deleted: new Uint8Array(rows.created.length).fill(1),
+      });
+    }
     for (const group of change.groups?.created ?? []) store.deleteGroup(group.id);
-    for (const feature of change.features?.created ?? []) store.deleteFeature(feature.id);
     for (const layer of change.layers?.created ?? []) store.deleteLayer(layer.id);
     for (const { id, previous } of change.layers?.updated ?? []) {
       if (store.getLayer(id)) store.updateLayer(id, previous);
     }
     const order = change.layers?.orderChanged;
     if (order) store.setLayerOrder(order.previous);
-  }, 'undo');
+  }, 'remote');
 }
 
 describe('a load into a Store of the application', () => {
@@ -220,7 +238,7 @@ describe('a load into a Store of the application', () => {
       })),
     });
     const before = draw.document.toJSON();
-    const changes: DocumentChange[] = [];
+    const changes: StoreChange[] = [];
     const unsubscribe = host.store.subscribe((change) => changes.push(change));
     const results = await draw.document.loadMany([
       { source: collection('a'), options: { layer: { name: 'roads.geojson' } } },
@@ -235,8 +253,11 @@ describe('a load into a Store of the application', () => {
     expect(draw.groups.get(shops?.groupId ?? '')).toMatchObject({
       name: 'town',
       layerId: shops?.layerId,
-      featureIds: ['b', 'c'],
     });
+    expect(draw.groups.listFeatureIds(shops?.groupId ?? '', { start: 0, end: 2 })).toEqual([
+      'b',
+      'c',
+    ]);
     expect(draw.features.get('b')).toMatchObject({
       layerId: shops?.layerId,
       groupId: shops?.groupId,

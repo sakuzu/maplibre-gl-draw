@@ -367,6 +367,7 @@ export function documentOverStore(store: Store): InstanceDocument {
     listGroupFeatureIds: (groupId, start, end) => membersOf(groupId).slice(start, end),
     hasFeature: (id) => store.getFeature(id) !== undefined,
     getFeatureProperty: (id, key) => store.getFeature(id)?.properties[key],
+    getFeaturePlace: (id) => store.getFeature(id),
     countFeatures: (match) => matching(match).length,
     *iterateFeatures(match) {
       for (const { id } of matching(match)) {
@@ -792,6 +793,30 @@ export function rowWrites(store: RowStore) {
         deleted: Uint8Array.of(1),
       });
     },
+    /** Creates features in one write, each at the front of its group or its layer, in order */
+    createFeatures(features: readonly Feature[]): boolean {
+      const fronts = new Map<string, string | undefined>();
+      const places = features.map((feature) => {
+        const parent = feature.groupId ?? feature.layerId;
+        const below = fronts.has(parent)
+          ? fronts.get(parent)
+          : (() => {
+              const order = orderOf(store, parent);
+              return order.length > 0 ? itemKeyOf(store, order[order.length - 1]) : undefined;
+            })();
+        const orderKey = createOrderKeyBetween(below, undefined);
+        fronts.set(parent, orderKey);
+        return { parent, orderKey };
+      });
+      return store.createRows({
+        ids: features.map((feature) => feature.id),
+        fields: newRowFields(features, places),
+        geometry: geometryColumnOf(
+          features.map((feature) => feature.geometry),
+          2,
+        ),
+      });
+    },
     createLayer: (layer: Layer): boolean => store.createLayer(layer),
     updateLayer: (id: string, updates: Partial<Layer>): boolean => store.updateLayer(id, updates),
     deleteLayer: (id: string): boolean => store.deleteLayer(id),
@@ -985,11 +1010,16 @@ export function expectNotProportional(
 // The Store that counts
 // ============================================================================
 
-/** The methods of the tables of a Store that read the values of rows: of the rows given, or one */
-const ROW_READS: ReadonlyMap<string, 'refs' | 'one'> = new Map([
+/**
+ * The methods of the tables of a Store that read rows: the values of the rows given, one row,
+ * or the row found by its id (counted when one is found)
+ */
+const ROW_READS: ReadonlyMap<string, 'refs' | 'one' | 'found'> = new Map([
   ['readValues', 'refs'],
   ['getRowProperty', 'one'],
   ['getRowStyle', 'one'],
+  ['getRowRef', 'found'],
+  ['findRow', 'found'],
 ]);
 
 /** The methods of a Store that write rows: the new rows given, or the rows given */
@@ -1013,9 +1043,9 @@ export interface StoreWork {
  * library count
  *
  * Every method called on the wrapper, or on its tables and the views of their layers, is counted
- * by its name, with the rows whose values it reads (`readValues` of the tables, and
- * `getRowProperty` and `getRowStyle` of a layer) and the rows it is given to write (`createRows`
- * and `writeRows`). The method runs on the Store itself, so what the Store calls on itself is not
+ * by its name, with the rows it reads (the values of `readValues` of the tables, a row found by
+ * its id with `getRowRef` and `findRow` when one is found, and `getRowProperty` and `getRowStyle`
+ * of a layer) and the rows it is given to write (`createRows` and `writeRows`). The method runs on the Store itself, so what the Store calls on itself is not
  * counted: only what its user asked for. Everything else (the fields, the numbers of the marks)
  * reads through to the Store, so the wrapper stands for it wherever the Store is given.
  *
@@ -1052,6 +1082,7 @@ export function createCountingStore<S extends object>(
             if (read === 'refs') work.featuresRead += (args[0] as ArrayLike<number>).length;
             else if (read === 'one') work.featuresRead += 1;
             const result = (value as (...a: unknown[]) => unknown).apply(t, args);
+            if (read === 'found' && result !== undefined) work.featuresRead += 1;
             // The view of a layer the tables give back is counted as well
             return prop === 'get' && typeof result === 'object' && result !== null
               ? wrapped(result)

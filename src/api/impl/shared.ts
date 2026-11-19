@@ -148,11 +148,9 @@ export function onlyLockOrVisibility(patch: object): boolean {
 // ============================================================================
 
 /** Whether the ID names a feature, a group or a layer */
-export function isTaken(store: DocumentAccess, id: string): boolean {
+export function isTaken(store: InstanceDocument, id: string): boolean {
   return (
-    store.getFeature(id) !== undefined ||
-    store.getGroup(id) !== undefined ||
-    store.getLayer(id) !== undefined
+    store.hasFeature(id) || store.getGroup(id) !== undefined || store.getLayer(id) !== undefined
   );
 }
 
@@ -210,7 +208,7 @@ export function layerLocked(store: DocumentAccess, layer: Layer): boolean {
  * Whether an item can be seen: it exists, its own visible flag and the ones of its group and
  * layer are on, and this client hides none of them
  */
-export function isShown(store: DocumentAccess, type: SelectionType, id: string): boolean {
+export function isShown(store: InstanceDocument, type: SelectionType, id: string): boolean {
   const layerShown = (layerId: string): boolean =>
     store.getLayer(layerId)?.visible === true && !store.isHidden(layerId);
   const groupShown = (group: Group): boolean =>
@@ -220,7 +218,8 @@ export function isShown(store: DocumentAccess, type: SelectionType, id: string):
     const group = store.getGroup(id);
     return group !== undefined && groupShown(group);
   }
-  const feature = store.getFeature(id);
+  // Read from the row of the feature, which is not made
+  const feature = store.getFeaturePlace(id);
   if (!feature?.visible || store.isHidden(id)) return false;
   if (feature.groupId) {
     const group = store.getGroup(feature.groupId);

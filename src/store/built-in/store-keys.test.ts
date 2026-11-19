@@ -44,7 +44,6 @@ function layer(id: string, more: Partial<Layer> = {}): Layer {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
     ...more,
@@ -493,7 +492,6 @@ describe.each(STORES)('%s', (_name, make) => {
         layerId: 'a',
         orderKey: 'k5',
         name: 'g',
-        featureIds: [],
         visible: true,
         locked: false,
       });

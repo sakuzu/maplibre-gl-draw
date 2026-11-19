@@ -11,7 +11,8 @@ import type { Draw } from '../api/draw.js';
 import { createDraw } from '../api/draw.js';
 import * as geometryEntry from '../geometry/index.js';
 import * as mainEntry from '../index.js';
-import { MemoryContractStore, MemoryStore } from '../store/memory.js';
+import { createStore } from '../store/built-in/create-store.js';
+import type { Store } from '../store/built-in/types.js';
 import * as tableEntry from '../table/index.js';
 import { createMapStub } from '../test-utils.js';
 import * as webglEntry from '../webgl/index.js';
@@ -25,8 +26,8 @@ afterEach(() => {
 });
 
 /** A draw instance over a Store of its own */
-function instance(): { draw: Draw; store: MemoryStore } {
-  const store = new MemoryStore();
+function instance(): { draw: Draw; store: Store } {
+  const store = createStore();
   const draw = createDraw(createMapStub().map, { store });
   draws.push(draw);
   return { draw, store };
@@ -38,22 +39,24 @@ function point(lng: number) {
 
 describe('the work counts of a Store', () => {
   it('are held by each Store, starting from zero', () => {
-    const a = new MemoryStore();
-    const b = new MemoryStore();
+    const a = createStore();
+    const b = createStore();
     const countsA = workCountsOf(a);
     const countsB = workCountsOf(b);
     expect(countsA).toEqual(createWorkCounts());
     expect(countsA).not.toBe(countsB);
   });
 
-  it('count the features the Store makes and the notifications its listeners get', () => {
+  it('count the rows the Store writes and the notifications its listeners get', () => {
+    // The Store holds the features as rows: the instance writes the row of a feature it changes
     const { draw, store } = instance();
     const counts = workCountsOf(store);
     if (!counts) throw new Error('no counts');
+    const feature = draw.features.create(point(0));
     const before = { ...counts };
 
-    draw.features.create(point(0));
-    expect(counts.objectsCreated - before.objectsCreated).toBe(1);
+    draw.features.update(feature?.id ?? '', { properties: { a: 1 } });
+    expect(counts.rowsWritten - before.rowsWritten).toBe(1);
     expect(counts.notifications - before.notifications).toBe(1);
   });
 
@@ -73,10 +76,11 @@ describe('the work counts of a Store', () => {
   });
 
   it('are held in a field that does not show on the Store', () => {
-    const store = new MemoryStore();
-    expect(Object.keys(store)).toEqual([]);
-    expect(JSON.stringify(store)).toBe('{}');
-    expect({ ...store }).toEqual({});
+    // The members of the Store are its fields; the numbers are not one of them, and a Store
+    // spread into an object of its own does not carry them
+    const store = createStore();
+    expect(Object.keys(store).filter((key) => /count/i.test(key))).toEqual([]);
+    expect(workCountsOf({ ...store })).toBeUndefined();
   });
 
   it('are counted by nothing for an object that holds none', () => {
@@ -84,17 +88,14 @@ describe('the work counts of a Store', () => {
     expect(workCountsOf(null)).toBeUndefined();
     expect(() => countWork(undefined, 'objectsCreated')).not.toThrow();
 
-    // A contract the host gives gets a Store of core around it, which counts the notifications;
-    // the features the contract makes are not counted
-    const contract = new MemoryContractStore();
-    const draw = createDraw(createMapStub().map, { store: contract });
+    // A Store the host spreads from the built-in one holds no numbers: the instance over it
+    // counts nothing, and writes as over the built-in Store
+    const spread: Store = { ...createStore() };
+    const draw = createDraw(createMapStub().map, { store: spread });
     draws.push(draw);
-    const counts = workCountsOf(draw.getStore());
-    if (!counts) throw new Error('no counts');
-    const before = { ...counts };
-    draw.features.create(point(0));
-    expect(counts.objectsCreated).toBe(before.objectsCreated);
-    expect(counts.notifications - before.notifications).toBe(1);
+    expect(workCountsOf(draw.getStore())).toBeUndefined();
+    expect(() => draw.features.create(point(0))).not.toThrow();
+    expect(draw.features.count()).toBe(1);
   });
 
   it('given to an object are the numbers it reads back', () => {

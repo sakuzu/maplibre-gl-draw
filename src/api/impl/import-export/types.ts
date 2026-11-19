@@ -5,6 +5,7 @@
  * Types internal to the Import/Export module
  */
 
+import type { InstanceDocument } from '../../../store/document-access.js';
 import type { Feature, FileData, LoadResult } from '../../../store/types.js';
 
 /**
@@ -13,8 +14,12 @@ import type { Feature, FileData, LoadResult } from '../../../store/types.js';
  * does not roll back.
  */
 export interface PreparedLoad {
-  /** Writes what was read and returns what was loaded */
-  write(): LoadResult;
+  /**
+   * Writes what was read and returns what was loaded
+   *
+   * @param document - The layer over the Store of the instance, which creates many features at once
+   */
+  write(document: InstanceDocument): LoadResult;
 }
 
 /**

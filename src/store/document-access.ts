@@ -174,6 +174,15 @@ export interface DocumentAccess
     ClientStateAccess,
     DrawingStateAccess {}
 
+/** Where a feature is, and its flags */
+export interface FeaturePlace {
+  readonly id: string;
+  readonly layerId: string;
+  readonly groupId: string | undefined;
+  readonly visible: boolean;
+  readonly locked: boolean;
+}
+
 /** What a read of the features keeps: every key given must match */
 export interface FeatureMatch {
   /** Only the features in this layer */
@@ -218,6 +227,11 @@ export interface DocumentPlaces {
   hasFeature(id: string): boolean;
   /** One attribute of a feature, read without the feature being made (undefined for none) */
   getFeatureProperty(id: string, key: string): unknown;
+  /**
+   * Where a feature is and its flags, read from its row without the feature being made
+   * (undefined for none)
+   */
+  getFeaturePlace(id: string): FeaturePlace | undefined;
   /** Counts the features that match */
   countFeatures(match?: FeatureMatch): number;
   /**

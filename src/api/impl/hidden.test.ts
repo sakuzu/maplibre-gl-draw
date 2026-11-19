@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
+import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { HiddenCollection } from '../hidden.js';
 import { createHidden } from './hidden.js';
@@ -51,7 +52,7 @@ beforeEach(() => {
       locked: false,
     });
   }
-  hidden = createHidden({ store });
+  hidden = createHidden(createResourceDeps(store));
   notifications = [];
   store.subscribe((changes) => notifications.push(changes));
 });

@@ -23,10 +23,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { createDocument } from '../api/impl/document.js';
+import { createDocumentAccess } from '../api/impl/document-access.js';
 import { connectStoreEvents, createEventHub } from '../api/impl/events.js';
 import type { FeatureCoordinates } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createResourceDeps } from '../test-utils.js';
+import { createStore } from './built-in/create-store.js';
 import { MemoryStore } from './memory.js';
 import type { Data, Feature, Group, Layer } from './types.js';
 
@@ -123,17 +125,18 @@ function generate(count: number): Data {
 // 1 load. Because the minimum is taken to resist noise, it returns the time of a single run
 // and the caller repeats it.
 async function measureLoadOnce(data: Data): Promise<number> {
-  const store = new MemoryStore();
-  store.createLayer({
+  // The built-in Store, with the layer over it the instance makes
+  const rows = createStore();
+  rows.createLayer({
     id: 'default-layer',
     name: 'L',
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
+  const store = createDocumentAccess(rows);
   const document = createDocument(createResourceDeps(store), () => {});
 
   const events = createEventHub();

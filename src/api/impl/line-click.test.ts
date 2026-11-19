@@ -18,10 +18,10 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
-import { MemoryContractStore } from '../../store/memory.js';
-import { createMapStub } from '../../test-utils.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { Store } from '../../store/built-in/types.js';
+import { createMapStub, rowWrites } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
-import type { Store } from '../extension/store.js';
 import type { Feature, Layer } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -52,7 +52,6 @@ const LAYER = {
   visible: true,
   locked: false,
   opacity: 1,
-  items: [],
 } as unknown as Layer;
 
 let engine: Engine | null = null;
@@ -137,15 +136,16 @@ function throughTheInstance(createdZoom: number, path?: [number, number][]) {
 
 /** The line and the polygon a replaced Store held before the instance was created */
 function heldByTheStore(createdZoom: number, path?: [number, number][]) {
-  const contract = new MemoryContractStore();
+  const store = createStore();
+  const rows = rowWrites(store);
   const { line, polygon } = inputs(createdZoom, path);
   const base = { layerId: LAYER.id, groupId: undefined, visible: true, locked: false };
-  contract.transact(() => {
-    contract.createLayer(LAYER);
-    contract.createFeature({ ...line, ...base, id: 'line' } as Feature);
-    contract.createFeature({ ...polygon, ...base, id: 'polygon' } as Feature);
+  store.transact(() => {
+    store.createLayer(LAYER);
+    rows.createFeature({ ...line, ...base, id: 'line' } as Feature);
+    rows.createFeature({ ...polygon, ...base, id: 'polygon' } as Feature);
   }, 'remote');
-  return { ...create(contract), lineId: 'line', polygonId: 'polygon' };
+  return { ...create(store), lineId: 'line', polygonId: 'polygon' };
 }
 
 /** The extensions a host registers around the select mode */

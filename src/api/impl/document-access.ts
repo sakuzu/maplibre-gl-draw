@@ -36,6 +36,7 @@ import type {
 } from '../../store/built-in/types.js';
 import type {
   FeatureMatch,
+  FeaturePlace,
   InstanceDocument,
   MoveDestination,
 } from '../../store/document-access.js';
@@ -173,6 +174,20 @@ function appendChange(target: StoreChange, change: StoreChange, folds: Folds): v
     if (change.files.created) t.created = appended(t.created, change.files.created);
     if (change.files.deleted) t.deleted = appended(t.deleted, change.files.deleted);
   }
+}
+
+/** Whether a change tells a change of the document (not of the state of this client alone) */
+function changesDocument(change: StoreChange): boolean {
+  return (
+    change.features !== undefined ||
+    change.layers !== undefined ||
+    change.groups !== undefined ||
+    change.layerReorder !== undefined ||
+    change.groupReorder !== undefined ||
+    change.metadata !== undefined ||
+    change.files !== undefined ||
+    change.reset === true
+  );
 }
 
 /** Whether a change holds nothing */
@@ -387,6 +402,9 @@ export function createDocumentAccess(
     pendingFolds = newFolds();
     toldOrdersBefore = ordersBefore;
     ordersBefore = new Map();
+    // A notification of the state of this client alone is counted as the Store counts its own
+    // (one that tells a change of the document follows the notification of the Store)
+    if (!changesDocument(change)) countWork(counts, 'notifications');
     try {
       for (const listener of [...listeners]) {
         try {
@@ -426,6 +444,13 @@ export function createDocumentAccess(
   let lastOuterSource: UpdateSource | null = null;
   /** Whether the instance wrote to the Store since its last change arrived */
   let wroteRows = false;
+  /** How many times the document was written, by the instance or directly to the Store */
+  let documentVersion = 0;
+  /** A write of the instance to the Store */
+  const wrote = (): void => {
+    wroteRows = true;
+    documentVersion += 1;
+  };
   /** What the writes of the instance touched since the last change of the Store arrived */
   let ownRows = new Set<number>();
   let ownLayers = new Set<string>();
@@ -597,7 +622,7 @@ export function createDocumentAccess(
 
   /** The feature of a row, made from it unless it is kept made */
   const featureOfRow = (ref: number, id: string): Feature => {
-    const known = featureCache.get(id);
+    const known = featureCache.get(id) ?? featureRead(id);
     if (known) return known;
     const [feature] = makeFeatures(Int32Array.of(ref), [id]);
     remember(feature);
@@ -606,7 +631,7 @@ export function createDocumentAccess(
 
   const getFeature = (id: string): Feature | undefined => {
     if (typeof id !== 'string') return undefined;
-    const known = featureCache.get(id);
+    const known = featureCache.get(id) ?? featureRead(id);
     if (known) {
       remember(known);
       return known;
@@ -630,7 +655,7 @@ export function createDocumentAccess(
     const missingIds: string[] = [];
     for (let i = 0; i < refs.length; i++) {
       const id = tables.getRowId(refs[i]) as string;
-      const known = featureCache.get(id);
+      const known = featureCache.get(id) ?? featureRead(id);
       if (known) out[i] = known;
       else {
         missing.push(i);
@@ -667,12 +692,51 @@ export function createDocumentAccess(
     return out;
   };
 
+  /**
+   * The features of the whole document in stacking order, as last read, kept while the document
+   * is not written: the parts that read every feature (the drawing, the hit testing) read it
+   * again without the features being made again. The features of the layers that are not on the
+   * stacking order are at the end of the one with them.
+   */
+  const everyFeature: {
+    version: number;
+    inOrder: Feature[] | null;
+    withOffOrder: Feature[] | null;
+    byId: Map<string, Feature> | null;
+  } = { version: -1, inOrder: null, withOffOrder: null, byId: null };
+
+  /** The features of the whole document as last read, while they are what the document holds */
+  const everyFeatureNow = (): typeof everyFeature => {
+    if (everyFeature.version !== documentVersion) {
+      everyFeature.version = documentVersion;
+      everyFeature.inOrder = null;
+      everyFeature.withOffOrder = null;
+      everyFeature.byId = null;
+    }
+    return everyFeature;
+  };
+
+  /** A feature of the whole document as last read, while it is what the document holds */
+  const featureRead = (id: string): Feature | undefined => {
+    const every = everyFeatureNow();
+    const list = every.withOffOrder ?? every.inOrder;
+    if (!list) return undefined;
+    if (!every.byId) every.byId = new Map(list.map((feature) => [feature.id, feature]));
+    return every.byId.get(id);
+  };
+
   const listFeaturesInOrder = (withOffOrder: boolean): Feature[] => {
+    const every = everyFeatureNow();
+    const known = withOffOrder ? every.withOffOrder : every.inOrder;
+    if (known) return known.slice();
     const out: Feature[] = [];
     for (const layerId of layerIdsInOrder(withOffOrder)) {
       for (const feature of featuresOfRows(rowsOfLayer(layerId))) out.push(feature);
     }
-    return out;
+    if (withOffOrder) every.withOffOrder = out;
+    else every.inOrder = out;
+    every.byId = null;
+    return out.slice();
   };
 
   // ==========================================================================
@@ -780,6 +844,20 @@ export function createDocumentAccess(
   };
 
   const getLayer = (id: string): Layer | undefined => layerOf(store.getLayer(id));
+
+  /** Where a feature is and its flags, read from its row (see `DocumentPlaces`) */
+  const getFeaturePlace = (id: string): FeaturePlace | undefined => {
+    if (typeof id !== 'string') return undefined;
+    const ref = tables.getRowRef(id);
+    if (ref === undefined) return undefined;
+    const fields = tables.readValues(Int32Array.of(ref), ['visible', 'locked', 'parent']).fields;
+    return {
+      id,
+      ...placeOf(fields.get('parent')?.[0]),
+      visible: fields.get('visible')?.[0] !== false,
+      locked: fields.get('locked')?.[0] === true,
+    };
+  };
   const getGroup = (id: string): Group | undefined => groupOf(store.getGroup(id));
 
   // ==========================================================================
@@ -1098,7 +1176,7 @@ export function createDocumentAccess(
     if (fields.size === 0 && geometry === undefined) return;
     if (fields.has('parent') || fields.has('orderKey')) placesWritten();
     ownRows.add(ref);
-    wroteRows = true;
+    wrote();
     store.writeRows({
       rows: Int32Array.of(ref),
       fields,
@@ -1178,8 +1256,8 @@ export function createDocumentAccess(
 
   /**
    * Creates the rows of features, each at the front of its group or its layer (or at the place an
-   * order written gives it), as if they were created one after another: the rows of one layer
-   * that follow each other are written in one write of the Store. A feature that cannot be
+   * order written gives it), as if they were created one after another: the rows of each layer
+   * are written in one write of the Store, and told in the order given. A feature that cannot be
    * created throws once the ones before it are written.
    */
   const createFeatureRows = (features: readonly Feature[]): Feature[] => {
@@ -1192,27 +1270,35 @@ export function createDocumentAccess(
       before: Layer | Group | undefined;
     };
     let batch: Pending[] = [];
+    /** Writes the rows of the features taken, one write per layer, and tells them in order */
     const flush = (): void => {
       const rows = batch;
       batch = [];
       pendingRows = null;
       if (rows.length === 0) return;
-      const layerId = rows[0].stored.layerId;
-      const created = store.createRows({
-        ids: rows.map((row) => row.stored.id),
-        fields: newRowFields(
-          rows.map((row) => row.stored),
-          rows.map((row) => ({ parent: row.container, orderKey: row.key })),
-        ),
-        geometry: geometryColumnOf(
-          rows.map((row) => row.stored.geometry),
-          tables.getValuesPerPosition(layerId) ?? 2,
-        ),
-      });
-      if (!created) {
-        throw new Error(`Feature with id "${rows[0].stored.id}" already exists`);
+      const byLayer = new Map<string, Pending[]>();
+      for (const row of rows) {
+        const list = byLayer.get(row.stored.layerId);
+        if (list) list.push(row);
+        else byLayer.set(row.stored.layerId, [row]);
       }
-      wroteRows = true;
+      for (const [layerId, inLayer] of byLayer) {
+        const created = store.createRows({
+          ids: inLayer.map((row) => row.stored.id),
+          fields: newRowFields(
+            inLayer.map((row) => row.stored),
+            inLayer.map((row) => ({ parent: row.container, orderKey: row.key })),
+          ),
+          geometry: geometryColumnOf(
+            inLayer.map((row) => row.stored.geometry),
+            tables.getValuesPerPosition(layerId) ?? 2,
+          ),
+        });
+        if (!created) {
+          throw new Error(`Feature with id "${inLayer[0].stored.id}" already exists`);
+        }
+        wrote();
+      }
       for (const { stored, container, listed, before } of rows) {
         const ref = tables.getRowRef(stored.id);
         if (ref !== undefined) ownRows.add(ref);
@@ -1238,7 +1324,6 @@ export function createDocumentAccess(
           throw new Error(`Group with id "${feature.groupId}" not found`);
         }
         const stored = frozenFeature(undefined, feature);
-        if (batch.length > 0 && batch[0].stored.layerId !== stored.layerId) flush();
         const container = stored.groupId ?? stored.layerId;
         const listing = listings.get(stored.id);
         const listed = listing !== undefined && listing.container === container;
@@ -1386,7 +1471,7 @@ export function createDocumentAccess(
     const layerBefore = getLayer(feature.layerId);
     const groupBefore = feature.groupId !== undefined ? getGroup(feature.groupId) : undefined;
     ownRows.add(ref);
-    wroteRows = true;
+    wrote();
     endKeys.delete(container);
     store.writeRows({ rows: Int32Array.of(ref), fields: new Map(), deleted: Uint8Array.of(1) });
     featureCache.delete(id);
@@ -1454,7 +1539,7 @@ export function createDocumentAccess(
       });
     }
     ownGroups.add(id);
-    wroteRows = true;
+    wrote();
     placesWritten();
     store.deleteGroup(id);
     bumpLayer(layerId);
@@ -1510,7 +1595,7 @@ export function createDocumentAccess(
         placed[at] = { id, key };
         if (store.getGroup(id)) {
           ownGroups.add(id);
-          wroteRows = true;
+          wrote();
           placesWritten();
           store.updateGroup(id, { orderKey: key });
         } else {
@@ -1535,7 +1620,7 @@ export function createDocumentAccess(
       const from = group.layerId;
       const key = keyOfListing({ container: layerId, order, index });
       ownGroups.add(id);
-      wroteRows = true;
+      wrote();
       placesWritten();
       store.updateGroup(id, { layerId, orderKey: key });
       listings.delete(id);
@@ -1554,7 +1639,7 @@ export function createDocumentAccess(
     }
     const items = [...(layer.items ?? [])];
     ownLayers.add(layer.id);
-    wroteRows = true;
+    wrote();
     placesWritten();
     if (!store.createLayer(storedLayerOf(layer))) {
       throw new Error(`Layer with id "${layer.id}" already exists`);
@@ -1583,7 +1668,7 @@ export function createDocumentAccess(
     const fields = storedLayerOf({ ...updates, id } as Layer) as unknown as Record<string, unknown>;
     delete fields.id;
     ownLayers.add(id);
-    wroteRows = true;
+    wrote();
     if (Object.keys(fields).length > 0 || !('items' in updates)) {
       store.updateLayer(id, fields as Partial<PublicLayer>);
     }
@@ -1654,7 +1739,7 @@ export function createDocumentAccess(
     }
     ownLayers.add(id);
     ownOrder = true;
-    wroteRows = true;
+    wrote();
     placesWritten();
     store.deleteLayer(id);
     bumpLayer(id);
@@ -1694,7 +1779,7 @@ export function createDocumentAccess(
       key = tailKeyOf(layerId);
     }
     ownGroups.add(group.id);
-    wroteRows = true;
+    wrote();
     if (!store.createGroup(storedGroupOf({ ...group, layerId }, key))) {
       throw new Error(`Group with id "${group.id}" already exists`);
     }
@@ -1743,7 +1828,7 @@ export function createDocumentAccess(
       fields[key] = frozenValue((updates as Record<string, unknown>)[key]);
     }
     ownGroups.add(id);
-    wroteRows = true;
+    wrote();
     if (Object.keys(fields).length > 0) store.updateGroup(id, fields as Partial<StoreGroup>);
     if (updates.featureIds) writeOrder(id, [...updates.featureIds]);
     const group = getGroup(id) as Group;
@@ -1764,7 +1849,7 @@ export function createDocumentAccess(
       noteOrderBefore(layerId);
       const [key] = keysAt(layerId, [groupId], Math.min(index, countOf(layerId) - 1));
       ownGroups.add(groupId);
-      wroteRows = true;
+      wrote();
       placesWritten();
       store.updateGroup(groupId, { orderKey: key });
       unlisted.delete(groupId);
@@ -1917,7 +2002,7 @@ export function createDocumentAccess(
           const previous = getGroup(id) as Group;
           if (group.layerId === layerId) {
             ownGroups.add(id);
-            wroteRows = true;
+            wrote();
             placesWritten();
             store.updateGroup(id, { orderKey: keys[i] });
             return;
@@ -1930,7 +2015,7 @@ export function createDocumentAccess(
           const memberIds = memberIdsOf(id);
           const members = memberIds.map((memberId) => getFeature(memberId) as Feature);
           ownGroups.add(id);
-          wroteRows = true;
+          wrote();
           placesWritten();
           store.updateGroup(id, { layerId, orderKey: keys[i] });
           for (const memberId of memberIds) {
@@ -2376,6 +2461,8 @@ export function createDocumentAccess(
 
   /** A change of the Store: what the instance wrote is told as it wrote it, the rest read here */
   const onRowChange = (change: RowChange): void => {
+    // Whoever wrote it, the document is no longer the one last read
+    documentVersion += 1;
     try {
       noteDeleted(change);
       const own = wroteRows;
@@ -2470,7 +2557,7 @@ export function createDocumentAccess(
       write(() => {
         const previous = [...store.getLayerOrder()];
         ownOrder = true;
-        wroteRows = true;
+        wrote();
         store.setLayerOrder(order);
         mergeDocument({
           layers: { orderChanged: { order: [...store.getLayerOrder()], previous } },
@@ -2496,7 +2583,7 @@ export function createDocumentAccess(
       write(() => {
         if (store.getFile(file.id)) throw new Error(`File with id "${file.id}" already exists`);
         ownFiles.add(file.id);
-        wroteRows = true;
+        wrote();
         store.createFile(frozenValue({ ...file }));
         mergeDocument({ files: { created: [store.getFile(file.id) as FileData] } });
       }),
@@ -2505,7 +2592,7 @@ export function createDocumentAccess(
         const file = store.getFile(id);
         if (!file) throw new Error(`File with id "${id}" not found`);
         ownFiles.add(id);
-        wroteRows = true;
+        wrote();
         store.deleteFile(id);
         mergeDocument({ files: { deleted: [file] } });
       }),
@@ -2513,7 +2600,7 @@ export function createDocumentAccess(
       write(() => {
         const previous = { ...store.getMetadata() } as Metadata;
         ownMetadata = true;
-        wroteRows = true;
+        wrote();
         store.setMetadata(frozenValue({ ...metadata }));
         mergeDocument({
           metadata: { metadata: { ...store.getMetadata() } as Metadata, previous },
@@ -2543,6 +2630,7 @@ export function createDocumentAccess(
       if (ref === undefined) return undefined;
       return tables.get(layerOfRow(ref))?.getRowProperty(ref, key);
     },
+    getFeaturePlace,
     countFeatures: (match?: FeatureMatch) => countMatching(match),
     iterateFeatures: (match?: FeatureMatch) => iterateMatching(match),
     getOrderBefore: (containerId: string) => toldOrdersBefore?.get(containerId),
@@ -2716,7 +2804,14 @@ export function createDocumentAccess(
   }
 
   client.attach({
-    document: layer,
+    // The rules of the state of this client read where the features are and whether they are
+    // visible: from the rows, without the features being made
+    document: {
+      getFeature: (id: string) => getFeaturePlace(id) as Feature | undefined,
+      getGroup,
+      getLayer,
+      listLayers: layer.listLayers,
+    },
     merge: (change) => merge(change),
     transact: (fn) => busTransact(fn, 'local'),
   });

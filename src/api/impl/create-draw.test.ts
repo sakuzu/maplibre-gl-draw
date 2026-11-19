@@ -7,7 +7,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { StoreChange } from '../../store/built-in/types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
@@ -36,7 +37,7 @@ describe('createDraw', () => {
   });
 
   it('takes a Store of the library and the options the engine reads as they are', () => {
-    const store = new MemoryStore();
+    const store = createStore();
     const other = createDraw(createMapStub().map, {
       store,
       initDefaultLayer: false,
@@ -104,7 +105,7 @@ describe('read-only and the interaction lock', () => {
 
 describe('transact', () => {
   it('delivers one Store notification for nested writes, with the outer source', () => {
-    const notifications: DocumentChange[] = [];
+    const notifications: StoreChange[] = [];
     draw.getStore().subscribe((changes) => notifications.push(changes));
     const result = draw.transact(
       () => {
@@ -123,7 +124,9 @@ describe('transact', () => {
     expect(result).toBe(42);
     expect(notifications).toHaveLength(1);
     expect(notifications[0].source).toBe('outer');
-    expect(notifications[0].features?.created).toHaveLength(1);
+    // The Store tells the rows it created
+    const rows = [...(notifications[0].rows?.layers.values() ?? [])];
+    expect(rows.flatMap((layer) => [...layer.created])).toHaveLength(1);
     expect(notifications[0].layers?.created).toHaveLength(1);
     expect(notifications[0].metadata?.metadata.title).toBe('Map');
   });

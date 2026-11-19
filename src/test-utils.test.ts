@@ -10,7 +10,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { countWork } from './shared/work-counts.js';
-import { MemoryStore } from './store/memory.js';
+import { createStore } from './store/built-in/create-store.js';
+import type { FeatureRowField, Store } from './store/built-in/types.js';
 import {
   compareWork,
   countsOf,
@@ -20,6 +21,8 @@ import {
   expectNotProportional,
   expectPartsWithin,
   gridPoints,
+  readRowFeature,
+  rowWrites,
   runInParts,
   storeWorkDuring,
   WORK_SIZES,
@@ -30,7 +33,7 @@ describe('the comparison of the two sizes', () => {
   /** A scene that does `work(size)` on a Store and returns what one number counted */
   function scene(work: (counts: ReturnType<typeof countsOf>, size: number) => void) {
     return (size: number): number => {
-      const counts = countsOf(new MemoryStore());
+      const counts = countsOf(createStore());
       return workDuring(counts, () => work(counts, size)).objectsCreated;
     };
   }
@@ -65,7 +68,7 @@ describe('the comparison of the two sizes', () => {
 
   it('fails a scene that touches every row', () => {
     const touched = (size: number): number => {
-      const counts = countsOf(new MemoryStore());
+      const counts = countsOf(createStore());
       return workDuring(counts, () => {
         for (let row = 0; row < size; row++) countWork(counts, 'rowsTouched');
       }).rowsTouched;
@@ -97,7 +100,7 @@ describe('the run in parts on the fake clock', () => {
   });
 
   it('fails an operation that writes every row in one task', async () => {
-    const counts = countsOf(new MemoryStore());
+    const counts = countsOf(createStore());
     const run = await runInParts({
       counts,
       run: () => {
@@ -109,7 +112,7 @@ describe('the run in parts on the fake clock', () => {
   });
 
   it('fails an operation that only awaits promises between its parts', async () => {
-    const counts = countsOf(new MemoryStore());
+    const counts = countsOf(createStore());
     const run = await runInParts({
       counts,
       run: async () => {
@@ -125,7 +128,7 @@ describe('the run in parts on the fake clock', () => {
   });
 
   it('passes an operation that writes its parts in separate tasks, with a frame between', async () => {
-    const counts = countsOf(new MemoryStore());
+    const counts = countsOf(createStore());
     const seen: number[] = [];
     const run = await runInParts({
       counts,
@@ -146,7 +149,7 @@ describe('the run in parts on the fake clock', () => {
   });
 
   it('gives back the failure of the operation', async () => {
-    const counts = countsOf(new MemoryStore());
+    const counts = countsOf(createStore());
     await expect(
       runInParts({
         counts,
@@ -160,7 +163,7 @@ describe('the run in parts on the fake clock', () => {
 
   it('needs the fake timers', async () => {
     vi.useRealTimers();
-    const counts = countsOf(new MemoryStore());
+    const counts = countsOf(createStore());
     await expect(runInParts({ counts, run: () => {} })).rejects.toThrow(/fake timers/);
   });
 });
@@ -191,21 +194,20 @@ describe('the counting GL', () => {
 describe('the Store that counts', () => {
   /** A counting wrapper over a Store of `size` points */
   function countedStore(size: number) {
-    const target = new MemoryStore();
+    const target = createStore();
     target.createLayer({
       id: 'l1',
       name: 'Layer',
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
-    for (const [i, input] of gridPoints(size).entries()) {
-      target.createFeature({
+    rowWrites(target).createFeatures(
+      gridPoints(size).map((input, i) => ({
         id: `f${i}`,
-        type: 'Point',
+        type: 'Point' as const,
         geometry: input.geometry,
         layerId: 'l1',
         groupId: undefined,
@@ -213,30 +215,47 @@ describe('the Store that counts', () => {
         locked: false,
         visible: true,
         style: {},
-      });
-    }
+      })),
+    );
     return { target, ...createCountingStore(target) };
   }
 
+  /** The rows of every feature of the layer, read through a Store (what a list reads) */
+  const listRows = (store: Store) => {
+    const view = store.tables.get('l1');
+    return store.tables.readValues(view?.listRowRefs(0, view.rowCount) ?? new Int32Array(0), [
+      'type',
+    ]).rows;
+  };
+
   it('counts the calls by name, the features given back and the features given to write', () => {
     const { store, work } = countedStore(3);
-    expect(store.getFeature('f1')?.id).toBe('f1');
-    expect(store.getFeature('none')).toBeUndefined();
-    expect(store.listFeatures()).toHaveLength(3);
-    store.updateFeature('f1', { properties: { a: 1 } });
-    store.deleteFeature('f2');
-    expect(work.calls.get('getFeature')).toBe(2);
-    expect(work.calls.get('listFeatures')).toBe(1);
+    const f1 = store.tables.getRowRef('f1');
+    expect(store.tables.getRowId(f1 as number)).toBe('f1');
+    expect(store.tables.getRowRef('none')).toBeUndefined();
+    const rows = listRows(store);
+    expect(rows).toHaveLength(3);
+    store.writeRows({
+      rows: Int32Array.of(f1 as number),
+      fields: new Map<FeatureRowField, unknown[]>([['properties:a', [1]]]),
+    });
+    // f2, the third row of the layer
+    store.writeRows({ rows: rows.subarray(2, 3), fields: new Map(), deleted: Uint8Array.of(1) });
+    expect(work.calls.get('getRowRef')).toBe(2);
+    expect(work.calls.get('readValues')).toBe(1);
     expect(work.featuresRead).toBe(4);
     expect(work.featuresWritten).toBe(2);
   });
 
-  it('stands for the Store: its class, its numbers and the writes on it', () => {
+  it('stands for the Store: its fields, its numbers and the writes on it', () => {
     const { target, store } = countedStore(1);
-    expect(store).toBeInstanceOf(MemoryStore);
+    expect(Object.keys(store)).toEqual(Object.keys(target));
     expect(countsOf(store)).toBe(countsOf(target));
-    store.updateFeature('f0', { properties: { b: 2 } });
-    expect(target.getFeature('f0')?.properties).toEqual({ b: 2 });
+    store.writeRows({
+      rows: Int32Array.of(store.tables.getRowRef('f0') as number),
+      fields: new Map<FeatureRowField, unknown[]>([['properties:b', [2]]]),
+    });
+    expect(readRowFeature(target, 'f0')?.properties).toEqual({ b: 2 });
   });
 
   it('fails a scene whose click reads every feature through the Store', () => {
@@ -244,8 +263,8 @@ describe('the Store that counts', () => {
       const { store, work } = countedStore(size);
       // The click of the scene: one feature is hit, and every feature is read
       return storeWorkDuring(work, () => {
-        store.getFeature('f5');
-        store.listFeatures();
+        store.tables.getRowRef('f5');
+        listRows(store);
       }).featuresRead;
     };
     expect(() => expectNotProportional(readAll, 'the features read')).toThrow(
@@ -256,7 +275,7 @@ describe('the Store that counts', () => {
   it('passes a scene whose click reads the feature it hits', () => {
     const readOne = (size: number): number => {
       const { store, work } = countedStore(size);
-      return storeWorkDuring(work, () => store.getFeature('f5')).featuresRead;
+      return storeWorkDuring(work, () => store.tables.getRowRef('f5')).featuresRead;
     };
     expect(expectNotProportional(readOne)).toEqual({ small: 1, large: 1, ratio: 1 });
   });

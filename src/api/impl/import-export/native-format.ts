@@ -88,7 +88,7 @@ export function exportNative(store: DocumentAccess, options?: ExportOptions): Da
  */
 export async function prepareNative(
   data: Data,
-  deps: { store: InstanceDocument },
+  deps: { store: DocumentAccess },
 ): Promise<PreparedLoad> {
   const { store } = deps;
 
@@ -122,7 +122,7 @@ export async function prepareNative(
   const retainedUnlisted = [...retainedLayerIds].filter((id) => !layerOrder.includes(id));
 
   // The writes, in the transaction of the caller, which makes them one change
-  const write = (): LoadResult => {
+  const write = (document: InstanceDocument): LoadResult => {
     // 1. Clear the existing data
     const existingFeatures = store.listFeatures();
     for (const feature of existingFeatures) {
@@ -161,8 +161,8 @@ export async function prepareNative(
       store.createGroup(group);
     }
 
-    // 4. Import the features
-    store.createFeatures(features);
+    // 4. Import the features, as few writes of the Store as their layers allow
+    document.createFeatures(features);
 
     // 5. Import the files
     for (const file of files) {

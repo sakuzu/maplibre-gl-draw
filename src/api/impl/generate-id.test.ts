@@ -63,7 +63,7 @@ function documentIds(): string[] {
   return [
     ...store.listLayers().map((layer) => layer.id),
     ...store.listGroups().map((group) => group.id),
-    ...store.listFeatures().map((feature) => feature.id),
+    ...draw.features.list().map((feature) => feature.id),
     ...store.listFiles().map((file) => file.id),
   ].filter((id) => id !== 'default-layer');
 }

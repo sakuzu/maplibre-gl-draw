@@ -8,8 +8,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
-import { MemoryContractStore } from '../../store/memory.js';
-import type { StoreChange } from '../../store/types.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { Store } from '../../store/built-in/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import { customRendererOf } from '../../view/layer/store-retained-classify.js';
 import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
@@ -23,8 +23,8 @@ import type { ModeFactory } from '../extension/mode.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from '../extension/provider.js';
 import type { OverlayRenderer } from '../extension/render.js';
-import type { Store } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
+import type { Layer } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -853,57 +853,56 @@ describe('the providers and the cursor of a mode', () => {
 });
 
 describe('a Store that replaces its whole document', () => {
-  /**
-   * A Store of an application, which the instance wraps, that can announce a replacement of
-   * its whole document
-   */
-  class ReplacingStore extends MemoryContractStore {
-    readonly #listeners = new Set<(changes: StoreChange) => void>();
-    override subscribe(listener: (changes: StoreChange) => void): () => void {
-      const stop = super.subscribe(listener);
-      this.#listeners.add(listener);
-      return () => {
-        stop();
-        this.#listeners.delete(listener);
-      };
-    }
-    announce(changes: StoreChange & { reset?: boolean }): void {
-      for (const listener of this.#listeners) listener(changes);
-    }
-  }
+  // A Store of an application, the built-in Store spread into an object of its own, whose whole
+  // document is replaced from elsewhere with `clear` (its change has `reset: true`)
+
+  /** A layer of the replacing document */
+  const replacing: Layer = {
+    id: 'replacing',
+    name: 'Replacing',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    styleRule: undefined,
+    metadata: undefined,
+  };
 
   it('interrupts the current mode, and only for a reset', () => {
-    const store = new ReplacingStore();
-    const other = createDraw(createMapStub().map, { store: store as unknown as Store });
+    const store: Store = { ...createStore() };
+    const other = createDraw(createMapStub().map, { store });
     const onCancel = vi.fn();
     other.extensions.modes.add('probe', () => ({ onCancel }));
     other.setMode('probe');
-    store.announce({ source: 'remote' });
+    store.transact(() => store.setMetadata({ title: 'elsewhere' }), 'remote');
     expect(onCancel).not.toHaveBeenCalled();
-    store.announce({ source: 'remote', reset: true });
+    store.transact(() => {
+      store.clear();
+      store.createLayer(replacing);
+    }, 'remote');
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(other.getMode()).toBe('probe');
     other.destroy();
-    store.announce({ source: 'remote', reset: true });
+    store.transact(() => store.clear(), 'remote');
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('carries reset to the listeners of document.changed', () => {
-    const store = new ReplacingStore();
-    const other = createDraw(createMapStub().map, { store: store as unknown as Store });
+    const store: Store = { ...createStore() };
+    const other = createDraw(createMapStub().map, { store });
     const changes: DocumentChange[] = [];
     other.on('document.changed', (change) => changes.push(change));
-    const layer = other.layers.list()[0];
-    store.announce({
-      source: 'remote',
-      reset: true,
-      layers: { updated: [{ id: layer.id, layer, previous: layer }] },
-    });
-    store.announce({ source: 'remote', reset: true });
+    const replace = () =>
+      store.transact(() => {
+        store.clear();
+        store.createLayer(replacing);
+      }, 'remote');
+    replace();
+    replace();
     expect(changes).toHaveLength(2);
     expect(changes.every((change) => change.reset === true && change.source === 'remote')).toBe(
       true,
     );
+    const layer = other.layers.list()[0];
     other.layers.update(layer.id, { name: 'renamed' });
     expect(changes[2].reset).toBeUndefined();
     other.destroy();
@@ -986,6 +985,15 @@ describe('what a drawing mode reads and shows', () => {
   });
 
   it('shows the placed vertices and a highlighted one in the preview', () => {
+    // The drawing state is held by the layer over the Store of the instance
+    const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+    const local = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    local.extensions.modes.add('probe', (context) => {
+      ctx = context;
+      return {};
+    });
+    local.setMode('probe');
     ctx.preview.set(
       {
         type: 'LineString',
@@ -1000,15 +1008,14 @@ describe('what a drawing mode reads and shows', () => {
       },
       { confirmedVertices: 2, highlightVertex: 0 },
     );
-    const tentative = draw.getStore() as unknown as {
-      getTentative(): { confirmedCount?: number; highlightedVertexIndex?: number } | null;
-    };
+    const tentative = engine.context.store;
     expect(tentative.getTentative()).toEqual(
       expect.objectContaining({ confirmedCount: 2, highlightedVertexIndex: 0 }),
     );
     expect(ctx.drawing.isDrawing()).toBe(true);
     ctx.preview.clear();
     expect(ctx.drawing.isDrawing()).toBe(false);
+    local.destroy();
   });
 
   it('gives the writable layer, or null when none can be written', () => {

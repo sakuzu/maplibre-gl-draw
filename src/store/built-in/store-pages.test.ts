@@ -50,14 +50,13 @@ function layer(id: string): Layer {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   };
 }
 
 function group(id: string, layerId: string, orderKey: string): StoreGroup {
-  return { id, layerId, orderKey, name: id, featureIds: [], visible: true, locked: false };
+  return { id, layerId, orderKey, name: id, visible: true, locked: false };
 }
 
 /** The key of the order of the `i`-th row */

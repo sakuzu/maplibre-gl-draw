@@ -63,8 +63,18 @@ describe('image.requested', () => {
 describe('selection.ungroup', () => {
   /** The layer of the document, its items, and the members of every group */
   const snapshot = () => ({
-    items: draw.layers.list().map((layer) => [...layer.items]),
-    groups: draw.groups.list().map((group) => [group.id, [...group.featureIds]]),
+    items: draw.layers
+      .list()
+      .map((layer) =>
+        draw.layers.listItemIds(layer.id, { start: 0, end: draw.layers.countItems(layer.id) }),
+      ),
+    groups: draw.groups.list().map((group) => [
+      group.id,
+      draw.groups.listFeatureIds(group.id, {
+        start: 0,
+        end: draw.groups.countFeatures(group.id),
+      }),
+    ]),
     grouped: draw.features.list().map((feature) => [feature.id, feature.groupId]),
   });
 

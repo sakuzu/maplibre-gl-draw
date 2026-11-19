@@ -46,7 +46,6 @@ function layer(id: string, more: Partial<Layer> = {}): Layer {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
     ...more,
@@ -59,7 +58,7 @@ function group(
   orderKey: string,
   more: Partial<StoreGroup> = {},
 ): StoreGroup {
-  return { id, layerId, orderKey, name: id, featureIds: [], visible: true, locked: false, ...more };
+  return { id, layerId, orderKey, name: id, visible: true, locked: false, ...more };
 }
 
 function point(x: number, y: number): Geometry {

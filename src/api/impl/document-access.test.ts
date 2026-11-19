@@ -4,13 +4,13 @@
 /**
  * The layer over the Store takes no other path for another kind of Store: every row of the table
  * of what the instance does (src/parity/) keeps its record when each instance of a scene that
- * gives no Store of its own is given, in place of the in-memory Store of core, a Store of the
- * application made by spreading the members of the in-memory document Store into a plain object.
+ * gives no Store of its own is given, in place of the Store it makes, a Store of the application
+ * made by spreading the members of the built-in Store into a plain object.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
-import type { Store as PublicStore } from '../extension/store.js';
+import type { Store } from '../../store/built-in/types.js';
 import type { DrawOptions } from '../options.js';
 
 /** The instances of the scenes that were given the spread Store */
@@ -18,18 +18,9 @@ const given = vi.hoisted(() => ({ count: 0 }));
 
 vi.mock('../draw.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../draw.js')>();
-  const { MemoryContractStore } = await import('../../store/memory.js');
-  /** The in-memory document Store, its members spread into a plain object */
-  const spreadStore = (): PublicStore => {
-    const inner = new MemoryContractStore();
-    const members = Object.getOwnPropertyNames(MemoryContractStore.prototype)
-      .filter((key) => key !== 'constructor')
-      .map((key) => {
-        const member = (inner as unknown as Record<string, (...args: unknown[]) => unknown>)[key];
-        return [key, member.bind(inner)] as const;
-      });
-    return { ...Object.fromEntries(members) } as unknown as PublicStore;
-  };
+  const { createStore } = await import('../../store/built-in/create-store.js');
+  /** The built-in Store, its members spread into a plain object */
+  const spreadStore = (): Store => ({ ...createStore() });
   return {
     ...actual,
     createDraw: (map: MapLibreMap, options: DrawOptions = {}) => {

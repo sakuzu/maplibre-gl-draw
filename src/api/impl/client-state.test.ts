@@ -12,14 +12,16 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EngineModeContext, EngineModeHandler } from '../../modes/handler.js';
 import { ModeManagerImpl } from '../../modes/manager.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { Store } from '../../store/built-in/types.js';
 import { ClientState } from '../../store/memory/ui-state.js';
-import { MemoryContractStore } from '../../store/memory.js';
 import {
   createCountedInstance,
   createMapStub,
   createSyntheticInput,
   expectNotProportional,
   gridPoints,
+  rowWrites,
   storeWorkDuring,
   WORK_SCENES,
   workDuring,
@@ -28,7 +30,6 @@ import { createRenderCoordinator } from '../../view/coordinator.js';
 import { createDraw, type Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawEvents } from '../events.js';
-import type { Store } from '../extension/store.js';
 import type { Feature, IdSet } from '../model.js';
 import { createIdSet } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
@@ -55,25 +56,13 @@ const CLIENT_MEMBERS = [
 ] as const;
 
 /**
- * A Store of the application: the in-memory Store of the main entry, wrapped by spreading its
- * members into an object of its own, with the members of the state of this client of the
- * published version added as spies that must never be called
+ * A Store of the application: the built-in Store, wrapped by spreading its members into an
+ * object of its own, with the members of the state of this client of the published version
+ * added as spies that must never be called
  */
 function wrappedStore() {
-  const inner = new MemoryContractStore();
-  const members: Record<string, unknown> = {};
-  let proto: object | null = Object.getPrototypeOf(inner);
-  while (proto && proto !== Object.prototype) {
-    for (const name of Object.getOwnPropertyNames(proto)) {
-      const value = (inner as unknown as Record<string, unknown>)[name];
-      if (name !== 'constructor' && typeof value === 'function' && !(name in members)) {
-        members[name] = (value as (...args: unknown[]) => unknown).bind(inner);
-      }
-    }
-    proto = Object.getPrototypeOf(proto);
-  }
   const spies = Object.fromEntries(CLIENT_MEMBERS.map((name) => [name, vi.fn()]));
-  const store = { ...members, ...spies } as unknown as Store;
+  const store = { ...createStore(), ...spies } as unknown as Store;
   return { store, spies };
 }
 
@@ -127,7 +116,7 @@ describe('the state of this client with a Store of the application', () => {
     expect(draw.isReadOnly()).toBe(true);
     // Read-only refuses the writes of the document
     expect(draw.features.create(point('c'))).toBeNull();
-    expect(store.getFeature('c')).toBeUndefined();
+    expect(store.tables.getRowRef('c')).toBeUndefined();
     draw.setReadOnly(false);
     expect(draw.features.create(point('c'))).not.toBeNull();
 
@@ -149,9 +138,10 @@ describe('the state of this client with a Store of the application', () => {
     draw.on('hidden.changed', ({ ids }) => hidden.push(ids.toArray()));
     draw.on('editingFeatures.changed', ({ ids }) => editing.push(ids.toArray()));
 
+    const rows = rowWrites(store);
     store.transact(() => {
-      store.deleteFeature('a');
-      store.deleteFeature('c');
+      rows.deleteFeature('a');
+      rows.deleteFeature('c');
     }, 'remote');
 
     expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['b'] });

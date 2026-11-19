@@ -26,7 +26,6 @@ function layer(id: string): Layer {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   };
@@ -138,7 +137,6 @@ describe('the updates of many groups in one transaction', () => {
             layerId: 'a',
             orderKey: `k${i}`,
             name: '',
-            featureIds: [],
             visible: true,
             locked: false,
           });

@@ -742,7 +742,7 @@ export async function prepareGeoJSON(
     getCurrentLayerId: () => string;
   },
   options?: GeoJSONImportOptions,
-): Promise<PreparedLoad> {
+): Promise<PreparedLoad & { write(): LoadResult }> {
   const { store, autoNameGenerator, generateFeatureId, getCurrentLayerId } = deps;
   const layerId = getCurrentLayerId();
 
