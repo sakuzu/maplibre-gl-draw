@@ -773,8 +773,10 @@ export interface StoreChange {
    * `rows` lists them), so that the geometries of one layer have one number of values per
    * position: for every field the transaction wrote (`parent` and `orderKey` included, and the
    * keys of the style written), with `deleted` for the rows it deleted or brought back. A row
-   * created by the transaction has none. Only for a listener that asked for them, for this
-   * source ({@link SubscribeOptions.previousValues}).
+   * created by the transaction has none. In a change with `reset`, the rows taken out have every
+   * field they had (their geometry, their type, their place, their flags, every attribute and
+   * every key of their style): they cannot be read from the tables once they are taken out. Only
+   * for a listener that asked for them, for this source ({@link SubscribeOptions.previousValues}).
    */
   previousValues?: ReadonlyMap<string, RowValues>;
   /**

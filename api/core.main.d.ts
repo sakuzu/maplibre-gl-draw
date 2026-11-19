@@ -3251,7 +3251,10 @@ export interface DrawEvents {
     };
     /**
      * A feature changed; `hasMoreParts` is true when the change is a part of a bulk edit that is
-     * not its last part, as `hasMoreParts` of the `document.changed` it comes with
+     * not its last part, as `hasMoreParts` of the `document.changed` it comes with. A feature
+     * deleted and created again with its ID in one transaction is told here, once, and not as
+     * deleted and created (a change that replaces the whole document tells it as both, see
+     * `feature.deleted`)
      *
      * It arrives once per feature, also when one change touches many features. The feature
      * objects are made only while the event has a listener; for changes of many features, listen
@@ -3268,7 +3271,9 @@ export interface DrawEvents {
      *
      * It arrives once per feature, also when one change touches many features. The feature
      * objects are made only while the event has a listener; for changes of many features, listen
-     * to `document.changed` instead.
+     * to `document.changed` instead. A change that replaces the whole document
+     * (`DocumentChange.reset`) tells every feature taken out here, before the features it
+     * writes are told as created.
      */
     'feature.deleted': {
         feature: Feature;
@@ -3355,7 +3360,9 @@ export interface DrawEvents {
      * (see {@link DocumentChange}). A change of the selection, the mode or another state of this
      * client alone does not fire it. The values the features had before are carried to a
      * subscriber of `draw.document.subscribe` that asks for them. The events of the document
-     * are told once the Store has told every one of its listeners, so a listener can write
+     * are told once the Store has told every one of its listeners, so a listener can write. The
+     * changes are told in the order they were written: what a listener writes is told once the
+     * change being told has reached every listener and every subscriber.
      */
     'document.changed': DocumentChange;
     /** A document was loaded */

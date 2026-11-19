@@ -296,6 +296,13 @@
       "main:added:SketchEdit{2}.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "177": {
+      "main:doc:DrawEvents.document.changed": "91775a80e45fd5470097dce2e38696b2e82b0a23e9fe89b81f4f946f12111218"
+    },
+    "178": {
+      "main:doc:DrawEvents.feature.deleted": "c57c51b46fc85e1e948b59b0e7f560e7da5d24f2f4a2637b7564bd16951f7821",
+      "store:doc:StoreChange.previousValues": "d9d15cd9651c150e6fed82ce9c1b370a64c7d7331bfdc9a35a822a67dc3c4ae0"
     }
   }
 }
