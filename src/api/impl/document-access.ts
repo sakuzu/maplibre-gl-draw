@@ -504,8 +504,9 @@ export function createDocumentAccess(
     } finally {
       opening = false;
     }
-    if (!openedOutermost && wroteRows) {
-      // The change of the Store comes when the transaction opened from elsewhere ends
+    if (!openedOutermost && wroteRows && !awaitingRows) {
+      // The change of the Store comes when the transaction opened from elsewhere ends: what
+      // the writes made is held back until then (once, however many writes there are)
       awaitingRows = true;
       busDepth += 1;
     }
@@ -516,12 +517,15 @@ export function createDocumentAccess(
   function transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     return client.hold(() =>
       busTransact(() => {
-        const result = rowTransact(fn, busDepth > 1 ? busSource : source);
-        if (rowDepth === 0 && !awaitingRows) {
-          clearOwn();
-          followDocument();
+        try {
+          return rowTransact(fn, busDepth > 1 ? busSource : source);
+        } finally {
+          // What was written before a throw stays, and is told
+          if (rowDepth === 0 && !awaitingRows) {
+            clearOwn();
+            followDocument();
+          }
         }
-        return result;
       }, source),
     );
   }
@@ -786,8 +790,16 @@ export function createDocumentAccess(
     (tables.readValues(Int32Array.of(ref), ['orderKey']).fields.get('orderKey')?.[0] as string) ??
     '';
 
+  /**
+   * The rows of features being created, not written to the Store yet (see `createFeatureRows`):
+   * their containers and keys, which the reads of the order take as written
+   */
+  let pendingRows: Map<string, { container: string; key: string }> | null = null;
+
   /** The key of an item of a layer (a row outside a group, or a group), or undefined */
   const itemKeyOf = (id: string): string | undefined => {
+    const pendingRow = pendingRows?.get(id);
+    if (pendingRow) return pendingRow.key;
     const group = store.getGroup(id);
     if (group) return group.orderKey;
     const ref = tables.getRowRef(id);
@@ -796,6 +808,8 @@ export function createDocumentAccess(
 
   /** Whether an ID is an item of a container: a row or a group of a layer, a row of a group */
   const containerOfItem = (id: string): string | undefined => {
+    const pendingRow = pendingRows?.get(id);
+    if (pendingRow) return pendingRow.container;
     const group = store.getGroup(id);
     if (group) return group.layerId;
     const ref = tables.getRowRef(id);
@@ -933,7 +947,9 @@ export function createDocumentAccess(
     for (let i = index - 1; i >= 0 && below === undefined; i--) {
       if (containerOfItem(order[i]) === container) below = itemKeyOf(order[i]);
     }
-    for (let i = index + 1; i < order.length && above === undefined; i++) {
+    // Nothing the container holds lies beyond the frontmost item of the order it holds
+    const front = frontOfListing(container, order);
+    for (let i = index + 1; i <= front && above === undefined; i++) {
       if (containerOfItem(order[i]) === container) above = itemKeyOf(order[i]);
     }
     if (below !== undefined && above !== undefined && compareKeys(below, above) >= 0) {
@@ -981,11 +997,74 @@ export function createDocumentAccess(
     if (known.back === undefined) known.back = key;
   };
 
-  /** Forgets the keys of the ends a change written to the Store directly may have moved */
+  /** A new item takes this key somewhere in a container: the ends move when it is beyond them */
+  const keyTaken = (container: string, key: string): void => {
+    const known = endKeys.get(container);
+    if (!known) return;
+    if (known.front === undefined || compareKeys(key, known.front) > 0) known.front = key;
+    if (known.back === undefined || compareKeys(key, known.back) < 0) known.back = key;
+  };
+
+  /**
+   * How many times the places of items were written: the ends of the containers are forgotten,
+   * and the positions of the orders written are read again (see `frontOfListing`)
+   */
+  let placeVersion = 0;
+
+  /**
+   * The position of the frontmost item of an order written that its container holds, kept while
+   * the places are written only by the items of the orders taking their places (see
+   * `listingPlaced`), so that the items of a long order placed one after another do not read it
+   * whole each time
+   */
+  const listingFronts = new WeakMap<
+    readonly string[],
+    { container: string; index: number; version: number }
+  >();
+
+  const frontOfListing = (container: string, order: readonly string[]): number => {
+    const known = listingFronts.get(order);
+    if (known && known.version === placeVersion && known.container === container) {
+      return known.index;
+    }
+    let index = -1;
+    for (let i = order.length - 1; i >= 0; i--) {
+      if (containerOfItem(order[i]) === container) {
+        index = i;
+        break;
+      }
+    }
+    listingFronts.set(order, { container, index, version: placeVersion });
+    return index;
+  };
+
+  /**
+   * An item of an order written took its place, and nothing else was placed since `version`:
+   * the position of the front of the order follows it
+   */
+  const listingPlaced = (listing: Listing, version: number): void => {
+    const known = listingFronts.get(listing.order);
+    if (!known || known.container !== listing.container || known.version !== version) return;
+    listingFronts.set(listing.order, {
+      container: listing.container,
+      index: Math.max(known.index, listing.index),
+      version: placeVersion,
+    });
+  };
+
+  /** Forgets the keys of the ends of the containers, after a write of the places of items */
+  const placesWritten = (): void => {
+    endKeys.clear();
+    placeVersion += 1;
+  };
+
+  /**
+   * Forgets the keys of the ends, and the positions of the orders written, that a change written
+   * to the Store directly may have moved
+   */
   const forgetEndKeys = (change: RowChange, foreign: StoreChange): void => {
-    if (endKeys.size === 0) return;
     if (change.reset || foreign.groups || foreign.layers?.deleted || foreign.layers?.created) {
-      endKeys.clear();
+      placesWritten();
       return;
     }
     for (const [layerId, rows] of change.rows?.layers ?? []) {
@@ -995,6 +1074,7 @@ export function createDocumentAccess(
         ((rows.fields.has('parent') || rows.fields.has('orderKey')) &&
           rows.updated.some((ref) => !ownRows.has(ref)));
       if (!moved) continue;
+      placeVersion += 1;
       for (const container of [...endKeys.keys()]) {
         if (container === layerId) endKeys.delete(container);
         else {
@@ -1016,7 +1096,7 @@ export function createDocumentAccess(
     geometry?: Geometry,
   ): void => {
     if (fields.size === 0 && geometry === undefined) return;
-    if (fields.has('parent') || fields.has('orderKey')) endKeys.clear();
+    if (fields.has('parent') || fields.has('orderKey')) placesWritten();
     ownRows.add(ref);
     wroteRows = true;
     store.writeRows({
@@ -1096,60 +1176,101 @@ export function createDocumentAccess(
     }
   };
 
-  /** Creates the row of a feature, at the back of its group or its layer */
-  const createFeatureRow = (feature: Feature): Feature => {
-    if (getFeature(feature.id)) {
-      throw new Error(`Feature with id "${feature.id}" already exists`);
-    }
-    requireLayer(feature.layerId);
-    if (feature.groupId && !store.getGroup(feature.groupId)) {
-      throw new Error(`Group with id "${feature.groupId}" not found`);
-    }
-    const stored = frozenFeature(undefined, feature);
-    const container = stored.groupId ?? stored.layerId;
-    const listing = listings.get(stored.id);
-    const listed = listing !== undefined && listing.container === container;
-    const before =
-      stored.groupId !== undefined
-        ? listed
+  /**
+   * Creates the rows of features, each at the front of its group or its layer (or at the place an
+   * order written gives it), as if they were created one after another: the rows of one layer
+   * that follow each other are written in one write of the Store. A feature that cannot be
+   * created throws once the ones before it are written.
+   */
+  const createFeatureRows = (features: readonly Feature[]): Feature[] => {
+    const made: Feature[] = [];
+    type Pending = {
+      stored: Feature;
+      container: string;
+      key: string;
+      listed: boolean;
+      before: Layer | Group | undefined;
+    };
+    let batch: Pending[] = [];
+    const flush = (): void => {
+      const rows = batch;
+      batch = [];
+      pendingRows = null;
+      if (rows.length === 0) return;
+      const layerId = rows[0].stored.layerId;
+      const created = store.createRows({
+        ids: rows.map((row) => row.stored.id),
+        fields: newRowFields(
+          rows.map((row) => row.stored),
+          rows.map((row) => ({ parent: row.container, orderKey: row.key })),
+        ),
+        geometry: geometryColumnOf(
+          rows.map((row) => row.stored.geometry),
+          tables.getValuesPerPosition(layerId) ?? 2,
+        ),
+      });
+      if (!created) {
+        throw new Error(`Feature with id "${rows[0].stored.id}" already exists`);
+      }
+      wroteRows = true;
+      for (const { stored, container, listed, before } of rows) {
+        const ref = tables.getRowRef(stored.id);
+        if (ref !== undefined) ownRows.add(ref);
+        remember(stored);
+        mergeDocument({ features: { created: [stored] } });
+        if (stored.groupId !== undefined) {
+          bumpGroup(container);
+          if (!listed) groupOrderChanged(container, before as Group | undefined);
+        } else {
+          bumpLayer(container);
+          if (!listed) layerOrderChanged(container, before as Layer | undefined);
+        }
+        made.push(stored);
+      }
+    };
+    try {
+      for (const feature of features) {
+        if (pendingRows?.has(feature.id) || getFeature(feature.id)) {
+          throw new Error(`Feature with id "${feature.id}" already exists`);
+        }
+        requireLayer(feature.layerId);
+        if (feature.groupId && !store.getGroup(feature.groupId)) {
+          throw new Error(`Group with id "${feature.groupId}" not found`);
+        }
+        const stored = frozenFeature(undefined, feature);
+        if (batch.length > 0 && batch[0].stored.layerId !== stored.layerId) flush();
+        const container = stored.groupId ?? stored.layerId;
+        const listing = listings.get(stored.id);
+        const listed = listing !== undefined && listing.container === container;
+        const before = listed
           ? undefined
-          : getGroup(container)
-        : listed
-          ? undefined
-          : getLayer(container);
-    if (!listed) noteOrderBefore(container);
-    const key = listed ? keyOfListing(listing) : tailKeyOf(container);
-    const created = store.createRows({
-      ids: [stored.id],
-      fields: newRowFields([stored], [{ parent: container, orderKey: key }]),
-      geometry: geometryColumnOf(
-        [stored.geometry],
-        tables.getValuesPerPosition(stored.layerId) ?? 2,
-      ),
-    });
-    if (!created) {
-      throw new Error(`Feature with id "${feature.id}" already exists`);
+          : stored.groupId !== undefined
+            ? getGroup(container)
+            : getLayer(container);
+        if (!listed) noteOrderBefore(container);
+        const version = placeVersion;
+        const key = listed ? keyOfListing(listing) : tailKeyOf(container);
+        pendingRows ??= new Map();
+        pendingRows.set(stored.id, { container, key });
+        batch.push({ stored, container, key, listed, before });
+        if (listed) {
+          listings.delete(stored.id);
+          keyTaken(container, key);
+          listingPlaced(listing, version);
+        } else {
+          frontTaken(container, key);
+        }
+      }
+    } catch (error) {
+      flush();
+      throw error;
     }
-    wroteRows = true;
-    const ref = tables.getRowRef(stored.id);
-    if (ref !== undefined) ownRows.add(ref);
-    if (listed) {
-      listings.delete(stored.id);
-      endKeys.delete(container);
-    } else {
-      frontTaken(container, key);
-    }
-    remember(stored);
-    mergeDocument({ features: { created: [stored] } });
-    if (stored.groupId !== undefined) {
-      bumpGroup(container);
-      if (!listed) groupOrderChanged(container, before as Group | undefined);
-    } else {
-      bumpLayer(container);
-      if (!listed) layerOrderChanged(container, before as Layer | undefined);
-    }
-    return stored;
+    flush();
+    return made;
   };
+
+  /** Creates the row of a feature (see `createFeatureRows`) */
+  const createFeatureRow = (feature: Feature): Feature => createFeatureRows([feature])[0];
 
   /**
    * Updates the row of a feature: its values, and its place when its layer or its group changes
@@ -1303,16 +1424,18 @@ export function createDocumentAccess(
     // The features go where the group was, unless an order written places them
     const free = memberIds.filter((memberId) => listings.get(memberId)?.container !== layerId);
     const groupListed = isListed(id);
+    const placedByOrder = new Set<string>();
     if (memberIds.length > 0) {
       const keys = keysBetween(base.orderKey, keyInFrontOf(base), free.length);
-      const places = free.map((memberId, i) => ({ id: memberId, parent: layerId, key: keys[i] }));
+      writePlaces(free.map((memberId, i) => ({ id: memberId, parent: layerId, key: keys[i] })));
+      // One at a time, so that each takes its key among those the order placed before it
       for (const memberId of memberIds) {
         const listing = listings.get(memberId);
         if (listing?.container !== layerId) continue;
-        places.push({ id: memberId, parent: layerId, key: keyOfListing(listing) });
+        writePlaces([{ id: memberId, parent: layerId, key: keyOfListing(listing) }]);
         listings.delete(memberId);
+        placedByOrder.add(memberId);
       }
-      writePlaces(places);
     }
     if (groupListed && free.some((memberId) => isListed(memberId))) {
       layerOrderChanged(layerId, layerBefore);
@@ -1323,15 +1446,16 @@ export function createDocumentAccess(
       const updated = frozenFeature(member, { groupId: undefined });
       countWork(counts, 'objectsCreated');
       remember(updated);
-      // A feature of a group no order lists is listed at the end of the operation
-      if (!groupListed) pendingFeaturePlacement.add(member.id);
+      // A feature of a group no order lists is listed at the end of the operation, unless an
+      // order placed it
+      if (!groupListed && !placedByOrder.has(member.id)) pendingFeaturePlacement.add(member.id);
       mergeDocument({
         features: { updated: [{ id: member.id, feature: updated, previous: member }] },
       });
     }
     ownGroups.add(id);
     wroteRows = true;
-    endKeys.clear();
+    placesWritten();
     store.deleteGroup(id);
     bumpLayer(layerId);
     groupWrappers.delete(id);
@@ -1387,7 +1511,7 @@ export function createDocumentAccess(
         if (store.getGroup(id)) {
           ownGroups.add(id);
           wroteRows = true;
-          endKeys.clear();
+          placesWritten();
           store.updateGroup(id, { orderKey: key });
         } else {
           const ref = tables.getRowRef(id);
@@ -1412,7 +1536,7 @@ export function createDocumentAccess(
       const key = keyOfListing({ container: layerId, order, index });
       ownGroups.add(id);
       wroteRows = true;
-      endKeys.clear();
+      placesWritten();
       store.updateGroup(id, { layerId, orderKey: key });
       listings.delete(id);
       bumpLayer(from);
@@ -1431,7 +1555,7 @@ export function createDocumentAccess(
     const items = [...(layer.items ?? [])];
     ownLayers.add(layer.id);
     wroteRows = true;
-    endKeys.clear();
+    placesWritten();
     if (!store.createLayer(storedLayerOf(layer))) {
       throw new Error(`Layer with id "${layer.id}" already exists`);
     }
@@ -1441,10 +1565,13 @@ export function createDocumentAccess(
       if (!store.getGroup(id)) listings.set(id, { container: layer.id, order: items, index });
     });
     takeListedGroups(layer.id, items);
-    const created = Object.freeze({
-      ...layerOf(store.getLayer(layer.id)),
-      items: Object.freeze(items),
-    });
+    // The items it was created with, as a field that is not enumerable (see `layerOf`)
+    const created = Object.freeze(
+      Object.defineProperty({ ...layerOf(store.getLayer(layer.id)) }, 'items', {
+        value: Object.freeze(items),
+        enumerable: false,
+      }),
+    );
     mergeDocument({ layers: { created: [created as Layer] } });
   };
 
@@ -1528,7 +1655,7 @@ export function createDocumentAccess(
     ownLayers.add(id);
     ownOrder = true;
     wroteRows = true;
-    endKeys.clear();
+    placesWritten();
     store.deleteLayer(id);
     bumpLayer(id);
     layerWrappers.delete(id);
@@ -1547,6 +1674,7 @@ export function createDocumentAccess(
       ? listing.container
       : (firstMember?.layerId ?? (store.getLayer(group.layerId) ? group.layerId : undefined));
     if (layerId === undefined) throw new Error(`Layer with id "${group.layerId}" not found`);
+    const version = placeVersion;
     let key: string;
     if (listing) {
       key = keyOfListing(listing);
@@ -1567,9 +1695,15 @@ export function createDocumentAccess(
     }
     ownGroups.add(group.id);
     wroteRows = true;
-    endKeys.clear();
     if (!store.createGroup(storedGroupOf({ ...group, layerId }, key))) {
       throw new Error(`Group with id "${group.id}" already exists`);
+    }
+    // A new item of its layer: the ends of the layer and the front of the order follow it
+    if (listing) {
+      keyTaken(layerId, key);
+      listingPlaced(listing, version);
+    } else {
+      frontTaken(layerId, key);
     }
     bumpLayer(layerId);
     // The features listed join it in the order given; the others when they are created
@@ -1588,10 +1722,13 @@ export function createDocumentAccess(
       listings.delete(featureId);
     });
     bumpGroup(group.id);
-    const created = Object.freeze({
-      ...groupOf(store.getGroup(group.id)),
-      featureIds: Object.freeze(featureIds),
-    });
+    // The features it was created with, as a field that is not enumerable (see `groupOf`)
+    const created = Object.freeze(
+      Object.defineProperty({ ...groupOf(store.getGroup(group.id)) }, 'featureIds', {
+        value: Object.freeze(featureIds),
+        enumerable: false,
+      }),
+    );
     mergeDocument({ groups: { created: [created as Group] } });
   };
 
@@ -1628,7 +1765,7 @@ export function createDocumentAccess(
       const [key] = keysAt(layerId, [groupId], Math.min(index, countOf(layerId) - 1));
       ownGroups.add(groupId);
       wroteRows = true;
-      endKeys.clear();
+      placesWritten();
       store.updateGroup(groupId, { orderKey: key });
       unlisted.delete(groupId);
       layerOrderChanged(layerId, before);
@@ -1781,18 +1918,20 @@ export function createDocumentAccess(
           if (group.layerId === layerId) {
             ownGroups.add(id);
             wroteRows = true;
-            endKeys.clear();
+            placesWritten();
             store.updateGroup(id, { orderKey: keys[i] });
             return;
           }
           const source = group.layerId;
           const sourceBefore = getLayer(source);
           noteOrderBefore(source);
+          // Its features move with it: where they were in it is told of each of them
+          noteOrderBefore(id);
           const memberIds = memberIdsOf(id);
           const members = memberIds.map((memberId) => getFeature(memberId) as Feature);
           ownGroups.add(id);
           wroteRows = true;
-          endKeys.clear();
+          placesWritten();
           store.updateGroup(id, { layerId, orderKey: keys[i] });
           for (const memberId of memberIds) {
             const ref = tables.getRowRef(memberId);
@@ -1839,6 +1978,22 @@ export function createDocumentAccess(
     }
   };
 
+  /** The orders of the containers before the change written to the Store directly being read */
+  let foreignOrdersBefore = new Map<string, readonly string[]>();
+
+  /** Whether an update of a group wrote its key of the order alone */
+  const onlyKeyOfGroup = (group: StoreGroup, previous: StoreGroup): boolean => {
+    if (group.orderKey === previous.orderKey) return false;
+    const keys = new Set([...Object.keys(group), ...Object.keys(previous)]);
+    for (const key of keys) {
+      if (key === 'orderKey') continue;
+      const a = (group as unknown as Record<string, unknown>)[key];
+      const b = (previous as unknown as Record<string, unknown>)[key];
+      if (a !== b && JSON.stringify(a) !== JSON.stringify(b)) return false;
+    }
+    return true;
+  };
+
   /** The change of the Store in the words of the features, for what the instance did not write */
   const changeFromRows = (change: RowChange): StoreChange => {
     const out: StoreChange = {};
@@ -1847,12 +2002,27 @@ export function createDocumentAccess(
     const deleted: Feature[] = [];
     const touchedLayers = new Set<string>();
     const touchedGroups = new Set<string>();
+    /** Where the items the change placed, created or deleted were before it (none: not there) */
+    const placesBefore = new Map<string, { container: string; key: string } | null>();
+    /** The containers whose items only took other keys: their order changed, nothing else */
+    const reordered = new Set<string>();
+    /** The containers the features moved out of (when the orders before are kept) */
+    const left = new Set<string>();
+    /** The groups whose features the change deleted */
+    const emptiedGroups = new Set<string>();
+    const watching = watchingMoves();
     for (const [layerId, rows] of change.rows?.layers ?? []) {
       const createdRefs = rows.created.filter((ref) => !ownRows.has(ref));
       const updatedRefs = rows.updated.filter((ref) => !ownRows.has(ref));
       const deletedRefs = rows.deleted.filter((ref) => !ownRows.has(ref));
       if (createdRefs.length + updatedRefs.length + deletedRefs.length === 0) continue;
-      touchedLayers.add(layerId);
+      // The order of a layer changes with the rows it gains or loses, and with the places written
+      const placed = rows.fields.has('parent') || rows.fields.has('orderKey');
+      // Only the places written: a row that stays in its container took another place among the
+      // same items
+      const onlyPlaces =
+        placed && [...rows.fields].every((field) => field === 'parent' || field === 'orderKey');
+      if (createdRefs.length + deletedRefs.length > 0) touchedLayers.add(layerId);
       // The features made from the rows as they were: those kept made, or their values before
       const before = change.previousValues?.get(layerId);
       const beforeIndex = new Map<number, number>();
@@ -1904,19 +2074,68 @@ export function createDocumentAccess(
           [feature] = makeFeatures(Int32Array.of(ref), [id]);
         }
         if (feature) deleted.push(feature);
-        if (feature?.groupId) touchedGroups.add(feature.groupId);
+        if (feature?.groupId) {
+          touchedGroups.add(feature.groupId);
+          emptiedGroups.add(feature.groupId);
+        }
+      }
+      // The places of the rows before the change, for the orders before it
+      if (placed || deletedRefs.length > 0) {
+        const notePlaces = (refs: Int32Array, beforeOf: (ref: number) => number | undefined) => {
+          if (refs.length === 0) return;
+          const nowValues = tables.readValues(refs, ['parent', 'orderKey']).fields;
+          for (let i = 0; i < refs.length; i++) {
+            const id = tables.getRowId(refs[i]);
+            if (id === undefined) continue;
+            const at = beforeOf(refs[i]);
+            const parent =
+              at !== undefined && before?.fields.has('parent')
+                ? before.fields.get('parent')?.[at]
+                : nowValues.get('parent')?.[i];
+            const key =
+              at !== undefined && before?.fields.has('orderKey')
+                ? before.fields.get('orderKey')?.[at]
+                : nowValues.get('orderKey')?.[i];
+            placesBefore.set(id, { container: String(parent), key: String(key ?? '') });
+          }
+        };
+        if (placed) notePlaces(updatedRefs, (ref) => beforeIndex.get(ref));
+        // One at a time: the rows deleted with their group are read alone
+        if (change.deletedRowsToken !== undefined) {
+          for (const ref of deletedRefs) notePlaces(Int32Array.of(ref), () => undefined);
+        }
+        for (const ref of createdRefs) {
+          const id = tables.getRowId(ref);
+          if (id !== undefined) placesBefore.set(id, null);
+        }
       }
       for (const ref of updatedRefs) {
         const id = tables.getRowId(ref);
         if (id === undefined) continue;
+        if (onlyPlaces) {
+          const parent = String(
+            tables.readValues(Int32Array.of(ref), ['parent']).fields.get('parent')?.[0],
+          );
+          if (placesBefore.get(id)?.container === parent) {
+            // Not a change of the feature: a change of the order of its container
+            reordered.add(parent);
+            continue;
+          }
+        }
         const cached = featureCache.get(id);
         featureCache.delete(id);
         const [now] = makeFeatures(Int32Array.of(ref), [id]);
         const previous = cached ?? previousOf(ref, id, now) ?? now;
         remember(now);
         updated.push({ id, feature: now, previous });
+        if (!placed) continue;
+        if (watching && (previous.groupId ?? previous.layerId) !== (now.groupId ?? now.layerId)) {
+          left.add(previous.groupId ?? previous.layerId);
+        }
         if (previous.groupId) touchedGroups.add(previous.groupId);
         if (now.groupId) touchedGroups.add(now.groupId);
+        // An item of the layer, before or after, changes the order of its items
+        if (previous.groupId === undefined || now.groupId === undefined) touchedLayers.add(layerId);
         if (previous.layerId !== layerId) touchedLayers.add(previous.layerId);
       }
       if (createdRefs.length > 0) {
@@ -1959,8 +2178,12 @@ export function createDocumentAccess(
     }
     for (const layer of change.layers?.deleted ?? []) {
       if (ownLayers.has(layer.id)) continue;
-      touchedLayers.delete(layer.id);
       const gone = layerWrappers.get(layer.id)?.layer ?? (layerOf(layer) as Layer);
+      // A layer deleted with its items loses them first, as the instance tells its own deletion
+      if (touchedLayers.delete(layer.id)) {
+        if (!layers.updated) layers.updated = [];
+        layers.updated.push({ id: layer.id, layer: gone, previous: gone });
+      }
       layerWrappers.delete(layer.id);
       bumpLayer(layer.id);
       if (!layers.deleted) layers.deleted = [];
@@ -1988,13 +2211,32 @@ export function createDocumentAccess(
     }
     for (const group of change.groups?.created ?? []) {
       if (ownGroups.has(group.id)) continue;
+      // The features it was created with are told with its creation
+      touchedGroups.delete(group.id);
       bumpGroup(group.id);
       bumpLayer(group.layerId);
       if (!groups.created) groups.created = [];
       groups.created.push(groupOf(group) as Group);
     }
+    for (const group of change.groups?.created ?? []) {
+      if (!ownGroups.has(group.id)) placesBefore.set(group.id, null);
+    }
+    for (const group of change.groups?.deleted ?? []) {
+      if (!ownGroups.has(group.id)) {
+        placesBefore.set(group.id, { container: group.layerId, key: group.orderKey });
+      }
+    }
     for (const entry of change.groups?.updated ?? []) {
       if (ownGroups.has(entry.id)) continue;
+      placesBefore.set(entry.id, {
+        container: entry.previous.layerId,
+        key: entry.previous.orderKey,
+      });
+      if (onlyKeyOfGroup(entry.group, entry.previous)) {
+        // A group that took another place among the items of its layer
+        reordered.add(entry.group.layerId);
+        continue;
+      }
       touchedGroups.delete(entry.id);
       const previous = groupWrappers.get(entry.id)?.group ?? (groupOf(entry.previous) as Group);
       bumpGroup(entry.id);
@@ -2009,8 +2251,12 @@ export function createDocumentAccess(
     }
     for (const group of change.groups?.deleted ?? []) {
       if (ownGroups.has(group.id)) continue;
-      touchedGroups.delete(group.id);
       const gone = groupWrappers.get(group.id)?.group ?? (groupOf(group) as Group);
+      // A group deleted with its features loses them first
+      if (touchedGroups.delete(group.id) && emptiedGroups.has(group.id)) {
+        if (!groups.updated) groups.updated = [];
+        groups.updated.push({ id: group.id, group: gone, previous: gone });
+      }
       groupWrappers.delete(group.id);
       bumpLayer(group.layerId);
       if (!groups.deleted) groups.deleted = [];
@@ -2028,6 +2274,41 @@ export function createDocumentAccess(
     }
     if (Object.keys(layers).length > 0) out.layers = layers;
     if (Object.keys(groups).length > 0) out.groups = groups;
+    // The orders of the containers before the change, from their orders now and the places the
+    // change wrote
+    const orderBefore = (container: string): string[] => {
+      const now = placedOf(container, 0, countOf(container)).filter(
+        (item) => !placesBefore.has(item.id),
+      );
+      for (const [id, place] of placesBefore) {
+        if (place?.container === container) now.push({ id, key: place.key });
+      }
+      return now.sort(comparePlaced).map((item) => item.id);
+    };
+    for (const container of reordered) {
+      if (store.getGroup(container)) {
+        bumpGroup(container);
+        out.groupReorder = {
+          groupId: container,
+          featureIds: memberIdsOf(container),
+          previous: orderBefore(container),
+        };
+      } else if (store.getLayer(container)) {
+        bumpLayer(container);
+        out.layerReorder = {
+          layerId: container,
+          order: itemIdsOf(container),
+          previous: orderBefore(container),
+        };
+      }
+    }
+    foreignOrdersBefore = new Map();
+    // Not for a container the change deleted: the features that left it name it alone
+    for (const container of left) {
+      if (store.getGroup(container) || store.getLayer(container)) {
+        foreignOrdersBefore.set(container, orderBefore(container));
+      }
+    }
     if (change.metadata && !ownMetadata) {
       out.metadata = {
         metadata: { ...change.metadata.metadata },
@@ -2121,9 +2402,13 @@ export function createDocumentAccess(
       }
       if (isEmptyChange(foreign)) return;
       const { source } = change;
+      const orders = foreignOrdersBefore;
       afterTold.push(() =>
         client.hold(() =>
           busTransact(() => {
+            for (const [container, order] of orders) {
+              if (!ordersBefore.has(container)) ordersBefore.set(container, order);
+            }
             appendChange(pending, foreign, pendingFolds);
             client.followDocument(foreign, drawing.dragState !== null);
           }, source),
@@ -2167,6 +2452,7 @@ export function createDocumentAccess(
 
     // The writes of the document, the transactions and the subscription
     createFeature: (feature: Feature) => write(() => void createFeatureRow(feature)),
+    createFeatures: (features: readonly Feature[]) => write(() => void createFeatureRows(features)),
     updateFeature: (id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions) =>
       write(() => updateFeatureRow(id, updates, options)),
     // A drag given up has written the values it started from back: nothing is left to drop

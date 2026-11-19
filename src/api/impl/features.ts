@@ -184,9 +184,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
         return feature;
       });
       if (store.isReadOnly()) return null;
-      store.transact(() => {
-        for (const feature of features) store.createFeature(feature);
-      });
+      store.createFeatures(features);
       return features.map((feature) => store.getFeature(feature.id) as StoredFeature);
     },
 

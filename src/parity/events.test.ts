@@ -13,7 +13,7 @@
 
 import type { FeatureCollection } from 'geojson';
 import { describe, vi } from 'vitest';
-import type { DocumentChange, Draw, DrawDocument, Feature } from '../index.js';
+import type { Draw, DrawDocument, Feature } from '../index.js';
 import {
   createApplicationStore,
   createParityInstance,
@@ -24,6 +24,7 @@ import {
   parityStoreView,
   parityTable,
   readParity,
+  readStoreChange,
   settleParity,
 } from '../test-utils.js';
 
@@ -44,10 +45,11 @@ function scene(
     const t = createParityInstance({ initDefaultLayer: false, ...instance });
     fillParityDocument(t);
     if (setup) parityQuiet(() => setup(t.draw, t));
-    const notified: DocumentChange[] = [];
+    const notified: unknown[] = [];
     if (store) {
       settleParity();
-      parityStoreView(t.draw.getStore()).subscribe((change) => notified.push(change));
+      const view = parityStoreView(t.draw.getStore());
+      view.subscribe((change) => notified.push(readStoreChange(view, change)));
     }
     const seen = await observeParity(t, () => act(t.draw, t));
     return store ? { ...seen, storeChanges: readParity(notified, 'storeChanges') } : seen;
@@ -256,9 +258,9 @@ describe('the fields of document.changed', () => {
     const t = createParityInstance({ initDefaultLayer: false, app });
     fillParityDocument(t);
     parityQuiet(() => t.draw.setMode('drawLine'));
-    const notified: DocumentChange[] = [];
+    const notified: unknown[] = [];
     settleParity();
-    app.scene.subscribe((change) => notified.push(change));
+    app.scene.subscribe((change) => notified.push(readStoreChange(app.store, change)));
     const seen = await observeParity(t, () => {
       app.scene.startEditing(['pt', 'ln']);
       return t.draw.setMode('select');

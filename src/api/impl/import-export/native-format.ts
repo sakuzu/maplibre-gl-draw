@@ -6,8 +6,8 @@
  */
 
 import { getDrawProperty } from '../../../shared/properties.js';
-import type { DocumentAccess } from '../../../store/document-access.js';
-import type { Data, ExportOptions, FileData, LoadResult } from '../../../store/types.js';
+import type { DocumentAccess, InstanceDocument } from '../../../store/document-access.js';
+import type { Data, ExportOptions, FileData, Layer, LoadResult } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';
@@ -17,13 +17,27 @@ import type { PreparedLoad } from './types.js';
 /** The layer that survives the replacement (it is updated in place when the data has it) */
 const DEFAULT_LAYER_ID = 'default-layer';
 
+/** A layer of the document: its fields, with the items it lists after its opacity */
+function documentLayerOf(layer: Layer): Layer {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(layer)) {
+    out[key] = (layer as unknown as Record<string, unknown>)[key];
+    if (key === 'opacity') out.items = [...layer.items];
+  }
+  if (!('items' in out)) out.items = [...layer.items];
+  return out as unknown as Layer;
+}
+
 /**
  * Exports the current data in the native format
  */
 export function exportNative(store: DocumentAccess, options?: ExportOptions): Data {
   let features = store.listFeatures();
-  const layers = store.listLayers();
-  const groups = store.listGroups();
+  const layers = store.listLayers().map(documentLayerOf);
+  // A group of the document lists its features, after its other fields
+  const groups = store
+    .listGroups()
+    .map((group) => ({ ...group, featureIds: [...group.featureIds] }));
 
   if (options?.featureIds && options.featureIds.length > 0) {
     const featureIdSet = new Set(options.featureIds);
@@ -74,7 +88,7 @@ export function exportNative(store: DocumentAccess, options?: ExportOptions): Da
  */
 export async function prepareNative(
   data: Data,
-  deps: { store: DocumentAccess },
+  deps: { store: InstanceDocument },
 ): Promise<PreparedLoad> {
   const { store } = deps;
 
@@ -148,9 +162,7 @@ export async function prepareNative(
     }
 
     // 4. Import the features
-    for (const feature of features) {
-      store.createFeature(feature);
-    }
+    store.createFeatures(features);
 
     // 5. Import the files
     for (const file of files) {

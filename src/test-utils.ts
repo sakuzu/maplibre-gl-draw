@@ -13,13 +13,20 @@ import type { Draw } from './api/draw.js';
 import { createDraw } from './api/draw.js';
 import type { DocumentChange, DrawEvents } from './api/events.js';
 import type { ModeFactory } from './api/extension/mode.js';
-import type { Store as PublicStore } from './api/extension/store.js';
 import type { ExtensionsCollections } from './api/extensions.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
 import { createDrawOnEngine } from './api/impl/create-draw.js';
 import type { Engine } from './api/impl/engine.js';
 import { createEngine } from './api/impl/engine.js';
+import {
+  FEATURE_FIELDS,
+  featuresOfValues,
+  geometryColumnOf,
+  newRowFields,
+  PROPERTY_FIELD,
+  updatedRowFields,
+} from './api/impl/feature-rows.js';
 import { createFeatures } from './api/impl/features.js';
 import { createGroups } from './api/impl/groups.js';
 import { createHidden } from './api/impl/hidden.js';
@@ -30,6 +37,8 @@ import { createSelection } from './api/impl/selection.js';
 import type { ResourceDeps } from './api/impl/shared.js';
 import { withLocksIgnored } from './api/impl/shared.js';
 import type {
+  DocumentGroup,
+  DocumentLayer,
   FeatureFilter,
   Group,
   GroupFilter,
@@ -51,11 +60,18 @@ import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import { type WorkCounts, workCountsOf } from './shared/work-counts.js';
 import type { SnapResult } from './snapping/types.js';
-import type { Store as RowStore } from './store/built-in/types.js';
+import { createStore } from './store/built-in/create-store.js';
+import { createOrderKeyBetween } from './store/built-in/order-keys.js';
+import type {
+  FeatureRowField,
+  Store as RowStore,
+  StoreChange as RowStoreChange,
+  StoreGroup,
+} from './store/built-in/types.js';
 import type { FeatureMatch, InstanceDocument, MoveDestination } from './store/document-access.js';
-import { MemoryContractStore, MemoryStore } from './store/memory.js';
 import { listEveryFeatureInOrder } from './store/ordering.js';
 import type { Store } from './store/store.js';
+import type { FileData, Metadata } from './store/types.js';
 import type { TerrainContext } from './view/terrain/context.js';
 import { createSelectionExtensionRegistry } from './view/ui/selection-ui/extension-registry.js';
 
@@ -362,16 +378,17 @@ export function documentOverStore(store: Store): InstanceDocument {
     watchMoves: () => {},
     moveFeatures,
     moveGroups,
+    createFeatures: (features) =>
+      store.transact(() => features.every((feature) => store.createFeature(feature))),
     onReset: (listener) =>
       store.subscribe((change) => {
         if (change.reset) listener();
       }),
   };
+  const members = new Map<string | symbol, unknown>(Object.entries(extra));
   return new Proxy(store, {
     get(target, key) {
-      if (typeof key === 'string' && Object.hasOwn(extra, key)) {
-        return (extra as Record<string, unknown>)[key];
-      }
+      if (members.has(key)) return members.get(key);
       const value = Reflect.get(target, key, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
@@ -633,6 +650,215 @@ export function createSyntheticInput(engine: {
 }
 
 // ============================================================================
+// The rows of a Store, read and written from outside an instance
+// ============================================================================
+
+/** The key of the order of a row */
+function rowKeyOf(store: RowStore, ref: number): string | undefined {
+  return store.tables.readValues(Int32Array.of(ref), ['orderKey']).fields.get('orderKey')?.[0] as
+    | string
+    | undefined;
+}
+
+/** The IDs of the items of a layer, or of the features of a group, in their order from the back */
+function orderOf(store: RowStore, container: string): string[] {
+  const { tables } = store;
+  const group = store.getGroup(container);
+  if (group) {
+    const view = tables.get(group.layerId);
+    const ref = tables.findGroup(container);
+    if (!view || ref === undefined) return [];
+    const members = view.listGroupMembers(ref, 0, view.countGroupMembers(ref));
+    return Array.from(members, (row) => tables.getRowId(row) ?? '');
+  }
+  const view = tables.get(container);
+  if (!view || view.itemCount === 0) return [];
+  const { kinds, refs } = view.listItemRefs(0, view.itemCount);
+  return Array.from(refs, (ref, i) =>
+    kinds[i] === 0 ? (tables.getRowId(ref) ?? '') : (tables.getGroupId(ref) ?? ''),
+  );
+}
+
+/** The key of the order of an item of a layer (a row or a group), or of a feature of a group */
+function itemKeyOf(store: RowStore, id: string): string | undefined {
+  const group = store.getGroup(id);
+  if (group) return group.orderKey;
+  const ref = store.tables.getRowRef(id);
+  return ref === undefined ? undefined : rowKeyOf(store, ref);
+}
+
+/** The key of a new item at a position of an order (the front when it is left out) */
+function keyAt(store: RowStore, order: readonly string[], index = order.length): string {
+  const below = index > 0 ? itemKeyOf(store, order[index - 1]) : undefined;
+  const above = index < order.length ? itemKeyOf(store, order[index]) : undefined;
+  return createOrderKeyBetween(below, above);
+}
+
+/** The layer and the group of the parent of a row */
+function placeOfParent(store: RowStore, parent: unknown) {
+  const id = String(parent);
+  const group = store.getGroup(id);
+  return group ? { layerId: group.layerId, groupId: id } : { layerId: id, groupId: undefined };
+}
+
+/** The feature of a row of a Store, read from its values (undefined for none) */
+export function readRowFeature(store: RowStore, id: string): Feature | undefined {
+  const ref = store.tables.getRowRef(id);
+  if (ref === undefined) return undefined;
+  const rows = Int32Array.of(ref);
+  const fields: FeatureRowField[] = [
+    ...FEATURE_FIELDS,
+    ...store.listPropertyKeys(rows).map((key) => `${PROPERTY_FIELD}${key}` as FeatureRowField),
+  ];
+  const [feature] = featuresOfValues(store.tables.readValues(rows, fields), [id], (parent) =>
+    placeOfParent(store, parent),
+  );
+  return feature;
+}
+
+/** Every feature of a Store, read from the rows of its layers in stacking order */
+export function readRowFeatures(store: RowStore): Feature[] {
+  const out: Feature[] = [];
+  for (const layerId of store.getLayerOrder()) {
+    const view = store.tables.get(layerId);
+    if (!view) continue;
+    for (const ref of view.listRowRefs(0, view.rowCount)) {
+      const id = store.tables.getRowId(ref);
+      const feature = id === undefined ? undefined : readRowFeature(store, id);
+      if (feature) out.push(feature);
+    }
+  }
+  return out;
+}
+
+/**
+ * The writes of a change made outside an instance, in the words of the features, written to a
+ * Store as rows: what an application that keeps the document elsewhere writes when a change
+ * arrives. Each write is one write of the Store (in the transaction under way, or one of its own
+ * with the source `'remote'`); a new feature, group or item goes to the front of its layer or its
+ * group, as the published version put it.
+ */
+export function rowWrites(store: RowStore) {
+  const { tables } = store;
+  /** Writes the place of a row: its parent and its key */
+  const place = (id: string, parent: string, orderKey: string): void => {
+    const ref = tables.getRowRef(id);
+    if (ref === undefined) return;
+    store.writeRows({
+      rows: Int32Array.of(ref),
+      fields: new Map<FeatureRowField, unknown[]>([
+        ['parent', [parent]],
+        ['orderKey', [orderKey]],
+      ]),
+    });
+  };
+  return {
+    createFeature(feature: Feature): boolean {
+      const parent = feature.groupId ?? feature.layerId;
+      return store.createRows({
+        ids: [feature.id],
+        fields: newRowFields(
+          [feature],
+          [{ parent, orderKey: keyAt(store, orderOf(store, parent)) }],
+        ),
+        geometry: geometryColumnOf([feature.geometry], 2),
+      });
+    },
+    updateFeature(id: string, updates: Partial<Feature>): boolean {
+      const previous = readRowFeature(store, id);
+      if (!previous) return false;
+      const updated = { ...previous, ...updates, id } as Feature;
+      const { fields, geometry } = updatedRowFields(previous, updated, updates);
+      const from = previous.groupId ?? previous.layerId;
+      const to = updated.groupId ?? updated.layerId;
+      if (from !== to) {
+        fields.set('parent', [to]);
+        fields.set('orderKey', [keyAt(store, orderOf(store, to))]);
+      }
+      if (fields.size === 0 && geometry === undefined) return true;
+      const ref = tables.getRowRef(id) as number;
+      return store.writeRows({
+        rows: Int32Array.of(ref),
+        fields,
+        ...(geometry !== undefined && { geometry: geometryColumnOf([geometry], 2) }),
+      });
+    },
+    deleteFeature(id: string): boolean {
+      const ref = tables.getRowRef(id);
+      if (ref === undefined) return false;
+      return store.writeRows({
+        rows: Int32Array.of(ref),
+        fields: new Map(),
+        deleted: Uint8Array.of(1),
+      });
+    },
+    createLayer: (layer: Layer): boolean => store.createLayer(layer),
+    updateLayer: (id: string, updates: Partial<Layer>): boolean => store.updateLayer(id, updates),
+    deleteLayer: (id: string): boolean => store.deleteLayer(id),
+    setLayerOrder: (order: string[]): boolean => store.setLayerOrder(order),
+    /** Moves an item within its layer to a position, as the order without it counts */
+    reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean {
+      const order = orderOf(store, layerId).filter((id) => id !== itemId);
+      const key = keyAt(store, order, newIndex);
+      if (store.getGroup(itemId)) return store.updateGroup(itemId, { orderKey: key });
+      place(itemId, layerId, key);
+      return true;
+    },
+    /** Moves a feature within its group to a position, as the order without it counts */
+    reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean {
+      const order = orderOf(store, groupId).filter((id) => id !== featureId);
+      place(featureId, groupId, keyAt(store, order, newIndex));
+      return true;
+    },
+    /**
+     * Creates a group with the features given in it, in that order: it takes the place of its
+     * first feature in the layer (the front of the layer when that one is not an item of it)
+     */
+    createGroup(group: Omit<StoreGroup, 'orderKey'> & { featureIds: readonly string[] }): boolean {
+      const { featureIds, ...rest } = group;
+      const first = featureIds[0];
+      const order = orderOf(store, group.layerId);
+      const created = store.createGroup({
+        ...rest,
+        orderKey:
+          first !== undefined && order.includes(first)
+            ? (itemKeyOf(store, first) as string)
+            : keyAt(store, order),
+      });
+      if (!created) return false;
+      let below: string | undefined;
+      for (const id of featureIds) {
+        below = createOrderKeyBetween(below, undefined);
+        place(id, group.id, below);
+      }
+      return true;
+    },
+    updateGroup: (id: string, updates: Partial<StoreGroup>): boolean =>
+      store.updateGroup(id, updates),
+    /** Deletes a group: its features take its place in its layer first */
+    deleteGroup(id: string): boolean {
+      const group = store.getGroup(id);
+      if (!group) return false;
+      const order = orderOf(store, group.layerId);
+      const at = order.indexOf(id);
+      const above = at + 1 < order.length ? itemKeyOf(store, order[at + 1]) : undefined;
+      let below: string | undefined = group.orderKey;
+      for (const member of orderOf(store, id)) {
+        below = createOrderKeyBetween(below, above);
+        place(member, group.layerId, below);
+      }
+      return store.deleteGroup(id);
+    },
+    createFile: (file: FileData): boolean => store.createFile(file),
+    deleteFile: (id: string): boolean => store.deleteFile(id),
+    setMetadata: (metadata: Partial<Metadata>): boolean => store.setMetadata(metadata),
+  };
+}
+
+/** The writes of `rowWrites` */
+export type RowWrites = ReturnType<typeof rowWrites>;
+
+// ============================================================================
 // The work of a scene
 //
 // The tests bound an operation by the amount of work it does, not by the time it takes: the
@@ -759,41 +985,39 @@ export function expectNotProportional(
 // The Store that counts
 // ============================================================================
 
-/** The methods of the Store that give back one feature or a list of them */
-const FEATURE_READS: ReadonlyMap<string, 'one' | 'list'> = new Map([
-  ['getFeature', 'one'],
-  ['listFeatures', 'list'],
-  ['listFeaturesInOrder', 'list'],
+/** The methods of the tables of a Store that read the values of rows: of the rows given, or one */
+const ROW_READS: ReadonlyMap<string, 'refs' | 'one'> = new Map([
+  ['readValues', 'refs'],
+  ['getRowProperty', 'one'],
+  ['getRowStyle', 'one'],
 ]);
 
-/** The methods of the Store that write one feature, or the features of a list of ids */
-const FEATURE_WRITES: ReadonlyMap<string, 'one' | 'ids'> = new Map([
-  ['createFeature', 'one'],
-  ['updateFeature', 'one'],
-  ['deleteFeature', 'one'],
-  ['abortIntermediateUpdates', 'ids'],
+/** The methods of a Store that write rows: the new rows given, or the rows given */
+const ROW_WRITES: ReadonlyMap<string, 'ids' | 'rows'> = new Map([
+  ['createRows', 'ids'],
+  ['writeRows', 'rows'],
 ]);
 
 /** What was read and written through a Store */
 export interface StoreWork {
-  /** The calls of each method of the Store, by name */
+  /** The calls of each method of the Store and of its tables, by name */
   calls: Map<string, number>;
-  /** The features the methods of the Store gave back */
+  /** The rows whose values were read through the tables of the Store */
   featuresRead: number;
-  /** The features the methods of the Store were given to write */
+  /** The rows the Store was given to write */
   featuresWritten: number;
 }
 
 /**
- * Wraps a Store so that what goes through it is counted, whatever the marks of the library count
+ * Wraps a Store of rows so that what goes through it is counted, whatever the marks of the
+ * library count
  *
- * Every method called on the wrapper is counted by its name, with the features it gives back
- * (`getFeature`, `listFeatures`, `listFeaturesInOrder`) and the features it is given to write
- * (`createFeature`, `updateFeature`, `deleteFeature`, and the ids of
- * `abortIntermediateUpdates`). The method runs on the Store itself, so what the Store calls on
- * itself is not counted: only what its user asked for. Everything else (the prototype, the
- * fields, the numbers of the marks) reads through to the Store, so the wrapper stands for it
- * wherever the Store is given.
+ * Every method called on the wrapper, or on its tables and the views of their layers, is counted
+ * by its name, with the rows whose values it reads (`readValues` of the tables, and
+ * `getRowProperty` and `getRowStyle` of a layer) and the rows it is given to write (`createRows`
+ * and `writeRows`). The method runs on the Store itself, so what the Store calls on itself is not
+ * counted: only what its user asked for. Everything else (the fields, the numbers of the marks)
+ * reads through to the Store, so the wrapper stands for it wherever the Store is given.
  *
  * Each call makes its own numbers, so two instances never share them.
  */
@@ -801,33 +1025,48 @@ export function createCountingStore<S extends object>(
   target: S,
 ): { store: S; work: StoreWork; reset(): void } {
   const work: StoreWork = { calls: new Map(), featuresRead: 0, featuresWritten: 0 };
-  const wrappers = new Map<string, (...args: unknown[]) => unknown>();
-  const wrap = (name: string, method: (...args: unknown[]) => unknown) => {
-    let wrapper = wrappers.get(name);
-    if (wrapper) return wrapper;
-    wrapper = (...args: unknown[]): unknown => {
-      work.calls.set(name, (work.calls.get(name) ?? 0) + 1);
-      const write = FEATURE_WRITES.get(name);
-      if (write === 'one') work.featuresWritten += 1;
-      else if (write === 'ids') work.featuresWritten += (args[0] as readonly unknown[]).length;
-      const result = method.apply(target, args);
-      const read = FEATURE_READS.get(name);
-      if (read === 'one' && result !== undefined) work.featuresRead += 1;
-      else if (read === 'list') work.featuresRead += (result as readonly unknown[]).length;
-      return result;
-    };
-    wrappers.set(name, wrapper);
-    return wrapper;
+  const counted = new WeakMap<object, object>();
+  /** A wrapper of an object whose methods are counted, and whose objects given back are too */
+  const wrapped = <T extends object>(object: T): T => {
+    const known = counted.get(object);
+    if (known) return known as T;
+    const methods = new Map<string, (...args: unknown[]) => unknown>();
+    const proxy = new Proxy(object, {
+      get(t, prop) {
+        const value: unknown = Reflect.get(t, prop, t);
+        if (typeof prop !== 'string') return value;
+        if (typeof value !== 'function') {
+          return prop === 'tables' && typeof value === 'object' && value !== null
+            ? wrapped(value)
+            : value;
+        }
+        let method = methods.get(prop);
+        if (!method) {
+          method = (...args: unknown[]): unknown => {
+            work.calls.set(prop, (work.calls.get(prop) ?? 0) + 1);
+            const write = ROW_WRITES.get(prop);
+            const given = args[0] as { ids?: readonly unknown[]; rows?: ArrayLike<number> };
+            if (write === 'ids') work.featuresWritten += given?.ids?.length ?? 0;
+            else if (write === 'rows') work.featuresWritten += given?.rows?.length ?? 0;
+            const read = ROW_READS.get(prop);
+            if (read === 'refs') work.featuresRead += (args[0] as ArrayLike<number>).length;
+            else if (read === 'one') work.featuresRead += 1;
+            const result = (value as (...a: unknown[]) => unknown).apply(t, args);
+            // The view of a layer the tables give back is counted as well
+            return prop === 'get' && typeof result === 'object' && result !== null
+              ? wrapped(result)
+              : result;
+          };
+          methods.set(prop, method);
+        }
+        return method;
+      },
+    });
+    counted.set(object, proxy);
+    return proxy;
   };
-  const store = new Proxy(target, {
-    get(t, prop) {
-      const value: unknown = Reflect.get(t, prop, t);
-      if (typeof prop !== 'string' || typeof value !== 'function') return value;
-      return wrap(prop, value as (...args: unknown[]) => unknown);
-    },
-  });
   return {
-    store,
+    store: wrapped(target),
     work,
     /** Starts the numbers again from zero */
     reset(): void {
@@ -1163,7 +1402,7 @@ export function createDrawingMapStub(gl: WebGL2RenderingContext) {
 export function createCountedInstance(options: DrawOptions = {}): {
   draw: Draw;
   engine: Engine;
-  store: MemoryStore;
+  store: RowStore;
   counts: WorkCounts;
   storeWork: StoreWork;
   gl: ReturnType<typeof createCountingGL>;
@@ -1172,7 +1411,7 @@ export function createCountedInstance(options: DrawOptions = {}): {
 } {
   const gl = createCountingGL();
   const map = createDrawingMapStub(gl.gl);
-  const store = new MemoryStore();
+  const store = createStore();
   // The instance is given the counting wrapper; `store` stays the Store itself, for the writes
   // a test makes from outside the instance
   const counting = createCountingStore(store);
@@ -1499,67 +1738,6 @@ export function createParityMap(
 }
 
 /**
- * Every member of the public Store of the main entry of the published version; the members of
- * the state of this client are no longer the Store's (see `PARITY_CLIENT_MEMBERS`)
- */
-export const PARITY_STORE_MEMBERS: readonly string[] = [
-  'getFeature',
-  'listFeatures',
-  'listFeaturesInOrder',
-  'getLayer',
-  'listLayers',
-  'getLayerOrder',
-  'getGroup',
-  'listGroups',
-  'getFile',
-  'listFiles',
-  'getMetadata',
-  'getSelection',
-  'getEditingIds',
-  'getVertexSelection',
-  'getMode',
-  'isReadOnly',
-  'isInteractionLocked',
-  'isHidden',
-  'listHidden',
-  'subscribe',
-  'transact',
-  'createFeature',
-  'updateFeature',
-  'abortIntermediateUpdates',
-  'deleteFeature',
-  'createLayer',
-  'updateLayer',
-  'deleteLayer',
-  'setLayerOrder',
-  'reorderInLayer',
-  'reorderInGroup',
-  'createGroup',
-  'updateGroup',
-  'deleteGroup',
-  'createFile',
-  'deleteFile',
-  'setMetadata',
-  'setSelection',
-  'startEditing',
-  'endEditing',
-  'setSelectedVertices',
-  'setMode',
-  'setReadOnly',
-  'setInteractionLock',
-  'setLocallyHidden',
-  'getMaxNameNumber',
-  'recordNameNumber',
-];
-
-/** The members of the public Store an application may leave out */
-const OPTIONAL_STORE_MEMBERS: ReadonlySet<string> = new Set([
-  'abortIntermediateUpdates',
-  'getMaxNameNumber',
-  'recordNameNumber',
-]);
-
-/**
  * The members of the state of this client the Store of the published version had, which the
  * scenes call on the Store of the application. The Store no longer holds that state: the
  * instance does, so each one is read and written through the instance given the Store.
@@ -1615,84 +1793,67 @@ function drawOfParityStore(store: unknown): Draw {
 }
 
 /**
- * A Store of the application, kept in memory, with the members of the public Store only
+ * A Store of the application, kept in memory: the built-in Store spread into an object of its
+ * own, as an application that keeps the document elsewhere makes it
  *
  * `store` is given to `createDraw`; `scene` is the same Store for the scene, which writes to it
- * from outside the instance as an application that keeps the document elsewhere does, and calls
- * the members of the state of this client through it (`ParityClientMembers`, read and written
- * through the instance). What the scene calls on `scene`, and the optional members the instance
- * calls, are the uses of the row. `calls` lists the calls of the instance to the optional
- * members.
+ * from outside the instance as an application does when a change arrives: the writes of
+ * `rowWrites`, in the words of the features, written as rows, its transactions and its
+ * subscription. It also calls the members of the state of this client through it
+ * (`ParityClientMembers`, read and written through the instance). What the scene calls on
+ * `scene` are the uses of the row.
+ *
+ * The Store has no member that numbers the automatic names or that is told when a drag is given
+ * up (3.0 has none), so the instance calls nothing on it besides the members of the Store:
+ * `calls` stays empty, whatever the options of the scene.
  */
 export interface ApplicationStore {
-  store: PublicStore;
-  scene: PublicStore & ParityClientMembers;
+  store: RowStore;
+  scene: RowWrites &
+    Pick<RowStore, 'transact' | 'subscribe'> &
+    ParityClientMembers & { readonly tables: RowStore['tables'] };
   calls: string[];
 }
 
 /**
  * Makes a Store of the application
  *
- * @param options.nameNumbers The largest number of an automatic name the Store knows of, by
- *   type: given, the Store has `getMaxNameNumber` and `recordNameNumber`
- * @param options.abort Whether the Store has `abortIntermediateUpdates`
+ * @param _options What the Store of the published version gave the instance besides the
+ *   document (the largest number of the automatic names, the call when a drag is given up): the
+ *   Store of 3.0 has no place for them, so they are not used
  */
 export function createApplicationStore(
-  options: { nameNumbers?: Record<string, number>; abort?: boolean } = {},
+  _options: { nameNumbers?: Record<string, number>; abort?: boolean } = {},
 ): ApplicationStore {
-  const inner = new MemoryContractStore() as unknown as Record<string, unknown>;
-  const calls: string[] = [];
-  const optional: Record<string, unknown> = {};
-  if (options.nameNumbers) {
-    const numbers = { ...options.nameNumbers };
-    optional.getMaxNameNumber = (type: string) => {
-      calls.push(`getMaxNameNumber ${type}`);
-      return numbers[type];
+  const base = createStore();
+  const store: RowStore = { ...base };
+  const scene: Record<string, unknown> = {};
+  const noted =
+    (name: string, fn: (...args: unknown[]) => unknown) =>
+    (...args: unknown[]) => {
+      useParity(`Store.${name}`);
+      return fn(...args);
     };
-    optional.recordNameNumber = (type: string, n: number) => {
-      calls.push(`recordNameNumber ${type} ${n}`);
-      numbers[type] = Math.max(numbers[type] ?? 0, n);
-    };
+  for (const [name, fn] of Object.entries(rowWrites(store))) {
+    scene[name] = noted(name, fn as (...args: unknown[]) => unknown);
   }
-  if (options.abort) {
-    optional.abortIntermediateUpdates = (ids: string[]) => {
-      calls.push(`abortIntermediateUpdates ${ids.join(',')}`);
-    };
-  }
-  const members = new Set<string>(
-    PARITY_STORE_MEMBERS.filter((m) => !(m in PARITY_CLIENT_MEMBERS)),
+  scene.transact = noted('transact', (fn, source, options) =>
+    store.transact(fn as () => unknown, source as string, options as undefined),
   );
+  scene.subscribe = noted('subscribe', (listener, options) =>
+    store.subscribe(listener as (change: RowStoreChange) => void, options as undefined),
+  );
+  scene.tables = store.tables;
   const client = PARITY_CLIENT_MEMBERS as Record<string, (draw: Draw) => unknown>;
-  const view = (recordAll: boolean) =>
-    new Proxy(inner, {
-      get(target, key) {
-        if (recordAll && typeof key === 'string' && key in client) {
-          return (...args: unknown[]) => {
-            useParity(`Store.${key}`);
-            const member = client[key](drawOfParityStore(app)) as (...a: unknown[]) => unknown;
-            return member(...args);
-          };
-        }
-        if (typeof key !== 'string' || !members.has(key)) return undefined;
-        const value = OPTIONAL_STORE_MEMBERS.has(key) ? optional[key] : Reflect.get(target, key);
-        if (typeof value !== 'function') return value;
-        return (...args: unknown[]) => {
-          if (recordAll || OPTIONAL_STORE_MEMBERS.has(key)) useParity(`Store.${key}`);
-          return (value as (...a: unknown[]) => unknown).apply(target, args);
-        };
-      },
-      has(_target, key) {
-        return (
-          typeof key === 'string' &&
-          members.has(key) &&
-          (!OPTIONAL_STORE_MEMBERS.has(key) || key in optional)
-        );
-      },
-    }) as unknown as PublicStore;
+  for (const name of Object.keys(client)) {
+    scene[name] = noted(name, (...args) =>
+      (client[name](drawOfParityStore(app)) as (...a: unknown[]) => unknown)(...args),
+    );
+  }
   const app: ApplicationStore = {
-    store: view(false),
-    scene: view(true) as ApplicationStore['scene'],
-    calls,
+    store,
+    scene: scene as unknown as ApplicationStore['scene'],
+    calls: [],
   };
   return app;
 }
@@ -1881,21 +2042,49 @@ const readFeature = (f: PublicFeature) => ({
   visible: f.visible,
   locked: f.locked,
 });
-const readLayer = (l: Layer) => ({
+/**
+ * The items of a layer the reader reads with it: those a layer of a document holds
+ * (`DocumentLayer`), or, given the instance, the items of the layer as `layers.listItemIds` reads
+ * them now; none for a layer handed out in an event (it carries none)
+ */
+const itemsOfLayer = (l: Layer, draw?: Draw): string[] | undefined => {
+  if (Object.prototype.propertyIsEnumerable.call(l, 'items')) {
+    return [...(l as DocumentLayer).items];
+  }
+  if (!draw) return undefined;
+  return parityQuiet(() =>
+    draw.layers.has(l.id)
+      ? draw.layers.listItemIds(l.id, { start: 0, end: draw.layers.countItems(l.id) })
+      : undefined,
+  );
+};
+/** The features of a group the reader reads with it, as `itemsOfLayer` reads the items */
+const featuresOfGroup = (g: Group, draw?: Draw): string[] | undefined => {
+  if (Object.prototype.propertyIsEnumerable.call(g, 'featureIds')) {
+    return [...(g as DocumentGroup).featureIds];
+  }
+  if (!draw) return undefined;
+  return parityQuiet(() =>
+    draw.groups.has(g.id)
+      ? draw.groups.listFeatureIds(g.id, { start: 0, end: draw.groups.countFeatures(g.id) })
+      : undefined,
+  );
+};
+const readLayer = (l: Layer, draw?: Draw) => ({
   id: l.id,
   name: l.name,
   visible: l.visible,
   locked: l.locked,
   opacity: l.opacity,
-  items: [...l.items],
+  items: itemsOfLayer(l, draw),
   styleRule: l.styleRule,
   metadata: l.metadata,
 });
-const readGroup = (g: Group) => ({
+const readGroup = (g: Group, draw?: Draw) => ({
   id: g.id,
   layerId: g.layerId,
   name: g.name,
-  featureIds: [...g.featureIds],
+  featureIds: featuresOfGroup(g, draw),
   visible: g.visible,
   locked: g.locked,
 });
@@ -1904,6 +2093,11 @@ const maybe =
   <T, R>(read: (v: T) => R) =>
   (v: T | undefined | null) =>
     v === undefined || v === null ? v : read(v);
+/** The reader of a layer or a group read with the instance, which reads its items */
+const withDraw =
+  <T, R>(read: (v: T, draw?: Draw) => R, draw: Draw) =>
+  (v: T) =>
+    read(v, draw);
 
 /** How each event is read: every event of the instance, by name */
 const PARITY_EVENT_READS: { [K in keyof DrawEvents]-?: (p: DrawEvents[K]) => unknown } = {
@@ -2002,23 +2196,23 @@ function readChange(p: DocumentChange) {
     deleted: p.features.deleted?.map(readFeature),
   };
   const layers = p.layers && {
-    created: p.layers.created?.map(readLayer),
+    created: p.layers.created?.map((l) => readLayer(l)),
     updated: p.layers.updated?.map((u) => ({
       id: u.id,
       layer: readLayer(u.layer),
       previous: readLayer(u.previous),
     })),
-    deleted: p.layers.deleted?.map(readLayer),
+    deleted: p.layers.deleted?.map((l) => readLayer(l)),
     orderChanged: p.layers.orderChanged,
   };
   const groups = p.groups && {
-    created: p.groups.created?.map(readGroup),
+    created: p.groups.created?.map((g) => readGroup(g)),
     updated: p.groups.updated?.map((u) => ({
       id: u.id,
       group: readGroup(u.group),
       previous: readGroup(u.previous),
     })),
-    deleted: p.groups.deleted?.map(readGroup),
+    deleted: p.groups.deleted?.map((g) => readGroup(g)),
   };
   return {
     source: p.source,
@@ -2033,6 +2227,51 @@ function readChange(p: DocumentChange) {
     mode: p.mode,
     metadata: p.metadata,
     files: p.files,
+  };
+}
+
+/**
+ * A change a Store told, read while it is told (the ids of the rows it deleted are let go of
+ * after it): its fields, with the rows of each layer by their ids
+ */
+export function readStoreChange(store: RowStore, change: RowStoreChange): unknown {
+  const ids = (refs: Int32Array) => Array.from(refs, (ref) => store.tables.getRowId(ref));
+  return {
+    source: change.source,
+    operationId: change.operationId,
+    hasMoreParts: change.hasMoreParts,
+    stopped: change.stopped,
+    reset: change.reset,
+    rows: change.rows && {
+      layers: [...change.rows.layers].map(([layerId, rows]) => ({
+        layerId,
+        created: ids(rows.created),
+        updated: ids(rows.updated),
+        deleted: ids(rows.deleted),
+        fields: [...rows.fields].sort(),
+      })),
+    },
+    layers: change.layers && {
+      created: change.layers.created?.map((l) => readLayer(l)),
+      updated: change.layers.updated?.map((u) => ({
+        id: u.id,
+        layer: readLayer(u.layer),
+        previous: readLayer(u.previous),
+      })),
+      deleted: change.layers.deleted?.map((l) => readLayer(l)),
+      orderChanged: change.layers.orderChanged,
+    },
+    groups: change.groups && {
+      created: change.groups.created?.map((g) => readGroup(g)),
+      updated: change.groups.updated?.map((u) => ({
+        id: u.id,
+        group: readGroup(u.group),
+        previous: readGroup(u.previous),
+      })),
+      deleted: change.groups.deleted?.map((g) => readGroup(g)),
+    },
+    metadata: change.metadata,
+    files: change.files,
   };
 }
 
@@ -2093,7 +2332,7 @@ const sizeOf = (items: readonly { id: string }[]) => ({
  */
 export function readParity(target: unknown, view: ParityView, ...args: unknown[]): unknown {
   const draw = target as Draw;
-  const store = target as PublicStore;
+  const store = target as RowStore;
   const log = target as ParityEvent[];
   const [a] = args;
   const read = (fn: () => unknown) => attemptParity(fn);
@@ -2110,8 +2349,8 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
       return quiet(() => ({
         order: [...draw.layers.getOrder()],
         active: draw.layers.getActive()?.id ?? null,
-        layers: draw.layers.list().map(readLayer),
-        groups: draw.groups.list().map(readGroup),
+        layers: draw.layers.list().map(withDraw(readLayer, draw)),
+        groups: draw.groups.list().map(withDraw(readGroup, draw)),
         features: draw.features.list().map(readFeature),
         metadata: draw.metadata.get(),
       }));
@@ -2140,7 +2379,8 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
     case 'order':
       return log.map(([name]) => name);
     case 'storeChanges':
-      return (target as DocumentChange[]).map(readChange);
+      // Read while each change was told (`readStoreChange`)
+      return target;
     case 'features.get':
       return read(() => maybe(readFeature)(draw.features.get(a as string)));
     case 'features.getMany':
@@ -2158,11 +2398,11 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
     case 'features.getAppliedStyle':
       return read(() => draw.features.getAppliedStyle(a as string));
     case 'layers.get':
-      return read(() => maybe(readLayer)(draw.layers.get(a as string)));
+      return read(() => maybe(withDraw(readLayer, draw))(draw.layers.get(a as string)));
     case 'layers.getMany':
-      return read(() => draw.layers.getMany(a as string[]).map(maybe(readLayer)));
+      return read(() => draw.layers.getMany(a as string[]).map(maybe(withDraw(readLayer, draw))));
     case 'layers.list':
-      return read(() => draw.layers.list(a as LayerFilter).map(readLayer));
+      return read(() => draw.layers.list(a as LayerFilter).map(withDraw(readLayer, draw)));
     case 'layers.count':
       return read(() => draw.layers.count(a as LayerFilter));
     case 'layers.has':
@@ -2170,13 +2410,13 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
     case 'layers.getOrder':
       return read(() => [...draw.layers.getOrder()]);
     case 'layers.getActive':
-      return read(() => maybe(readLayer)(draw.layers.getActive()));
+      return read(() => maybe(withDraw(readLayer, draw))(draw.layers.getActive()));
     case 'groups.get':
-      return read(() => maybe(readGroup)(draw.groups.get(a as string)));
+      return read(() => maybe(withDraw(readGroup, draw))(draw.groups.get(a as string)));
     case 'groups.getMany':
-      return read(() => draw.groups.getMany(a as string[]).map(maybe(readGroup)));
+      return read(() => draw.groups.getMany(a as string[]).map(maybe(withDraw(readGroup, draw))));
     case 'groups.list':
-      return read(() => draw.groups.list(a as GroupFilter).map(readGroup));
+      return read(() => draw.groups.list(a as GroupFilter).map(withDraw(readGroup, draw)));
     case 'groups.listSize':
       return read(() => sizeOf(draw.groups.list(a as GroupFilter)));
     case 'groups.count':
@@ -2206,8 +2446,8 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
         const doc = draw.document.toJSON();
         return {
           ...doc,
-          layers: doc.layers?.map(readLayer),
-          groups: doc.groups?.map(readGroup),
+          layers: doc.layers?.map((l) => readLayer(l)),
+          groups: doc.groups?.map((g) => readGroup(g)),
           features: doc.features.map(readFeature),
         };
       });
@@ -2219,22 +2459,27 @@ export function readParity(target: unknown, view: ParityView, ...args: unknown[]
       return read(() => draw.isReadOnly());
     case 'interactionLocked':
       return read(() => draw.isInteractionLocked());
+    // The Store has no feature: one is read through the instance, many from the tables
     case 'store.getFeature':
-      return read(() => maybe(readFeature)(store.getFeature(a as string)));
+      return read(() => maybe(readFeature)(drawOfParityStore(target).features.get(a as string)));
     case 'store.listFeatures':
-      return read(() => store.listFeatures().map(readFeature));
     case 'store.listFeaturesInOrder':
-      return read(() => store.listFeaturesInOrder().map(readFeature));
+      return read(() => readRowFeatures(store).map((f) => readFeature(f as PublicFeature)));
+    // The items of a layer and the features of a group are read through the instance
     case 'store.getLayer':
-      return read(() => maybe(readLayer)(store.getLayer(a as string)));
+      return read(() =>
+        maybe(withDraw(readLayer, drawOfParityStore(target)))(store.getLayer(a as string)),
+      );
     case 'store.listLayers':
-      return read(() => store.listLayers().map(readLayer));
+      return read(() => store.listLayers().map(withDraw(readLayer, drawOfParityStore(target))));
     case 'store.getLayerOrder':
       return read(() => [...store.getLayerOrder()]);
     case 'store.getGroup':
-      return read(() => maybe(readGroup)(store.getGroup(a as string)));
+      return read(() =>
+        maybe(withDraw(readGroup, drawOfParityStore(target)))(store.getGroup(a as string)),
+      );
     case 'store.listGroups':
-      return read(() => store.listGroups().map(readGroup));
+      return read(() => store.listGroups().map(withDraw(readGroup, drawOfParityStore(target))));
     case 'store.getFile':
       return read(() => store.getFile(a as string));
     case 'store.listFiles':

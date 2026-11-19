@@ -238,6 +238,11 @@ export interface DocumentPlaces {
 /** The writes that move features and groups, and the replacements of the whole document */
 export interface DocumentMoves {
   /**
+   * Creates features, each as `createFeature` does, one after another in one transaction (the
+   * rows of one layer that follow each other are written at once)
+   */
+  createFeatures(features: readonly Feature[]): boolean;
+  /**
    * Moves features, given in stacking order, to a layer, into a group or out of their group,
    * keeping their order, in one transaction
    */

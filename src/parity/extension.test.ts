@@ -15,7 +15,8 @@
  */
 
 import { describe } from 'vitest';
-import type { DocumentChange, Draw, Feature, StoreView } from '../index.js';
+import type { Draw, Feature } from '../index.js';
+import type { Store } from '../store/index.js';
 import {
   type ApplicationStore,
   createApplicationStore,
@@ -28,16 +29,17 @@ import {
   parityStoreView,
   parityTable,
   readParity,
+  readStoreChange,
   settleParity,
 } from '../test-utils.js';
 
 const table = parityTable('extension');
 
 /** An instance with the document filled in, and the Store of the context of a plugin */
-function withPlugin(app?: ApplicationStore): { t: ParityInstance; store: StoreView } {
+function withPlugin(app?: ApplicationStore): { t: ParityInstance; store: Store } {
   const t = createParityInstance({ initDefaultLayer: false, app });
   fillParityDocument(t);
-  let store: StoreView | null = null;
+  let store: Store | null = null;
   parityQuiet(() =>
     t.draw.extensions.plugins.add({
       name: 'store-probe',
@@ -86,9 +88,9 @@ describe('what a plugin reads from the Store of its context', () => {
   }
   table.scene('ctx.store.subscribe to a write and a selection', async () => {
     const { t, store } = withPlugin();
-    const notified: DocumentChange[] = [];
+    const notified: unknown[] = [];
     settleParity();
-    store.subscribe((change) => notified.push(change));
+    store.subscribe((change) => notified.push(readStoreChange(store, change)));
     const seen = await observeParity(t, () => {
       t.draw.features.update('pt', { properties: { n: 5 } });
       t.draw.selection.set('feature', ['pt']);
@@ -97,9 +99,9 @@ describe('what a plugin reads from the Store of its context', () => {
   });
   table.scene('ctx.store.subscribe, then unsubscribed', async () => {
     const { t, store } = withPlugin();
-    const notified: DocumentChange[] = [];
+    const notified: unknown[] = [];
     settleParity();
-    const stop = store.subscribe((change) => notified.push(change));
+    const stop = store.subscribe((change) => notified.push(readStoreChange(store, change)));
     stop();
     await observeParity(t, () => t.draw.features.delete('pt'));
     return { storeChanges: readParity(notified, 'storeChanges') };
@@ -135,9 +137,9 @@ function outside(
     const t = createParityInstance({ initDefaultLayer: false, app });
     fillParityDocument(t);
     if (setup) parityQuiet(() => setup(t.draw, t, app.scene));
-    const notified: DocumentChange[] = [];
+    const notified: unknown[] = [];
     settleParity();
-    app.scene.subscribe((change) => notified.push(change));
+    app.scene.subscribe((change) => notified.push(readStoreChange(app.store, change)));
     app.calls.length = 0;
     const seen = await observeParity(t, () => act(app.scene, t.draw, t));
     return { ...seen, storeChanges: readParity(notified, 'storeChanges'), calls: [...app.calls] };
@@ -204,12 +206,7 @@ describe('the changes a Store of the application writes from outside the instanc
   );
   outside('updateFeature in the middle of an edit', (store) =>
     store.transact(
-      () =>
-        store.updateFeature(
-          'pt',
-          { geometry: { type: 'Point', coordinates: [-2.9, 2] } },
-          { isIntermediate: true },
-        ),
+      () => store.updateFeature('pt', { geometry: { type: 'Point', coordinates: [-2.9, 2] } }),
       'remote',
     ),
   );
@@ -260,7 +257,6 @@ describe('the changes a Store of the application writes from outside the instanc
           visible: true,
           locked: false,
           opacity: 1,
-          items: [],
           styleRule: undefined,
           metadata: undefined,
         }),

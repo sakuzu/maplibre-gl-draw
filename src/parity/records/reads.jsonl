@@ -262,8 +262,8 @@
 {"row":"the state of a new instance with a default layer | document","value":{"active":"default-layer","features":[],"groups":[],"layers":[{"id":"default-layer","items":[],"locked":false,"name":"Layer 1","opacity":1,"visible":true}],"metadata":{},"order":["default-layer"]}}
 {"row":"the state of a new instance with a default layer | client","value":{"hidden":[],"interactionLocked":false,"mode":"select","readOnly":false,"selection":{"ids":[],"type":null},"vertexSelection":null}}
 {"scene":"features.list of 10,001 features","uses":["FeaturesCollection.createMany","FeaturesCollection.list"]}
-{"row":"features.list of 10,001 features | value","value":{"first":"m0","last":"m10000","length":10001}}
+{"row":"features.list of 10,001 features | value","value":{"$throws":"DrawError","code":"tooManyItems"}}
 {"scene":"selection.features of 10,001 features","uses":["FeaturesCollection.createMany","SelectionResource.features","SelectionResource.set"]}
 {"row":"selection.features of 10,001 features | value","value":{"first":"m0","last":"m10000","length":10001}}
 {"scene":"groups.list of 10,001 groups","uses":["DocumentResource.load","GroupsCollection.list"]}
-{"row":"groups.list of 10,001 groups | value","value":{"first":"g0","last":"g10000","length":10001}}
+{"row":"groups.list of 10,001 groups | value","value":{"$throws":"DrawError","code":"tooManyItems"}}
