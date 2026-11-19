@@ -9,6 +9,7 @@
  */
 
 import { holdWorkCounts } from '../../shared/work-counts.js';
+import { holdChanges } from './changes.js';
 import { openDocument, type StoreDocument } from './document.js';
 import { featureTablesOf, listPropertyKeysOf } from './feature-tables.js';
 import type { Store, StoreOptions } from './types.js';
@@ -35,6 +36,7 @@ export function storeOf(document: StoreDocument): Store {
     ...storeWritesOf(document),
   };
   holdWorkCounts(store, document.counts);
+  holdChanges(store.tables, document.changes);
   return store;
 }
 

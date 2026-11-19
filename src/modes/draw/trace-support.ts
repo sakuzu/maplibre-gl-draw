@@ -100,13 +100,13 @@ function graphFeature(id: string, geometry: Geometry, type: string = geometry.ty
  * the document by extent and the rows of the datasets to trace along
  */
 export function traceSourceOf(ctx: ModeContext): TraceSource {
-  const { draw, store } = ctx;
+  const { draw } = ctx;
   // What this client hides is read through the instance, which holds it
   const hidden = { isHidden: (id: string) => draw.hidden.has(id) };
   const shown = (feature: PublicFeature): boolean => {
     if (!feature.visible) return false;
-    if (!store.getLayer(feature.layerId)?.visible) return false;
-    if (feature.groupId && store.getGroup(feature.groupId)?.visible === false) return false;
+    if (!draw.layers.get(feature.layerId)?.visible) return false;
+    if (feature.groupId && draw.groups.get(feature.groupId)?.visible === false) return false;
     return !isLocallyHidden(feature as Feature, hidden);
   };
   return {

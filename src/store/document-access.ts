@@ -83,6 +83,10 @@ export interface DocumentWrites {
   deleteLayer(id: string): boolean;
   /** Sets the stacking order of the layers */
   setLayerOrder(order: string[]): boolean;
+  /** Moves an item within a layer */
+  reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean;
+  /** Moves a feature within a group */
+  reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean;
   /** Creates a group */
   createGroup(group: Group): boolean;
   /** Updates a group */

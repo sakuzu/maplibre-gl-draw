@@ -42,6 +42,11 @@
  * operation has been told, so that a row whose id comes back in a later part keeps its reference
  * (the tables leave those, as they are not deleted).
  *
+ * Once a change has been told to every listener and the ids of its deleted rows nothing keeps
+ * have been forgotten, the functions given to `onChangeTold` for the tables of the Store are
+ * called (an internal hook, not on any entry of the package): a write they make is a new
+ * transaction.
+ *
  * @internal
  */
 
@@ -206,6 +211,8 @@ export interface Changes {
   readBefore: ReadBefore | null;
   /** The number of values of a position of a layer */
   readonly valuesPerPosition: (layerId: string) => number;
+  /** What is called once a change has been told and its deleted rows forgotten */
+  readonly told: Set<() => void>;
 }
 
 /**
@@ -234,6 +241,7 @@ export function createChanges(
     cleared: new Map(),
     readBefore: null,
     valuesPerPosition,
+    told: new Set(),
   };
 }
 
@@ -399,13 +407,73 @@ export function transact<T>(
   }
   changes.depth = 0;
   changes.transaction = null;
+  let told = false;
   try {
-    tell(changes, transaction);
+    told = tell(changes, transaction);
   } finally {
     forgetDeleted(changes);
   }
+  if (told) afterTold(changes);
   if (failed) throw failure;
   return result as T;
+}
+
+/**
+ * Calls what waits for a change to have been told, each one isolated from the errors of the
+ * others: those there when the change was told
+ */
+function afterTold(changes: Changes): void {
+  if (changes.told.size === 0) return;
+  for (const listener of [...changes.told]) {
+    if (!changes.told.has(listener)) continue;
+    try {
+      listener();
+    } catch (error) {
+      console.error('Error in a listener called after a change of the Store was told:', error);
+    }
+  }
+}
+
+/** The field of the tables of a built-in Store that holds its transactions and listeners */
+const CHANGES = Symbol('changes');
+
+/**
+ * Gives the tables of a built-in Store its transactions and listeners, once, when it is made
+ *
+ * The field is not enumerable, so the tables read, copy and serialize as before.
+ *
+ * @internal
+ */
+export function holdChanges(tables: object, changes: Changes): void {
+  Object.defineProperty(tables, CHANGES, { value: changes });
+}
+
+/**
+ * Calls `listener` each time the built-in Store whose tables these are has told a change to
+ * every listener and forgotten the ids of its deleted rows nothing keeps. A write the listener
+ * makes is a new transaction of the Store.
+ *
+ * @returns The function that stops
+ * @throws DrawError `invalidInput` for tables that are not those of a built-in Store
+ * @internal
+ */
+export function onChangeTold(tables: unknown, listener: () => void): () => void {
+  const changes =
+    typeof tables === 'object' && tables !== null
+      ? (tables as { [CHANGES]?: Changes })[CHANGES]
+      : undefined;
+  if (!changes) {
+    throw new DrawError('invalidInput', 'the tables are not those of a Store made by createStore');
+  }
+  if (typeof listener !== 'function') {
+    throw new DrawError('invalidInput', 'onChangeTold: the listener is not a function');
+  }
+  // A listener of its own each time, so that the same function given twice is called twice
+  const own = (): void => listener();
+  changes.told.add(own);
+  return () => {
+    changes.told.delete(own);
+  };
 }
 
 /**
@@ -1032,7 +1100,7 @@ function changedDocument(change: StoreChange): boolean {
  * when it changed the document, or when it is the last part of an operation (an operation is
  * always closed)
  */
-function tell(changes: Changes, transaction: Transaction): void {
+function tell(changes: Changes, transaction: Transaction): boolean {
   const change = changeOf(transaction);
   const { operationId, givenOperation, hasMoreParts } = transaction;
   if (givenOperation) {
@@ -1048,7 +1116,7 @@ function tell(changes: Changes, transaction: Transaction): void {
   const told = changedDocument(change) || (givenOperation && !hasMoreParts);
   const listeners = told ? changes.subscriptions.slice() : [];
   const tokens = keptFor(changes, transaction, change, listeners);
-  if (!told) return;
+  if (!told) return false;
   const before = valuesBeforeFor(changes, transaction, change);
   countWork(changes.counts, 'notifications');
   changes.notifying = true;
@@ -1070,6 +1138,7 @@ function tell(changes: Changes, transaction: Transaction): void {
   } finally {
     changes.notifying = false;
   }
+  return true;
 }
 
 /** Where the work for the values before is counted: the numbers of the Store, and its own */
