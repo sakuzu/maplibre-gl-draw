@@ -18,7 +18,7 @@
 import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
-import type { DocumentAccess } from '../../store/document-access.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type {
   FeatureCoordinates,
   StoreChange,
@@ -48,6 +48,8 @@ export interface EventHub {
   once<K extends keyof DrawEvents>(event: K, listener: DrawEventListener<K>): () => void;
   /** Calls the listeners of an event, each one isolated from the errors of the others */
   emit<K extends keyof DrawEvents>(event: K, payload: DrawEvents[K]): void;
+  /** Whether an event has a listener */
+  has(event: keyof DrawEvents): boolean;
   /** Drops every listener */
   clear(): void;
 }
@@ -107,6 +109,7 @@ export function createEventHub(): EventHub {
         }
       }
     },
+    has: (event) => (listeners.get(event)?.length ?? 0) > 0,
     clear() {
       listeners.clear();
     },
@@ -123,7 +126,7 @@ export function createEventHub(): EventHub {
  * @returns The function that stops
  * @internal
  */
-export function connectStoreEvents(hub: EventHub, store: DocumentAccess): () => void {
+export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () => void {
   // The state of this client is held by the instance; its changes arrive in the notification of
   // the operation they belong to
   const { client } = store;
@@ -131,6 +134,8 @@ export function connectStoreEvents(hub: EventHub, store: DocumentAccess): () => 
   let hidden: readonly string[] = Object.freeze([...client.listHidden()]);
   let readOnly = client.isReadOnly();
   let locked = client.isInteractionLocked();
+  // The orders before a change are kept only while `feature.moved` has a listener
+  store.watchMoves(() => hub.has('feature.moved'));
   return store.subscribe((changes) => {
     emitResourceEvents(hub, store, changes);
 
@@ -219,7 +224,7 @@ function sameIds(list: readonly string[], set: ReadonlySet<string>): boolean {
 }
 
 /** The events of each resource of one notification */
-function emitResourceEvents(hub: EventHub, store: DocumentAccess, changes: StoreChange): void {
+function emitResourceEvents(hub: EventHub, store: InstanceDocument, changes: StoreChange): void {
   const source = changes.source ?? 'local';
 
   const { features, layers, groups } = changes;
@@ -233,7 +238,8 @@ function emitResourceEvents(hub: EventHub, store: DocumentAccess, changes: Store
       source,
       intermediate: update.isIntermediate === true,
     });
-    const move = describeMove(store, changes, update.previous, update.feature);
+    if (!hub.has('feature.moved')) continue;
+    const move = describeMove(store, update.previous, update.feature);
     if (move) hub.emit('feature.moved', { feature: update.feature as Feature, ...move, source });
   }
   for (const feature of features?.deleted ?? []) {
@@ -250,11 +256,7 @@ function emitResourceEvents(hub: EventHub, store: DocumentAccess, changes: Store
   if (changes.layerReorder && !updatedLayers.has(changes.layerReorder.layerId)) {
     const layer = store.getLayer(changes.layerReorder.layerId);
     if (layer) {
-      hub.emit('layer.updated', {
-        layer,
-        previous: { ...layer, items: [...changes.layerReorder.previous] },
-        source,
-      });
+      hub.emit('layer.updated', { layer, previous: layer, source });
     }
   }
   for (const layer of layers?.deleted ?? []) hub.emit('layer.deleted', { layer, source });
@@ -276,11 +278,7 @@ function emitResourceEvents(hub: EventHub, store: DocumentAccess, changes: Store
   if (changes.groupReorder && !updatedGroups.has(changes.groupReorder.groupId)) {
     const group = store.getGroup(changes.groupReorder.groupId);
     if (group) {
-      hub.emit('group.updated', {
-        group,
-        previous: { ...group, featureIds: [...changes.groupReorder.previous] },
-        source,
-      });
+      hub.emit('group.updated', { group, previous: group, source });
     }
   }
   for (const group of groups?.deleted ?? []) hub.emit('group.deleted', { group, source });
@@ -311,23 +309,19 @@ function emitResourceEvents(hub: EventHub, store: DocumentAccess, changes: Store
 
 /**
  * Where a feature moved from and to, when an update changed its layer or its group; null
- * otherwise
+ * otherwise. The position it left is read from the order its container had before the change,
+ * and the position it went to from the order now.
  */
 function describeMove(
-  store: DocumentAccess,
-  changes: StoreChange,
+  store: InstanceDocument,
   previous: StoredFeature,
   feature: StoredFeature,
 ): { from: MoveTarget; to: MoveTarget } | null {
   if (previous.layerId === feature.layerId && previous.groupId === feature.groupId) return null;
 
-  const previousLayer = changes.layers?.updated?.find((u) => u.id === previous.layerId)?.previous;
-  const previousGroup = previous.groupId
-    ? changes.groups?.updated?.find((u) => u.id === previous.groupId)?.previous
-    : undefined;
   const from: MoveTarget = previous.groupId
-    ? withIndex({ groupId: previous.groupId }, previousGroup?.featureIds, previous.id)
-    : withIndex({ layerId: previous.layerId }, previousLayer?.items, previous.id);
+    ? withIndex({ groupId: previous.groupId }, store.getOrderBefore(previous.groupId), previous.id)
+    : withIndex({ layerId: previous.layerId }, store.getOrderBefore(previous.layerId), previous.id);
 
   let to: MoveTarget;
   if (feature.groupId) {

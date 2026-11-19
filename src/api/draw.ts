@@ -6,11 +6,12 @@
  */
 
 import type { Map as MaplibreMap } from 'maplibre-gl';
+import type { Store } from '../store/built-in/types.js';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
 import type { DrawingResource } from './drawing.js';
 import type { DrawEvents } from './events.js';
-import type { StoreView, UpdateSource } from './extension/store.js';
+import type { UpdateSource } from './extension/store.js';
 import type { ExtensionsCollections } from './extensions.js';
 import type { FeaturesCollection } from './features.js';
 import type { GroupsCollection } from './groups.js';
@@ -72,8 +73,23 @@ export interface Draw {
 
   /** The map the instance draws on. */
   getMap(): MaplibreMap;
-  /** The Store, to read the document and the state and to subscribe to their changes. */
-  getStore(): StoreView;
+  /**
+   * The Store that keeps the document: the one given in the `store` option, or the one the
+   * instance made (the `/store` entry). It is for an application that keeps the document
+   * somewhere of its own, and for writing into the document a change made outside this
+   * instance, such as one the application read from elsewhere: such a change is drawn on a
+   * client that only views the document as well.
+   *
+   * An edit of the user is not written there: a write to the Store does not go through the
+   * checks of this instance (read-only and the locks). Only a change made outside the instance
+   * goes to the Store directly, with the source `'remote'`: a large document built in a Worker
+   * and opened so too. The source `'load'` is that of `draw.document.load` alone.
+   * The edits, the writing back of the values a change had before (`features.restore`) and the
+   * bulk edits go through the resources of this instance. The state of this client (the
+   * selection, the mode, read-only, the interaction lock, the hidden items, the editing and the
+   * vertex selection) is read and changed through this instance, not through the Store.
+   */
+  getStore(): Store;
 
   // Mode
 

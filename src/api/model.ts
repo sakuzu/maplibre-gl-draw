@@ -205,7 +205,8 @@ export interface LegendEntry {
 }
 
 /**
- * A unit of the stacking order that holds features and groups.
+ * A unit of the stacking order that holds features and groups. The IDs of what it holds are read
+ * with `layers.countItems` and `layers.listItemIds`.
  */
 export interface Layer {
   /** The ID */
@@ -218,11 +219,6 @@ export interface Layer {
   locked: boolean;
   /** The opacity of the whole layer, from 0 to 1 */
   opacity: number;
-  /**
-   * The IDs of the features and groups in the layer, from the back. `features.move` and
-   * `groups.move` change it
-   */
-  items: readonly string[];
   /** The rule that colors its features from their attributes */
   styleRule: StyleRule | undefined;
   /** Values of the user */
@@ -230,7 +226,8 @@ export interface Layer {
 }
 
 /**
- * A set of features in one layer.
+ * A set of features in one layer. The IDs of its features are read with `groups.countFeatures`
+ * and `groups.listFeatureIds`.
  */
 export interface Group {
   /** The ID */
@@ -239,8 +236,6 @@ export interface Group {
   layerId: string;
   /** The name */
   name: string;
-  /** The IDs of its features, from the back */
-  featureIds: readonly string[];
   /** Whether it is visible */
   visible: boolean;
   /** Whether it is locked */
@@ -252,15 +247,28 @@ export interface Group {
 // ============================================================================
 
 /**
- * The title and the description of the document.
+ * The metadata of the document: its title, its description, and the keys of applications and
+ * extensions.
  *
- * An application can add fields of its own by declaration merging.
+ * A key without a prefix belongs to the library, as `title` and `description` do. A key without
+ * a prefix that the library does not know (one read from a file) is not refused: it is kept as it
+ * is. An application or an extension puts values of its own under keys that start with a prefix
+ * of its own,
+ * `<prefix>:<name>` (as the keys of `properties` do, see {@link DRAW_PROPERTY_PREFIX}), so that
+ * they never meet the keys of the library or of another extension; it can declare them by
+ * declaration merging. Such a key holds a value that JSON holds (a string, a finite number, a
+ * boolean, `null`, or arrays and plain objects of them), and the document keeps it as it is:
+ * `document.toJSON` writes it, `document.load` reads it back, and the Store holds it. Each key
+ * is written on its own (`metadata.update`), and a change tells the keys it wrote
+ * (`DocumentChange.metadata.keys`).
  */
 export interface Metadata {
   /** The title */
   title?: string;
   /** The description */
   description?: string;
+  /** The keys of applications and extensions, each under its prefix */
+  [key: `${string}:${string}`]: unknown;
 }
 
 /** A file embedded in the document, such as the data of an image. */
@@ -286,16 +294,32 @@ export interface DrawDocument {
   modified?: string;
   /** The title and the description */
   metadata?: Metadata;
-  /** The layers */
-  layers?: Layer[];
+  /** The layers, each with the IDs of its items */
+  layers?: DocumentLayer[];
   /** The IDs of the layers in stacking order, from the back */
   layerOrder: string[];
-  /** The groups */
-  groups?: Group[];
+  /** The groups, each with the IDs of its features */
+  groups?: DocumentGroup[];
   /** The features */
   features: Feature[];
   /** The embedded files, by ID */
   files?: Record<string, FileData>;
+}
+
+/**
+ * A layer as the format of the library writes it: the layer and the IDs of what it holds.
+ */
+export interface DocumentLayer extends Layer {
+  /** The IDs of the features and groups in the layer, from the back */
+  items: readonly string[];
+}
+
+/**
+ * A group as the format of the library writes it: the group and the IDs of its features.
+ */
+export interface DocumentGroup extends Group {
+  /** The IDs of its features, from the back */
+  featureIds: readonly string[];
 }
 
 // ============================================================================
@@ -334,7 +358,7 @@ export interface FeatureInput {
  * The ID and the layer cannot change here; `features.move` moves a feature.
  *
  * A patch has no `type`: the type of a feature cannot change. To turn a feature into another
- * type, or to undo such a change, delete it and create it again.
+ * type, or to change it back, delete it and create it again.
  */
 export interface FeaturePatch {
   /** The new GeoJSON geometry */
@@ -460,12 +484,23 @@ export interface GroupFilter {
  * Where a move goes: a layer, or into a group.
  *
  * `{ groupId: null }` takes a feature out of its group: it stays in its layer, just in front
- * of the group. `index` is the position within the destination, 0 at the back; the front
+ * of the group. `index` is the position within the target, 0 at the back; the front
  * when it is left out.
  */
 export type MoveTarget =
   | { layerId: string; index?: number }
   | { groupId: string | null; index?: number };
+
+/**
+ * A range of positions, 0 at the back, as `Array.prototype.slice` takes one: from `start`, up to
+ * `end` and without it. `{ start: 0, end: 100 }` is the first 100 positions.
+ */
+export interface IndexRange {
+  /** The first position of the range */
+  start: number;
+  /** The position after the last one of the range: not in the range, as with `slice` */
+  end: number;
+}
 
 // ============================================================================
 // Loading

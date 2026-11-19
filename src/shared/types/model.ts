@@ -764,6 +764,8 @@ export interface Metadata {
   title?: string;
   /** The description of the document */
   description?: string;
+  /** The keys of applications and extensions, each under its prefix (`<prefix>:<name>`) */
+  [key: `${string}:${string}`]: unknown;
 }
 
 /**

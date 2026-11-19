@@ -5,7 +5,7 @@
  * `draw.layers`: the layers of the document
  */
 
-import type { Layer, LayerFilter, LayerInput, LayerPatch } from './model.js';
+import type { IndexRange, Layer, LayerFilter, LayerInput, LayerPatch } from './model.js';
 
 /**
  * The layers of the document, with the standard methods of a collection, the stacking order
@@ -43,6 +43,33 @@ export interface LayersCollection {
   count(filter?: LayerFilter): number;
   /** Whether a layer with this ID exists. */
   has(id: string): boolean;
+  /**
+   * Counts the items of a layer: the things that stand in its stacking order, that is its
+   * groups (one item each, however many features they hold) and the features that are in no
+   * group. The features in its groups are not counted: `features.count({ layerId })` counts
+   * every feature of the layer.
+   *
+   * @throws `DrawError` with the code `notFound` when there is no layer with this ID
+   */
+  countItems(id: string): number;
+  /**
+   * The IDs of the items of a layer (its groups and the features that are in no group, as
+   * `countItems` counts them) at a range of positions, from the back: an ID names a group or a
+   * feature, and `groups.has` tells which. `features.move` and `groups.move` change the order.
+   * A range that goes past the front ends there.
+   *
+   * The positions are those of the moment it is called: a write between two calls (an item
+   * created, deleted or moved) shifts them, so reading a layer a range at a time with writes in
+   * between can skip items or read them twice. `features.iterate` reads every feature of a
+   * layer once, whatever is written meanwhile.
+   *
+   * @param range - The positions, 0 at the back: from `start`, up to `end` and without it
+   * @returns The IDs, from the back
+   * @throws `DrawError` with the code `notFound` when there is no layer with this ID,
+   *   `invalidInput` when the range is not two integers from 0 with `start <= end`, or
+   *   `tooManyItems` when it spans more than 10,000 positions
+   */
+  listItemIds(id: string, range: IndexRange): string[];
   /**
    * Creates a layer and returns it as it was stored.
    *

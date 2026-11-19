@@ -5,7 +5,14 @@
  * `draw.groups`: the groups of the document
  */
 
-import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from './model.js';
+import type {
+  Group,
+  GroupFilter,
+  GroupInput,
+  GroupPatch,
+  IndexRange,
+  MoveTarget,
+} from './model.js';
 
 /**
  * The groups of the document, with the standard methods of a collection and the verbs that
@@ -33,8 +40,21 @@ export interface GroupsCollection {
    * Lists the groups in stacking order, from the back.
    *
    * @param filter - Keeps only the groups that match every key given
+   * @throws `DrawError` with the code `tooManyItems` when more than 10,000 groups match; the
+   *   list is never cut short. {@link GroupsCollection.iterate} reads any number of them
    */
   list(filter?: GroupFilter): Group[];
+  /**
+   * Reads the groups in stacking order, from the back, one at a time, for any number of them.
+   *
+   * It reads the groups that match when it starts, as {@link FeaturesCollection.iterate} reads
+   * the features: a group deleted before the iterator reaches it is skipped, and a group
+   * created after it started is not read.
+   *
+   * @param filter - Keeps only the groups that match every key given
+   * @returns An iterator of the groups
+   */
+  iterate(filter?: GroupFilter): IterableIterator<Group>;
   /**
    * Counts the groups.
    *
@@ -43,6 +63,24 @@ export interface GroupsCollection {
   count(filter?: GroupFilter): number;
   /** Whether a group with this ID exists. */
   has(id: string): boolean;
+  /**
+   * Counts the features of a group.
+   *
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID
+   */
+  countFeatures(id: string): number;
+  /**
+   * The IDs of the features of a group at a range of positions, from the back. A range that
+   * goes past the front ends there. As with `layers.listItemIds`, a write between two calls
+   * shifts the positions.
+   *
+   * @param range - The positions, 0 at the back: from `start`, up to `end` and without it
+   * @returns The IDs, from the back
+   * @throws `DrawError` with the code `notFound` when there is no group with this ID,
+   *   `invalidInput` when the range is not two integers from 0 with `start <= end`, or
+   *   `tooManyItems` when it spans more than 10,000 positions
+   */
+  listFeatureIds(id: string, range: IndexRange): string[];
   /**
    * Creates a group of features and returns it as it was stored.
    *

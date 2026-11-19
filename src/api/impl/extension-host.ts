@@ -28,7 +28,6 @@ import { DrawError } from '../errors.js';
 import type { PluginContext } from '../extension/context.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { Hit } from '../extension/provider.js';
-import type { StoreView } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature } from '../model.js';
 import type { AdapterDeps } from './adapters.js';
@@ -109,10 +108,10 @@ export interface ExtensionHost {
   /** The frontmost hit at a point on the screen, in the shape of the contract */
   hitAt(point: { x: number; y: number }): Hit | null;
   /**
-   * Gives the host the draw instance the contexts hand out, and the Store given in the
-   * options, whose notifications that reset the document interrupt the current mode
+   * Gives the host the draw instance the contexts hand out, and follows the changes that
+   * replace the whole document, which interrupt the current mode
    */
-  attach(draw: Draw, documentStore?: StoreView): void;
+  attach(draw: Draw): void;
   /** Starts listening to the map (the pointer leaving it) */
   start(): void;
   /** Removes every extension and stops listening */
@@ -465,18 +464,16 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       toHit(modeServices.hitTestTopmost(point), (feature) =>
         modeServices.distanceToFeaturePx(feature, point),
       ),
-    attach(draw, documentStore) {
+    attach(draw) {
       attached = draw;
       watchImageCommits(draw);
-      // A Store that replaces its whole document says so with `reset`: the mode drops what it
+      // A change that replaces the whole document says so with `reset`: the mode drops what it
       // was drawing, as it does for an Escape
-      if (documentStore) {
-        watches.push(
-          documentStore.subscribe((changes) => {
-            if (changes.reset === true && !destroyed) modeManager.notifyStateReset();
-          }),
-        );
-      }
+      watches.push(
+        store.onReset(() => {
+          if (!destroyed) modeManager.notifyStateReset();
+        }),
+      );
     },
     start() {
       if (listening || destroyed) return;

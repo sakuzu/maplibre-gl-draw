@@ -7,7 +7,6 @@
 
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { Draw } from '../draw.js';
-import type { StoreView } from '../extension/store.js';
 import type { DrawOptions } from '../options.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
@@ -50,7 +49,7 @@ export function createDrawOnEngine(
   const { store } = context;
   // The state of this client, held by the instance (the Store holds only the document)
   const { client } = store;
-  const view: StoreView = context.exposedStore;
+  const exposedStore = context.exposedStore;
 
   const deps: ResourceDeps = {
     store,
@@ -89,7 +88,7 @@ export function createDrawOnEngine(
     extensions: engine.extensions.collections,
 
     getMap: () => map,
-    getStore: () => view,
+    getStore: () => exposedStore,
 
     getMode: () => modeManager.getMode(),
     setMode(mode) {
@@ -134,7 +133,7 @@ export function createDrawOnEngine(
     asyncMembers: ASYNC_MEMBERS,
     skip: new Set(['destroy']),
   });
-  engine.extensions.attach(draw, options.store);
+  engine.extensions.attach(draw);
   return draw;
 }
 

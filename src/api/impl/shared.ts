@@ -7,7 +7,7 @@
  */
 
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
-import type { DocumentAccess } from '../../store/document-access.js';
+import type { DocumentAccess, InstanceDocument } from '../../store/document-access.js';
 import { isFeatureLocked, isGroupLocked } from '../../store/lock.js';
 import type { BoundingBox, Feature, Group, Layer, SelectionType } from '../../store/types.js';
 import { DrawError } from '../errors.js';
@@ -20,8 +20,8 @@ import type { RuntimeOptions } from '../options.js';
  * @internal
  */
 export interface ResourceDeps {
-  /** The Store of the instance */
-  store: DocumentAccess;
+  /** The layer over the Store of the instance */
+  store: InstanceDocument;
   /** Generates the ID of a new feature, layer or group */
   generateId: () => string;
   /** The names of new layers and groups */

@@ -10,6 +10,7 @@
 
 import type { Position } from 'geojson';
 import type { BBox } from '../../geometry/types.js';
+import type { Store } from '../../store/built-in/types.js';
 import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import type { DrawingResource } from '../drawing.js';
@@ -19,7 +20,6 @@ import type { Feature, FeatureInput, FeatureType, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { Mode, SnapResult } from '../state.js';
 import type { Hit } from './provider.js';
-import type { StoreView } from './store.js';
 
 /** The positions and the heights on the terrain, for placing things on it. */
 export interface TerrainAnchors {
@@ -98,8 +98,15 @@ export interface ScreenContext {
 export interface ExtensionContext {
   /** The whole public API; an extension reads and writes the document through it */
   readonly draw: Draw;
-  /** The Store, to read the document and the state and to subscribe to their changes */
-  readonly store: StoreView;
+  /**
+   * The Store of the document, the one `draw.getStore()` returns: for an extension that writes
+   * into the document a change made outside this instance (one it read from elsewhere, or a
+   * large document built in a Worker), with the source `'remote'`. A
+   * write to it does not go through the checks of read-only and the locks, so an edit of the
+   * user, and the writing back of the values a change had before, go through `draw` instead;
+   * the state of this client is read through `draw` too
+   */
+  readonly store: Store;
   /**
    * Subscribes to an event, with the same names as `draw.on`. The subscription ends by itself
    * when the extension is removed.

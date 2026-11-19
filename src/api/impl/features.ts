@@ -8,7 +8,7 @@
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
-import type { DocumentAccess } from '../../store/document-access.js';
+import type { DocumentAccess, FeatureMatch } from '../../store/document-access.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type {
@@ -50,7 +50,6 @@ import {
   invalidInput,
   isRecord,
   isTaken,
-  matches,
   notFound,
   onlyKeys,
   onlyLockOrVisibility,
@@ -74,6 +73,9 @@ const INPUT_KEYS = [
 const PATCH_KEYS = ['geometry', 'properties', 'style', 'visible', 'locked'] as const;
 const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'shown', 'locked', 'bbox'] as const;
 
+/** The most features a list returns at once */
+const LIST_LIMIT = 10_000;
+
 /**
  * Creates `draw.features`
  *
@@ -95,61 +97,59 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
 
   /** The features in stacking order, from the back */
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] => {
+    if (features.length < 2) return features;
     const position = new Map(listEveryFeatureInOrder(store).map((f, index) => [f.id, index]));
     return [...features].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
   };
 
-  /**
-   * The checks of a filter: the entries compared as they are, and the IDs within the extent
-   * when the filter has one
-   */
-  const filterOf = (filter: FeatureFilter | undefined) => {
+  /** What a filter keeps, as the layer over the Store reads it from the rows */
+  const matchOf = (filter: FeatureFilter | undefined): FeatureMatch | undefined => {
     const all = filterEntries(filter, FILTER_KEYS);
-    const shown = all.find(([key]) => key === 'shown')?.[1];
-    if (shown !== undefined && typeof shown !== 'boolean') {
-      throw invalidInput('shown must be a boolean');
+    if (all.length === 0) return undefined;
+    const match: Record<string, unknown> = {};
+    for (const [key, value] of all) {
+      if (key === 'shown' && typeof value !== 'boolean') {
+        throw invalidInput('shown must be a boolean');
+      }
+      if (key !== 'bbox') match[key] = value;
     }
-    const entries = all.filter(([key]) => key !== 'shown');
-    const bbox = entries.find(([key]) => key === 'bbox')?.[1];
-    if (bbox === undefined) return { entries, inside: null, shown };
-    if (
-      !Array.isArray(bbox) ||
-      bbox.length !== 4 ||
-      bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value))
-    ) {
-      throw invalidInput('bbox must be [west, south, east, north] in degrees');
+    const bbox = all.find(([key]) => key === 'bbox')?.[1];
+    if (bbox !== undefined) {
+      if (
+        !Array.isArray(bbox) ||
+        bbox.length !== 4 ||
+        bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value))
+      ) {
+        throw invalidInput('bbox must be [west, south, east, north] in degrees');
+      }
+      const [minX, minY, maxX, maxY] = bbox as number[];
+      const bounds = { minX, minY, maxX, maxY };
+      match.ids = new Set(
+        deps.spatialIndex
+          ? deps.spatialIndex.findInBounds(bounds)
+          : store
+              .listFeatures()
+              .filter((feature) => {
+                const box = getBoundingBox(feature);
+                return box.minX <= maxX && box.maxX >= minX && box.minY <= maxY && box.maxY >= minY;
+              })
+              .map((feature) => feature.id),
+      );
     }
-    const [minX, minY, maxX, maxY] = bbox as number[];
-    const bounds = { minX, minY, maxX, maxY };
-    const inside = new Set(
-      deps.spatialIndex
-        ? deps.spatialIndex.findInBounds(bounds)
-        : store
-            .listFeatures()
-            .filter((feature) => {
-              const box = getBoundingBox(feature);
-              return box.minX <= maxX && box.maxX >= minX && box.minY <= maxY && box.maxY >= minY;
-            })
-            .map((feature) => feature.id),
-    );
-    return { entries: entries.filter(([key]) => key !== 'bbox'), inside, shown };
+    return match as FeatureMatch;
   };
-  /** Whether the feature, its group and its layer are all visible in the document */
-  const isShown = (feature: StoredFeature): boolean =>
-    feature.visible &&
-    (feature.groupId === undefined || store.getGroup(feature.groupId)?.visible !== false) &&
-    store.getLayer(feature.layerId)?.visible !== false;
-  const keep = (
-    feature: StoredFeature,
-    { entries, inside, shown }: ReturnType<typeof filterOf>,
-  ): boolean =>
-    (inside === null || inside.has(feature.id)) &&
-    (shown === undefined || isShown(feature) === shown) &&
-    matches(feature, entries);
 
   const list = (filter?: FeatureFilter): Feature[] => {
-    const checks = filterOf(filter);
-    return listEveryFeatureInOrder(store).filter((feature) => keep(feature, checks));
+    const match = matchOf(filter);
+    const count = store.countFeatures(match);
+    if (count > LIST_LIMIT) {
+      throw new DrawError(
+        'tooManyItems',
+        `${count} features match, more than the ${LIST_LIMIT} a list returns; read them with features.iterate`,
+        { count },
+      );
+    }
+    return [...store.iterateFeatures(match)];
   };
 
   return {
@@ -158,15 +158,15 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
       return ids.map((id) => store.getFeature(id));
     },
-    list,
-    count(filter) {
-      const checks = filterOf(filter);
-      if (checks.entries.length === 0 && checks.inside === null && checks.shown === undefined) {
-        return store.listFeatures().length;
-      }
-      return store.listFeatures().filter((feature) => keep(feature, checks)).length;
+    getProperty(id, key) {
+      if (!store.hasFeature(id)) throw notFound('feature', id);
+      if (typeof key !== 'string') throw invalidInput('The key must be a string');
+      return store.getFeatureProperty(id, key);
     },
-    has: (id) => store.getFeature(id) !== undefined,
+    list,
+    iterate: (filter) => store.iterateFeatures(matchOf(filter)),
+    count: (filter) => store.countFeatures(matchOf(filter)),
+    has: (id) => store.hasFeature(id),
 
     create(input) {
       const feature = prepareFeature(deps, input, new Set());

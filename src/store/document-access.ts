@@ -59,11 +59,6 @@ export interface DocumentReads {
   listFiles(): FileData[];
   /** Returns the metadata of the document */
   getMetadata(): Metadata;
-  /**
-   * The largest number of a generated name the Store knows to be used for this type, beyond
-   * what it lists, or undefined
-   */
-  getMaxNameNumber?(type: FeatureType | 'Layer' | 'Group'): number | undefined;
 }
 
 /**
@@ -76,7 +71,7 @@ export interface DocumentWrites {
   createFeature(feature: Feature): boolean;
   /** Updates a feature */
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean;
-  /** Discards uncommitted intermediate states */
+  /** Tells that intermediate states were given up (the writer has written the values back) */
   abortIntermediateUpdates?(ids: string[]): void;
   /** Deletes a feature */
   deleteFeature(id: string): boolean;
@@ -88,10 +83,6 @@ export interface DocumentWrites {
   deleteLayer(id: string): boolean;
   /** Sets the stacking order of the layers */
   setLayerOrder(order: string[]): boolean;
-  /** Moves an item within a layer */
-  reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean;
-  /** Moves a feature within a group */
-  reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean;
   /** Creates a group */
   createGroup(group: Group): boolean;
   /** Updates a group */
@@ -104,8 +95,6 @@ export interface DocumentWrites {
   deleteFile(id: string): boolean;
   /** Sets the metadata, merging */
   setMetadata(metadata: Partial<Metadata>): boolean;
-  /** Tells the Store the number of a name just generated */
-  recordNameNumber?(type: FeatureType | 'Layer' | 'Group', number: number): void;
   /**
    * Subscribes to the changes of the document and of the local state
    *
@@ -180,3 +169,87 @@ export interface DocumentAccess
     DocumentWrites,
     ClientStateAccess,
     DrawingStateAccess {}
+
+/** What a read of the features keeps: every key given must match */
+export interface FeatureMatch {
+  /** Only the features in this layer */
+  readonly layerId?: string;
+  /** Only the features in this group */
+  readonly groupId?: string;
+  /** Only the features of this type */
+  readonly type?: FeatureType;
+  /** Only the features whose own visible flag is this */
+  readonly visible?: boolean;
+  /** Only the features that are shown (their own flag, their group's and their layer's) or not */
+  readonly shown?: boolean;
+  /** Only the locked or the unlocked features */
+  readonly locked?: boolean;
+  /** Only the features with one of these IDs */
+  readonly ids?: ReadonlySet<string>;
+}
+
+/**
+ * Where features move: a layer, a group, or out of their group into their layer; `index` is the
+ * position within it once they have left it, from the back (the front when it is left out)
+ */
+export type MoveDestination =
+  | { readonly kind: 'layer'; readonly layerId: string; readonly index?: number }
+  | { readonly kind: 'group'; readonly groupId: string; readonly index?: number }
+  | { readonly kind: 'ungroup'; readonly index?: number };
+
+/**
+ * The reads of the document by position, which read what they return without a feature or an
+ * ID per item of the document
+ */
+export interface DocumentPlaces {
+  /** The number of items of a layer: its groups and the features in no group (0 for none) */
+  countItems(layerId: string): number;
+  /** The IDs of the items of a layer at the positions `[start, end)`, from the back */
+  listItemIds(layerId: string, start: number, end: number): string[];
+  /** The number of the features of a group (0 for none) */
+  countGroupFeatures(groupId: string): number;
+  /** The IDs of the features of a group at the positions `[start, end)`, from the back */
+  listGroupFeatureIds(groupId: string, start: number, end: number): string[];
+  /** Whether a feature with this ID exists, told without the feature being made */
+  hasFeature(id: string): boolean;
+  /** One attribute of a feature, read without the feature being made (undefined for none) */
+  getFeatureProperty(id: string, key: string): unknown;
+  /** Counts the features that match */
+  countFeatures(match?: FeatureMatch): number;
+  /**
+   * The features that match when it starts, in stacking order from the back, each made as the
+   * iterator reaches it; a feature deleted meanwhile is skipped
+   */
+  iterateFeatures(match?: FeatureMatch): IterableIterator<Feature>;
+  /**
+   * The IDs of the items of a layer or the features of a group as they were before the change
+   * being told, while it is told: kept only while `watchMoves` answers true when the change
+   * starts (undefined otherwise)
+   */
+  getOrderBefore(containerId: string): readonly string[] | undefined;
+  /** Sets the question whether the orders before a change are kept (see `getOrderBefore`) */
+  watchMoves(watching: () => boolean): void;
+}
+
+/** The writes that move features and groups, and the replacements of the whole document */
+export interface DocumentMoves {
+  /**
+   * Moves features, given in stacking order, to a layer, into a group or out of their group,
+   * keeping their order, in one transaction
+   */
+  moveFeatures(ids: readonly string[], to: MoveDestination): void;
+  /**
+   * Moves groups, given in stacking order, to a layer at a position (the front when it is left
+   * out), in one transaction
+   */
+  moveGroups(ids: readonly string[], layerId: string, index: number | undefined): void;
+  /**
+   * Calls the listener whenever the Store tells a change that replaces its whole document
+   *
+   * @returns The function that stops
+   */
+  onReset(listener: () => void): () => void;
+}
+
+/** The layer over the Store an instance makes: the four parts, the reads by position and the moves */
+export interface InstanceDocument extends DocumentAccess, DocumentPlaces, DocumentMoves {}

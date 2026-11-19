@@ -20,9 +20,8 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { Color, PointStyle, StrokeStyle } from '../../shared/types/style.js';
 import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
-import { DrawStore } from '../../store/draw-store.js';
+import type { Store } from '../../store/built-in/types.js';
 import type { DrawEvents } from '../events.js';
-import type { Store } from '../extension/store.js';
 import type { FeatureStyle, FeatureStyleResolved } from '../model.js';
 import type {
   DrawOptions,
@@ -225,14 +224,8 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
   isExternalEntry: func,
 };
 
-/**
- * The members of the public Store the instance calls; `abortIntermediateUpdates`,
- * `getMaxNameNumber` and `recordNameNumber` are optional
- */
+/** The members of the Store the instance calls */
 const STORE_METHODS = [
-  'getFeature',
-  'listFeatures',
-  'listFeaturesInOrder',
   'getLayer',
   'listLayers',
   'getLayerOrder',
@@ -241,23 +234,25 @@ const STORE_METHODS = [
   'getFile',
   'listFiles',
   'getMetadata',
+  'listPropertyKeys',
   'subscribe',
   'transact',
-  'createFeature',
-  'updateFeature',
-  'deleteFeature',
+  'createRows',
+  'createRowsFromPages',
+  'writeRows',
+  'releaseDeletedRows',
+  'clear',
   'createLayer',
   'updateLayer',
   'deleteLayer',
   'setLayerOrder',
-  'reorderInLayer',
-  'reorderInGroup',
   'createGroup',
   'updateGroup',
   'deleteGroup',
   'createFile',
   'deleteFile',
   'setMetadata',
+  'newOperationId',
 ] as const satisfies ReadonlyArray<keyof Store>;
 
 /**
@@ -275,10 +270,11 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
     initDefaultLayer: bool,
     generateId: func,
     store(value, what) {
-      if (!isRecord(value) && !(value instanceof DrawStore)) {
-        throw invalidInput(`${what} must be a Store`);
-      }
+      if (!isRecord(value)) throw invalidInput(`${what} must be a Store`);
       const store = value as Record_;
+      if (!isRecord(store.tables)) {
+        throw invalidInput(`${what} must be a Store: tables is missing`, { member: 'tables' });
+      }
       for (const method of STORE_METHODS) {
         if (typeof store[method] !== 'function') {
           throw invalidInput(`${what} must be a Store: ${method} is missing`, { member: method });
@@ -656,11 +652,7 @@ export function toEngineOptions(
   if (runtime.scaleWithZoom !== undefined) result.scaleWithZoom = runtime.scaleWithZoom;
   if (runtime.clickTolerancePx !== undefined) result.clickTolerancePx = runtime.clickTolerancePx;
   if (runtime.dragThresholdPx !== undefined) result.dragThresholdPx = runtime.dragThresholdPx;
-  if (options.store !== undefined) {
-    // A Store of the library is used as it is; the Store of an application is read and written
-    // through the public contract only, and the instance keeps the drawing state around it
-    result.store = options.store;
-  }
+  if (options.store !== undefined) result.store = options.store;
   return result;
 }
 

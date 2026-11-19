@@ -7,7 +7,7 @@
  */
 
 import type { Messages } from '../messages.js';
-import type { Store } from './extension/store.js';
+import type { Store } from '../store/built-in/types.js';
 import type { FeatureStyle, FeatureType, LineStyle } from './model.js';
 import type { Mode } from './state.js';
 
@@ -457,7 +457,11 @@ export interface RuntimeOptions {
 export interface DrawOptions extends RuntimeOptions {
   /** The mode to start in */
   defaultMode?: Mode;
-  /** The Store that keeps the document, instead of the built-in one; only at creation */
+  /**
+   * The Store that keeps the document, instead of the built-in one, for an application that
+   * keeps the document somewhere of its own (the `/store` entry); only at creation. Most
+   * applications leave it out.
+   */
   store?: Store;
   /** Whether a layer is created when there is none; only at creation */
   initDefaultLayer?: boolean;

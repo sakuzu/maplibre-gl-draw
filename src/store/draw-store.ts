@@ -29,7 +29,7 @@
 
 import { createWorkCounts, holdWorkCounts, type WorkCounts } from '../shared/work-counts.js';
 import { ChangeBus } from './memory/change-bus.js';
-import { ClientState, MemoryDrawingState } from './memory/ui-state.js';
+import { type ClientDocument, ClientState, MemoryDrawingState } from './memory/ui-state.js';
 import type { Store, StoreContract } from './store.js';
 import type {
   BoxSelection,
@@ -91,11 +91,11 @@ export class DrawStore implements Store {
     this.#client = client;
     const bus = this.#bus;
     client.attach({
-      document: contract,
+      document: contract as unknown as ClientDocument,
       merge: (change) => bus.merge(change),
       transact: (fn) => bus.transact(fn, 'local'),
     });
-    contract.subscribe((changes) => this.#receive(changes));
+    contract.subscribe((changes) => this.#receive(changes as unknown as StoreChange));
   }
 
   /** The state of this client, held by the instance */
@@ -118,21 +118,21 @@ export class DrawStore implements Store {
     return this.#features(this.#contract.listFeaturesInOrder());
   }
   getLayer(id: string): Layer | undefined {
-    const layer = this.#contract.getLayer(id);
+    const layer = this.#contract.getLayer(id) as Layer | undefined;
     return layer && this.#layer(layer);
   }
   listLayers(): Layer[] {
-    const layers = this.#contract.listLayers();
+    const layers = this.#contract.listLayers() as Layer[];
     return layers.some(hasNullLayerField) ? layers.map((layer) => this.#layer(layer)) : layers;
   }
   getLayerOrder(): readonly string[] {
     return this.#contract.getLayerOrder();
   }
   getGroup(id: string): Group | undefined {
-    return this.#contract.getGroup(id);
+    return this.#contract.getGroup(id) as Group | undefined;
   }
   listGroups(): Group[] {
-    return this.#contract.listGroups();
+    return this.#contract.listGroups() as Group[];
   }
   getFile(id: string): FileData | undefined {
     return this.#contract.getFile(id);

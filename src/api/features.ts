@@ -37,11 +37,37 @@ export interface FeaturesCollection {
    */
   getMany(ids: readonly string[]): (Feature | undefined)[];
   /**
+   * Reads one attribute of a feature (a key of its `properties`) without the feature being
+   * made: what a hook that narrows many candidates reads (`Plugin.interaction.filterSelection`
+   * over a box of 100,000 features), so that it makes no feature per candidate.
+   *
+   * @param id - The feature
+   * @param key - The key of `properties`
+   * @returns The value, or `undefined` when the feature does not hold the key
+   * @throws `DrawError` with the code `notFound` when there is no feature with this ID
+   */
+  getProperty(id: string, key: string): unknown;
+  /**
    * Lists the features in stacking order, from the back.
    *
    * @param filter - Keeps only the features that match every key given
+   * @throws `DrawError` with the code `tooManyItems` when more than 10,000 features match; the
+   *   list is never cut short. {@link FeaturesCollection.iterate} reads any number of them
    */
   list(filter?: FeatureFilter): Feature[];
+  /**
+   * Reads the features in stacking order, from the back, one at a time, for any number of
+   * them: each feature is made as the iterator reaches it, as it is then, and is not kept by
+   * the instance afterwards.
+   *
+   * It reads the features that match when it starts, in the order they had then. A write to
+   * the document while it is under way does not stop it: a feature deleted before the
+   * iterator reaches it is skipped, and a feature created after it started is not read.
+   *
+   * @param filter - Keeps only the features that match every key given
+   * @returns An iterator of the features
+   */
+  iterate(filter?: FeatureFilter): IterableIterator<Feature>;
   /**
    * Counts the features.
    *

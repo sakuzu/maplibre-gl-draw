@@ -44,6 +44,39 @@ const INPUT_KEYS = [
 const PATCH_KEYS = ['name', 'visible', 'locked', 'opacity', 'styleRule', 'metadata'] as const;
 const FILTER_KEYS = ['visible', 'locked'] as const;
 
+/** The most IDs a range returns at once */
+const RANGE_LIMIT = 10_000;
+
+/**
+ * Checks a range of positions and returns it
+ *
+ * @throws DrawError `invalidInput` for a range that is not two integers from 0 with start <= end,
+ *   `tooManyItems` for a range of more than 10,000 positions
+ * @internal
+ */
+export function requireRange(range: unknown): { start: number; end: number } {
+  if (!isRecord(range)) throw invalidInput('The range must be an object');
+  const { start, end } = range;
+  if (
+    typeof start !== 'number' ||
+    typeof end !== 'number' ||
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end < start
+  ) {
+    throw invalidInput('The range must be two integers from 0 with start <= end');
+  }
+  if (end - start > RANGE_LIMIT) {
+    throw new DrawError(
+      'tooManyItems',
+      `The range spans ${end - start} positions, more than the ${RANGE_LIMIT} it returns at once`,
+      { count: end - start },
+    );
+  }
+  return { start, end };
+}
+
 /**
  * Creates `draw.layers`
  *
@@ -99,6 +132,14 @@ export function createLayers(
     list,
     count: (filter) => list(filter).length,
     has: (id) => store.getLayer(id) !== undefined,
+    countItems(id) {
+      return store.countItems(require(id).id);
+    },
+    listItemIds(id, range) {
+      const layer = require(id);
+      const { start, end } = requireRange(range);
+      return store.listItemIds(layer.id, start, end);
+    },
 
     create(input) {
       const prepared = prepareLayer(deps, input, new Set());

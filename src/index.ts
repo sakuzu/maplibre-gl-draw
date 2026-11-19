@@ -79,6 +79,8 @@ export type { DocumentResource } from './api/document.js';
 
 // Document model
 export type {
+  DocumentGroup,
+  DocumentLayer,
   DrawDocument,
   DrawProperties,
   Feature,
@@ -104,6 +106,7 @@ export type {
   GroupFilter,
   GroupInput,
   GroupPatch,
+  IndexRange,
   LayerFilter,
   LayerInput,
   LayerPatch,

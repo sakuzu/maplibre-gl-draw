@@ -4,11 +4,12 @@
 /**
  * Where a move goes, and the writes that move features and groups there
  *
- * A move is one transaction. The features and groups keep their stacking order among
- * themselves, and `index` is their position within the destination once they have left it.
+ * A move is one transaction of the layer over the Store. The features and groups keep their
+ * stacking order among themselves, and `index` is their position within the destination once
+ * they have left it.
  */
 
-import type { DocumentAccess } from '../../store/document-access.js';
+import type { DocumentAccess, InstanceDocument } from '../../store/document-access.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
 import type { MoveTarget } from '../model.js';
 import {
@@ -63,13 +64,6 @@ export function resolveMoveTarget(store: DocumentAccess, to: MoveTarget): Resolv
   return { kind: 'group', group, index, locked: groupLocked(store, group) };
 }
 
-/** Inserts the IDs into the list at the index, or at the end when it is undefined */
-function insertAt(list: string[], ids: readonly string[], index: number | undefined): string[] {
-  const at = index === undefined ? list.length : Math.min(index, list.length);
-  list.splice(at, 0, ...ids);
-  return list;
-}
-
 /**
  * Moves features to a target, in one transaction
  *
@@ -77,75 +71,18 @@ function insertAt(list: string[], ids: readonly string[], index: number | undefi
  * @internal
  */
 export function moveFeatures(
-  store: DocumentAccess,
+  store: InstanceDocument,
   features: Feature[],
   target: ResolvedTarget,
 ): void {
   const ids = features.map((feature) => feature.id);
-  const moved = new Set(ids);
-  store.transact(() => {
-    if (target.kind === 'layer') {
-      const layerId = target.layer.id;
-      for (const feature of features) {
-        if (feature.layerId !== layerId || feature.groupId !== undefined) {
-          store.updateFeature(feature.id, { layerId, groupId: undefined });
-        }
-      }
-      const items = (store.getLayer(layerId)?.items ?? []).filter((id) => !moved.has(id));
-      store.updateLayer(layerId, { items: insertAt(items, ids, target.index) });
-      return;
-    }
-
-    if (target.kind === 'group') {
-      const { group } = target;
-      for (const feature of features) {
-        if (feature.groupId !== group.id) {
-          store.updateFeature(feature.id, { layerId: group.layerId, groupId: group.id });
-        }
-      }
-      const featureIds = (store.getGroup(group.id)?.featureIds ?? []).filter(
-        (id) => !moved.has(id),
-      );
-      store.updateGroup(group.id, { featureIds: insertAt(featureIds, ids, target.index) });
-      return;
-    }
-
-    // Out of their groups: each feature stays in its layer
-    const byLayer = new Map<string, Feature[]>();
-    for (const feature of features) {
-      const list = byLayer.get(feature.layerId) ?? [];
-      list.push(feature);
-      byLayer.set(feature.layerId, list);
-    }
-    for (const [layerId, inLayer] of byLayer) {
-      const before = [...(store.getLayer(layerId)?.items ?? [])];
-      const blocks = new Map<string, string[]>();
-      for (const feature of inLayer) {
-        if (feature.groupId === undefined) continue;
-        const block = blocks.get(feature.groupId) ?? [];
-        block.push(feature.id);
-        blocks.set(feature.groupId, block);
-      }
-      for (const feature of inLayer) {
-        if (feature.groupId !== undefined) store.updateFeature(feature.id, { groupId: undefined });
-      }
-      let items: string[];
-      if (target.index === undefined) {
-        // Just in front of their group, or in its place when it was left empty and deleted
-        items = [];
-        for (const itemId of before) {
-          if (!blocks.has(itemId) || store.getGroup(itemId)) items.push(itemId);
-          items.push(...(blocks.get(itemId) ?? []));
-        }
-      } else {
-        const layerIds = inLayer.map((feature) => feature.id);
-        const inThisLayer = new Set(layerIds);
-        items = (store.getLayer(layerId)?.items ?? []).filter((id) => !inThisLayer.has(id));
-        insertAt(items, layerIds, target.index);
-      }
-      store.updateLayer(layerId, { items });
-    }
-  });
+  if (target.kind === 'layer') {
+    store.moveFeatures(ids, { kind: 'layer', layerId: target.layer.id, index: target.index });
+  } else if (target.kind === 'group') {
+    store.moveFeatures(ids, { kind: 'group', groupId: target.group.id, index: target.index });
+  } else {
+    store.moveFeatures(ids, { kind: 'ungroup', index: target.index });
+  }
 }
 
 /**
@@ -155,25 +92,14 @@ export function moveFeatures(
  * @internal
  */
 export function moveGroups(
-  store: DocumentAccess,
+  store: InstanceDocument,
   groups: Group[],
   layer: Layer,
   index?: number,
 ): void {
-  const ids = groups.map((group) => group.id);
-  const moved = new Set(ids);
-  store.transact(() => {
-    for (const group of groups) {
-      if (group.layerId === layer.id) continue;
-      const source = store.getLayer(group.layerId);
-      if (source) {
-        store.updateLayer(source.id, { items: source.items.filter((id) => id !== group.id) });
-      }
-      for (const featureId of group.featureIds) {
-        store.updateFeature(featureId, { layerId: layer.id });
-      }
-    }
-    const items = (store.getLayer(layer.id)?.items ?? []).filter((id) => !moved.has(id));
-    store.updateLayer(layer.id, { items: insertAt(items, ids, index) });
-  });
+  store.moveGroups(
+    groups.map((group) => group.id),
+    layer.id,
+    index,
+  );
 }

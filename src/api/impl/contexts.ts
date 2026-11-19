@@ -22,9 +22,9 @@ import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { PixelRatioProvider } from '../../shared/utils/pixel-ratio.js';
 import type { SnapResult as StoredSnapResult } from '../../snapping/types.js';
+import type { Store } from '../../store/built-in/types.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
-import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature, TentativeState } from '../../store/types.js';
 import { isWritableLayer } from '../../store/writable-layer.js';
 import {

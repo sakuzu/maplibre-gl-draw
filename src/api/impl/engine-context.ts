@@ -49,12 +49,10 @@ import {
   resolveGuideStepDegrees,
   resolveSnapKinds,
 } from '../../snapping/types.js';
-import type { DocumentAccess } from '../../store/document-access.js';
-import { toStore } from '../../store/draw-store.js';
-import { ClientState } from '../../store/memory/ui-state.js';
-import { MemoryStore } from '../../store/memory.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { Store } from '../../store/built-in/types.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
-import type { Store, StoreContract } from '../../store/store.js';
 import type { FeatureStyle, Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
 import { pointMarkerReachPx } from '../../view/renderers/point/point-style.js';
@@ -90,12 +88,8 @@ export interface EngineOptions {
   topology?: Partial<TopologyConfig>;
   /** The tracing along edges */
   trace?: TraceOptions;
-  /**
-   * The Store to keep the document and the state of this client in, instead of an in-memory
-   * one: a Store of core, or one of the host that is read and written only through the public
-   * contract
-   */
-  store?: StoreContract | Store;
+  /** The Store to keep the document in, instead of a new built-in one */
+  store?: Store;
   /** Whether the document starts with one empty layer (true by default) */
   initDefaultLayer?: boolean;
   /** Makes the ID of every feature, group, layer and file the engine creates (ULIDs by default) */
@@ -126,7 +120,7 @@ export const DEFAULT_OPTIONS = {
 export interface Context {
   map: MapLibreMap;
   /** The layer over the Store, through which every part of the engine reads and writes it */
-  store: DocumentAccess;
+  store: InstanceDocument;
   /** The Store itself, which `draw.getStore()` and the contexts of the extensions hand out */
   exposedStore: Store;
   /** The spatial index, derived from the Store (it follows every Store change by itself) */
@@ -261,12 +255,9 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // runtime options change, so always copy it so that the default is not shared
   const trace: TraceConfig = mergeTraceConfig(DEFAULT_TRACE_CONFIG, options.trace ?? {});
 
-  // The internal components. The state of this client belongs to the instance: the Store a
-  // host gives keeps the document only (a Store of core given as it is keeps its own)
-  const client = new ClientState();
-  const exposedStore: Store = options.store
-    ? toStore(options.store, client)
-    : new MemoryStore(client);
+  // The internal components. The Store keeps the document; the state of this client belongs to
+  // the instance, which keeps it in the layer over the Store
+  const exposedStore: Store = options.store ?? createStore();
   // The layer over the Store: one for this instance, handed to every part of it
   const store = createDocumentAccess(exposedStore);
   // Derived from the Store: it subscribes before any other component, so a listener that

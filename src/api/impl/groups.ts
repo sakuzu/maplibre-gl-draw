@@ -11,6 +11,7 @@ import type { Feature as StoredFeature, Group as StoredGroup } from '../../store
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
 import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from '../model.js';
+import { requireRange } from './layers.js';
 import { moveGroups, resolveMoveTarget } from './placement.js';
 import type { ResourceDeps } from './shared.js';
 import {
@@ -32,6 +33,9 @@ import {
 const INPUT_KEYS = ['featureIds', 'id', 'name', 'visible', 'locked'] as const;
 const PATCH_KEYS = ['name', 'visible', 'locked'] as const;
 const FILTER_KEYS = ['layerId', 'visible', 'locked'] as const;
+
+/** The most groups a list returns at once */
+const LIST_LIMIT = 10_000;
 
 /**
  * Creates `draw.groups`
@@ -63,10 +67,31 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     return result;
   };
 
-  const list = (filter?: GroupFilter): Group[] => {
+  const matching = (filter?: GroupFilter): StoredGroup[] => {
     const entries = filterEntries(filter, FILTER_KEYS);
     return inOrder().filter((group) => matches(group, entries));
   };
+
+  const list = (filter?: GroupFilter): Group[] => {
+    const groups = matching(filter);
+    if (groups.length > LIST_LIMIT) {
+      throw new DrawError(
+        'tooManyItems',
+        `${groups.length} groups match, more than the ${LIST_LIMIT} a list returns; read them with groups.iterate`,
+        { count: groups.length },
+      );
+    }
+    return groups;
+  };
+
+  /** The groups that match when it starts, each read as it is when the iterator reaches it */
+  function* iterate(filter?: GroupFilter): IterableIterator<Group> {
+    const ids = matching(filter).map((group) => group.id);
+    for (const id of ids) {
+      const group = store.getGroup(id);
+      if (group) yield group;
+    }
+  }
 
   const createOne = (prepared: StoredGroup): void => insertGroup(store, prepared);
 
@@ -77,8 +102,21 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       return ids.map((id) => store.getGroup(id));
     },
     list,
-    count: (filter) => list(filter).length,
+    iterate(filter) {
+      // The filter is checked when it is called, not when the iterator first reads
+      filterEntries(filter, FILTER_KEYS);
+      return iterate(filter);
+    },
+    count: (filter) => matching(filter).length,
     has: (id) => store.getGroup(id) !== undefined,
+    countFeatures(id) {
+      return store.countGroupFeatures(require(id).id);
+    },
+    listFeatureIds(id, range) {
+      const group = require(id);
+      const { start, end } = requireRange(range);
+      return store.listGroupFeatureIds(group.id, start, end);
+    },
 
     create(input) {
       const prepared = prepareGroup(deps, input, new Set(), new Set());
