@@ -46,6 +46,8 @@ describe('the scenes', () => {
       'delete',
       'import',
       'export',
+      'iterate',
+      'getProperty',
       'storeParts',
       'storeRead',
       'storeMoveBefore',

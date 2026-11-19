@@ -443,6 +443,47 @@ export const SCENES: readonly Scene[] = [
     },
   }),
   scene({
+    name: 'iterate',
+    label: 'Read every feature one at a time (draw.features.iterate)',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      ctx.draw.selection.clear();
+      await rest(ctx);
+    },
+    async run(ctx) {
+      const { draw } = ctx;
+      const read = ctx.input(() => {
+        let count = 0;
+        for (const feature of draw.features.iterate()) if (feature.id !== '') count += 1;
+        return count;
+      });
+      ctx.note('features', read);
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'getProperty',
+    label:
+      'Read one attribute of every feature without the features made (draw.features.getProperty)',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      ctx.draw.selection.clear();
+      await rest(ctx);
+    },
+    async run(ctx) {
+      const { draw, featureIds } = ctx;
+      const named = ctx.input(() => {
+        let count = 0;
+        for (const id of featureIds)
+          if (draw.features.getProperty(id, 'name') !== undefined) count += 1;
+        return count;
+      });
+      ctx.note('features', featureIds.length);
+      ctx.note('named', named);
+      await ctx.settle();
+    },
+  }),
+  scene({
     name: 'storeParts',
     label: `Write the rows into a Store without a map, ${STORE_PART_ROWS.toLocaleString('en')} at a time as the parts of one operation, a frame between them`,
     async prepare(ctx): Promise<{ store: Store; parts: NewRows[]; changes: number[] }> {
