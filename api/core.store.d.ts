@@ -463,11 +463,13 @@ export type RowRef = number;
  *   are closed
  * - `visible`: true for a feature that is visible itself, as `Feature.visible`; a boolean
  * - `locked`: true for a feature that is locked; a boolean
- * - `style`: the whole style of the feature, an object (`{}` for none) whose values are strings
- *   and finite numbers; a key the library does not know is kept
- * - `style:<key>`: one key of the style (`style:fillColor`), a string or a finite number;
- *   writing `undefined` takes the key off. A caller that keeps or writes back what changed reads
- *   the keys written, not the whole object
+ * - `style`: the whole style of the feature, an object (`{}` for none) whose values are values
+ *   JSON holds, as those of `properties:<key>`. The keys the library defines hold strings and
+ *   finite numbers (`FeatureStyle` of the main entry); a key the library does not know is kept,
+ *   whatever value JSON holds
+ * - `style:<key>`: one key of the style (`style:fillColor`), a value JSON holds; writing
+ *   `undefined` takes the key off. A caller that keeps or writes back what changed reads the
+ *   keys written, not the whole object
  * - `properties:<key>`: one attribute of the feature, by its key (`properties:name`): a value
  *   JSON holds (a string, a finite number, a boolean, `null`, or arrays and plain objects of
  *   them), never a function; writing `undefined` takes the key off

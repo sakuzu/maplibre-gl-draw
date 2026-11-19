@@ -373,6 +373,10 @@
       "main:removed:Store.getMaxNameNumber": "cf6ee1c217428e3f865b2dc13caffb9587426a6403df40d244d0fba795e72eff",
       "main:removed:Store.recordNameNumber": "73d296d1fd274967463f6e5ce1e799b1befb985499510dd8849d765fe1b4c184"
     },
+    "129": {
+      "main:doc:FeatureStyle": "a382b5587f2ac44bee8123b1b5d318e30befda70bdd836c7030043bdc3217c4c",
+      "store:doc:FeatureRowField": "8117597d65a6b4ffa188ca2fa7779e3d58935004e219586d6dc694365329cf2f"
+    },
     "151": {
       "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"
     },

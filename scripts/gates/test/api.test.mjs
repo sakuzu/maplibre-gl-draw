@@ -226,4 +226,43 @@ export declare function area(x: number): number;
     expect(e).toContain('geometry:doc:Point.x');
     expect(e).not.toContain('main:');
   });
+
+  /** The area of the geometry entry carries a brand the entry keeps to itself */
+  function brandedTree() {
+    const root = reachingTree();
+    for (const file of ['dist/geometry/index.d.ts', 'api/core.geometry.d.ts']) {
+      edit(
+        root,
+        '/** An area at a point. */',
+        '/** What marks an area. */\ndeclare const areaBrand: unique symbol;\n/** An area at a point. */',
+        file,
+      );
+      edit(
+        root,
+        '    at: Point;\n',
+        '    at: Point;\n    /** Its mark. */\n    readonly [areaBrand]: true;\n',
+        file,
+      );
+    }
+    // As the compiler writes a file that keeps a declaration to itself
+    edit(
+      root,
+      'export declare function area(x: number): number;\n',
+      'export declare function area(x: number): number;\nexport {};\n',
+      'dist/geometry/index.d.ts',
+    );
+    return root;
+  }
+
+  it('passes the entry that reaches a declaration another entry keeps to itself', () => {
+    expect(check({ root: brandedTree() }).errors).toEqual([]);
+  });
+
+  it('fails the entry that keeps the declaration when a word of its TSDoc changes', () => {
+    const root = brandedTree();
+    edit(root, 'What marks an area.', 'What names an area.', 'dist/geometry/index.d.ts');
+    const e = check({ root }).errors.join('\n');
+    expect(e).toContain('geometry:doc:areaBrand');
+    expect(e).not.toContain('main:');
+  });
 });

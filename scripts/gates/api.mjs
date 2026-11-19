@@ -48,17 +48,28 @@ export function declarationDifferences(root, built) {
   const diffs = [];
   const missingFixed = [];
   const exported = exportedNames(built.entries);
+  /** The records of the fixed file of each entry that has one */
+  const fixedOf = new Map();
   for (const { id } of ENTRIES) {
     const file = join(root, fixedFileOf(id));
-    if (!existsSync(file)) {
-      missingFixed.push(fixedFileOf(id));
-      continue;
-    }
+    if (existsSync(file)) fixedOf.set(id, recordsOfFixedFile(file));
+    else missingFixed.push(fixedFileOf(id));
+  }
+  for (const [id, fixed] of fixedOf) {
     const elsewhere = new Set();
     for (const [other, names] of exported) {
       if (other !== id) for (const n of names) elsewhere.add(n);
     }
-    diffs.push(...diffRecords(id, built.entries[id] ?? null, recordsOfFixedFile(file), elsewhere));
+    // What the fixed file of another entry declares without exporting it (a brand, say) is
+    // reached here through a type of that entry, and is compared there
+    for (const [other, records] of fixedOf) {
+      if (other === id) continue;
+      for (const [key, record] of Object.entries(records)) {
+        if (/[.{#]/.test(key) || key.startsWith('export:') || key === '(entry)') continue;
+        if (record.exported === false) elsewhere.add(key);
+      }
+    }
+    diffs.push(...diffRecords(id, built.entries[id] ?? null, fixed, elsewhere));
   }
   return { diffs, missingFixed };
 }
