@@ -292,13 +292,7 @@
       "where": "src/api/impl/store-contract.test.ts",
       "term": "\\b(undo|redo)\\b(?! vertex)",
       "reason": "the published version describes an undo kept by an application or an extension here",
-      "hits": 3
-    },
-    {
-      "where": "src/api/model.ts",
-      "term": "\\b(undo|redo)\\b(?! vertex)",
-      "reason": "the published version describes an undo kept by an application or an extension here",
-      "hits": 1
+      "hits": 2
     },
     {
       "where": "src/dataset/chunk-set.ts",
@@ -644,22 +638,6 @@
       "reason": "a row of the legend of a style rule; not a row of a table",
       "hits": 1,
       "why": "the main entry words of the rows",
-      "lines": [null]
-    },
-    {
-      "where": "declarations/main/FeaturePatch",
-      "term": "\\bundo(?! vertex)",
-      "reason": "to undo a change of the type of a feature, the application deletes and creates it again; not an undo of core",
-      "hits": 1,
-      "why": "a declaration that waits",
-      "lines": [null]
-    },
-    {
-      "where": "declarations/main/FeaturePatch",
-      "term": "\\b(undo|redo)\\b(?! vertex)",
-      "reason": "to undo a change of the type of a feature, the application deletes and creates it again; not an undo of core",
-      "hits": 1,
-      "why": "the same word as the row above, by the list of everywhere",
       "lines": [null]
     },
     {

@@ -30,7 +30,8 @@ export type DrawErrorCode =
   | 'tooManyItems';
 
 /**
- * The error a method throws when an argument is wrong; the method has changed nothing.
+ * The error a method throws when an argument is wrong, or when a read would return more than
+ * it returns at once; the method has changed nothing.
  */
 export class DrawError extends Error {
   /** Why it was thrown */

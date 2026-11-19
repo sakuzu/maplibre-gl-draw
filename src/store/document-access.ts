@@ -71,7 +71,7 @@ export interface DocumentWrites {
   createFeature(feature: Feature): boolean;
   /** Updates a feature */
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean;
-  /** Tells that intermediate states were given up (the writer has written the values back) */
+  /** Tells that intermediate states were given up (the values were written back already) */
   abortIntermediateUpdates?(ids: string[]): void;
   /** Deletes a feature */
   deleteFeature(id: string): boolean;

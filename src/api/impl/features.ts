@@ -7,6 +7,7 @@
 
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
+import { drawPropertyKey } from '../../shared/properties.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import type { DocumentAccess, FeatureMatch } from '../../store/document-access.js';
 import { isFeatureLocked } from '../../store/lock.js';
@@ -426,17 +427,32 @@ function prepareFeature(
     }
   }
 
+  const properties = withoutUndefined(input.properties ?? {});
+  if (input.type === 'Image') requireImageSize(properties);
+
   return {
     id,
     type: input.type,
     geometry: input.geometry,
     layerId,
     groupId: group?.id,
-    properties: withoutUndefined(input.properties ?? {}),
+    properties,
     style: withoutUndefined(input.style ?? {}) as StoredFeatureStyle,
     visible: input.visible ?? true,
     locked: input.locked ?? false,
   };
+}
+
+/**
+ * Checks the size in pixels of a new Image, which the caller gives and cannot leave out
+ */
+function requireImageSize(properties: Record<string, unknown>): void {
+  for (const name of ['imageWidth', 'imageHeight'] as const) {
+    const value = properties[drawPropertyKey(name)];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      throw invalidInput(`An Image needs its ${name} in pixels, a number greater than 0`);
+    }
+  }
 }
 
 /**

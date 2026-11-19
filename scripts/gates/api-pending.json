@@ -43,9 +43,6 @@
     "14": {
       "main:doc:Draw.destroy": "4af9041a7ae56b6b60a8c0e5f19e5aeb546d1489331e2cd6839ec2ebed5b217b"
     },
-    "15": {
-      "main:doc:UpdateSource": "6e60e44086ce5845aa8bd9f957350c053895b87cb18021e957c27e0c01ee85ae"
-    },
     "16": {
       "main:doc:FeaturesCollection": "0e6f62745b5f12d748824eb2c4db02e121e50dc6322ba8f3ba8e9a3b438576de"
     },
@@ -325,9 +322,6 @@
     "98": {
       "main:doc:LegendEntry": "86d71933a72dccc9f6633e637aac3beca6749a2863f4aa90f0adf1f74544064c",
       "main:doc:deriveLegend": "3965705d865b929397bb9e4d1597f5e2416abf2d0b2e379edf06301878fdc1c3"
-    },
-    "101": {
-      "main:doc:DrawError": "5d6d16364674af6498bf5c20e7ef7923572b8f186e76c27930cfa60eb02dc5f7"
     },
     "102": {
       "main:doc:PreparedTable": "a093a5b970e9d3c9a949b432c73f46200662726e89acf726949635ee0e851c4b",
