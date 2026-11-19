@@ -225,32 +225,28 @@
       "removed": {
         "change": 107,
         "why": "the features are written as rows"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.updateFeature",
       "removed": {
         "change": 107,
         "why": "the features are written as rows"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.abortIntermediateUpdates",
       "removed": {
         "change": 107,
         "why": "the features are written as rows"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.deleteFeature",
       "removed": {
         "change": 107,
         "why": "the features are written as rows"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.createLayer"
@@ -269,16 +265,14 @@
       "removed": {
         "change": 118,
         "why": "the order is written as order keys"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.reorderInGroup",
       "removed": {
         "change": 118,
         "why": "the order is written as order keys"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.createGroup"
@@ -359,40 +353,35 @@
       "removed": {
         "change": 120,
         "why": "the hooks of the name numbers are taken out"
-      },
-      "pending": true
+      }
     },
     {
       "key": "Store.recordNameNumber",
       "removed": {
         "change": 120,
         "why": "the hooks of the name numbers are taken out"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.getFeature",
       "removed": {
         "change": 106,
         "why": "the features are read as rows"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.listFeatures",
       "removed": {
         "change": 106,
         "why": "the features are read as rows"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.listFeaturesInOrder",
       "removed": {
         "change": 106,
         "why": "the features are read as rows"
-      },
-      "pending": true
+      }
     },
     {
       "key": "StoreView.getLayer"
