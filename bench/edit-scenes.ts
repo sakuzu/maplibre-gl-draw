@@ -84,7 +84,7 @@ function scene<T>(definition: Scene<T>): Scene {
 }
 
 /** The kinds of the events of the mouse a scene sends */
-type MouseKind = 'mousedown' | 'mousemove' | 'mouseup';
+type MouseKind = 'mousedown' | 'mousemove' | 'mouseup' | 'click';
 
 /** Sends an event of the mouse to the canvas of the map, at a point of the map (CSS px) */
 function mouse(
@@ -345,6 +345,37 @@ export const SCENES: readonly Scene[] = [
       const { draw } = ctx;
       ctx.input(() => draw.hidden.add(id));
       ctx.note('hidden', draw.hidden.count());
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'clickOne',
+    label: 'Select one feature with a click inside it (the hit of a point of the screen)',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      ctx.draw.selection.clear();
+      await rest(ctx);
+      // A polygon in the middle of the grid, clicked inside its ring
+      const id = ctx.featureIds[Math.floor(ctx.featureIds.length / 4)];
+      const geometry = ctx.draw.features.get(id)?.geometry;
+      if (geometry?.type !== 'Polygon') throw new Error(`the feature ${id} is not a polygon`);
+      const ring = geometry.coordinates[0].slice(0, -1);
+      const center: [number, number] = [
+        ring.reduce((sum, [x]) => sum + x, 0) / ring.length,
+        ring.reduce((sum, [, y]) => sum + y, 0) / ring.length,
+      ];
+      const at = ctx.map.project(center);
+      return [at.x, at.y] as const;
+    },
+    async run(ctx, [x, y]) {
+      const { map } = ctx;
+      ctx.input(() => {
+        mouse(map, 'mousemove', x, y, { pressed: false });
+        mouse(map, 'mousedown', x, y, { pressed: true });
+        mouse(map, 'mouseup', x, y, { pressed: false });
+        mouse(map, 'click', x, y, { pressed: false });
+      });
+      ctx.note('selected', ctx.draw.selection.get().ids.length);
       await ctx.settle();
     },
   }),
