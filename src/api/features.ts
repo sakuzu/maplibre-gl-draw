@@ -87,11 +87,20 @@ export interface FeaturesCollection {
   /**
    * Creates a feature and returns it as it was stored.
    *
+   * An Image created without its size on the map is given one as `document.load` gives the
+   * image it places: `maplibre-gl-draw:createdZoom` left out is the zoom of the map now (the
+   * zoom a load places an image at), so the image is shown at its size in pixels at that zoom,
+   * and `maplibre-gl-draw:scale` left out is 1. An extension that places an image needs no
+   * rule of its own for it. The size of the image in pixels (`maplibre-gl-draw:imageWidth` and
+   * `imageHeight`) is given by the caller and cannot be left out, whether the document holds
+   * the file or not.
+   *
    * @returns The new feature, or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape,
-   *   `alreadyExists` when its ID is taken, `notFound` when its layer or group does not
-   *   exist, or `invalidState` when the input names no layer and the document has no layer
-   *   to put it in
+   * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape or
+   *   `acceptsId` does not take its ID or an Image has no size in pixels, `alreadyExists`
+   *   when its ID is taken, `notFound` when
+   *   its layer or group does not exist, or `invalidState` when the input names no layer and
+   *   the document has no layer to put it in
    */
   create(input: FeatureInput): Feature | null;
   /**

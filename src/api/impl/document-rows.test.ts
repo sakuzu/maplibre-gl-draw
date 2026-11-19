@@ -473,6 +473,28 @@ describe('the keys of the metadata', () => {
   });
 });
 
+describe('an Image created without its size on the map', () => {
+  it('holds the zoom of the map now, and keeps the zoom it is given', () => {
+    const { draw } = instanceOver();
+    const image = (id: string, more: Record<string, unknown> = {}) => ({
+      id,
+      type: 'Image' as const,
+      geometry: { type: 'Point' as const, coordinates: [0, 0] },
+      properties: {
+        'maplibre-gl-draw:imageWidth': 20,
+        'maplibre-gl-draw:imageHeight': 10,
+        ...more,
+      } as never,
+    });
+    expect(draw.features.create(image('a'))?.properties['maplibre-gl-draw:createdZoom']).toBe(10);
+    draw.features.create(image('b', { 'maplibre-gl-draw:createdZoom': 3 }));
+    expect(draw.features.get('b')?.properties['maplibre-gl-draw:createdZoom']).toBe(3);
+    expect(
+      codeOf(() => draw.features.create(image('c', { 'maplibre-gl-draw:imageWidth': 0 }))),
+    ).toBe('invalidInput');
+  });
+});
+
 describe('a key of the style of an extension', () => {
   it('holds a boolean, null, an array and an object, written alone and kept through a load', async () => {
     const { draw, store } = instanceOver();

@@ -221,16 +221,24 @@
         "after": "65: feature.moved is given for a change of the position inside a layer or a group too. 66: layer.updated and group.updated are given only when the values of the layer or the group change; a change of the order of their items is feature.moved or group.moved (and the layer.updated or group.updated that only changed items or featureIds is not given)."
       },
       "features.create an Image | changes": {
-        "changes": [30, 36, 54, 63, 64],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids. 54: document.changed is the summary in the words of the features (63). 63: Every notification has source, operationId, hasMoreParts, stopped and reset; features are IdSets of the ids created, updated, deleted and moved (no feature objects, no previous values); layers and groups carry no items or featureIds and groups has moved; the fields selection, editing, mode, layerReorder and groupReorder are gone. 64: features is ChangedIds: { created, updated, deleted, moved }, each an IdSet."
+        "changes": [30, 36, 54, 63, 64, 174],
+        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids. 54: document.changed is the summary in the words of the features (63). 63: Every notification has source, operationId, hasMoreParts, stopped and reset; features are IdSets of the ids created, updated, deleted and moved (no feature objects, no previous values); layers and groups carry no items or featureIds and groups has moved; the fields selection, editing, mode, layerReorder and groupReorder are gone. 64: features is ChangedIds: { created, updated, deleted, moved }, each an IdSet. 174: An Image created without its size on the map holds the zoom of the map now as maplibre-gl-draw:createdZoom."
+      },
+      "features.create an Image | document": {
+        "changes": [174],
+        "after": "174: An Image created without its size on the map holds the zoom of the map now as maplibre-gl-draw:createdZoom."
       },
       "features.create an Image | events": {
-        "changes": [30, 36, 65, 66],
-        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids. 65: feature.moved is given for a change of the position inside a layer or a group too. 66: layer.updated and group.updated are given only when the values of the layer or the group change; a change of the order of their items is feature.moved or group.moved (and the layer.updated or group.updated that only changed items or featureIds is not given)."
+        "changes": [30, 36, 65, 66, 174],
+        "after": "30: Layer has no items: a layer handed out (returned or in an event) carries no items; the reader reads the items of a layer it reads with layers.listItemIds (29), with the same ids. 36: Group has no featureIds: a group handed out (returned or in an event) carries none; the reader reads the members with groups.listFeatureIds (35), with the same ids. 65: feature.moved is given for a change of the position inside a layer or a group too. 66: layer.updated and group.updated are given only when the values of the layer or the group change; a change of the order of their items is feature.moved or group.moved (and the layer.updated or group.updated that only changed items or featureIds is not given). 174: An Image created without its size on the map holds the zoom of the map now as maplibre-gl-draw:createdZoom."
       },
       "features.create an Image | order": {
         "changes": [65, 66],
         "after": "65: feature.moved is given for a change of the position inside a layer or a group too. 66: layer.updated and group.updated are given only when the values of the layer or the group change; a change of the order of their items is feature.moved or group.moved (and the layer.updated or group.updated that only changed items or featureIds is not given)."
+      },
+      "features.create an Image | returned": {
+        "changes": [174],
+        "after": "174: An Image created without its size on the map holds the zoom of the map now as maplibre-gl-draw:createdZoom."
       },
       "features.create in a hidden layer | changes": {
         "changes": [30, 36, 54, 63, 64],

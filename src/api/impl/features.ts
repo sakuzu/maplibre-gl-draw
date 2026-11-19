@@ -431,7 +431,14 @@ function prepareFeature(
   }
 
   const properties = withoutUndefined(input.properties ?? {});
-  if (input.type === 'Image') requireImageSize(properties);
+  if (input.type === 'Image') {
+    requireImageSize(properties);
+    // Left out, the size on the map is the one a load gives the image it places
+    const createdZoom = drawPropertyKey('createdZoom');
+    if (properties[createdZoom] === undefined && deps.getZoom) {
+      properties[createdZoom] = deps.getZoom();
+    }
+  }
 
   return {
     id,

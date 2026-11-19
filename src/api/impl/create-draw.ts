@@ -58,6 +58,7 @@ export function createDrawOnEngine(
     getActiveLayerId: context.getActiveLayerId,
     setActiveLayerId: context.setActiveLayerId,
     getStyleOptions: drawOptions.getStyle,
+    getZoom: () => map.getZoom(),
     spatialIndex: context.spatialIndex,
   };
   const features = createFeatures(deps);

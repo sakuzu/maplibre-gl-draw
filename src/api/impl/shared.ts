@@ -32,6 +32,8 @@ export interface ResourceDeps {
   setActiveLayerId: (id: string) => void;
   /** The `style` option as it was given: the defaults of the look of the features */
   getStyleOptions: () => RuntimeOptions['style'];
+  /** The zoom of the map now, which an Image created without its size on the map is given */
+  getZoom?: () => number;
   /**
    * The spatial index of the features, for a filter by extent; the extent of each feature is
    * measured when it is left out

@@ -71,9 +71,6 @@
     "26": {
       "main:added:FeaturesCollection.releaseValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "27": {
-      "main:doc:FeaturesCollection.create": "85800f1e6240d947ccab20f2a7efcfaaceb3d76a6cc024e4ee96eb67fb7e8bba"
-    },
     "31": {
       "main:doc:LayersCollection": "18d5bfbc804ca40e2e790c77185a46eda5a25988f6e77328ba5cde5c198164a1",
       "main:doc:LayersCollection.create": "c0130d3102dfefbdd6692ab036699b58463c0cc5a7c579e382ab3f67b599dee0",
