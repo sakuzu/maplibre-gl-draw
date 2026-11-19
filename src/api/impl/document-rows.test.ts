@@ -447,25 +447,25 @@ describe('the groups left empty', () => {
 describe('the keys of the metadata', () => {
   it('writes key by key, deletes a key given undefined, and refuses a value JSON cannot hold', () => {
     const { draw, store } = instanceOver();
-    draw.metadata.update({ title: 'A', 'example:owner': { id: 1 }, note: 'kept' } as never);
+    draw.metadata.update({ title: 'A', 'example:author': { id: 1 }, note: 'kept' } as never);
     draw.metadata.update({ title: 'B' });
-    expect(store.getMetadata()).toEqual({ title: 'B', 'example:owner': { id: 1 }, note: 'kept' });
+    expect(store.getMetadata()).toEqual({ title: 'B', 'example:author': { id: 1 }, note: 'kept' });
     draw.metadata.update({ note: undefined } as never);
-    expect(store.getMetadata()).toEqual({ title: 'B', 'example:owner': { id: 1 } });
+    expect(store.getMetadata()).toEqual({ title: 'B', 'example:author': { id: 1 } });
     expect(codeOf(() => draw.metadata.update({ 'example:bad': () => 1 } as never))).toBe(
       'invalidInput',
     );
     expect(codeOf(() => draw.metadata.update({ 'example:bad': Number.NaN } as never))).toBe(
       'invalidInput',
     );
-    expect(draw.metadata.get()).toEqual({ title: 'B', 'example:owner': { id: 1 } });
+    expect(draw.metadata.get()).toEqual({ title: 'B', 'example:author': { id: 1 } });
   });
 
   it('keeps the keys with a prefix and those without one through toJSON and a load', async () => {
     const { draw } = instanceOver();
-    draw.metadata.update({ title: 'T', 'example:owner': { id: 1 }, plain: [1, 2] } as never);
+    draw.metadata.update({ title: 'T', 'example:author': { id: 1 }, plain: [1, 2] } as never);
     const saved = draw.document.toJSON();
-    expect(saved.metadata).toEqual({ title: 'T', 'example:owner': { id: 1 }, plain: [1, 2] });
+    expect(saved.metadata).toEqual({ title: 'T', 'example:author': { id: 1 }, plain: [1, 2] });
     const reopened = instanceOver().draw;
     await reopened.document.load(saved);
     expect(reopened.metadata.get()).toEqual(saved.metadata);
