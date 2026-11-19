@@ -5,7 +5,7 @@
  * The marks of the rows a decided change of the public API changes (src/parity/marks.json)
  *
  * A mark names the changes by their numbers in the list of the changes of the specification of
- * 3.0 (numbered 1 to 175) and says what the row reads after them. Only a marked row may have its
+ * 3.0 (numbered 1 to 176) and says what the row reads after them. Only a marked row may have its
  * record changed, and only as its mark says; a row without a mark keeps its record.
  */
 
@@ -24,7 +24,7 @@ const { marks } = JSON.parse(await readFile(new URL('./marks.json', import.meta.
 
 /** The numbers of the list of the changes */
 const FIRST_CHANGE = 1;
-const LAST_CHANGE = 175;
+const LAST_CHANGE = 176;
 
 describe('the marks of the rows that decided changes change', () => {
   it('are on the axes of the table', () => {
