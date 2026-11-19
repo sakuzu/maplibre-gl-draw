@@ -635,6 +635,31 @@
       "path": "bench/edit-document.test.ts",
       "change": "the list of the scenes of the editing benchmark gains the scenes of iterate and getProperty",
       "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/spatial/store-spatial-index.test.ts",
+      "change": "CHANGES 106 (the index of the candidates built over the layer, the built-in Store, which it no longer subscribes to)",
+      "unit": "the candidates of hits read from the box index of the Store"
+    },
+    {
+      "path": "src/modes/select/box-selection.test.ts",
+      "change": "CHANGES 3, 106 (the index of the candidates built over the layer, the built-in Store)",
+      "unit": "the candidates of hits read from the box index of the Store"
+    },
+    {
+      "path": "src/modes/select/drag-handler.test.ts",
+      "change": "CHANGES 3, 106 (the index of the candidates built over the layer, the built-in Store)",
+      "unit": "the candidates of hits read from the box index of the Store"
+    },
+    {
+      "path": "src/modes/select/shortcut-handler.test.ts",
+      "change": "CHANGES 3, 106 (the index of the candidates built over the layer, the built-in Store)",
+      "unit": "the candidates of hits read from the box index of the Store"
+    },
+    {
+      "path": "src/view/layer/world-copies.test.ts",
+      "change": "CHANGES 3, 106 (the index of the candidates built over the layer, the built-in Store)",
+      "unit": "the candidates of hits read from the box index of the Store"
     }
   ]
 }
