@@ -255,3 +255,50 @@ describe('features.createMany', () => {
     }, 'the rows read per feature');
   });
 });
+
+describe('groups.create of every feature', () => {
+  // The points of the first layer are read from their rows, as for 1,000 as for 10,000
+  const scene = measured((size) => {
+    const { instance, ids } = instanceWithout(size);
+    let writes = 0;
+    const work = workOf(instance, () => {
+      writes = callsDuring(instance, 'writeRows', () =>
+        instance.draw.groups.create({ featureIds: ids }),
+      );
+    });
+    return { ...work, writes };
+  });
+
+  it('reads as many rows per feature for 10,000 features as for 1,000', () => {
+    expectNotProportional(
+      (size) => (scene(size).rowsTouched + scene(size).featuresRead) / size,
+      'the rows read per feature',
+    );
+  });
+
+  it('writes the places of the features in one write of the Store', () => {
+    expect(scene(1_000).writes).toBe(1);
+    expect(scene(10_000).writes).toBe(1);
+  });
+});
+
+describe('the places of many features', () => {
+  it('are written in one write of the Store per layer by selection.group and moveMany', () => {
+    for (const size of Object.values(WORK_SIZES)) {
+      const { instance, ids, layerId } = instanceOf(size);
+      const other = instance.draw.layers.create({ name: 'Other' });
+      if (!other) throw new Error('no layer');
+      instance.draw.selection.set('feature', ids);
+      expect(callsDuring(instance, 'writeRows', () => instance.draw.selection.group())).toBe(1);
+      const groupId = instance.draw.groups.list({ layerId })[0]?.id as string;
+      const members = instance.draw.groups.listFeatureIds(groupId, { start: 0, end: size });
+      expect(
+        callsDuring(instance, 'writeRows', () =>
+          instance.draw.features.moveMany(members, { layerId: other.id }),
+        ),
+      ).toBe(1);
+      expect(instance.draw.groups.has(groupId)).toBe(false);
+      expect(instance.draw.layers.countItems(other.id)).toBe(size);
+    }
+  });
+});

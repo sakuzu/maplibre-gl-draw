@@ -10,7 +10,6 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from '../../store/built-in/create-store.js';
-import { createOrderKeyBetween } from '../../store/built-in/order-keys.js';
 import type { FeatureRowField, Store, StoreChange } from '../../store/built-in/types.js';
 import { createMapStub, gridPoints, rowWrites } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
@@ -118,27 +117,10 @@ describe('the limit of 10,000', () => {
   });
 
   it('returns a range of 10,000 features of a group and throws tooManyItems for 10,001', () => {
-    const { draw, store } = instanceOver();
+    const { draw } = instanceOver();
     const ids = (draw.features.createMany(gridPoints(10_001)) as Feature[]).map((f) => f.id);
-    const group = draw.groups.create({ featureIds: ids.slice(0, 1) });
+    const group = draw.groups.create({ featureIds: ids });
     if (!group) throw new Error('no group');
-    // The other features join it in one write of the Store, from outside the instance
-    const firstRow = Int32Array.of(store.tables.getRowRef(ids[0]) as number);
-    let key = store.tables.readValues(firstRow, ['orderKey']).fields.get('orderKey')?.[0] as string;
-    const keys: string[] = [];
-    for (let i = 1; i < ids.length; i++) {
-      key = createOrderKeyBetween(key, undefined);
-      keys.push(key);
-    }
-    store.transact(() => {
-      store.writeRows({
-        rows: Int32Array.from(ids.slice(1), (id) => store.tables.getRowRef(id) as number),
-        fields: new Map<FeatureRowField, unknown[]>([
-          ['parent', ids.slice(1).map(() => group.id)],
-          ['orderKey', keys],
-        ]),
-      });
-    }, 'remote');
     expect(draw.groups.listFeatureIds(group.id, { start: 0, end: 10_000 })).toEqual(
       ids.slice(0, 10_000),
     );
