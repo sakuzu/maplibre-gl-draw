@@ -5,8 +5,8 @@
  * Type definitions of the datasets
  *
  * It defines the types for showing large numbers of features that are not being edited, quickly
- * and with attribute-driven styles. It is a path independent of the Store (editing, undo,
- * events), and there is no editing API here.
+ * and with attribute-driven styles. It is a path independent of the Store (editing, the
+ * changes of the document, events), and there is no editing API here.
  */
 
 import type { Feature as GeoJSONFeature, Geometry as GeoJSONGeometry } from 'geojson';
@@ -280,7 +280,7 @@ export interface DatasetEventMap {
  *
  * It is meant for overlaying tens of thousands of read-only records, such as parcels or a
  * table of places. The features never enter the Store, so none of the following applies to
- * them: editing, undo / redo, the events of the features, the selection UI, and
+ * them: editing, the changes of the document, the events of the features, the selection UI, and
  * `draw.features.list()` / `draw.document`. A caller who wants to edit one copies it into the
  * document with `draw.features.create`; the library does not relate the two. The public
  * `Dataset` of `draw.datasets` is built on it.

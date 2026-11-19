@@ -331,12 +331,6 @@
       "hits": 3
     },
     {
-      "where": "src/dataset/types.ts",
-      "term": "\\b(undo|redo)\\b(?! vertex)",
-      "reason": "the published version describes an undo kept by an application or an extension here",
-      "hits": 2
-    },
-    {
       "where": "src/e2e/examples.e2e.test.ts",
       "term": "\\bsync(ed|ing|s)?\\b",
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
@@ -419,18 +413,6 @@
       "term": "\\bsync(ed|ing|s)?\\b",
       "reason": "the synchronous functions of Node (readFileSync and the like), not a sync of the document",
       "hits": 3
-    },
-    {
-      "where": "src/shared/types/model.ts",
-      "term": "\\b(undo|redo)\\b(?! vertex)",
-      "reason": "the published version describes an undo kept by an application or an extension here",
-      "hits": 1
-    },
-    {
-      "where": "src/shared/types/model.ts",
-      "term": "\\bhistory",
-      "reason": "the published version describes the history kept by an extension here",
-      "hits": 2
     },
     {
       "where": "src/shared/types/model.ts",

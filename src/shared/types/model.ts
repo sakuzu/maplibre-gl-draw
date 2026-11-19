@@ -478,7 +478,7 @@ export interface Layer {
   /**
    * Style rule (no rule when omitted)
    *
-   * Because it is an ordinary field it is subject to saving, subscription and undo, and
+   * Because it is an ordinary field it is saved and told in the changes of the document, and
    * it is updated with `updateLayer(id, { styleRule })`.
    */
   styleRule: StyleRule | undefined;
@@ -671,8 +671,8 @@ export interface StoreChange {
    * Reordering of items within a layer
    *
    * The reordering of items (features or groups) within the layer.items array.
-   * It is emitted separately from layers.updated, and is recorded as a dedicated command
-   * by history management.
+   * It is emitted separately from layers.updated, as a change of the order of the items
+   * alone.
    */
   layerReorder?: {
     layerId: string;
@@ -683,8 +683,8 @@ export interface StoreChange {
    * Reordering of features within a group
    *
    * The reordering of features within the group.featureIds array.
-   * It is emitted separately from groups.updated, and is recorded as a dedicated command
-   * by history management.
+   * It is emitted separately from groups.updated, as a change of the order of the features
+   * alone.
    */
   groupReorder?: {
     groupId: string;
