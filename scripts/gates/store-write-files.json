@@ -4,7 +4,8 @@
     "src/store/store.ts": ["Store", "StoreView", "StoreContract"],
     "src/store/draw-store.ts": ["DrawStore"],
     "src/store/memory.ts": ["MemoryStore"],
-    "src/store/built-in/types.ts": ["Store", "StoreView"]
+    "src/store/built-in/types.ts": ["Store", "StoreView"],
+    "src/api/extension/store.ts": ["Store", "StoreView"]
   },
   "files": ["src/api/impl/document-access.ts"],
   "folders": ["src/store/", "src/store/memory/", "src/store/built-in/"]

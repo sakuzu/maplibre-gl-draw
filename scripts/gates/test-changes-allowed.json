@@ -455,6 +455,186 @@
       "path": "bench/edit-document.test.ts",
       "change": "the list of the scenes of the editing benchmark gains the scenes of selecting one feature and hiding on this client",
       "unit": "the client state moved to the instance"
+    },
+    {
+      "path": "src/test-utils.ts",
+      "change": "CHANGES 3, 8, 30, 36, 87, 106, 107, 118, 120, 133 (the tools of the table and of the work run over the Store of rows)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/test-utils.test.ts",
+      "change": "CHANGES 3, 87 (the Store that counts wraps a Store of rows and counts its rows)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/client-state.test.ts",
+      "change": "CHANGES 3, 8, 87 (the Store given is the built-in Store spread, written with rows)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/create-draw.test.ts",
+      "change": "CHANGES 3 (the built-in Store given; its change read as rows)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/document-access.test.ts",
+      "change": "CHANGES 3, 87 (the table run over the built-in Store spread)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/engine-input.test.ts",
+      "change": "CHANGES 28, 29, 30, 34, 35, 36 (the items of layers and groups read by position)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/events.test.ts",
+      "change": "CHANGES 3, 30, 36 (the drawing state and the write in the middle of a drag through the layer of the engine)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/extensions.test.ts",
+      "change": "CHANGES 3, 87 (the replacement made with writes of the source remote and clear)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/generate-id.test.ts",
+      "change": "CHANGES 8 (the IDs read with features.list)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/hidden.test.ts",
+      "change": "CHANGES 3 (the layer over the Store given to the resource)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/line-click.test.ts",
+      "change": "CHANGES 3 (the built-in Store, written with rows)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/prepopulated-store.test.ts",
+      "change": "CHANGES 3, 106, 107, 118 (the built-in Store, or one that wraps it, given)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/selection.test.ts",
+      "change": "CHANGES 30, 36 (the items of layers and groups read by position)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/store-contract.test.ts",
+      "change": "CHANGES 3, 106, 107, 118, 120 (the built-in Store spread; the scene of the numbers of the names without the hook of the Store)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/api/impl/work-scenes.test.ts",
+      "change": "CHANGES 3, 87 (the change from outside written as a row)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 39, 58, 59, 104 (IndexRange, DocumentLayer and DocumentGroup join the list of the main entry; its Store and StoreView of the published version leave it)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/parity/events.test.ts",
+      "change": "CHANGES 3, 87, 133 (the changes of the Store read as rows)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/parity/extension.test.ts",
+      "change": "CHANGES 3, 87, 133 (the changes of the Store read as rows)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/shared/work-counts.test.ts",
+      "change": "CHANGES 3, 87 (the Store of rows counts the rows it writes)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/load-scaling.test.ts",
+      "change": "CHANGES 3 (the layer over the built-in Store)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/store-before-work.test.ts",
+      "change": "CHANGES 30, 36 (the layers and the groups given without items and featureIds)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/store-before.test.ts",
+      "change": "CHANGES 30, 36 (the layers and the groups given without items and featureIds)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/store-forget.test.ts",
+      "change": "CHANGES 30, 36 (the layers and the groups given without items and featureIds)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/store-pages.test.ts",
+      "change": "CHANGES 30, 36 (the layers and the groups given without items and featureIds)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/store-work.test.ts",
+      "change": "CHANGES 30, 36 (the layers and the groups given without items and featureIds)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/store-writes.test.ts",
+      "change": "CHANGES 30, 36 (the layers and the groups given without items and featureIds)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/store-keys.test.ts",
+      "change": "CHANGES 30, 36, 129 (a key of the style holds any value JSON holds: the boolean value of a key is taken)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/store/built-in/validate.test.ts",
+      "change": "CHANGES 129 (a key of the style holds any value JSON holds: an object under a key is taken)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/e2e/draw.e2e.test.ts",
+      "change": "CHANGES 3, 30, 36 (the built-in Store given; the items of layers and groups read by position)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/e2e/page-entry.ts",
+      "change": "CHANGES 3 (the built-in Store and the write of rows given to the page)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "src/e2e/examples.e2e.test.ts",
+      "change": "CHANGES 17, 30, 36 (the city of more than 10,000 features read with features.iterate)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "ui/e2e/ui.e2e.test.ts",
+      "change": "CHANGES 30, 36 (the items of layers and groups read by position)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "ui/test/layer-panel.test.ts",
+      "change": "CHANGES 30, 36 (the items of layers and groups read by position)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "ui/test/layers.test.ts",
+      "change": "CHANGES 30, 36 (the items of layers and groups read by position)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "ui/test/fake-draw.ts",
+      "change": "CHANGES 30, 36 (the items of layers and groups read by position)",
+      "unit": "the document of an instance moved to the Store of rows"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "the list of the scenes of the editing benchmark gains the scenes of iterate and getProperty",
+      "unit": "the document of an instance moved to the Store of rows"
     }
   ]
 }
