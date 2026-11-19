@@ -347,10 +347,17 @@ export function storeWritesOf(
       ]),
     );
 
-  /** Whether an id is that of a row in use: a row that is not deleted, or a deleted row kept */
+  /**
+   * Whether an id is that of a row in use: a row that is not deleted, or a deleted row kept by a
+   * change told (a row the transaction open deleted is not kept yet, whatever the listeners asked
+   * for, so a group takes its id)
+   */
   const isRowInUse = (id: string): boolean => {
     const found = tables(() => rowWrites.lookup(id));
-    return found !== undefined && (!found.deleted || isKept(kept, found.row));
+    return (
+      found !== undefined &&
+      (!found.deleted || isKeptByChangeTold(kept, found.row, tablesTokenOf(changes)))
+    );
   };
 
   /**
@@ -663,6 +670,16 @@ export function storeWritesOf(
         }
       }
       checkValues(what, values, valuesPerPosition);
+      // A deleted row whose id a group or a layer took meanwhile does not come back: the id is in
+      // use
+      if (broughtBack) {
+        for (const ref of broughtBack) {
+          const id = tables(() => document.rows.getRowId(ref));
+          if (id !== undefined && (document.groups.has(id) || document.layers.has(id))) {
+            return false;
+          }
+        }
+      }
       readValuesBefore(changes, rows, fieldsWritten(fields, geometry));
       writeTables(
         rows,

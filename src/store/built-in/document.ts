@@ -37,6 +37,7 @@ import type { FileData, Layer, Metadata } from '../../api/model.js';
 import { createWorkCounts } from '../../shared/work-counts.js';
 import { createChanges } from './changes.js';
 import { tablesWorkerOf } from './pages.js';
+import { createRowBoxesSlot, rowBoxesOfSlot } from './row-boxes.js';
 import { ROW_COLUMNS } from './row-columns.js';
 import type { RowPageWorker, RowSpatialIndexing, StoreGroup } from './types.js';
 
@@ -94,6 +95,8 @@ export function dimensionsOfPositions(positions: LayerPositions): 'xy' | 'xyz' |
 export function openDocument(spatialIndexing?: RowSpatialIndexing, worker?: RowPageWorker) {
   /** How the positions of each layer are held, by the id of the layer */
   const layerPositions = new Map<string, LayerPositions>();
+  /** The boxes of the rows of the types that give theirs: none until an instance sets them */
+  const rowBoxes = createRowBoxesSlot();
   const { tables, writer: rowWrites } = createTables({
     columns: ROW_COLUMNS,
     groupColumns: GROUP_COLUMNS,
@@ -106,7 +109,9 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing, worker?: RowP
       dimensionsOfPositions(layerPositions.get(layerId) ?? PLANE_POSITIONS),
     ...(spatialIndexing && { coordinateSystem: spatialIndexing }),
     ...(worker && { worker: tablesWorkerOf(worker) }),
+    rowBoxes: rowBoxesOfSlot(rowBoxes),
   });
+  rowBoxes.writer = rowWrites;
   const counts = createWorkCounts();
   return {
     /** The reading side of the tables of the rows */
@@ -115,6 +120,8 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing, worker?: RowP
     rowWrites,
     /** How the positions of each layer are held, by the id of the layer */
     layerPositions,
+    /** The boxes of the rows of the types that give theirs (`row-boxes.ts`) */
+    rowBoxes,
     /** The layers, by id */
     layers: new Map<string, Layer>(),
     /** The groups, by id */
