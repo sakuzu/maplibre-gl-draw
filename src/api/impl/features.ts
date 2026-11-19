@@ -185,8 +185,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
         return feature;
       });
       if (store.isReadOnly()) return null;
-      store.createFeatures(features);
-      return features.map((feature) => store.getFeature(feature.id) as StoredFeature);
+      // The features written are read back as they are kept made, not from their rows
+      return store.holdFeatures(() => {
+        store.createFeatures(features);
+        return features.map((feature) => store.getFeature(feature.id) as StoredFeature);
+      });
     },
 
     update(id, patch) {

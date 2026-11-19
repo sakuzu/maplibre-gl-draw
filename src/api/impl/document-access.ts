@@ -415,6 +415,7 @@ export function createDocumentAccess(
       }
     } finally {
       toldOrdersBefore = null;
+      trimCache();
     }
   };
 
@@ -588,11 +589,27 @@ export function createDocumentAccess(
   // ==========================================================================
 
   const featureCache = new Map<string, Feature>();
+  /**
+   * How many callers keep the features made beyond the limit (`holdFeatures`). A transaction of
+   * the layer keeps them too, until its change has been told: the features a write made are then
+   * read without their rows by the subscribers of its change
+   */
+  let cacheHolds = 0;
+
+  /** Lets go of the features kept made beyond the limit, the oldest first */
+  const trimCache = (): void => {
+    if (cacheHolds > 0 || busDepth > 0) return;
+    while (featureCache.size > FEATURE_CACHE_LIMIT) {
+      const oldest = featureCache.keys().next().value;
+      if (oldest === undefined) break;
+      featureCache.delete(oldest);
+    }
+  };
 
   const remember = (feature: Feature): void => {
     featureCache.delete(feature.id);
     featureCache.set(feature.id, feature);
-    if (featureCache.size > FEATURE_CACHE_LIMIT) {
+    if (cacheHolds === 0 && busDepth === 0 && featureCache.size > FEATURE_CACHE_LIMIT) {
       const oldest = featureCache.keys().next().value;
       if (oldest !== undefined) featureCache.delete(oldest);
     }
@@ -2631,6 +2648,15 @@ export function createDocumentAccess(
       return tables.get(layerOfRow(ref))?.getRowProperty(ref, key);
     },
     getFeaturePlace,
+    holdFeatures<T>(fn: () => T): T {
+      cacheHolds += 1;
+      try {
+        return fn();
+      } finally {
+        cacheHolds -= 1;
+        trimCache();
+      }
+    },
     countFeatures: (match?: FeatureMatch) => countMatching(match),
     iterateFeatures: (match?: FeatureMatch) => iterateMatching(match),
     getOrderBefore: (containerId: string) => toldOrdersBefore?.get(containerId),

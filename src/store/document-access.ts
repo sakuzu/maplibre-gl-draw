@@ -232,6 +232,11 @@ export interface DocumentPlaces {
    * (undefined for none)
    */
   getFeaturePlace(id: string): FeaturePlace | undefined;
+  /**
+   * Runs `fn` while the features made are kept beyond the number the layer keeps, and lets go
+   * of those over it afterwards: for a caller that reads back the many features it wrote
+   */
+  holdFeatures<T>(fn: () => T): T;
   /** Counts the features that match */
   countFeatures(match?: FeatureMatch): number;
   /**

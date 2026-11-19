@@ -368,6 +368,7 @@ export function documentOverStore(store: Store): InstanceDocument {
     hasFeature: (id) => store.getFeature(id) !== undefined,
     getFeatureProperty: (id, key) => store.getFeature(id)?.properties[key],
     getFeaturePlace: (id) => store.getFeature(id),
+    holdFeatures: (fn) => fn(),
     countFeatures: (match) => matching(match).length,
     *iterateFeatures(match) {
       for (const { id } of matching(match)) {
