@@ -297,15 +297,37 @@ export class ClientState {
    */
   followDocument(changes: StoreChange, dragging: boolean): void {
     this.#write(() => {
-      for (const feature of changes.features?.deleted ?? []) this.forget(feature.id);
-      for (const group of changes.groups?.deleted ?? []) this.forget(group.id);
-      for (const layer of changes.layers?.deleted ?? []) this.forget(layer.id);
+      if (changes.reset === true) {
+        // What the replacement took out is not listed whole: each ID the state holds is asked
+        this.#forgetGone();
+      } else {
+        for (const feature of changes.features?.deleted ?? []) this.forget(feature.id);
+        for (const group of changes.groups?.deleted ?? []) this.forget(group.id);
+        for (const layer of changes.layers?.deleted ?? []) this.forget(layer.id);
+      }
       if (mayHide(changes)) this.pruneInvisible();
       this.#pruneVertices(changes, dragging);
     });
   }
 
   // Private
+
+  /**
+   * Forgets the IDs of the selection, of the features being edited and of the hidden items that
+   * no longer name anything, each asked of the document: nothing is read while the state holds
+   * none, and an ID written again by the change stays
+   */
+  #forgetGone(): void {
+    if (
+      this.#selection.ids.length === 0 &&
+      this.#editingIds.length === 0 &&
+      this.#locallyHidden.size === 0
+    ) {
+      return;
+    }
+    const ids = new Set([...this.#selection.ids, ...this.#editingIds, ...this.#locallyHidden]);
+    for (const id of ids) this.forget(id);
+  }
 
   /** Runs a write of the state as one operation of the Store it is attached to */
   #write(fn: () => void): void {

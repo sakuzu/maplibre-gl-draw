@@ -171,7 +171,9 @@ export interface DrawEvents {
    *
    * It arrives once per feature, also when one change touches many features. The feature
    * objects are made only while the event has a listener; for changes of many features, listen
-   * to `document.changed` instead.
+   * to `document.changed` instead. A change that replaces the whole document
+   * (`DocumentChange.reset`) tells every feature taken out here, before the features it
+   * writes are told as created.
    */
   'feature.deleted': {
     feature: Feature;

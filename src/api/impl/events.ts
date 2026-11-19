@@ -229,6 +229,7 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
   const readsChanges = (): boolean => hub.has('document.changed') || hub.subscribers().length > 0;
   const counts = watchChanges(store, {
     wanted: () => readsChanges() || hub.has('feature.moved') || hub.has('group.moved'),
+    deletedFeatures: () => hub.has('feature.deleted'),
     asksValues(change) {
       const asking = hub.subscribers().filter((subscriber) => subscriber.asks(change));
       return asking.length > 0 ? asking : null;
@@ -383,6 +384,16 @@ function emitResourceEvents(
   const made = (): void => countWork(counts, 'objectsCreated');
 
   const { features, layers, groups } = changes;
+  const tellDeleted = (): void => {
+    if (!hub.has('feature.deleted')) return;
+    for (const feature of features?.deleted ?? []) {
+      made();
+      hub.emit('feature.deleted', { feature: feature as Feature, source, hasMoreParts });
+    }
+  };
+  // A change that replaces the whole document tells what it took out before what it writes
+  const reset = changes.reset === true;
+  if (reset) tellDeleted();
   if (hub.has('feature.created')) {
     for (const feature of features?.created ?? []) {
       made();
@@ -427,12 +438,7 @@ function emitResourceEvents(
       hub.emit('feature.moved', { feature, ...move, source, hasMoreParts });
     }
   }
-  if (hub.has('feature.deleted')) {
-    for (const feature of features?.deleted ?? []) {
-      made();
-      hub.emit('feature.deleted', { feature: feature as Feature, source, hasMoreParts });
-    }
-  }
+  if (!reset) tellDeleted();
 
   for (const layer of layers?.created ?? []) hub.emit('layer.created', { layer, source });
   for (const { layer, previous } of layers?.updated ?? []) {

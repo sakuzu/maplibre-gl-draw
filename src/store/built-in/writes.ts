@@ -693,6 +693,40 @@ export function storeWritesOf(
       return true;
     });
 
+  /**
+   * Every field rows hold: their geometry, their type, their place, their flags, every key of
+   * their attributes and every key of their style (the styles of the rows are read for their
+   * keys, each style object once)
+   */
+  const everyFieldOf = (refs: Int32Array): FeatureRowField[] => {
+    const fields: FeatureRowField[] = [
+      'geometry',
+      'type',
+      'parent',
+      'orderKey',
+      'visible',
+      'locked',
+    ];
+    for (const key of tables(() => document.rows.listKeys('properties', refs))) {
+      fields.push(`properties:${key}` as FeatureRowField);
+    }
+    const styles = tables(() => document.rows.readValues(refs, ['style'])).fields.get('style');
+    // Work of the values before alone
+    for (const list of [counts, changes.beforeCounts]) {
+      countWork(list, 'objectsCreated', 3);
+      countWork(list, 'rowsTouched', refs.length);
+    }
+    const seen = new Set<unknown>();
+    const keys = new Set<string>();
+    for (const style of styles ?? []) {
+      if (!isObject(style) || seen.has(style)) continue;
+      seen.add(style);
+      for (const key of Object.keys(style)) keys.add(key);
+    }
+    for (const key of keys) fields.push(`${STYLE_KEY_FIELD}${key}` as FeatureRowField);
+    return fields;
+  };
+
   const clear: Store['clear'] = () =>
     write(changes, 'clear', () => {
       // What there is now: the rows that are not deleted, by layer
@@ -714,9 +748,10 @@ export function storeWritesOf(
         }
         rows.set(layerId, refs);
       }
-      // The values before: the deletion of every row there is
+      // The values before: every field of every row there is, with its deletion, as the rows
+      // cannot be read once they are taken out (only for a listener that asked for them)
       if (readsValuesBefore(changes)) {
-        for (const refs of rows.values()) readValuesBefore(changes, refs, []);
+        for (const refs of rows.values()) readValuesBefore(changes, refs, everyFieldOf(refs));
       }
       addCleared(changes, {
         rows,

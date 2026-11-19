@@ -241,6 +241,11 @@ export interface ChangeWatch {
   /** Whether the features a change wrote are noted (the sets of IDs are made of them) */
   wanted(): boolean;
   /**
+   * Whether the features a change that replaces the whole document takes out are made (from
+   * the values the rows had before it): only while they are told one by one
+   */
+  deletedFeatures(): boolean;
+  /**
    * Asked before a transaction writes, once: anything but null makes the change carry the values
    * the rows had before it, and is carried with it (`ChangeSummary.askedBy`)
    */
@@ -281,6 +286,9 @@ export function watchChanges(
 
 /** The number of features the layer keeps made */
 const FEATURE_CACHE_LIMIT = 1_024;
+
+/** The prefix of the fields of the keys of the style of a row */
+const STYLE_FIELD = 'style:';
 
 /** The kind of an item of a layer: a row, or a group */
 const ROW_ITEM = 0;
@@ -2993,7 +3001,8 @@ export function createDocumentAccess(
         }
         return frozenFeature(now, patch as Partial<Feature>);
       };
-      for (const ref of deletedRefs) {
+      if (change.reset) takenOut(layerId, deletedRefs, before, change, notes, deleted);
+      for (const ref of change.reset ? [] : deletedRefs) {
         const id = tables.getRowId(ref);
         if (id === undefined) continue;
         if (notes) noteDeleted(notes, id);
@@ -3278,6 +3287,71 @@ export function createDocumentAccess(
       layerWrappers.clear();
       groupWrappers.clear();
     }
+    return out;
+  };
+
+  /**
+   * The features of a layer a change that replaces the whole document took out: their IDs are
+   * read only for the notes or for the features made, and the features are made, from the values
+   * the rows had before the change, only while they are told one by one (`deletedFeatures`)
+   */
+  const takenOut = (
+    layerId: string,
+    refs: Int32Array,
+    before: RowValues | undefined,
+    change: RowChange,
+    notes: Notes | undefined,
+    out: Feature[],
+  ): void => {
+    const make = watch?.deletedFeatures() === true;
+    if (refs.length === 0 || (!notes && !make)) return;
+    const ids = Array.from(refs, (ref) => tables.getRowId(ref));
+    if (notes) for (const id of ids) if (id !== undefined) noteDeleted(notes, id);
+    if (!make) return;
+    const made = before ? featuresBefore(layerId, before, change) : new Map<number, Feature>();
+    for (let i = 0; i < refs.length; i++) {
+      const id = ids[i];
+      if (id === undefined) continue;
+      const feature = made.get(refs[i]) ?? featureCache.get(id);
+      if (feature) out.push(feature);
+    }
+  };
+
+  /**
+   * The features of the rows of a layer as they were before a change, made from their values
+   * before (every field, as a change that replaces the whole document carries them), by row
+   */
+  const featuresBefore = (
+    layerId: string,
+    before: RowValues,
+    change: RowChange,
+  ): Map<number, Feature> => {
+    let values = before;
+    // The style of each row, from the keys of its style
+    if (!values.fields.has('style')) {
+      const keys = [...values.fields.keys()].filter((field) => field.startsWith(STYLE_FIELD));
+      const styles = Array.from(values.rows, (_, i) => {
+        const style: Record<string, unknown> = {};
+        for (const field of keys) {
+          const value = values.fields.get(field)?.[i];
+          if (value !== undefined) style[field.slice(STYLE_FIELD.length)] = value;
+        }
+        return style;
+      });
+      values = { ...values, fields: new Map(values.fields).set('style', styles) };
+    }
+    const ids = Array.from(values.rows, (ref) => tables.getRowId(ref) ?? '');
+    // The groups taken out with them, or written again by the change
+    const groups = new Map((change.groups?.deleted ?? []).map((group) => [group.id, group]));
+    const features = featuresOfValues(values, ids, (parent) => {
+      const id = String(parent);
+      if (id === layerId) return { layerId, groupId: undefined };
+      const group = groups.get(id) ?? store.getGroup(id);
+      return group ? { layerId: group.layerId, groupId: id } : { layerId, groupId: undefined };
+    });
+    countWork(counts, 'objectsCreated', features.length);
+    const out = new Map<number, Feature>();
+    for (let i = 0; i < features.length; i++) out.set(values.rows[i], features[i]);
     return out;
   };
 
