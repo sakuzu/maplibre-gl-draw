@@ -49,9 +49,7 @@
       "src/api/impl/document.ts",
       "src/api/impl/import-export/**",
       "src/api/extension/store.ts",
-      "src/store/store.ts",
       "src/store/types.ts",
-      "src/store/memory.ts",
       "src/store/memory/**",
       "examples/save-and-load/**"
     ],

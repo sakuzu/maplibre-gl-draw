@@ -175,14 +175,6 @@ beforeEach(() => {
       'l1',
     ),
   );
-  store.createFeature(
-    feature(
-      'collection',
-      { type: 'GeometryCollection', geometries: [{ type: 'Point', coordinates: [0, 0] }] },
-      { type: 'Point' },
-      'l1',
-    ),
-  );
   store.createGroup({
     id: 'g1',
     layerId: 'l1',
@@ -515,7 +507,15 @@ describe('featuresToGeoJSON and featureToGeoJSON', () => {
     doc.toGeoJSON().features.map((f) => store.getFeature(String(f.id)) as Feature);
 
   it('write the same text as document.toGeoJSON for the same features', () => {
-    const features = [...inExportOrder(), store.getFeature('collection') as Feature];
+    const features = [
+      ...inExportOrder(),
+      feature(
+        'collection',
+        { type: 'GeometryCollection', geometries: [{ type: 'Point', coordinates: [0, 0] }] },
+        { type: 'Point' },
+        'l1',
+      ),
+    ];
     const getFile = (id: string) => store.getFile(id);
     expect(JSON.stringify(featuresToGeoJSON(features, { getFile }), null, 2)).toBe(
       JSON.stringify(doc.toGeoJSON(), null, 2),

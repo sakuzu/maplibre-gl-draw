@@ -88,10 +88,10 @@ export class IntermediateWrites {
    * ends without being committed. Each feature gets the fields it had when the drag started
    * written back as a last intermediate update, and the discard is then announced with
    * abortIntermediateUpdates. A store that applies intermediate updates to the real data
-   * (MemoryStore) is back at the start by the restore; one that holds them apart drops them on
-   * the discard. A feature that something else changed during the drag (a change from
-   * outside) no longer holds what the drag wrote, and is left as it is. Once committed (after
-   * commit) the record is empty, so nothing happens.
+   * (the layer over the built-in Store) is back at the start by the restore; one that holds them
+   * apart drops them on the discard. A feature that something else changed during the drag (a
+   * change from outside) no longer holds what the drag wrote, and is left as it is. Once
+   * committed (after commit) the record is empty, so nothing happens.
    */
   discard(store?: DragStore): void {
     if (this.pending.size === 0) {

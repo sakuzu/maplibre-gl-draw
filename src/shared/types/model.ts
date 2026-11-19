@@ -606,9 +606,9 @@ export interface UpdateFeatureOptions {
    *
    * An intermediate state is always overwritten by the committing update that follows
    * (the one without options).
-   * MemoryStore ignores it and applies the update as usual, and passes it through to
-   * isIntermediate of StoreChange.features.updated. An external store can look at this
-   * flag to decide whether to keep the update or to hold it apart until the commit.
+   * The layer over the built-in Store ignores it and applies the update as usual, and passes it
+   * through to isIntermediate of StoreChange.features.updated. An external store can look at
+   * this flag to decide whether to keep the update or to hold it apart until the commit.
    */
   isIntermediate?: boolean;
 }

@@ -130,8 +130,10 @@ describe('isInteractionBlocked', () => {
 });
 
 describe('isGroupLocked', () => {
-  const findLayerOfGroup = (store: InstanceDocument) => (groupId: string) =>
-    store.listLayers().find((l) => l.items.includes(groupId));
+  const findLayerOfGroup = (store: InstanceDocument) => (groupId: string) => {
+    const group = store.getGroup(groupId);
+    return group === undefined ? undefined : store.getLayer(group.layerId);
+  };
 
   it('is true if the group itself is locked', () => {
     const store = makeStore();
@@ -148,7 +150,6 @@ describe('isGroupLocked', () => {
 
   it('is true if the layer it belongs to is locked', () => {
     const store = makeStore();
-    store.updateLayer('lLocked', { items: ['g1'] });
     const group: Group = {
       id: 'g1',
       layerId: 'lLocked',
@@ -157,12 +158,12 @@ describe('isGroupLocked', () => {
       locked: false,
       visible: true,
     };
+    store.createGroup(group);
     expect(isGroupLocked(group, findLayerOfGroup(store))).toBe(true);
   });
 
   it('is false if neither the group nor the layer is locked', () => {
     const store = makeStore();
-    store.updateLayer('l1', { items: ['g1'] });
     const group: Group = {
       id: 'g1',
       layerId: 'l1',
@@ -171,6 +172,7 @@ describe('isGroupLocked', () => {
       locked: false,
       visible: true,
     };
+    store.createGroup(group);
     expect(isGroupLocked(group, findLayerOfGroup(store))).toBe(false);
   });
 });

@@ -1815,6 +1815,8 @@ export function createDocumentAccess(
         mergeDocument({ features: { created: [stored] } });
         if (stored.groupId !== undefined) {
           bumpGroup(container);
+          // The layer lists the group once it holds a feature
+          bumpLayer(stored.layerId);
           if (!listed) groupOrderChanged(container, before as Group | undefined);
         } else {
           bumpLayer(container);
@@ -1929,6 +1931,8 @@ export function createDocumentAccess(
     if (containerChanged) {
       // Out of the order of the container it left
       if (previous.groupId !== undefined) {
+        // The layer no longer lists a group left empty
+        bumpLayer(previous.layerId);
         if (store.getGroup(previous.groupId)) {
           bumpGroup(previous.groupId);
           if (isListed(id)) {
@@ -1942,6 +1946,8 @@ export function createDocumentAccess(
         bumpLayer(previous.layerId);
       }
       if (updated.groupId !== undefined) {
+        // The layer lists the group once it holds a feature
+        bumpLayer(updated.layerId);
         if (store.getGroup(updated.groupId)) {
           bumpGroup(updated.groupId);
           if (!listings.has(id) && isListed(id)) groupOrderChanged(updated.groupId, targetBefore);

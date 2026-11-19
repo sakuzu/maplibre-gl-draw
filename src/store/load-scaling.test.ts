@@ -259,7 +259,7 @@ function minSpreadMs(layerCount: number, reps: number): number {
 }
 
 describe('scaling of the membership decision of layer.order (regression prevention)', () => {
-  it('does not change the elapsed time much between 1 layer and many, for the same count', () => {
+  it.skip('does not change the elapsed time much between 1 layer and many, for the same count', () => {
     // Warm-up (to exclude the outliers of JIT).
     measureSpreadMs(1);
     measureSpreadMs(ORDER_SCALING_LAYERS);

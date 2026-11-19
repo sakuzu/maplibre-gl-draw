@@ -506,13 +506,23 @@ describe('document.loadMany store contents', () => {
     // The generated ids are written as their order of appearance, so that the contents compare
     // whatever the order in which the ids were taken
     const generated = new Map<string, string>();
+    const loaded = [first, ...(results ?? [])];
+    // The features in the order they were made (the layer lists them in stacking order)
+    const featureIds = loaded.flatMap((result) => result?.featureIds ?? []);
+    expect(featureIds.length).toBe(store.countFeatures());
     const contents = JSON.stringify(
       {
-        results: [first, ...(results ?? [])],
-        layers: store.listLayers(),
+        results: loaded,
+        layers: store.listLayers().map((layer) => ({
+          ...layer,
+          items: store.listItemIds(layer.id, 0, store.countItems(layer.id)),
+        })),
         layerOrder: store.getLayerOrder(),
-        groups: store.listGroups(),
-        features: store.listFeatures(),
+        groups: store.listGroups().map((group) => ({
+          ...group,
+          featureIds: store.listGroupFeatureIds(group.id, 0, store.countGroupFeatures(group.id)),
+        })),
+        features: featureIds.map((id) => store.getFeature(id)),
         files: store.listFiles(),
       },
       (_key, value: unknown) => {
@@ -524,7 +534,9 @@ describe('document.loadMany store contents', () => {
       },
       1,
     );
-    expect(contents).toMatchInlineSnapshot(`
+    // The text pinned before, compared as a JSON value (the keys of a feature come in another
+    // order)
+    const pinned = `
       "{
        "results": [
         {
@@ -1120,6 +1132,7 @@ describe('document.loadMany store contents', () => {
         }
        ]
       }"
-    `);
+    `;
+    expect(JSON.parse(contents)).toEqual(JSON.parse(pinned.trim().slice(1, -1)));
   });
 });

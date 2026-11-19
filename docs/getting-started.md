@@ -159,11 +159,9 @@ everything that changed together.
 
 ```ts
 draw.on('document.changed', ({ features, source }) => {
-  if (!features) return;
-  const { created = [], updated = [], deleted = [] } = features;
   console.log(
-    `${created.length} created, ${updated.length} updated,`,
-    `${deleted.length} deleted (${source})`,
+    `${features.created.count()} created, ${features.updated.count()} updated,`,
+    `${features.deleted.count()} deleted (${source})`,
   );
 });
 ```

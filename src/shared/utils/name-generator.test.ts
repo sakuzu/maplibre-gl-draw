@@ -19,18 +19,30 @@ import { AutoNameGenerator, normalizeAutoNameConfig } from './name-generator.js'
 let store: InstanceDocument;
 let idSeq: number;
 
-function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Feature {
-  const feature: Feature = {
+function featureOf(type: FeatureType, name?: string, layerId = 'l1'): Feature {
+  return {
     groupId: undefined,
     id: `f-${++idSeq}`,
     type,
-    geometry: geometryFromCoordinates(type, [0, 0]),
+    geometry: geometryFromCoordinates(
+      type,
+      type === 'LineString'
+        ? [
+            [0, 0],
+            [1, 1],
+          ]
+        : [0, 0],
+    ),
     layerId,
     properties: name === undefined ? {} : { name },
     locked: false,
     visible: true,
     style: {},
   };
+}
+
+function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Feature {
+  const feature = featureOf(type, name, layerId);
   store.createFeature(feature);
   return feature;
 }
@@ -373,9 +385,9 @@ describe('a Store that knows numbers beyond what it lists', () => {
 
 describe('the computational cost of AutoNameGenerator', () => {
   it('does not scan everything on every generation', () => {
-    for (let i = 0; i < 10_000; i++) {
-      createFeature('Point', `Point ${i + 1}`);
-    }
+    store.createFeatures(
+      Array.from({ length: 10_000 }, (_, i) => featureOf('Point', `Point ${i + 1}`)),
+    );
 
     const generator = new AutoNameGenerator(store);
     const spy = vi.spyOn(store, 'listFeatures');

@@ -904,7 +904,7 @@ describe('a Store that replaces its whole document', () => {
     );
     const layer = other.layers.list()[0];
     other.layers.update(layer.id, { name: 'renamed' });
-    expect(changes[2].reset).toBeUndefined();
+    expect(changes[2].reset).toBe(false);
     other.destroy();
   });
 });
