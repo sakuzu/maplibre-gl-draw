@@ -774,7 +774,7 @@ describe('the examples', () => {
     expect(await featureCount(page)).toBe(city.total);
     const byType = await page.evaluate(() => {
       const types: Record<string, number> = {};
-      for (const feature of (window as unknown as E2EWindow).draw.features.list()) {
+      for (const feature of (window as unknown as E2EWindow).draw.features.iterate()) {
         types[feature.type] = (types[feature.type] ?? 0) + 1;
       }
       return types;
@@ -813,14 +813,13 @@ describe('the examples', () => {
     const target = await page.evaluate(() => {
       const { draw, map } = window as unknown as E2EWindow;
       const middle = { x: map.getCanvas().clientWidth / 2, y: map.getCanvas().clientHeight / 2 };
-      const places = draw.features
-        .list()
+      const places = [...draw.features.iterate()]
         .filter((feature) => feature.type === 'Point')
         .map((feature) =>
           map.project((feature.geometry as GeoJSON.Point).coordinates as [number, number]),
         );
       let best: { id: string; center: [number, number]; distance: number } | null = null;
-      for (const feature of draw.features.list()) {
+      for (const feature of draw.features.iterate()) {
         if (feature.properties?.use !== 'House') continue;
         const [ring] = (feature.geometry as GeoJSON.Polygon).coordinates;
         const center: [number, number] = [
