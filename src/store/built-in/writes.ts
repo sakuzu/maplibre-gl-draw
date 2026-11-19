@@ -28,11 +28,14 @@
  * before it writes them (`values-before.ts`); while a listener keeps the deleted rows, each write
  * gives the token of the tables of its transaction, and marks the rows it deleted and brought back
  * (`kept-rows.ts`). A deleted row is written only when something keeps it, and only to bring it
- * back (`deleted` 0); its id stays in use while it is kept.
+ * back (`deleted` 0); its id stays in use while a change told keeps it.
  *
- * The ids of the deleted rows nothing keeps are forgotten once the change of the transaction has
- * been told (see `changes.ts`): until then, `createRows` takes such an id with the reference of the
- * row, and afterwards a new row, or a row of a page, takes it with a new reference.
+ * A row the transaction open deleted is kept by nothing yet, whatever the listeners asked for:
+ * `createRows` takes its id with the reference of the row, in the parent given, with the values
+ * given alone (the fields it held and the write does not give take the values of a new row). The
+ * ids of the deleted rows nothing keeps are forgotten once the change of the transaction has been
+ * told (see `changes.ts`), and afterwards a new row, or a row of a page, takes such an id with a
+ * new reference.
  *
  * @internal
  */
@@ -67,7 +70,14 @@ import {
 } from './changes.js';
 import { dimensionsOfPositions, positionsOf, type StoreDocument } from './document.js';
 import { readRowValues } from './feature-tables.js';
-import { forgetKept, isKept, type ReleaseTablesToken, releaseToken } from './kept-rows.js';
+import {
+  forgetKept,
+  isKept,
+  isKeptByChangeTold,
+  markCreatedAgain,
+  type ReleaseTablesToken,
+  releaseToken,
+} from './kept-rows.js';
 import { createRowsFromPagesOf } from './page-writes.js';
 import { shapeValuesOf } from './shape-values.js';
 import type {
@@ -331,7 +341,7 @@ export function storeWritesOf(
   // included, with their deletion
   changes.readBefore = (rows, fields) =>
     tables(() =>
-      readRowValues(document, rows, fields, { deleted: true, unkept: true }, [
+      readRowValues(document, rows, fields, { deleted: true, unkept: true, anyLayer: true }, [
         counts,
         changes.beforeCounts,
       ]),
@@ -481,6 +491,30 @@ export function storeWritesOf(
     addRows(changes, written.rows);
   };
 
+  /**
+   * The fields of a write of new rows with the fields rows that come back held and the write does
+   * not give, written with the values of a new row: visible, not locked, the style `{}`, and no
+   * attribute of theirs (the keys of the style written alone build on no style)
+   */
+  const withValuesOfNewRows = (
+    fields: ReadonlyMap<FeatureRowField, readonly unknown[]>,
+    again: Int32Array,
+    length: number,
+  ): ReadonlyMap<FeatureRowField, readonly unknown[]> => {
+    const out = new Map(fields);
+    const fill = (field: FeatureRowField, value: unknown): void => {
+      if (!out.has(field)) out.set(field, new Array<unknown>(length).fill(value));
+    };
+    fill('visible', true);
+    fill('locked', false);
+    if (styleKeysOf(fields).length === 0) fill('style', NO_STYLE);
+    for (const key of tables(() => document.rows.listKeys('properties', again))) {
+      fill(`properties:${key}` as FeatureRowField, undefined);
+    }
+    countWork(counts, 'objectsCreated', 2);
+    return out;
+  };
+
   const createRows: Store['createRows'] = (rows) =>
     write(changes, 'createRows', () => {
       const what = 'createRows';
@@ -516,26 +550,37 @@ export function storeWritesOf(
       const seen = new Set<string>();
       /** The ids the tables hold already (those of deleted rows nothing keeps), by their places */
       let found: Uint8Array | undefined;
+      /** The references of those rows */
+      const again: number[] = [];
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i];
         if (seen.has(id) || document.groups.has(id)) return false;
         const row = tables(() => rowWrites.lookup(id));
-        if (row && (!row.deleted || isKept(kept, row.row))) return false;
+        // A row kept by a change told is in use; one the transaction open deleted comes back
+        if (row && (!row.deleted || isKeptByChangeTold(kept, row.row, tablesTokenOf(changes)))) {
+          return false;
+        }
         // The id of a deleted row nothing keeps whose id is not forgotten yet: a row the
         // transaction deleted, or one a clear of its operation took out (it keeps its reference)
         if (row) {
           found ??= new Uint8Array(ids.length);
           found[i] = 1;
+          again.push(row.row);
         }
         seen.add(id);
       }
       countWork(counts, 'objectsCreated');
       const column = idColumnOf(ids);
       countWork(counts, 'objectsCreated', 3);
+      // A row that comes back holds the values given alone: the fields it held that are not given
+      // are written with the values of a new row, so that the change names them
+      const written =
+        again.length > 0 ? withValuesOfNewRows(fields, Int32Array.from(again), ids.length) : fields;
       const refs = tables(() => rowWrites.allocateRowRefs(column));
-      if (found) readValuesBefore(changes, refs, fieldsWritten(fields, geometry as GeometryColumn));
+      if (found)
+        readValuesBefore(changes, refs, fieldsWritten(written, geometry as GeometryColumn));
       try {
-        writeTables(refs, fields, geometry as GeometryColumn, layerId, undefined, true);
+        writeTables(refs, written, geometry as GeometryColumn, layerId, undefined, true);
       } catch (error) {
         // The ids given new references are taken out again: nothing was created
         let fresh = refs;
@@ -545,6 +590,13 @@ export function storeWritesOf(
         }
         tables(() => rowWrites.forgetIds(fresh));
         throw error;
+      }
+      if (found) {
+        const again = found;
+        markCreatedAgain(
+          kept,
+          refs.filter((_, i) => again[i] === 1),
+        );
       }
       return true;
     });

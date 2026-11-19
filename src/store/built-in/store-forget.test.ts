@@ -317,6 +317,186 @@ describe.each(STORES)('%s', (_name, make) => {
     });
   });
 
+  describe.each([
+    ['without a listener that keeps the deleted rows', false],
+    ['with a listener that keeps the deleted rows', true],
+  ])('the id of a row the transaction open deleted, %s', (_keeping, keep) => {
+    /** The rows q of the layer `a` written again by createRows, in the parent given */
+    const again = (parent: string): NewRows => ({
+      ids: ['q'],
+      fields: new Map<FeatureRowField, readonly unknown[]>([
+        ['type', ['LineString']],
+        ['parent', [parent]],
+        ['orderKey', ['k9']],
+        ['properties:kind', ['new']],
+      ]),
+      geometry: {
+        types: Uint8Array.of(1),
+        coordinates: Float64Array.of(1, 1, 2, 2),
+        valuesPerPosition: 2,
+        partStarts: Int32Array.of(0, 1),
+        ringStarts: Int32Array.of(0, 1),
+        positionStarts: Int32Array.of(0, 2),
+      },
+    });
+    /** A Store with p, q and r in `a`, q styled and hidden, and a listener of its changes */
+    const setUp = (make: () => Store) => {
+      const store = withRows(make);
+      const q = refOf(store, 'q');
+      store.writeRows({
+        rows: Int32Array.of(q),
+        fields: new Map<FeatureRowField, readonly unknown[]>([
+          ['style', [{ strokeColor: '#f00' }]],
+          ['visible', [false]],
+        ]),
+      });
+      const changes = record(store, { keepDeletedRows: keep, previousValues: true });
+      return { store, q, changes };
+    };
+
+    it('is taken by createRows, with its reference, told as updated, with the values given alone', () => {
+      const { store, q, changes } = setUp(make);
+      store.transact(() => {
+        remove(store, q);
+        expect(store.createRows(again('a'))).toBe(true);
+      }, 'remote');
+      expect(refOf(store, 'q')).toBe(q);
+      const rows = changes[0].rows?.layers.get('a');
+      expect([...(rows?.updated ?? [])]).toEqual([q]);
+      expect([...(rows?.created ?? [])]).toEqual([]);
+      expect([...(rows?.deleted ?? [])]).toEqual([]);
+      const values = store.tables.readValues(Int32Array.of(q), [
+        'type',
+        'visible',
+        'style',
+        'properties:name',
+        'properties:kind',
+      ]);
+      expect(Object.fromEntries(values.fields)).toEqual({
+        type: ['LineString'],
+        visible: [true],
+        style: [{}],
+        'properties:name': [undefined],
+        'properties:kind': ['new'],
+      });
+      expect(store.listPropertyKeys(Int32Array.of(q))).toEqual(['kind']);
+      // The values before are those it had before the transaction
+      const before = changes[0].previousValues?.get('a');
+      const at = [...(before?.rows ?? [])].indexOf(q);
+      expect(before?.fields.get('type')?.[at]).toBe('Point');
+      expect(before?.fields.get('visible')?.[at]).toBe(false);
+      expect(before?.fields.get('style')?.[at]).toEqual({ strokeColor: '#f00' });
+      expect(before?.fields.get('properties:name')?.[at]).toBe('Q');
+      for (const field of ['visible', 'style', 'properties:name', 'properties:kind'] as const) {
+        expect(rows?.fields.has(field)).toBe(true);
+      }
+    });
+
+    it('comes back in another layer and in a group', () => {
+      const { store, q, changes } = setUp(make);
+      store.createLayer(layer('b'));
+      store.createGroup({
+        id: 'g',
+        name: 'g',
+        layerId: 'b',
+        visible: true,
+        locked: false,
+        orderKey: 'k0',
+      });
+      const told = changes.length;
+      store.transact(() => {
+        remove(store, q);
+        expect(store.createRows(again('b'))).toBe(true);
+      }, 'remote');
+      expect(refOf(store, 'q')).toBe(q);
+      expect(store.tables.get('b')?.rowCount).toBe(1);
+      expect(idsOf(store).sort()).toEqual(['p', 'r']);
+      expect([...(changes[told].rows?.layers.get('b')?.updated ?? [])]).toEqual([q]);
+      store.transact(() => {
+        remove(store, q);
+        expect(store.createRows(again('g'))).toBe(true);
+      }, 'remote');
+      expect(refOf(store, 'q')).toBe(q);
+      const view = store.tables.get('b');
+      const group = store.tables.findGroup('g') as number;
+      expect([...(view?.listGroupMembers(group, 0, 1) ?? [])]).toEqual([q]);
+    });
+
+    it('comes back elsewhere once the group and the layer it was in are deleted', () => {
+      const { store } = setUp(make);
+      store.createLayer(layer('b'));
+      store.createGroup({
+        id: 'g',
+        name: 'g',
+        layerId: 'b',
+        visible: true,
+        locked: false,
+        orderKey: 'k0',
+      });
+      store.createRows({ ...again('g'), ids: ['s'] });
+      const s = refOf(store, 's');
+      store.transact(() => {
+        remove(store, s);
+        expect(store.deleteGroup('g')).toBe(true);
+        expect(store.createRows({ ...again('a'), ids: ['s'] })).toBe(true);
+      }, 'remote');
+      expect(refOf(store, 's')).toBe(s);
+      expect(idsOf(store).sort()).toEqual(['p', 'q', 'r', 's']);
+      store.createRows({ ...again('b'), ids: ['t'] });
+      // A member of a group of the layer as well: the rows the layer takes with it have two parents
+      store.createGroup({
+        id: 'h',
+        name: 'h',
+        layerId: 'b',
+        visible: true,
+        locked: false,
+        orderKey: 'k1',
+      });
+      store.createRows({ ...again('h'), ids: ['u'] });
+      const t = refOf(store, 't');
+      store.transact(() => {
+        remove(store, t);
+        expect(store.deleteLayer('b')).toBe(true);
+        expect(store.createRows({ ...again('a'), ids: ['t'] })).toBe(true);
+      }, 'remote');
+      expect(refOf(store, 't')).toBe(t);
+      expect(idsOf(store).sort()).toEqual(['p', 'q', 'r', 's', 't']);
+    });
+
+    it('is not kept by the token of the change, which keeps the other rows it deleted', () => {
+      const { store, q, changes } = setUp(make);
+      const r = refOf(store, 'r');
+      store.transact(() => {
+        remove(store, q, r);
+        expect(store.createRows(again('a'))).toBe(true);
+      }, 'remote');
+      const token = changes[0].deletedRowsToken;
+      expect([...(changes[0].rows?.layers.get('a')?.deleted ?? [])]).toEqual([r]);
+      if (keep) {
+        expect(token).toBeDefined();
+        expect(store.tables.findRow('r')).toEqual({ ref: r, deleted: true });
+      } else {
+        expect(token).toBeUndefined();
+        expect(store.tables.findRow('r')).toBeUndefined();
+      }
+      expect(store.tables.findRow('q')).toEqual({ ref: q, deleted: false });
+      if (token !== undefined) store.releaseDeletedRows(token);
+      expect(store.tables.findRow('q')).toEqual({ ref: q, deleted: false });
+    });
+
+    it('is kept as before once the transaction that deleted it has ended', () => {
+      const { store, q, changes } = setUp(make);
+      remove(store, q);
+      if (keep) {
+        expect(store.createRows(again('a'))).toBe(false);
+        const token = changes[0].deletedRowsToken as NonNullable<StoreChange['deletedRowsToken']>;
+        store.releaseDeletedRows(token);
+      }
+      expect(store.createRows(again('a'))).toBe(true);
+      expect(refOf(store, 'q')).not.toBe(q);
+    });
+  });
+
   describe('the rows a clear takes out', () => {
     it('keep their references when their ids come back in the operation, and are free after it', () => {
       const store = withRows(make);

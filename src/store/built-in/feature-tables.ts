@@ -104,6 +104,12 @@ export interface ReadRowsOptions {
    * transaction (it is not there otherwise)
    */
   readonly unkept?: boolean;
+  /**
+   * Whether the rows may be in more than one layer, for the values before of a transaction: the
+   * rows its writes read, whose layers it may have moved them out of or deleted. The geometries
+   * are read with the values per position the tables hold them with
+   */
+  readonly anyLayer?: boolean;
 }
 
 /**
@@ -158,7 +164,7 @@ export function readRowValues(
 
   // The rows are those of one layer
   let layerId: string | undefined;
-  const parents = found.fields.get('parent') ?? [];
+  const parents = options.anyLayer ? [] : (found.fields.get('parent') ?? []);
   for (let i = 0; i < parents.length; i++) {
     const layer = layerOfParent(document, parents[i]);
     if (layer === undefined) continue;
@@ -190,8 +196,11 @@ export function readRowValues(
       out.set(field, found.fields.get(PLAIN_FIELDS.get(field) ?? field) ?? []);
     }
   }
-  const valuesPerPosition =
-    layerId === undefined ? 2 : positionsOf(document, layerId).valuesPerPosition;
+  const valuesPerPosition = options.anyLayer
+    ? (shapes?.dimensions.length ?? 2)
+    : layerId === undefined
+      ? 2
+      : positionsOf(document, layerId).valuesPerPosition;
   const values: RowValues = {
     rows: found.rows,
     fields: out,

@@ -81,6 +81,30 @@ export function isKept(kept: KeptRows, row: RowRef): boolean {
 }
 
 /**
+ * Whether a deleted row is kept by a change told: a token keeps the rows of a change from the
+ * time it is told, so a row the transaction open deleted (marked with its token of the tables) is
+ * not kept yet, whatever the listeners asked for
+ *
+ * @param open - The token of the tables of the transaction open (undefined outside one, or when no
+ *   listener keeps the rows)
+ * @internal
+ */
+export function isKeptByChangeTold(kept: KeptRows, row: RowRef, open: number | undefined): boolean {
+  const tablesToken = kept.keptBy.get(row);
+  return tablesToken !== undefined && tablesToken !== open;
+}
+
+/**
+ * Marks that rows a write created took again the references of rows the transaction open
+ * deleted: they are not kept any more
+ *
+ * @internal
+ */
+export function markCreatedAgain(kept: KeptRows, rows: Int32Array): void {
+  for (let i = 0; i < rows.length; i++) kept.keptBy.delete(rows[i]);
+}
+
+/**
  * Marks what a write of rows did to the rows it kept: a row written not deleted is not kept any
  * more, and a row deleted is kept by the token of the tables the write gave (when it gave one)
  *
