@@ -1736,6 +1736,36 @@ export function createDocumentAccess(
   };
 
   /**
+   * Whether a key is that of an end of a container, as the keys of its ends are kept: true for a
+   * key that is not known (undefined), false for a container whose ends are not kept
+   */
+  const isEndKey = (container: string, key: string | undefined): boolean => {
+    const known = endKeys.get(container);
+    if (!known) return false;
+    return key === undefined || key === known.front || key === known.back;
+  };
+
+  /**
+   * Whether the rows of a layer a change written to the Store directly deleted leave the ends
+   * kept where they are: each is read from its values before the change (its container and its
+   * key), and none is an end of its container
+   */
+  const deletedAwayFromEnds = (rows: Int32Array, before: RowValues | undefined): boolean => {
+    const parents = before?.fields.get('parent');
+    const keys = before?.fields.get('orderKey');
+    if (!before || !parents || !keys) return false;
+    const at = new Map<number, number>();
+    for (let i = 0; i < before.rows.length; i++) at.set(before.rows[i], i);
+    for (const ref of rows) {
+      const i = at.get(ref);
+      const key = i === undefined ? undefined : keys[i];
+      if (i === undefined || typeof key !== 'string') return false;
+      if (isEndKey(String(parents[i]), key)) return false;
+    }
+    return true;
+  };
+
+  /**
    * Forgets the keys of the ends, and the positions of the orders written, that a change written
    * to the Store directly may have moved
    */
@@ -1745,12 +1775,18 @@ export function createDocumentAccess(
       return;
     }
     for (const [layerId, rows] of change.rows?.layers ?? []) {
+      const deleted = rows.deleted.filter((ref) => !ownRows.has(ref));
       const moved =
         rows.created.some((ref) => !ownRows.has(ref)) ||
-        rows.deleted.some((ref) => !ownRows.has(ref)) ||
         ((rows.fields.has('parent') || rows.fields.has('orderKey')) &&
           rows.updated.some((ref) => !ownRows.has(ref)));
-      if (!moved) continue;
+      if (!moved && deleted.length > 0) {
+        // The positions of the orders written are read again; the ends only when one went
+        placeVersion += 1;
+        if (deletedAwayFromEnds(deleted, change.previousValues?.get(layerId))) continue;
+      } else if (!moved) {
+        continue;
+      }
       placeVersion += 1;
       for (const container of [...endKeys.keys()]) {
         if (container === layerId) endKeys.delete(container);
@@ -2289,12 +2325,14 @@ export function createDocumentAccess(
     noteOrderBefore(container);
     const layerBefore = getLayer(feature.layerId);
     const groupBefore = feature.groupId !== undefined ? getGroup(feature.groupId) : undefined;
+    // The ends of its container move only when it is one of them
+    const atEnd = isEndKey(container, endKeys.has(container) ? rowKeyOf(ref) : undefined);
     stored(
       store.writeRows({ rows: Int32Array.of(ref), fields: new Map(), deleted: Uint8Array.of(1) }),
     );
     ownRows.add(ref);
     wrote();
-    endKeys.delete(container);
+    if (atEnd) endKeys.delete(container);
     featureCache.delete(id);
     if (feature.groupId === undefined) {
       if (isListed(id)) layerOrderChanged(feature.layerId, layerBefore);
