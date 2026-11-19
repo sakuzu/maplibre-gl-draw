@@ -231,7 +231,8 @@ parts, into another store, or after it has placed them. They are the
 counterpart of `featuresToGeoJSON`.
 
 ```ts
-import { parseGeoJSON, type Store } from '@sakuzu/maplibre-gl-draw';
+import { parseGeoJSON } from '@sakuzu/maplibre-gl-draw';
+import type { Store } from '@sakuzu/maplibre-gl-draw/store';
 
 declare const geojson: GeoJSON.FeatureCollection;
 declare const store: Store; // the Store given to createDraw, which keeps the files
@@ -448,7 +449,8 @@ declare function createServerStore(): Store;
 -->
 
 ```ts
-import { createDraw, type Store } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Store } from '@sakuzu/maplibre-gl-draw/store';
 
 // Your implementation of the Store contract
 const store: Store = createServerStore();
@@ -469,8 +471,8 @@ layers and the `layerId` of the groups kept in step, one notification
 per outermost transaction, a document taken from elsewhere delivered as
 one `DocumentChange` with `reset: true`, and writes that return whether
 they were applied. They are written in full on
-[`Store`](../api/maplibre-gl-draw/interfaces/Store.md) and
-[`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md).
+[`Store`](../api/maplibre-gl-draw/store/interfaces/Store.md) and
+[`StoreView`](../api/maplibre-gl-draw/store/interfaces/StoreView.md).
 
 The automatic names ("Point 3", "Layer 2") are numbered from the names
 the store lists, and a number is never used twice. A store that holds
@@ -518,8 +520,8 @@ your own, so that the listener can leave it out by that source.
 - [`isDrawProperty`](../api/maplibre-gl-draw/functions/isDrawProperty.md)
   and
   [`DrawProperties`](../api/maplibre-gl-draw/type-aliases/DrawProperties.md)
-- [`Store`](../api/maplibre-gl-draw/interfaces/Store.md),
-  [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md) and
+- [`Store`](../api/maplibre-gl-draw/store/interfaces/Store.md),
+  [`StoreView`](../api/maplibre-gl-draw/store/interfaces/StoreView.md) and
   [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)
 - [Data format](../reference/data-format.md) and
   [Events](../reference/events.md)

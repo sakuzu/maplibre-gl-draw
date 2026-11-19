@@ -232,7 +232,8 @@ await draw.document.loadMany([
 `featuresToGeoJSON` と対になる関数です。
 
 ```ts
-import { parseGeoJSON, type Store } from '@sakuzu/maplibre-gl-draw';
+import { parseGeoJSON } from '@sakuzu/maplibre-gl-draw';
+import type { Store } from '@sakuzu/maplibre-gl-draw/store';
 
 declare const geojson: GeoJSON.FeatureCollection;
 declare const store: Store; // createDraw に渡した Store。ファイルはここに置く
@@ -448,7 +449,8 @@ declare function createServerStore(): Store;
 -->
 
 ```ts
-import { createDraw, type Store } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Store } from '@sakuzu/maplibre-gl-draw/store';
 
 // Store の約束を満たす自前の実装
 const store: Store = createServerStore();
@@ -468,8 +470,8 @@ const draw = createDraw(map, { store });
 外側の取引ごとに 1 回通知すること、別の場所から受け取った文書を
 `reset: true` の 1 つの `DocumentChange` で届けること、書き込みが
 当てはまったかどうかを返すことです。約束のすべては
-[`Store`](../api/maplibre-gl-draw/interfaces/Store.md) と
-[`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md) に
+[`Store`](../api/maplibre-gl-draw/store/interfaces/Store.md) と
+[`StoreView`](../api/maplibre-gl-draw/store/interfaces/StoreView.md) に
 書いてあります。
 
 自動の名前 ("Point 3"、"Layer 2") の番号は、ストアが返す名前から数え、
@@ -516,8 +518,8 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 - [`isDrawProperty`](../api/maplibre-gl-draw/functions/isDrawProperty.md)
   と
   [`DrawProperties`](../api/maplibre-gl-draw/type-aliases/DrawProperties.md)
-- [`Store`](../api/maplibre-gl-draw/interfaces/Store.md)、
-  [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md)、
+- [`Store`](../api/maplibre-gl-draw/store/interfaces/Store.md)、
+  [`StoreView`](../api/maplibre-gl-draw/store/interfaces/StoreView.md)、
   [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)
 - [データ形式](../reference/data-format.md) と
   [イベント](../reference/events.md)

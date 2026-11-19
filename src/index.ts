@@ -164,7 +164,7 @@ export type {
 } from './api/datasets.js';
 
 // Store
-export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
+export type { UpdateSource } from './api/extension/store.js';
 
 // Extensions
 export type {

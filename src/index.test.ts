@@ -151,8 +151,6 @@ const MAIN = [
   'SnapPreference',
   'SnapProvider',
   'SnapResult',
-  'Store',
-  'StoreView',
   'StyleRule',
   'TerrainAnchors',
   'TerrainDiagnostics',

@@ -330,49 +330,6 @@
     "103": {
       "main:added:featureValuesBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "104": {
-      "main:removed:Store": "50a51512bbd1a50ba8a6670784bd70e2c374813bea9ff39c1efaff20539255b4",
-      "main:removed:Store.createFile": "914efb0d91028bd7f392e07ae10c316a74b54f41818dd3c5676586c95c631eba",
-      "main:removed:Store.createGroup": "d15676c7c06cba657c54f81bbf59c9acace2939779b2991b7ba1b0ebe238fdc2",
-      "main:removed:Store.createLayer": "eda60ca36c113318a0d3bd4e19003951b11c834044ae73cc7bf215749b98127d",
-      "main:removed:Store.deleteFile": "248feb3290d87b30ceedc0897ea1a81e58ded67d7f30df7113ba19a25fd80ab5",
-      "main:removed:Store.deleteGroup": "59bc611cef2740bf10e6b8bbc459881ea4175a6341f247e60373be188bc2d551",
-      "main:removed:Store.deleteLayer": "dda372a7be6196f793680f0848625d829755a398f1f2008f07f2ab84dc520bdf",
-      "main:removed:Store.setLayerOrder": "1ec8098946c36782b036a4c7efcb8f0810dc1f3bacc53f67b5323a8c5620c55c",
-      "main:removed:Store.setMetadata": "912f767a4a777dee6e2054bba54f85c43f13fd56d949390e7088ba327755e899",
-      "main:removed:Store.updateGroup": "8005c17de145d6da89a1d534ba718920549545a9872479fda119b22a9348a3bc",
-      "main:removed:Store.updateLayer": "fbdfc954c5b654d9d99509ce742fd890d707080daff1416daebfddad8292c485",
-      "main:removed:StoreView": "dc8c656141f446b350b82894b7d5308ef4fda84c1e88f91c05173d5200f161b3",
-      "main:removed:StoreView.getFile": "500aa118ee80bd7a360b7365026e8955dabe1a522f2b719dc6324c160f43abff",
-      "main:removed:StoreView.getGroup": "464ba49e92125651e77109dd19304e34192483afcb41b9484363db1228ae867f",
-      "main:removed:StoreView.getLayer": "e838d9e527f71f75dfb2aa9fa26bca07e31a5c5c9f7757b9613646f841c7e276",
-      "main:removed:StoreView.getLayerOrder": "7f6ea946ac0db35876d2ccb3790b6a605c76a7e1efd23e573e5b91334ffeeaa3",
-      "main:removed:StoreView.getMetadata": "6f830ff3524533e6d9c368f7b2f39f170779de92926148bfef84343ea3644d69",
-      "main:removed:StoreView.listFiles": "5620519ae96417c094eaa1bbe3e2e023eebaa5f329bcc36887865271a78ceae2",
-      "main:removed:StoreView.listGroups": "91bcbbb33af211dc9fa82a8fa0bb1f80a947e794534b6d6ce4a5346285e0bb7d",
-      "main:removed:StoreView.listLayers": "dba542850070341a6479f618d659cb620cd93f906f8aa55b68dca0994077ef09",
-      "main:removed:StoreView.subscribe": "2891ca996fe9e6fd78ff0079c4cae8e0d4b9d73dd12b5271f0f96c2ddcbbc009",
-      "main:removed:StoreView.transact": "1a394771ab37c3514d7af0872745ad0d57b103b0aa01858f7db313ec54df820e"
-    },
-    "106": {
-      "main:removed:StoreView.getFeature": "c58d9aaf3b8c940fe5d25cec8078309205595f5cc96eeb28e0b927d61db707ad",
-      "main:removed:StoreView.listFeatures": "acb9971433dec86c18319c0b4a370492e492447e33b793fdb558e02af5700cb6",
-      "main:removed:StoreView.listFeaturesInOrder": "e681c53e09e4d1b39d7e03ae74191805d4aa2c8eb69ef035604526d54645a21d"
-    },
-    "107": {
-      "main:removed:Store.abortIntermediateUpdates": "198c162da7fbe38dabf31c6f4f9c6b7befd8614a1b4698259dbb8a2f7038758f",
-      "main:removed:Store.createFeature": "3541ce4b4d39e1bf6b60e8af8eb9462e0a15017e85be3b9c4c0b107dfc5ac568",
-      "main:removed:Store.deleteFeature": "cf4666c7893500a2f5518a49bc5b80a9eb06fc087bbb68b8a4d3c73f1ea22a46",
-      "main:removed:Store.updateFeature": "646667cb5ddcf64781a1eaaedcefe570bbc0c068b3d1365ca1f7a31d5f662130"
-    },
-    "118": {
-      "main:removed:Store.reorderInGroup": "668dfe6e629f378a98b07990cb2b0edb319971fcf5ed07bd4b7eb8ebd03fdd49",
-      "main:removed:Store.reorderInLayer": "e08de45d43190858e95e1574efe8da926310d46551a02263f5501bb2a0b0b962"
-    },
-    "120": {
-      "main:removed:Store.getMaxNameNumber": "cf6ee1c217428e3f865b2dc13caffb9587426a6403df40d244d0fba795e72eff",
-      "main:removed:Store.recordNameNumber": "73d296d1fd274967463f6e5ce1e799b1befb985499510dd8849d765fe1b4c184"
-    },
     "129": {
       "main:doc:FeatureStyle": "a382b5587f2ac44bee8123b1b5d318e30befda70bdd836c7030043bdc3217c4c",
       "store:doc:FeatureRowField": "8117597d65a6b4ffa188ca2fa7779e3d58935004e219586d6dc694365329cf2f"
