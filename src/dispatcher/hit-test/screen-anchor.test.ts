@@ -16,10 +16,10 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { HitTestServiceImpl } from './service.js';
 
 /** An unproject that maps longitude/latitude naively and linearly (1 degree = 10px) */
@@ -42,11 +42,11 @@ function point(id: string, coord: Coordinate): Feature {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

@@ -8,15 +8,15 @@
 
 import type { Polygon } from 'geojson';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { StoreChange } from '../../store/types.js';
-import { createResourceDeps } from '../../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { FeatureInput } from '../model.js';
 import { createFeatures } from './features.js';
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let features: FeaturesCollection;
 let notifications: StoreChange[];
 
@@ -73,7 +73,7 @@ function itemsOf(layerId: string): readonly string[] {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   layer('l1');
   layer('l2');
   features = createFeatures(createResourceDeps(store));
@@ -204,7 +204,7 @@ describe('create', () => {
   });
 
   it('throws invalidState when there is no layer to put it in', () => {
-    const empty = new MemoryStore();
+    const empty = createTestDocument();
     const collection = createFeatures(createResourceDeps(empty));
     expect(codeOf(() => collection.create(point('a')))).toBe('invalidState');
   });

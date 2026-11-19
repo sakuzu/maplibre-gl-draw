@@ -13,9 +13,9 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Coordinate } from '../../store/types.js';
-import { createModeHarness } from '../../test-utils.js';
+import { createModeHarness, createTestDocument } from '../../test-utils.js';
 import { ModeManagerImpl } from '../manager.js';
 import { drawCircleMode } from './circle.js';
 
@@ -30,7 +30,7 @@ function pointer(coord: Coordinate): DrawPointerEvent {
   };
 }
 
-function start(store: MemoryStore) {
+function start(store: InstanceDocument) {
   const canvas = { style: { cursor: '' } };
   const map = {
     getCanvas: () => canvas,
@@ -45,7 +45,7 @@ function start(store: MemoryStore) {
 
 describe('the radius handle of the circle drawing mode', () => {
   it('the handle lands on the pointer at a high latitude (60 deg, 100 km, 45 deg)', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const mode = start(store);
     const center: Coordinate = [10, 60];
     const target = destinationPoint(center, 100_000, 45);

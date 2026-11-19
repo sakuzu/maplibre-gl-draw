@@ -43,6 +43,8 @@ describe('the scenes', () => {
       'hideOne',
       'clickOne',
       'boxSelect',
+      'updateOne',
+      'updateAll',
       'drag',
       'delete',
       'import',

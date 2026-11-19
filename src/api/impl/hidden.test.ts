@@ -6,14 +6,14 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { StoreChange } from '../../store/types.js';
-import { createResourceDeps } from '../../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { HiddenCollection } from '../hidden.js';
 import { createHidden } from './hidden.js';
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let hidden: HiddenCollection;
 let notifications: StoreChange[];
 
@@ -28,7 +28,7 @@ function codeOf(fn: () => unknown): string | undefined {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

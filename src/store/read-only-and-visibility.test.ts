@@ -13,8 +13,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
+import { createTestDocument } from '../test-utils.js';
+import type { InstanceDocument } from './document-access.js';
 import { getDisplayFeatures, isLocallyHidden, listShownFeatures } from './local-visibility.js';
-import { MemoryStore } from './memory.js';
 import type { Feature, Group, Layer } from './types.js';
 
 function makeFeature(id: string, layerId: string, groupId?: string): Feature {
@@ -31,8 +32,8 @@ function makeFeature(id: string, layerId: string, groupId?: string): Feature {
   };
 }
 
-function makeStore(): MemoryStore {
-  const store = new MemoryStore();
+function makeStore(): InstanceDocument {
+  const store = createTestDocument();
   const layer: Layer = {
     id: 'l1',
     name: 'l1',

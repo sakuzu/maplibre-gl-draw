@@ -93,11 +93,7 @@
       "main:added:EditOptions.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FeatureTarget": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FeatureTarget{0}.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureTarget{1}.layerIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureValues.[featureValuesBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureValues.byteLength": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureValues.featureCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "main:added:FeatureTarget{1}.layerIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "40": {
       "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
@@ -152,15 +148,6 @@
     "52": {
       "main:doc:DocumentResource.loadMany": "7d234ce92b555fb49b8189718a180a2e2f46055f289c28b6a26666692edb0535"
     },
-    "53": {
-      "main:added:DocumentResource.subscribe": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentSubscribeOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentSubscribeOptions.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:doc:Draw.document": "66afa72934d0c174b5076ad435261979cb4ccbc0d53e9fe33789604780c70c64"
-    },
-    "54": {
-      "main:doc:DocumentChange": "9ff72e02218bcde368cda0183566ab27ff2add18ee8a027d9962bcda7069cfe4"
-    },
     "55": {
       "main:doc:DocumentResource.toGeoJSON": "47229ec11e5ad2a57dab7325385667ab8933ceae546fd0ce86e4b0df73e0bda5",
       "main:doc:DocumentResource.toJSON": "6191e3a013210741c7395c56a4f0493296334db1d3810b9d29f03a355a74a3ba"
@@ -169,72 +156,10 @@
       "main:sig:LoadResult": "a742979caebe2244f118e5655841a1ef0fcd6447a7231511688b04bcd541ace4",
       "main:sig:LoadResult.featureIds": "06d150abae2e13d278d37344acc9fa5b40fd72b73056e3bc115dda322bd4f10a"
     },
-    "61": {
-      "main:doc:DrawEvents.feature.deleted": "288a4a9ac3fe66ec1240ec1d056161c304f8e433c2b2ed66399993d87f5abe9e"
-    },
     "62": {
       "main:added:DrawEvents.feature.updated.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:doc:DrawEvents.feature.updated": "a6c2a6184be3f3293608ede5898aa5fa009ee51f8bfce2bfd4d4937badc754a1",
       "main:removed:DrawEvents.feature.updated.intermediate": "7a206dc4ca10db38dd404e389c3037c3cb36bdf295f14bd17a370b9084f0a2cc"
-    },
-    "63": {
-      "main:added:DocumentChange.groups.moved": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentChange.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentChange.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentChange.previousValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentChange.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:doc:DocumentChange.groups": "df94503796b80a3ef1d9280f64040d2ab33cf2753cfe66d0b11253359346e2d7",
-      "main:doc:DocumentChange.layers": "2b2cea680e537f31067c18b21361558aaaa02bdac4d8e6dd89ad5cdd9b45a98a",
-      "main:removed:DocumentChange.editing": "92c091ca3c0ae5841c81080e284ce2457475f924507d1b07da526a9af5a94aea",
-      "main:removed:DocumentChange.editing.ended": "49bd6eac5cddcd68ba97829ab514fb4c66317c7601e5f8aceff07bbe7ba7cf6b",
-      "main:removed:DocumentChange.editing.started": "219143f205e5c75565146782fa7791d1d95617ef1e7d5d7f0c77406d9cdf8530",
-      "main:removed:DocumentChange.features.created": "de9a09e471a3976f31cb7d1c337639c7fb8549812cdcdd96a16f9b96db070d5c",
-      "main:removed:DocumentChange.features.deleted": "dc88a0afd94920a9e1a5bfb65e664c43d7b6c1e41d3cf8b0c83e0f904f633cb1",
-      "main:removed:DocumentChange.features.updated": "09c5ecbd39ab67f821f2d926ff44386da48f7b057b9d19afee8df52712c010ce",
-      "main:removed:DocumentChange.groupReorder": "dc22383f69b652d2231cadc8637f8431041ef80a4f7279b3627be0961419bb54",
-      "main:removed:DocumentChange.groupReorder.featureIds": "a82b9cd87b0c51aeec801915ca1cff93ba939048fad913847549ef3b40afc7ab",
-      "main:removed:DocumentChange.groupReorder.groupId": "4232cba8d0ee3cad97196e2a4271eb13c94ab0d98369b777f79a267d62f2edcf",
-      "main:removed:DocumentChange.groupReorder.previous": "61eb914746d9bbadbb09dc76902a95fa37e2dacb623174a867bbb42fd99300c3",
-      "main:removed:DocumentChange.layerReorder": "00c18d9fa5235661a5deb92e4e85bf4fddad13872aeddf102f022d19a4485719",
-      "main:removed:DocumentChange.layerReorder.layerId": "3b5be0c552fe616459b47981c55939d56126a651042eb4d27f29d6f0d322ceda",
-      "main:removed:DocumentChange.layerReorder.order": "553357ceeeb80b20b4382621df53e8b12220fe7d3b98d9320d0bd80682091503",
-      "main:removed:DocumentChange.layerReorder.previous": "61eb914746d9bbadbb09dc76902a95fa37e2dacb623174a867bbb42fd99300c3",
-      "main:removed:DocumentChange.mode": "cfd0002c5b38e2fb8e91326a878964bc867dd5f0a3b885543836eb76ea172e38",
-      "main:removed:DocumentChange.mode.mode": "e5fb9b679669cb66c142cf7e3609b8cb1259098fc08549376ff60b9c3ea1081b",
-      "main:removed:DocumentChange.mode.previous": "f5db86e9b824e36a3ba38fef343feb28c27b11a0a27f969ede67385162f1a052",
-      "main:removed:DocumentChange.selection": "bdd697d815e037c48d062622a4e7576cfba4c009790aca939ebe2591f161e256",
-      "main:removed:DocumentChange.selection.ids": "d3baed24c84d8ebae0905eb85b2f0a9731b948ad1baccc10198248d2f3e83639",
-      "main:removed:DocumentChange.selection.previousIds": "4a0f09a18eaa91f6bf5600f9a21392acd65598a946a1eb1fbf0f0ce7d038f758",
-      "main:removed:DocumentChange.selection.previousType": "655390f1b50c8ed3bd7cf081f22bf98c95ae28fd434c08e699df04c801fe8aff",
-      "main:removed:DocumentChange.selection.type": "99b5dba6ed70c2a890aacbc29ffb6e3c9aa4f07c352d291c1069866482842130",
-      "main:sig:DocumentChange.features": "c30fd38adc38abe928436cf9121c3cfacfd8d309da7c01f43bafd40d0aba30cc",
-      "main:sig:DocumentChange.reset": "3ded069a5155fc3d39eef7a41d4cec08fc91d4d144d22cacfb39f7765dfe9932",
-      "main:sig:DocumentChange.source": "b6b95ea5b82d7a5d3cdab9e9b05f29b929c2742d44e5208343ce09833b270b6b"
-    },
-    "64": {
-      "main:added:ChangedIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:ChangedIds.created": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:ChangedIds.deleted": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:ChangedIds.moved": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:ChangedIds.updated": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "65": {
-      "main:doc:DrawEvents.feature.moved": "de255dbe597693bf686d9af2d0f9d186a479dfc295df390b9b7dab59e9c5a809"
-    },
-    "66": {
-      "main:doc:DrawEvents.group.updated": "a2b9063188692a6048f8fc8de4cd78fee6ad4835132e7f5a3e23d11287df89f8",
-      "main:doc:DrawEvents.layer.updated": "d4835a4470f61c049cd649d8620c77c23555f1fd176b4e53765b33898336cb7a"
-    },
-    "67": {
-      "main:added:DrawEvents.group.moved": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.group.moved.from": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.group.moved.group": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.group.moved.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.group.moved.to": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "68": {
-      "main:added:DrawEvents.selection.changed.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:doc:DrawEvents.selection.changed": "0a9c40a1ece0c6f4f2581597127bb46ee4354db2c2a8717b247a09cbf95e1c6b"
     },
     "70": {
       "main:added:DrawEvents.drag.started.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -256,9 +181,6 @@
       "main:added:DrawEvents.drag.ended.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:doc:DrawEvents.drag.ended": "a5927735907d5a63ffd3b7c20bb44aaf4c946196891a094caa23d38ebb8ab7cf",
       "main:sig:DrawEvents.drag.ended.featureIds": "a82b9cd87b0c51aeec801915ca1cff93ba939048fad913847549ef3b40afc7ab"
-    },
-    "76": {
-      "main:doc:DrawEvents.document.changed": "bbd11a39515f863f3d85c57862fd5d26afc05bc7e7c430902a94720848b971cd"
     },
     "77": {
       "main:doc:DrawEvents.drag.started": "13702fa2996e30d4e4607741d913d6c237ee7eb3e1d8ffe47d6083b9cf2751e8"
@@ -324,9 +246,6 @@
       "main:doc:PreparedTable": "a093a5b970e9d3c9a949b432c73f46200662726e89acf726949635ee0e851c4b",
       "main:doc:Table": "625bf817f234ee6926316d82932aaf9a10a28e1d8700db7fda8ae0d1a5dc7ced"
     },
-    "103": {
-      "main:added:featureValuesBrand": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "151": {
       "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"
     },
@@ -369,12 +288,6 @@
     "160": {
       "main:added:DocumentResource.stringify": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "161": {
-      "main:added:DrawEvents.feature.created.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.feature.deleted.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DrawEvents.feature.moved.hasMoreParts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:doc:DrawEvents.feature.created": "05c07f12f6f232e41812e279d8c278b18e6ddbaa9b2f504f8a1b41144cf02734"
-    },
     "162": {
       "main:doc:NameGenerator": "37ab835d682a911f1bd3ef1e10883ba4cc05056de63ef090975410bfc6629557"
     },
@@ -383,9 +296,6 @@
       "main:added:SketchEdit{2}.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "173": {
-      "main:added:DocumentChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     }
   }
 }

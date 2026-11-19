@@ -20,8 +20,9 @@ import type {
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
@@ -108,14 +109,14 @@ function dragEvent(): DragNormalizedEvent {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let map: ReturnType<typeof makeMap>;
 let hit: HitTestResult | null;
 let context: EngineModeContext;
 let mode: SelectMode;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

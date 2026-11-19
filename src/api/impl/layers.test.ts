@@ -7,14 +7,14 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { StoreChange } from '../../store/types.js';
-import { createResourceDeps } from '../../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { LayersCollection } from '../layers.js';
 import { createLayers } from './layers.js';
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let layers: LayersCollection;
 let notifications: StoreChange[];
 
@@ -43,7 +43,7 @@ function addPoint(id: string, layerId: string, locked = false): void {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   layers = createLayers(createResourceDeps(store));
   notifications = [];
   store.subscribe((changes) => notifications.push(changes));
@@ -52,7 +52,8 @@ beforeEach(() => {
 describe('create and reading', () => {
   it('creates a layer with the defaults at the front and returns the stored layer', () => {
     const first = layers.create({ id: 'a', name: 'A' });
-    expect(first).toEqual({
+    // The items of a layer are read with the reads by position
+    expect({ ...first, items: store.listItemIds('a', 0, store.countItems('a')) }).toEqual({
       id: 'a',
       name: 'A',
       visible: true,

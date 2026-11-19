@@ -14,7 +14,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initialBearingDegrees } from '../geometry/distance.js';
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
-import { MemoryStore } from '../store/memory.js';
+import type { InstanceDocument } from '../store/document-access.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import type {
   Coordinate,
@@ -23,6 +23,7 @@ import type {
   Layer,
   TentativeState,
 } from '../store/types.js';
+import { createTestDocument } from '../test-utils.js';
 import { createSnapTargetsRegistry, type SnapTargetsRegistry } from './custom-targets.js';
 import { degreesPerPixel } from './geometry.js';
 import type { GuideSnapProviderDeps, GuideSnapProviderOptions } from './providers/guide.js';
@@ -49,7 +50,7 @@ function guideProvider(deps: GuideSnapProviderDeps, options: GuideSnapProviderOp
 
 const ZOOM = 14;
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 let snapTargets: SnapTargetsRegistry;
 
@@ -137,7 +138,7 @@ function coordsOf(candidates: SnapCandidate[]): Coordinate[] {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   spatialIndex = new RBushSpatialIndex();
   store.createLayer(makeLayer('l1'));
   // The snapping candidates of the custom types of this draw instance

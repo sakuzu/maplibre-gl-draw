@@ -439,33 +439,9 @@
       "hits": 1
     },
     {
-      "where": "src/store/memory.ts",
-      "term": "\\bsync(ed|ing|s)?\\b",
-      "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",
-      "hits": 3
-    },
-    {
-      "where": "src/store/memory/change-bus.ts",
-      "term": "\\bhistory",
-      "reason": "the published version describes the history kept by an extension here",
-      "hits": 1
-    },
-    {
       "where": "src/store/spatial/store-spatial-index.ts",
       "term": "\\bowners?\\b(?! document)",
       "reason": "the object that owns GPU resources or a state of an instance; not the owner of the document",
-      "hits": 1
-    },
-    {
-      "where": "src/store/store.ts",
-      "term": "\\bhistory",
-      "reason": "the published version describes the history kept by an extension here",
-      "hits": 1
-    },
-    {
-      "where": "src/store/store.ts",
-      "term": "\\bsynchroni[sz](e|es|ed|ing|ation)\\b",
-      "reason": "the published version describes the sync of an outside store or of extension data here",
       "hits": 1
     },
     {
@@ -727,14 +703,6 @@
       "hits": 2,
       "why": "the identifier ownerIds after a template literal the old reading lost",
       "lines": ["311", "314"]
-    },
-    {
-      "where": "src/store/memory.test.ts",
-      "term": "\\b(undo|redo)\\b(?! vertex)",
-      "reason": "the published version describes an undo kept by an application or an extension here",
-      "hits": 5,
-      "why": "the sources undo and redo a test gives a transaction, as an extension would; string values the old reading did not read",
-      "lines": ["649", "676", "688", "863", "866"]
     },
     {
       "where": "src/view/layer/drape-planner.ts",

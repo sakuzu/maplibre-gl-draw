@@ -13,8 +13,9 @@
 
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import type { AuxiliaryHandleProvider } from './auxiliary-handles.js';
 import { createSelectionScope } from './selection-scope.js';
 import type { SelectionUIDrawerDeps } from './selection-ui-drawer.js';
@@ -52,12 +53,12 @@ function square(id: string, minX: number, minY: number, size = 10): Feature {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let drawn: Array<{ featureId: string; refs: VertexRef[] }>;
 let deps: SelectionUIDrawerDeps;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

@@ -10,14 +10,15 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { MemoryStore } from '../store/memory.js';
+import type { InstanceDocument } from '../store/document-access.js';
 import type { Mode } from '../store/types.js';
+import { createTestDocument } from '../test-utils.js';
 import type { EngineModeHandler } from './handler.js';
 import { ModeManagerImpl, type ModeManagerOptions } from './manager.js';
 
 /** A manager with a plain handler registered for select and the given drawing modes */
 function createManager(
-  store: MemoryStore,
+  store: InstanceDocument,
   modes: Mode[] = ['drawPoint', 'drawLine', 'drawPolygon'],
   options?: ModeManagerOptions,
 ): ModeManagerImpl {
@@ -30,7 +31,7 @@ function createManager(
 
 describe('interaction lock gate of ModeManagerImpl.setMode', () => {
   it('ignores setMode to a drawing mode while the interaction lock is on', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = createManager(store);
 
     store.setInteractionLock(true);
@@ -40,7 +41,7 @@ describe('interaction lock gate of ModeManagerImpl.setMode', () => {
   });
 
   it('allows the transition to select even while the interaction lock is on', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = createManager(store);
 
     // First switch to a drawing mode, then verify that it can return to select after locking.
@@ -53,7 +54,7 @@ describe('interaction lock gate of ModeManagerImpl.setMode', () => {
   });
 
   it('can transition to a drawing mode once the interaction lock is released', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = createManager(store);
 
     store.setInteractionLock(true);
@@ -68,7 +69,7 @@ describe('interaction lock gate of ModeManagerImpl.setMode', () => {
 
 describe('canEnter gate of ModeManagerImpl.setMode', () => {
   it('ignores a mode that canEnter rejects and keeps the current mode', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = new ModeManagerImpl(store, {
       canEnter: (handler) => !handler.writesFeatures,
     });
@@ -83,7 +84,7 @@ describe('canEnter gate of ModeManagerImpl.setMode', () => {
   });
 
   it('never asks canEnter for select', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = new ModeManagerImpl(store, { canEnter: () => false });
     manager.registerMode('select', () => ({ modeName: 'select' }));
     store.setMode('drawLine');
@@ -95,7 +96,7 @@ describe('canEnter gate of ModeManagerImpl.setMode', () => {
 
 describe('unregistered modes in ModeManagerImpl.setMode', () => {
   it('refuses a mode without a factory and leaves the Store and the handler alone', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = createManager(store);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const changes: unknown[] = [];
@@ -115,7 +116,7 @@ describe('unregistered modes in ModeManagerImpl.setMode', () => {
   });
 
   it('returns the same false for every refusal and true for an entered mode', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = createManager(store, ['drawPoint', 'drawLine'], {
       canEnter: (handler: EngineModeHandler) => handler.modeName !== 'drawLine',
     });
@@ -132,7 +133,7 @@ describe('unregistered modes in ModeManagerImpl.setMode', () => {
 
 describe('removing a mode', () => {
   it('returns to select when the current mode is removed, and refuses it afterwards', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = new ModeManagerImpl(store);
     manager.registerMode('select', () => ({ modeName: 'select' }));
     const onStop = vi.fn();
@@ -149,7 +150,7 @@ describe('removing a mode', () => {
   });
 
   it('does not remove a later registration of the same name', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     const manager = createManager(store);
     const cancel = manager.registerMode('measure', () => ({ modeName: 'first' }));
     manager.registerMode('measure', () => ({ modeName: 'second' }));

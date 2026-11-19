@@ -13,9 +13,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature, FeatureType } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { HitTestServiceImpl } from './service.js';
 import type { HitTestStrategy } from './strategies/base.js';
 import { HitTestStrategyRegistry } from './strategies/base.js';
@@ -68,12 +69,12 @@ function point(id: string, coord: Coordinate): Feature {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 let service: HitTestServiceImpl;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

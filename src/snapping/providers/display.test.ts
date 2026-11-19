@@ -17,10 +17,10 @@ import { createDatasetManager, type DatasetManager } from '../../dataset/manager
 import type { Dataset, DatasetRow } from '../../dataset/types.js';
 import { resolveMessages } from '../../messages.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
-import { toRow } from '../../test-utils.js';
+import { createTestDocument, toRow } from '../../test-utils.js';
 import type {
   SnapCandidate,
   SnapPointCandidate,
@@ -35,14 +35,14 @@ const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 /** A bbox wide enough to contain every feature */
 const WIDE_BBOX: BoundingBox = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 let datasets: DatasetManager;
 let providers: DisplaySnapProviders;
 let enabled: boolean;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

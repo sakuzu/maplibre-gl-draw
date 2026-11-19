@@ -16,7 +16,7 @@ import { createDrawOnEngine } from '../../api/impl/create-draw.js';
 import type { Engine } from '../../api/impl/engine.js';
 import { createEngine } from '../../api/impl/engine.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess as Store } from '../../store/document-access.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { ModeManager } from '../manager.js';

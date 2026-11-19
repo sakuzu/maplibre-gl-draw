@@ -13,9 +13,9 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { toleranceDegrees } from './local-frame.js';
 import { HitTestServiceImpl } from './service.js';
 
@@ -76,7 +76,7 @@ function feature(id: string, type: Feature['type'], coordinates: FeatureCoordina
 }
 
 function serviceWith(features: Feature[]): HitTestServiceImpl {
-  const store = new MemoryStore();
+  const store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

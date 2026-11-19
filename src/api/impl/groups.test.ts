@@ -7,14 +7,14 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { StoreChange } from '../../store/types.js';
-import { createResourceDeps } from '../../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
 import { createGroups } from './groups.js';
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let groups: GroupsCollection;
 let notifications: StoreChange[];
 
@@ -60,7 +60,7 @@ function itemsOf(layerId: string): readonly string[] {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   layer('l1');
   layer('l2');
   for (const id of ['a', 'b', 'c', 'd']) addPoint(id);
@@ -73,7 +73,9 @@ beforeEach(() => {
 describe('create and reading', () => {
   it('makes a group in the place of its frontmost member, members in stacking order', () => {
     const group = groups.create({ id: 'g', featureIds: ['c', 'a'], name: 'G' });
-    expect(group).toEqual({
+    // The features of a group are read with the reads by position
+    const featureIds = store.listGroupFeatureIds('g', 0, store.countGroupFeatures('g'));
+    expect({ ...group, featureIds }).toEqual({
       id: 'g',
       layerId: 'l1',
       name: 'G',

@@ -27,9 +27,8 @@ import { createDocumentAccess } from '../api/impl/document-access.js';
 import { connectStoreEvents, createEventHub } from '../api/impl/events.js';
 import type { FeatureCoordinates } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
-import { createResourceDeps } from '../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../test-utils.js';
 import { createStore } from './built-in/create-store.js';
-import { MemoryStore } from './memory.js';
 import type { Data, Feature, Group, Layer } from './types.js';
 
 function mulberry32(seed: number): () => number {
@@ -217,7 +216,7 @@ const ORDER_SCALING_LAYERS = 20;
 // The layers are created with an empty order, and each insertion appends to the order
 // (the equivalent of a geojson import).
 function measureSpreadMs(layerCount: number): number {
-  const store = new MemoryStore();
+  const store = createTestDocument();
   for (let i = 0; i < layerCount; i++) {
     store.createLayer({
       id: `L${i}`,

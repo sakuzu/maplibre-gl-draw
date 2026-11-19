@@ -15,9 +15,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
-import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { createSelectionScope } from '../ui/selection-scope.js';
 import { createRenderScope } from './render-scope.js';
 import { disposeRenderers, initRenderers } from './renderers.js';
@@ -94,7 +94,7 @@ describe('the report of an image that fails to load', () => {
   });
 
   it('passes the feature ID and the error to onImageError', async () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     // Only embedded raster data URLs are decoded, so this one is refused
     store.createFile({ id: 'f1', mimeType: 'image/png', dataURL: 'https://example.com/a.png' });
     const onImageError = vi.fn();
@@ -127,7 +127,7 @@ describe('the report of an image that fails to load', () => {
   });
 
   it('reports every feature that shares a failed image, each once', async () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     store.createFile({ id: 'f1', mimeType: 'image/png', dataURL: 'https://example.com/a.png' });
     const onImageError = vi.fn();
     const renderers = initRenderers({

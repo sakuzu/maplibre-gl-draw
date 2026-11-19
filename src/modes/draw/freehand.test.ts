@@ -22,10 +22,10 @@ import type { DragNormalizedEvent, NormalizedEvent } from '../../dispatcher/type
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { createSnapService } from '../../snapping/service.js';
 import type { SnapService } from '../../snapping/types.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature, Mode } from '../../store/types.js';
-import { createModeHarness } from '../../test-utils.js';
+import { createModeHarness, createTestDocument } from '../../test-utils.js';
 import type { EngineModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
 import { drawFreehandMode } from './freehand.js';
@@ -102,7 +102,7 @@ function createFakeMap(): MapLibreMap {
   } as unknown as MapLibreMap;
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 let modeManager: ModeManagerImpl;
 let normalizer: FakeNormalizer;
@@ -111,7 +111,7 @@ let map: MapLibreMap;
 let harness: ReturnType<typeof createModeHarness>;
 
 function setup(): void {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

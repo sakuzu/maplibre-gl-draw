@@ -14,11 +14,11 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
-import { createModeHarness } from '../../test-utils.js';
+import { createModeHarness, createTestDocument } from '../../test-utils.js';
 import type { EngineModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
 import { drawCircleMode } from './circle.js';
@@ -61,7 +61,7 @@ function click(lng: number, lat: number): MouseNormalizedEvent {
   } as unknown as MouseNormalizedEvent;
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let manager: ModeManagerImpl;
 let activeLayerId: string;
 let imageRequests: unknown[];
@@ -71,7 +71,7 @@ let clickAt: (lng: number, lat: number) => void;
 let pressKey: (key: string) => void;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   activeLayerId = 'a';
   imageRequests = [];
   const getWritableLayerId = () => resolveWritableLayerId(store, activeLayerId);

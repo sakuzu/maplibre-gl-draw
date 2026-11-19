@@ -14,9 +14,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ModifierKeys } from '../dispatcher/types.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
-import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate } from '../store/types.js';
+import { createTestDocument } from '../test-utils.js';
 import { degreesPerPixel } from './geometry.js';
 import { createSnapService } from './service.js';
 import type {
@@ -369,7 +369,7 @@ describe('SnapService', () => {
   describe('the step angle of the built-in guides', () => {
     /** A service with the built-in providers, drawing a line whose first point is ORIGIN */
     function drawingService(options: SnapOptions = {}): SnapService {
-      const store = new MemoryStore();
+      const store = createTestDocument();
       store.setMode('drawLine');
       const anchor: Coordinate = [ORIGIN.lng, ORIGIN.lat];
       store.setTentative({

@@ -15,9 +15,9 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import type { SnapResult } from '../../api/state.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Coordinate, Feature } from '../../store/types.js';
-import { createModeHarness, pointerInput } from '../../test-utils.js';
+import { createModeHarness, createTestDocument, pointerInput } from '../../test-utils.js';
 import { ModeManagerImpl } from '../manager.js';
 import type { TraceAnchor, TraceSource } from './trace-support.js';
 import { computeTracePath, readTraceAnchor, traceSourceOf } from './trace-support.js';
@@ -45,7 +45,7 @@ const FAR: Coordinate[] = [
   [1.1, 1],
 ];
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let datasets: Map<string, Feature[]>;
 let traceEnabled: boolean;
 let displayTraceEnabled: boolean;
@@ -56,7 +56,7 @@ let displayTraceEnabled: boolean;
 let context: TraceSource;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

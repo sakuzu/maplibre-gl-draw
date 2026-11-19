@@ -17,8 +17,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import type { FeatureCompanionProvider } from '../../view/feature-companion.js';
 import {
   createFeatureCompanionRegistry,
@@ -78,7 +79,7 @@ function makeMap() {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let top: TopHit | null;
 let context: EngineModeContext;
 /** There is one companion rendering provider per draw instance */
@@ -103,7 +104,7 @@ function click(): void {
 
 beforeEach(() => {
   companions = createFeatureCompanionRegistry();
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

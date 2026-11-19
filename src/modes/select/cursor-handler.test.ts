@@ -14,8 +14,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
@@ -65,7 +66,7 @@ function makeMap(canvas: { style: { cursor: string } }) {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let canvas: { style: { cursor: string } };
 let context: EngineModeContext;
 let hit: Feature | null;
@@ -75,7 +76,7 @@ let hit: Feature | null;
 const centerEvent = { point: { x: 50, y: -50 } } as unknown as MouseNormalizedEvent;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

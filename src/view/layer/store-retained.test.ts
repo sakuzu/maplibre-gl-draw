@@ -18,9 +18,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
+import type { DocumentAccess as Store } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Store } from '../../store/store.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../store/types.js';
 import {
   createFeatureCompanionRegistry,

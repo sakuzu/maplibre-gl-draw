@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess as Store } from '../../store/document-access.js';
 import { getSelectedFeatureIds } from './helper.js';
 
 // getSelectedFeatureIds uses only getSelection / getGroup / getLayer / getFeature, so it is

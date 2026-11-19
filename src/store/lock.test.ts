@@ -9,12 +9,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../test-utils.js';
+import type { InstanceDocument } from './document-access.js';
 import { isFeatureLocked, isGroupLocked, isInteractionBlocked } from './lock.js';
-import { MemoryStore } from './memory.js';
 import type { Feature, Group, Layer } from './types.js';
 
-function makeStore(): MemoryStore {
-  const store = new MemoryStore();
+function makeStore(): InstanceDocument {
+  const store = createTestDocument();
   const layer: Layer = {
     id: 'l1',
     name: 'l1',
@@ -129,7 +130,7 @@ describe('isInteractionBlocked', () => {
 });
 
 describe('isGroupLocked', () => {
-  const findLayerOfGroup = (store: MemoryStore) => (groupId: string) =>
+  const findLayerOfGroup = (store: InstanceDocument) => (groupId: string) =>
     store.listLayers().find((l) => l.items.includes(groupId));
 
   it('is true if the group itself is locked', () => {

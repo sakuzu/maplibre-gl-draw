@@ -20,8 +20,8 @@ import type { EngineOverlayRenderer } from '../../extension/index.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
-import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
+import { createTestDocument } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { createSelectionScope } from '../ui/selection-scope.js';
 import { createCustomLayer } from './custom-layer.js';
@@ -194,7 +194,7 @@ function renderInput(): CustomRenderMethodInput {
 function setup() {
   const { gl, stats } = createGlStub();
   const { map, canvas } = createMapStub();
-  const store = new MemoryStore();
+  const store = createTestDocument();
   const layer = createCustomLayer({
     map,
     store,

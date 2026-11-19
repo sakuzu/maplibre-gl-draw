@@ -6,20 +6,20 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
-import { createResourceDeps } from '../../test-utils.js';
+import type { InstanceDocument } from '../../store/document-access.js';
+import { createResourceDeps, createTestDocument } from '../../test-utils.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
 import type { MetadataResource } from '../metadata.js';
 import { createDocument } from './document.js';
 import { createMetadata } from './metadata.js';
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let metadata: MetadataResource;
 let doc: DocumentResource;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

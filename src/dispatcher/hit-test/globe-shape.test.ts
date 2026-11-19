@@ -14,9 +14,9 @@ import { describe, expect, it } from 'vitest';
 import { mercatorLerp } from '../../shared/math/globe-subdivision.js';
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { createGlobeShapeResolver, globeHitTestGrid, shapeOnGlobe } from './globe-shape.js';
 import { HitTestServiceImpl } from './service.js';
 
@@ -106,7 +106,7 @@ describe('the resolver of a map', () => {
 });
 
 describe('a click on the drawn path of a long slanted edge', () => {
-  const store = new MemoryStore();
+  const store = createTestDocument();
   const index = new RBushSpatialIndex();
   const line = feature('LineString', SLANTED);
   // Halfway along the edge as drawn: 2.8 degrees north of the halfway point in degrees

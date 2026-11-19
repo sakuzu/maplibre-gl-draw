@@ -12,9 +12,9 @@ import { describe, expect, it } from 'vitest';
 import { createDocumentAccess } from '../../api/impl/document-access.js';
 import { PointBoxSelectionStrategy } from '../../dispatcher/hit-test/box-strategies.js';
 import { createStore } from '../../store/built-in/create-store.js';
-import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
 import { boxRects, queryFeaturesInBox } from './box-selection.js';
@@ -35,7 +35,7 @@ function point(id: string, layerId: string, coord: [number, number], visible = t
 
 describe('queryFeaturesInBox filtering', () => {
   it('excludes hidden features and features on locked or hidden layers', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     store.createLayer({
       id: 'l1',
       name: 'l1',
@@ -88,7 +88,7 @@ describe('queryFeaturesInBox filtering', () => {
   });
 
   it('excludes locked features and features in a locked group', () => {
-    const store = new MemoryStore();
+    const store = createTestDocument();
     store.createLayer({
       id: 'l1',
       name: 'l1',

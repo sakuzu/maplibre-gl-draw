@@ -14,8 +14,9 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { EngineModeContext, EngineModeHandler } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
-import { MemoryStore } from '../store/memory.js';
+import type { InstanceDocument } from '../store/document-access.js';
 import type { TentativeState } from '../store/types.js';
+import { createTestDocument } from '../test-utils.js';
 import { createInputRouter } from './input-router.js';
 import type {
   DragNormalizedEvent,
@@ -90,7 +91,7 @@ function drag(
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let normalizer: FakeNormalizer;
 let mode: RecordingMode;
 let mapClicks: MapClickEventPayload[];
@@ -113,7 +114,7 @@ function drawing(first: [number, number]): TentativeState {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   normalizer = new FakeNormalizer();
   mode = new RecordingMode();
   mapClicks = [];

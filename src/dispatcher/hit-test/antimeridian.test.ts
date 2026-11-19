@@ -11,9 +11,10 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { clickCopies } from './local-frame.js';
 import { HitTestServiceImpl } from './service.js';
 
@@ -47,12 +48,12 @@ function line(id: string, coords: Coordinate[]): Feature {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 let service: HitTestServiceImpl;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

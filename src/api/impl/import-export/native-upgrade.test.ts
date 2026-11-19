@@ -6,9 +6,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../../store/memory.js';
 import type { Data } from '../../../store/types.js';
-import { createResourceDeps } from '../../../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../../../test-utils.js';
 import { createDocument } from '../document.js';
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';
@@ -99,7 +98,7 @@ function document2() {
 }
 
 function createTestContext() {
-  const store = new MemoryStore();
+  const store = createTestDocument();
   store.createLayer({
     id: 'default-layer',
     name: 'Layer 1',

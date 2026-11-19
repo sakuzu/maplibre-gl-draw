@@ -6,7 +6,8 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from './memory.js';
+import { createTestDocument } from '../test-utils.js';
+import type { InstanceDocument } from './document-access.js';
 import type { Layer } from './types.js';
 import { isWritableLayer, resolveWritableLayerId } from './writable-layer.js';
 
@@ -24,10 +25,10 @@ function layer(id: string, overrides: Partial<Layer> = {}): Layer {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
 });
 
 describe('isWritableLayer', () => {

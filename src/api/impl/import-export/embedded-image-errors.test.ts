@@ -9,9 +9,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processImageDataUrl, UnsupportedImageTypeError } from '../../../shared/utils/image.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
-import { MemoryStore } from '../../../store/memory.js';
+import type { InstanceDocument } from '../../../store/document-access.js';
 import type { Data } from '../../../store/types.js';
-import { createResourceDeps } from '../../../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../../../test-utils.js';
 import { DrawError } from '../../errors.js';
 import { createDocument } from '../document.js';
 import { prepareGeoJSON } from './geojson-import.js';
@@ -81,10 +81,10 @@ const native = {
   files: { f: { id: 'f', mimeType: 'image/png', dataURL: LARGE } },
 } as unknown as Data;
 
-let store: MemoryStore;
+let store: InstanceDocument;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'default-layer',
     name: 'Layer 1',

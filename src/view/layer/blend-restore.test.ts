@@ -25,7 +25,7 @@ import type {
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess as Store } from '../../store/document-access.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
 import { toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';

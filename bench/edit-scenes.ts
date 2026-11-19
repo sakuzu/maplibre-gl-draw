@@ -402,6 +402,48 @@ export const SCENES: readonly Scene[] = [
     },
   }),
   scene({
+    name: 'updateOne',
+    label: 'Write an attribute of one feature, and its change (document.changed)',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      await rest(ctx);
+      return ctx.featureIds[Math.floor(ctx.featureIds.length / 2)];
+    },
+    async run(ctx, id) {
+      const { draw } = ctx;
+      let updated = 0;
+      const stop = draw.on('document.changed', (change) => {
+        updated = change.features.updated.count();
+      });
+      ctx.markChanged();
+      ctx.input(() => draw.features.update(id, { properties: { edited: true } }));
+      stop();
+      ctx.note('updated', updated);
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'updateAll',
+    label: 'Write an attribute of every feature in one change (draw.features.updateMany)',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      await rest(ctx);
+      return ctx.featureIds.map((id) => ({ id, patch: { properties: { edited: true } } }));
+    },
+    async run(ctx, patches) {
+      const { draw } = ctx;
+      let updated = 0;
+      const stop = draw.on('document.changed', (change) => {
+        updated = change.features.updated.count();
+      });
+      ctx.markChanged();
+      ctx.input(() => draw.features.updateMany(patches));
+      stop();
+      ctx.note('updated', updated);
+      await ctx.settle();
+    },
+  }),
+  scene({
     name: 'drag',
     label: 'Drag every feature selected from the middle of the map, a move per frame',
     async prepare(ctx) {

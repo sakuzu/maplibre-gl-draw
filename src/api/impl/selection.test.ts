@@ -6,8 +6,8 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
-import { createResourceDeps } from '../../test-utils.js';
+import type { InstanceDocument } from '../../store/document-access.js';
+import { createResourceDeps, createTestDocument } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
@@ -15,7 +15,7 @@ import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createSelection, createVertexSelection } from './selection.js';
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let selection: SelectionResource;
 let vertices: VertexSelectionResource;
 let groups: GroupsCollection;
@@ -44,7 +44,7 @@ function layer(id: string): void {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   layer('l1');
   layer('l2');
   const deps = createResourceDeps(store);

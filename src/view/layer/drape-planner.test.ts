@@ -11,7 +11,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess as Store } from '../../store/document-access.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { RenderableTerrainTile } from '../terrain/detect.js';

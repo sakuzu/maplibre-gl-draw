@@ -9,8 +9,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
-import { MemoryStore } from '../../../store/memory.js';
+import type { InstanceDocument } from '../../../store/document-access.js';
 import type { Feature } from '../../../store/types.js';
+import { createTestDocument } from '../../../test-utils.js';
 import { convertFeatureToGeoJSON } from './geojson-export.js';
 import type { GeoJSONLoadResult } from './geojson-import.js';
 import { prepareGeoJSON } from './geojson-import.js';
@@ -48,11 +49,11 @@ function signedArea(ring: readonly (readonly number[])[]): number {
 }
 
 describe('loadGeoJSON', () => {
-  let store: MemoryStore;
+  let store: InstanceDocument;
   let deps: Parameters<typeof loadGeoJSON>[1];
 
   beforeEach(() => {
-    store = new MemoryStore();
+    store = createTestDocument();
     store.createLayer({
       id: 'default-layer',
       name: 'Layer 1',

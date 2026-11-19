@@ -18,9 +18,9 @@ import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { createStore } from '../../store/built-in/create-store.js';
 import type { DocumentAccess, InstanceDocument } from '../../store/document-access.js';
-import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import type { EngineModeContext } from '../handler.js';
 import { handleDeleteShortcut, handleGroupShortcut } from './shortcut-handler.js';
 
@@ -275,8 +275,8 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
 
 describe('deleteSelection runs the same deletion as the Delete key', () => {
   /** Builds a store, selects, runs the deletion and returns the state and the notifications */
-  function run(deleteWith: (s: MemoryStore) => boolean | undefined) {
-    const s = new MemoryStore();
+  function run(deleteWith: (s: InstanceDocument) => boolean | undefined) {
+    const s = createTestDocument();
     for (const id of ['l1', 'l2']) {
       s.createLayer({
         id,
@@ -394,8 +394,8 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
 });
 
 describe('the group shortcut places the group where groupSelection does', () => {
-  function build(): MemoryStore {
-    const s = new MemoryStore();
+  function build(): InstanceDocument {
+    const s = createTestDocument();
     s.createLayer({
       id: 'l1',
       name: 'l1',

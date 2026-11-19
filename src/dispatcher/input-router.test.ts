@@ -22,9 +22,10 @@ import type { FeatureCoordinates } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createSnapService } from '../snapping/service.js';
 import type { SnapContext, SnapService } from '../snapping/types.js';
-import { MemoryStore } from '../store/memory.js';
+import type { InstanceDocument } from '../store/document-access.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import type { Feature, Layer } from '../store/types.js';
+import { createTestDocument } from '../test-utils.js';
 import { createInputRouter } from './input-router.js';
 import type {
   DragNormalizedEvent,
@@ -101,7 +102,7 @@ class RecordingMode implements EngineModeHandler {
   }
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 let normalizer: FakeNormalizer;
 let mode: RecordingMode;
@@ -223,7 +224,7 @@ function emit<K extends keyof NormalizedEventMap>(event: NormalizedEventMap[K]):
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   spatialIndex = new RBushSpatialIndex();
   const layer: Layer = {
     id: 'l1',

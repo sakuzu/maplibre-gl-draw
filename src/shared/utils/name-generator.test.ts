@@ -10,12 +10,13 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Feature, FeatureType } from '../../store/types.js';
+import { createTestDocument } from '../../test-utils.js';
 import { geometryFromCoordinates } from './coordinates.js';
 import { AutoNameGenerator, normalizeAutoNameConfig } from './name-generator.js';
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let idSeq: number;
 
 function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Feature {
@@ -35,7 +36,7 @@ function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Featur
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   idSeq = 0;
   store.createLayer({
     id: 'l1',
@@ -267,7 +268,8 @@ describe('a Store that knows numbers beyond what it lists', () => {
       listFeatures: () => store.listFeatures(),
       listLayers: () => store.listLayers(),
       listGroups: () => store.listGroups(),
-      subscribe: (listener: Parameters<MemoryStore['subscribe']>[0]) => store.subscribe(listener),
+      subscribe: (listener: Parameters<InstanceDocument['subscribe']>[0]) =>
+        store.subscribe(listener),
       getMaxNameNumber: (type: string): number | undefined => known[type],
       recordNameNumber: (type: string, number: number) => {
         recorded.push([type, number]);

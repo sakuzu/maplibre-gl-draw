@@ -18,9 +18,9 @@ import type {
   NormalizedEvent,
 } from '../../dispatcher/types.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import type { Coordinate } from '../../store/types.js';
-import { createModeHarness } from '../../test-utils.js';
+import { createModeHarness, createTestDocument } from '../../test-utils.js';
 import { ModeManagerImpl } from '../manager.js';
 import { drawLineMode } from './line.js';
 import { drawPolygonMode } from './polygon.js';
@@ -32,7 +32,7 @@ const B: Coordinate = [1, 0];
 const C: Coordinate = [1, 1];
 const D: Coordinate = [0, 1];
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let manager: ModeManagerImpl;
 let harness: ReturnType<typeof createModeHarness>;
 
@@ -84,7 +84,7 @@ function key(k: string): void {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

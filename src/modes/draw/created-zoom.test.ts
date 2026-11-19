@@ -17,8 +17,7 @@ import type {
   DrawPointerEvent,
   ModeFactory,
 } from '../../api/extension/mode.js';
-import { MemoryStore } from '../../store/memory.js';
-import { createModeHarness, keyInput } from '../../test-utils.js';
+import { createModeHarness, createTestDocument, keyInput } from '../../test-utils.js';
 import { ModeManagerImpl } from '../manager.js';
 import { drawCircleMode } from './circle.js';
 import { drawLineMode } from './line.js';
@@ -44,7 +43,7 @@ function drawWithContract(
   scaleWithZoom: boolean,
   input: (handler: ContractModeHandler) => void,
 ): Record<string, unknown> {
-  const store = new MemoryStore();
+  const store = createTestDocument();
   store.createLayer({
     id: 'a',
     name: 'a',

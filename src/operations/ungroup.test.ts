@@ -11,8 +11,9 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
-import { MemoryStore } from '../store/memory.js';
+import type { InstanceDocument } from '../store/document-access.js';
 import type { Feature } from '../store/types.js';
+import { createTestDocument } from '../test-utils.js';
 import { groupSelection, ungroupSelection } from './layer-operations.js';
 
 function feature(id: string): Feature {
@@ -29,7 +30,7 @@ function feature(id: string): Feature {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let idSeq: number;
 const nameGen = {
   generateGroupName: () => '自動グループ',
@@ -37,7 +38,7 @@ const nameGen = {
 const generateId = () => `grp-${++idSeq}`;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer({
     id: 'l1',
     name: 'l1',

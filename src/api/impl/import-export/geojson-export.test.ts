@@ -11,9 +11,9 @@
 
 import type { Geometry } from 'geojson';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryStore } from '../../../store/memory.js';
+import type { InstanceDocument } from '../../../store/document-access.js';
 import type { Feature, Layer } from '../../../store/types.js';
-import { createResourceDeps } from '../../../test-utils.js';
+import { createResourceDeps, createTestDocument } from '../../../test-utils.js';
 import type { DocumentResource } from '../../document.js';
 import { featuresToGeoJSON, featureToGeoJSON } from '../../model.js';
 import { createDocument } from '../document.js';
@@ -56,12 +56,12 @@ const CLOCKWISE_SQUARE = [
   [139.123456789, 35.987654321],
 ];
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let doc: DocumentResource;
 
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
-  store = new MemoryStore();
+  store = createTestDocument();
   store.createLayer(layer('l1'));
   store.createLayer(layer('l2'));
   store.createLayer(layer('l3', false));

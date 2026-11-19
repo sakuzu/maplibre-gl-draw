@@ -17,6 +17,7 @@ import type { ExtensionsCollections } from './api/extensions.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
 import { createDrawOnEngine } from './api/impl/create-draw.js';
+import { createDocumentAccess } from './api/impl/document-access.js';
 import type { Engine } from './api/impl/engine.js';
 import { createEngine } from './api/impl/engine.js';
 import {
@@ -57,7 +58,6 @@ import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
 import type { Feature } from './shared/types/model.js';
-import { coordinatesOf, forEachCoordinateDeep } from './shared/utils/coordinates.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import { type WorkCounts, workCountsOf } from './shared/work-counts.js';
@@ -70,15 +70,9 @@ import type {
   StoreChange as RowStoreChange,
   StoreGroup,
 } from './store/built-in/types.js';
-import type {
-  FeatureBoxes,
-  FeatureMatch,
-  InstanceDocument,
-  MoveDestination,
-} from './store/document-access.js';
-import { listEveryFeatureInOrder } from './store/ordering.js';
-import type { Store } from './store/store.js';
-import type { BoundingBox, FileData, Metadata } from './store/types.js';
+import type { InstanceDocument } from './store/document-access.js';
+import type { ClientState } from './store/memory/ui-state.js';
+import type { FileData, Metadata } from './store/types.js';
 import type { TerrainContext } from './view/terrain/context.js';
 import { createSelectionExtensionRegistry } from './view/ui/selection-ui/extension-registry.js';
 
@@ -242,218 +236,23 @@ export function createMapStub(options: { boxZoomEnabled?: boolean } = {}) {
   };
 }
 
-/** Inserts the IDs into the list at the index, or at the end when it is undefined */
-function insertAt(list: string[], ids: readonly string[], index: number | undefined): string[] {
-  const at = index === undefined ? list.length : Math.min(index, list.length);
-  list.splice(at, 0, ...ids);
-  return list;
-}
-
-/** Whether a feature of a Store of the published version matches what a read keeps */
-function matchesFeature(store: Store, feature: Feature, match: FeatureMatch): boolean {
-  if (match.layerId !== undefined && feature.layerId !== match.layerId) return false;
-  if (match.groupId !== undefined && feature.groupId !== match.groupId) return false;
-  if (match.type !== undefined && feature.type !== match.type) return false;
-  if (match.visible !== undefined && feature.visible !== match.visible) return false;
-  if (match.locked !== undefined && feature.locked !== match.locked) return false;
-  if (match.ids !== undefined && !match.ids.has(feature.id)) return false;
-  if (match.shown !== undefined) {
-    const shown =
-      feature.visible &&
-      (feature.groupId === undefined || store.getGroup(feature.groupId)?.visible !== false) &&
-      store.getLayer(feature.layerId)?.visible !== false;
-    if (shown !== match.shown) return false;
-  }
-  return true;
-}
-
 /**
- * The layer over the Store an instance makes, over a Store of the published version
- * (`MemoryStore`), for the tests that run the resources or the modes over one without an
- * instance: the members of the Store as they are, and the reads by position and the moves
- * written as the published version wrote them, with the orders of the Store
- */
-export function documentOverStore(store: Store): InstanceDocument {
-  const itemsOf = (layerId: string): readonly string[] => store.getLayer(layerId)?.items ?? [];
-  const membersOf = (groupId: string): readonly string[] =>
-    store.getGroup(groupId)?.featureIds ?? [];
-  const matching = (match?: FeatureMatch): Feature[] =>
-    listEveryFeatureInOrder(store).filter((f) => !match || matchesFeature(store, f, match));
-
-  const moveFeatures = (ids: readonly string[], to: MoveDestination): void => {
-    const features = ids
-      .map((id) => store.getFeature(id))
-      .filter((f): f is Feature => f !== undefined);
-    const moved = new Set(ids);
-    store.transact(() => {
-      if (to.kind === 'layer') {
-        const { layerId } = to;
-        for (const feature of features) {
-          if (feature.layerId !== layerId || feature.groupId !== undefined) {
-            store.updateFeature(feature.id, { layerId, groupId: undefined });
-          }
-        }
-        const items = itemsOf(layerId).filter((id) => !moved.has(id));
-        store.updateLayer(layerId, { items: insertAt(items, ids, to.index) });
-        return;
-      }
-      if (to.kind === 'group') {
-        const group = store.getGroup(to.groupId);
-        if (!group) return;
-        for (const feature of features) {
-          if (feature.groupId !== group.id) {
-            store.updateFeature(feature.id, { layerId: group.layerId, groupId: group.id });
-          }
-        }
-        const featureIds = membersOf(group.id).filter((id) => !moved.has(id));
-        store.updateGroup(group.id, { featureIds: insertAt(featureIds, ids, to.index) });
-        return;
-      }
-      // Out of their groups: each feature stays in its layer
-      const byLayer = new Map<string, Feature[]>();
-      for (const feature of features) {
-        const list = byLayer.get(feature.layerId) ?? [];
-        list.push(feature);
-        byLayer.set(feature.layerId, list);
-      }
-      for (const [layerId, inLayer] of byLayer) {
-        const before = [...itemsOf(layerId)];
-        const blocks = new Map<string, string[]>();
-        for (const feature of inLayer) {
-          if (feature.groupId === undefined) continue;
-          const block = blocks.get(feature.groupId) ?? [];
-          block.push(feature.id);
-          blocks.set(feature.groupId, block);
-        }
-        for (const feature of inLayer) {
-          if (feature.groupId !== undefined)
-            store.updateFeature(feature.id, { groupId: undefined });
-        }
-        let items: string[];
-        if (to.index === undefined) {
-          // Just in front of their group, or in its place when it was left empty and deleted
-          items = [];
-          for (const itemId of before) {
-            if (!blocks.has(itemId) || store.getGroup(itemId)) items.push(itemId);
-            items.push(...(blocks.get(itemId) ?? []));
-          }
-        } else {
-          const layerIds = inLayer.map((feature) => feature.id);
-          const inThisLayer = new Set(layerIds);
-          items = itemsOf(layerId).filter((id) => !inThisLayer.has(id));
-          insertAt(items, layerIds, to.index);
-        }
-        store.updateLayer(layerId, { items });
-      }
-    });
-  };
-
-  const moveGroups = (ids: readonly string[], layerId: string, index: number | undefined) => {
-    const moved = new Set(ids);
-    store.transact(() => {
-      for (const id of ids) {
-        const group = store.getGroup(id);
-        if (!group || group.layerId === layerId) continue;
-        const source = store.getLayer(group.layerId);
-        if (source) {
-          store.updateLayer(source.id, { items: source.items.filter((item) => item !== id) });
-        }
-        for (const featureId of group.featureIds) {
-          store.updateFeature(featureId, { layerId });
-        }
-      }
-      const items = itemsOf(layerId).filter((id) => !moved.has(id));
-      store.updateLayer(layerId, { items: insertAt(items, ids, index) });
-    });
-  };
-
-  /** The boxes set (`setFeatureBoxes`); without them, a feature has the box of its positions */
-  let boxes: FeatureBoxes | null = null;
-  const boxOf = (feature: Feature): BoundingBox | null => {
-    if (boxes?.gives(feature.type)) return boxes.boxOf(feature);
-    let box: BoundingBox | null = null;
-    forEachCoordinateDeep(coordinatesOf(feature), ([x, y]) => {
-      if (!box) box = { minX: x, minY: y, maxX: x, maxY: y };
-      else {
-        box.minX = Math.min(box.minX, x);
-        box.minY = Math.min(box.minY, y);
-        box.maxX = Math.max(box.maxX, x);
-        box.maxY = Math.max(box.maxY, y);
-      }
-    });
-    return box;
-  };
-
-  const extra: Omit<InstanceDocument, keyof Store> = {
-    countItems: (layerId) => itemsOf(layerId).length,
-    listItemIds: (layerId, start, end) => itemsOf(layerId).slice(start, end),
-    countGroupFeatures: (groupId) => membersOf(groupId).length,
-    listGroupFeatureIds: (groupId, start, end) => membersOf(groupId).slice(start, end),
-    hasFeature: (id) => store.getFeature(id) !== undefined,
-    getFeatureProperty: (id, key) => store.getFeature(id)?.properties[key],
-    getFeaturePlace: (id) => store.getFeature(id),
-    holdFeatures: (fn) => fn(),
-    sortInStackingOrder: (ids) => {
-      const at = new Map(listEveryFeatureInOrder(store).map((feature, i) => [feature.id, i]));
-      return ids
-        .filter((id) => at.has(id))
-        .sort((a, b) => (at.get(a) as number) - (at.get(b) as number));
-    },
-    countFeatures: (match) => matching(match).length,
-    *iterateFeatures(match) {
-      for (const { id } of matching(match)) {
-        const feature = store.getFeature(id);
-        if (feature) yield feature;
-      }
-    },
-    getOrderBefore: () => undefined,
-    watchMoves: () => {},
-    moveFeatures,
-    moveGroups,
-    createFeatures: (features) =>
-      store.transact(() => features.every((feature) => store.createFeature(feature))),
-    onReset: (listener) =>
-      store.subscribe((change) => {
-        if (change.reset) listener();
-      }),
-    findFeatureIdsInBox: (bounds) =>
-      store
-        .listFeatures()
-        .filter((feature) => {
-          const box = boxOf(feature);
-          return (
-            box !== null &&
-            box.minX <= bounds.maxX &&
-            box.maxX >= bounds.minX &&
-            box.minY <= bounds.maxY &&
-            box.maxY >= bounds.minY
-          );
-        })
-        .map((feature) => feature.id),
-    setFeatureBoxes: (given) => {
-      boxes = given;
-    },
-  };
-  const members = new Map<string | symbol, unknown>(Object.entries(extra));
-  return new Proxy(store, {
-    get(target, key) {
-      if (members.has(key)) return members.get(key);
-      const value = Reflect.get(target, key, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  }) as unknown as InstanceDocument;
-}
-
-/**
- * The dependencies of the resources of the draw instance over a Store, with IDs `id-1`,
- * `id-2` and so on, and the first layer as the active layer until another is set
+ * The layer over the Store an instance makes, over a built-in Store: for the tests that run the
+ * resources, the modes or the parts of an instance without an instance
  *
- * A Store of the published version is read and written through `documentOverStore`.
+ * @param client - The state of this client (a new one when left out)
+ */
+export function createTestDocument(client?: ClientState): InstanceDocument {
+  return createDocumentAccess(createStore(), client);
+}
+
+/**
+ * The dependencies of the resources of the draw instance over the layer over a Store, with IDs
+ * `id-1`, `id-2` and so on, and the first layer as the active layer until another is set
  */
 export function createResourceDeps(
-  given: Store | InstanceDocument,
+  store: InstanceDocument,
 ): ResourceDeps & { emitter: EventEmitterImpl } {
-  const store = 'moveFeatures' in given ? given : documentOverStore(given);
   let seq = 0;
   let active = '';
   const emitter = new EventEmitterImpl();
@@ -476,7 +275,7 @@ export function createResourceDeps(
  * pass to an input router
  */
 export function createModeHarness(options: {
-  store: Store;
+  store: InstanceDocument;
   map: MapLibreMap;
   /** The mode manager the modes run in (a context only needs its setMode) */
   modeManager: ModeManager;

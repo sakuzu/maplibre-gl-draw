@@ -1,9 +1,6 @@
 {
   "description": "The places that may use a member of a value whose type is a type of the Store (read, write, call or subscribe): the files, and the folders whose files directly in them may. The types of the Store are named with the files that declare them; a type that extends or implements one of them is one too. Every other part of the library goes through the layer over the Store. A listed file that no longer uses the Store fails.",
   "types": {
-    "src/store/store.ts": ["Store", "StoreView", "StoreContract"],
-    "src/store/draw-store.ts": ["DrawStore"],
-    "src/store/memory.ts": ["MemoryStore"],
     "src/store/built-in/types.ts": ["Store", "StoreView"],
     "src/api/extension/store.ts": ["Store", "StoreView"]
   },

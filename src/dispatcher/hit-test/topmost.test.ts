@@ -12,10 +12,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
-import { toRow } from '../../test-utils.js';
+import { createTestDocument, toRow } from '../../test-utils.js';
 import type { FeatureCompanionProvider } from '../../view/feature-companion.js';
 import {
   createFeatureCompanionRegistry,
@@ -67,13 +67,13 @@ function polygon(id: string, layerId: string): Feature {
 const CENTER = { x: 50, y: -50 };
 const CENTER_COORD: Coordinate = [5, 5];
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: RBushSpatialIndex;
 let service: HitTestServiceImpl;
 let manager: DatasetManager;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  store = createTestDocument();
   spatialIndex = new RBushSpatialIndex();
   service = new HitTestServiceImpl(store, spatialIndex);
   manager = createDatasetManager({

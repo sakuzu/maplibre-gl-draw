@@ -12,16 +12,6 @@
       "kind": "array"
     },
     {
-      "file": "src/api/impl/events.ts",
-      "name": "DOCUMENT_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/events.ts",
-      "name": "CLIENT_KEYS",
-      "kind": "array"
-    },
-    {
       "file": "src/api/impl/features.ts",
       "name": "INPUT_KEYS",
       "kind": "array"

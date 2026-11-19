@@ -8,7 +8,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import type { FrameDrawContext } from '../../extension/index.js';
-import type { Store } from '../../store/store.js';
+import type { DocumentAccess as Store } from '../../store/document-access.js';
 import type { Feature } from '../../store/types.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
