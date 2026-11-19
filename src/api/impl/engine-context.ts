@@ -329,9 +329,17 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // Create the AutoNameGenerator
   const autoNameGenerator = new AutoNameGenerator(store, options.autoName);
 
-  // Create the default layer (only when initDefaultLayer !== false)
+  /**
+   * Whether the Store holds a layer: the first one of the stacking order that is there, and the
+   * layers only when the order names none
+   */
+  const holdsLayer = (document: typeof store): boolean => {
+    for (const id of document.getLayerOrder()) if (document.getLayer(id)) return true;
+    return document.listLayers().length > 0;
+  };
+  // Create the default layer (only when initDefaultLayer !== false, and the Store holds no layer)
   let activeLayerId: string;
-  if (options.initDefaultLayer !== false) {
+  if (options.initDefaultLayer !== false && !holdsLayer(store)) {
     const defaultLayerName = autoNameGenerator.generateLayerName();
     const defaultLayer: Layer = {
       id: 'default-layer',
@@ -346,7 +354,7 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     store.createLayer(defaultLayer);
     activeLayerId = 'default-layer';
   } else {
-    // Creating the layers is the responsibility of the application
+    // Creating the layers is the responsibility of the application, or the Store holds them
     // The initial value is an empty string (it is set later)
     activeLayerId = '';
   }
