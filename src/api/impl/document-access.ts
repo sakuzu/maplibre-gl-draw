@@ -852,8 +852,34 @@ export function createDocumentAccess(
     if (changesDocument(change)) {
       Object.defineProperty(change, SUMMARY, { value: summaryOf(notesFor(change), change) });
     }
-    toldOrdersBefore = ordersBefore;
+    const orders = ordersBefore;
     ordersBefore = new Map();
+    if (delivering) {
+      // Written while a change is told: told once that change has reached every listener. The
+      // sets of its IDs are made now, so that they follow the rows deleted meanwhile
+      if (wanted()) summaryOfChange(change)?.ids();
+      toTell.push({ change, orders });
+      return;
+    }
+    delivering = true;
+    try {
+      tell(change, orders);
+      // The changes the listeners wrote, in the order they were written
+      for (let next = toTell.shift(); next; next = toTell.shift()) tell(next.change, next.orders);
+    } finally {
+      delivering = false;
+      toTell.length = 0;
+    }
+  };
+
+  /** Whether a change is being told to the listeners of the layer */
+  let delivering = false;
+  /** The changes written while a change is told, with the orders before them, to tell after it */
+  const toTell: Array<{ change: StoreChange; orders: Map<string, readonly string[]> }> = [];
+
+  /** Tells a change to every listener of the layer */
+  const tell = (change: StoreChange, orders: Map<string, readonly string[]>): void => {
+    toldOrdersBefore = orders;
     // A notification of the state of this client alone is counted as the Store counts its own
     // (one that tells a change of the document follows the notification of the Store)
     if (!changesDocument(change)) countWork(counts, 'notifications');

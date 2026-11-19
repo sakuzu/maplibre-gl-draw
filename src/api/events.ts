@@ -260,7 +260,9 @@ export interface DrawEvents {
    * (see {@link DocumentChange}). A change of the selection, the mode or another state of this
    * client alone does not fire it. The values the features had before are carried to a
    * subscriber of `draw.document.subscribe` that asks for them. The events of the document
-   * are told once the Store has told every one of its listeners, so a listener can write
+   * are told once the Store has told every one of its listeners, so a listener can write. The
+   * changes are told in the order they were written: what a listener writes is told once the
+   * change being told has reached every listener and every subscriber.
    */
   'document.changed': DocumentChange;
   /** A document was loaded */
