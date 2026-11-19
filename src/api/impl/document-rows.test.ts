@@ -500,6 +500,28 @@ describe('the IDs of features deleted and created again in one transaction', () 
     expect([...(rows?.created ?? [])]).toContain(refOf('parcel-2'));
   });
 
+  it('loads the document saved over one whose features went into a new group', async () => {
+    const { draw } = instanceOver();
+    drawn(draw);
+    draw.groups.delete('pair');
+    const saved = draw.document.toJSON();
+    draw.groups.create({ id: 'later', featureIds: ['parcel-2', 'pin'] });
+    await draw.document.load(saved);
+    expect(draw.document.toJSON()).toEqual(saved);
+    expect(draw.groups.has('later')).toBe(false);
+  });
+
+  it('loads the document saved over one whose feature went into a new layer', async () => {
+    const { draw } = instanceOver();
+    drawn(draw);
+    const saved = draw.document.toJSON();
+    draw.layers.create({ id: 'later', name: 'Later' });
+    draw.features.move('pin', { layerId: 'later' });
+    await draw.document.load(saved);
+    expect(draw.document.toJSON()).toEqual(saved);
+    expect(draw.layers.get('later')).toBeUndefined();
+  });
+
   it('creates a feature with the ID of one deleted before it, with its own values only', () => {
     const { draw } = instanceOver();
     draw.features.create({
