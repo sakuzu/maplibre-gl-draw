@@ -100,9 +100,11 @@ import type {
  *   of the library refuse a layer whose id is that of a group and a group whose id is that of a
  *   layer. The ids of files are unique. A write that would take an id in use does not apply. The
  *   id of a deleted row that a {@link DeletedRowsToken} keeps stays in use until the token is let
- *   go of. The id of a deleted row that nothing keeps is free again: `createRows` takes it inside
- *   the transaction that deleted the row too (the row comes back with its reference, and the
- *   change lists it as updated), and pages take it once that transaction has ended.
+ *   go of. A token keeps the rows of a change from the time the change is told: inside the
+ *   transaction that deletes a row, `createRows` takes its id again whatever the listeners asked
+ *   for (the row comes back with its reference, in the layer or the group it is given, and the
+ *   change lists it as updated, so that no token keeps it). Once that transaction has ended, the
+ *   id of a deleted row that nothing keeps is free for a new row, and pages take it then.
  * - Writes return whether they applied: true when the write changed the Store, false when it did
  *   not apply, changing nothing (an id in use, or a reason of the Store's own, such as a place to
  *   keep the document that is full). A write whose argument cannot apply (a row or an id that
