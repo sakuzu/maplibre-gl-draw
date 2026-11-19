@@ -238,6 +238,11 @@ export interface DocumentPlaces {
    * of those over it afterwards: for a caller that reads back the many features it wrote
    */
   holdFeatures<T>(fn: () => T): T;
+  /**
+   * The features of the IDs given in stacking order, from the back: what is read is the place of
+   * each of them alone (an ID that is not a feature is left out)
+   */
+  sortInStackingOrder(ids: readonly string[]): string[];
   /** Counts the features that match */
   countFeatures(match?: FeatureMatch): number;
   /**

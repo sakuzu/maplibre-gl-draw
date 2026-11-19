@@ -2716,6 +2716,40 @@ export function createDocumentAccess(
     });
   };
 
+  /**
+   * The features of the IDs given in stacking order, from the back: the layers in their order,
+   * then the items of a layer by their keys (a group at its place), then the features of a group
+   * by theirs, each read from its row alone
+   */
+  const sortInStackingOrder = (ids: readonly string[]): string[] => {
+    writePendingPlaces();
+    const layerAt = new Map<string, number>();
+    for (const layerId of layerIdsInOrder(true)) layerAt.set(layerId, layerAt.size);
+    const placed: Array<{ id: string; layer: number; item: Placed; member: Placed | null }> = [];
+    for (const id of ids) {
+      const ref = tables.getRowRef(id);
+      if (ref === undefined) continue;
+      const fields = tables.readValues(Int32Array.of(ref), ['parent', 'orderKey']).fields;
+      const parent = String(fields.get('parent')?.[0]);
+      const own: Placed = { id, key: String(fields.get('orderKey')?.[0] ?? '') };
+      const group = store.getGroup(parent);
+      const layerId = group ? group.layerId : parent;
+      placed.push({
+        id,
+        layer: layerAt.get(layerId) ?? layerAt.size,
+        item: group ? { id: group.id, key: group.orderKey } : own,
+        member: group ? own : null,
+      });
+    }
+    placed.sort(
+      (a, b) =>
+        a.layer - b.layer ||
+        comparePlaced(a.item, b.item) ||
+        (a.member && b.member ? comparePlaced(a.member, b.member) : 0),
+    );
+    return placed.map((entry) => entry.id);
+  };
+
   /** The IDs of the features whose box meets a box, read from the spatial index of the Store */
   const findFeatureIdsInBox = (bounds: BoundingBox): string[] => {
     const cursor = tables.scan({ bbox: [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY] });
@@ -2850,6 +2884,7 @@ export function createDocumentAccess(
         trimCache();
       }
     },
+    sortInStackingOrder,
     countFeatures: (match?: FeatureMatch) => countMatching(match),
     iterateFeatures: (match?: FeatureMatch) => iterateMatching(match),
     getOrderBefore: (containerId: string) => toldOrdersBefore?.get(containerId),

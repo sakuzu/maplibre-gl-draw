@@ -5,7 +5,7 @@
  * HitTestService
  *
  * The service that integrates the two-stage hit testing.
- * 1. Narrowing down the candidates with the SpatialIndex (rbush)
+ * 1. Narrowing down the candidates with the spatial index of the Store (the boxes of its rows)
  * 2. The precise test with a HitTestStrategy
  */
 

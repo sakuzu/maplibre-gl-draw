@@ -8,6 +8,7 @@
  */
 
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
+import type { DocumentAccess, DocumentPlaces } from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Feature } from '../../store/types.js';
 import type { EngineModeContext } from '../handler.js';
@@ -15,8 +16,9 @@ import type { EngineModeContext } from '../handler.js';
 /**
  * Detect the features inside the box
  *
- * First the candidates are obtained quickly through the SpatialIndex (rbush),
- * and then a precise inside-the-box test is performed.
+ * First the candidates are obtained quickly through the spatial index of the Store (the boxes
+ * of its rows), and then a precise inside-the-box test is performed. The features taken are
+ * listed in stacking order, from the back.
  */
 export function queryFeaturesInBox(
   boxSelection: BoxSelection,
@@ -25,8 +27,8 @@ export function queryFeaturesInBox(
   const { store, spatialIndex, boxSelectionRegistry } = context;
   const rects = boxRects(boxSelection.startPoint, boxSelection.endPoint);
 
-  // First obtain the candidates quickly with rbush (from each part of a box that crosses the
-  // antimeridian)
+  // First obtain the candidates quickly with the spatial index (from each part of a box that
+  // crosses the antimeridian)
   const candidateIds = new Set<string>();
   for (const rect of rects) {
     for (const id of spatialIndex.findInBounds(rect)) candidateIds.add(id);
@@ -58,7 +60,12 @@ export function queryFeaturesInBox(
     }
   }
 
-  return hitIds;
+  // The features taken in stacking order, from the back: only their places are read (the
+  // instance hands its modes the layer over the Store, which reads them)
+  if (hitIds.length < 2) return hitIds;
+  return (
+    store as DocumentAccess & Pick<DocumentPlaces, 'sortInStackingOrder'>
+  ).sortInStackingOrder(hitIds);
 }
 
 type Rect = { minX: number; minY: number; maxX: number; maxY: number };

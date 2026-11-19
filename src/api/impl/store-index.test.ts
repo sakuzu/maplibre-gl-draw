@@ -8,6 +8,8 @@
  *
  * - A click, a box and the pointer of a line being drawn reach an Image, a Circle and a type with
  *   an extent of its own away from their positions, by the boxes they cover
+ * - A box lists what it selects in stacking order, from the back, across layers too, whatever
+ *   order the features were created in
  * - A row moved by a write to the Store directly is hit with its new box
  * - A feature in a hidden layer, one hidden by this client and one deleted are neither hit nor
  *   snapped to; `features.list({ bbox })` returns the hidden features as well
@@ -157,6 +159,46 @@ describe.each(STORES)('on %s', (_name, make) => {
     expect(boxed(draw, map, [-2.6, -0.6], [-1.4, 0.6])).toEqual(['img']);
     expect(boxed(draw, map, [1.6, -0.4], [2.4, 0.4])).toEqual(['cir']);
     expect(boxed(draw, map, [-0.2, -2.2], [1.2, -0.8])).toEqual(['sq']);
+  });
+
+  it('lists what a box selects in stacking order, from the back, also across two layers', () => {
+    const { draw, map } = instanceOf(make());
+    const back = draw.layers.list()[0].id;
+    const front = draw.layers.create({ id: 'front' });
+    if (!front) throw new Error('no layer');
+    const point = (id: string, x: number, layerId: string) =>
+      draw.features.create({
+        id,
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [x, -2.6] },
+        layerId,
+      });
+    // Created in another order than the one they are stacked in
+    point('k3', 3.5, front.id);
+    point('k1', 3.1, back);
+    point('k2', 3.3, back);
+    point('k4', 3.7, front.id);
+    point('k5', 3.9, back);
+    draw.features.move('k2', { layerId: back, index: 0 });
+    draw.groups.create({ id: 'kg', featureIds: ['k5', 'k1'] });
+    const stacked = (): string[] =>
+      draw.features
+        .list()
+        .map((feature: Feature) => feature.id)
+        .filter((id) => id.startsWith('k'));
+
+    const order = stacked();
+    expect(order).not.toEqual(['k3', 'k1', 'k2', 'k4', 'k5']);
+    map.drag([2.9, -2.8], [4, -2.4], { modifiers: { shift: true } });
+    expect(draw.selection.get().ids).toEqual(order);
+
+    // The layers the other way round
+    draw.layers.reorder([...draw.layers.getOrder()].reverse());
+    const reordered = stacked();
+    expect(reordered).not.toEqual(order);
+    draw.selection.clear();
+    map.drag([2.9, -2.8], [4, -2.4], { modifiers: { shift: true } });
+    expect(draw.selection.get().ids).toEqual(reordered);
   });
 
   it('snaps to a vertex, and to a candidate of a type with an extent of its own away from its position', () => {

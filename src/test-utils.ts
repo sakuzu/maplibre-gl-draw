@@ -392,6 +392,12 @@ export function documentOverStore(store: Store): InstanceDocument {
     getFeatureProperty: (id, key) => store.getFeature(id)?.properties[key],
     getFeaturePlace: (id) => store.getFeature(id),
     holdFeatures: (fn) => fn(),
+    sortInStackingOrder: (ids) => {
+      const at = new Map(listEveryFeatureInOrder(store).map((feature, i) => [feature.id, i]));
+      return ids
+        .filter((id) => at.has(id))
+        .sort((a, b) => (at.get(a) as number) - (at.get(b) as number));
+    },
     countFeatures: (match) => matching(match).length,
     *iterateFeatures(match) {
       for (const { id } of matching(match)) {
