@@ -11,7 +11,7 @@
  * (to open) and as GeoJSON (to import).
  */
 
-import type { DrawDocument, Feature as DrawFeature, Layer } from '@sakuzu/maplibre-gl-draw';
+import type { DocumentLayer, DrawDocument, Feature as DrawFeature } from '@sakuzu/maplibre-gl-draw';
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
 
 /** The numbers of features the page links to, from the fewest */
@@ -154,7 +154,7 @@ function makeShapes(n: number): Shape[] {
   return shapes;
 }
 
-function layerOf(items: readonly string[]): Layer {
+function layerOf(items: readonly string[]): DocumentLayer {
   return {
     id: LAYER_ID,
     name: 'Features',

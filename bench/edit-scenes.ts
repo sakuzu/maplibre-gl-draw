@@ -200,7 +200,6 @@ function storeOfGrid(n: number): { store: Store; rows: Int32Array } {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -455,7 +454,6 @@ export const SCENES: readonly Scene[] = [
         visible: true,
         locked: false,
         opacity: 1,
-        items: [],
         styleRule: undefined,
         metadata: undefined,
       });
@@ -604,7 +602,6 @@ export const SCENES: readonly Scene[] = [
         visible: true,
         locked: false,
         opacity: 1,
-        items: [],
         styleRule: undefined,
         metadata: undefined,
       });

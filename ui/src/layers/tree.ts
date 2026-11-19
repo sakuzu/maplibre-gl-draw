@@ -56,6 +56,11 @@ export type LayerTreeNode = TreeNode & {
   data: Layer | DrawGroup | Feature | TreeDataset | null;
   /** The number of the rows of a dataset, or of the features a count stands for */
   count?: number;
+  /**
+   * The IDs of the items of a layer, or of the features of a group, from the back, as core lists
+   * them (those the tree does not show included)
+   */
+  order?: readonly string[];
 };
 
 /** Whether a node is of a kind that is selected */
@@ -68,19 +73,54 @@ export interface TreeSource {
   readonly layers: {
     get(id: string): Layer | undefined;
     getOrder(): readonly string[];
+    countItems(id: string): number;
+    listItemIds(id: string, range: { start: number; end: number }): string[];
   };
   /** The datasets, which are rows of the stack */
   readonly datasets?: {
     get(id: string): TreeDataset | undefined;
     list(): readonly TreeDataset[];
   };
-  readonly groups: { get(id: string): DrawGroup | undefined };
+  readonly groups: {
+    get(id: string): DrawGroup | undefined;
+    countFeatures(id: string): number;
+    listFeatureIds(id: string, range: { start: number; end: number }): string[];
+  };
   readonly features: {
     get(id: string): Feature | undefined;
     getAppliedStyle(id: string): FeatureStyleResolved | undefined;
   };
   /** What this client hides; a node it hides shows as hidden */
   readonly hidden?: { has(id: string): boolean };
+}
+
+/** The most IDs core gives in one range */
+const RANGE_LIMIT = 10_000;
+
+/** Every ID of a list of core of `count` IDs, read a range at a time, from the back */
+function readAll(
+  count: number,
+  read: (range: { start: number; end: number }) => readonly string[],
+): string[] {
+  const out: string[] = [];
+  for (let start = 0; start < count; start += RANGE_LIMIT) {
+    out.push(...read({ start, end: Math.min(count, start + RANGE_LIMIT) }));
+  }
+  return out;
+}
+
+/** The IDs of the items of a layer, from the back */
+function itemsOf(source: TreeSource, layerId: string): string[] {
+  return readAll(source.layers.countItems(layerId), (range) =>
+    source.layers.listItemIds(layerId, range),
+  );
+}
+
+/** The IDs of the features of a group, from the back */
+function featuresOf(source: TreeSource, groupId: string): string[] {
+  return readAll(source.groups.countFeatures(groupId), (range) =>
+    source.groups.listFeatureIds(groupId, range),
+  );
 }
 
 /** Whether a node shows as visible: visible in the document, and not hidden by this client */
@@ -282,17 +322,21 @@ export function buildNodes(
     const children: LayerTreeNode[] = [];
     // The features of the layer, counted from its items without reading them: those of a group
     // are in the group, not among the items
+    const items = itemsOf(source, layer.id);
     let total = 0;
     if (options.features) {
-      for (const itemId of layer.items) total += source.groups.get(itemId)?.featureIds.length ?? 1;
+      for (const itemId of items) {
+        total += source.groups.get(itemId) ? source.groups.countFeatures(itemId) : 1;
+      }
     }
     const many = total > limit;
     if (many) children.push(countNode(layer.id, total, m));
-    for (const itemId of many ? [] : [...layer.items].reverse()) {
+    for (const itemId of many ? [] : [...items].reverse()) {
       if (seen.has(itemId)) continue;
       const group = source.groups.get(itemId);
       if (group) {
         seen.add(group.id);
+        const members = featuresOf(source, group.id);
         const node: LayerTreeNode = {
           id: group.id,
           kind: 'group',
@@ -301,10 +345,11 @@ export function buildNodes(
           visible: shown(source, group),
           locked: group.locked,
           data: group,
+          order: members,
         };
         if (options.features) {
           node.children = [];
-          for (const featureId of [...group.featureIds].reverse()) {
+          for (const featureId of [...members].reverse()) {
             const feature = seen.has(featureId) ? undefined : source.features.get(featureId);
             if (!feature) continue;
             seen.add(feature.id);
@@ -332,6 +377,7 @@ export function buildNodes(
       locked: layer.locked,
       children,
       data: layer,
+      order: items,
     });
   }
   nodes.push(...division('belowLayers'));

@@ -630,14 +630,16 @@ describe('the stacking order on a real map', () => {
       const { draw } = window as unknown as E2EWindow;
       draw.options.update({ isExternalEntry: (id) => id.startsWith('base:') });
       const [first] = draw.layers.list();
-      const itemsBefore = [...first.items];
+      const itemsOf = (id: string) =>
+        draw.layers.listItemIds(id, { start: 0, end: draw.layers.countItems(id) });
+      const itemsBefore = itemsOf(first.id);
       draw.layers.create({ id: 'e2e-second' });
       draw.datasets.add({ id: 'e2e-parcels', rows: [], order: 'layerOrder' });
       draw.layers.reorder([first.id, 'base:roads', 'e2e-parcels', 'e2e-second']);
       const placed = {
         order: [...draw.getStore().getLayerOrder()],
         runs: draw.getLayerStack().map(({ from, to }) => [from, to]),
-        items: draw.layers.list().map((layer) => [...layer.items]),
+        items: draw.layers.list().map((layer) => itemsOf(layer.id)),
       };
       draw.layers.delete('e2e-second');
       draw.datasets.remove('e2e-parcels');
@@ -865,14 +867,19 @@ describe('a replaced Store that held its features before the instance, with null
   it('selects them with a click and with a Shift box', async () => {
     const ids = await page.evaluate(
       ({ point, line, polygon }) => {
-        type Contract = import('../index.js').Store;
+        type RowStore = import('../store/index.js').Store;
+        type Written = import('../index.js').Feature;
         const w = window as unknown as E2EWindow & {
           e2e: {
             createDraw: typeof import('../index.js').createDraw;
-            internals: { MemoryContractStore: new () => Contract };
+            internals: {
+              createStore: () => RowStore;
+              writeFeatureRows: (store: RowStore, features: readonly Written[]) => boolean;
+            };
           };
         };
-        const store = new w.e2e.internals.MemoryContractStore();
+        // The built-in Store spread into an object of its own, written with rows
+        const store: RowStore = { ...w.e2e.internals.createStore() };
         const base = {
           properties: {},
           layerId: 'held',
@@ -888,29 +895,30 @@ describe('a replaced Store that held its features before the instance, with null
             visible: true,
             locked: false,
             opacity: 1,
-            items: [],
             // A Store may give the optional fields as null
             styleRule: null as unknown as undefined,
             metadata: null as unknown as undefined,
           });
-          store.createFeature({
-            ...base,
-            id: 'p',
-            type: 'Point',
-            geometry: { type: 'Point', coordinates: point },
-          });
-          store.createFeature({
-            ...base,
-            id: 'l',
-            type: 'LineString',
-            geometry: { type: 'LineString', coordinates: line },
-          });
-          store.createFeature({
-            ...base,
-            id: 'g',
-            type: 'Polygon',
-            geometry: { type: 'Polygon', coordinates: [polygon] },
-          });
+          w.e2e.internals.writeFeatureRows(store, [
+            {
+              ...base,
+              id: 'p',
+              type: 'Point',
+              geometry: { type: 'Point', coordinates: point },
+            },
+            {
+              ...base,
+              id: 'l',
+              type: 'LineString',
+              geometry: { type: 'LineString', coordinates: line },
+            },
+            {
+              ...base,
+              id: 'g',
+              type: 'Polygon',
+              geometry: { type: 'Polygon', coordinates: [polygon] },
+            },
+          ]);
         }, 'remote');
         w.draw.destroy();
         w.draw = w.e2e.createDraw(w.map, { store, initDefaultLayer: false });

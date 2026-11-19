@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { Layer, StyleRule } from '@sakuzu/maplibre-gl-draw';
+import type { DocumentLayer, StyleRule } from '@sakuzu/maplibre-gl-draw';
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -189,7 +189,7 @@ describe('createLayerPanel', () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
     fake.change(({ layers }) => {
-      layers.set('l2', { ...(layers.get('l2') as Layer), name: 'Stations' });
+      layers.set('l2', { ...(layers.get('l2') as DocumentLayer), name: 'Stations' });
     });
     flushSync();
     expect(rowNames(fake.container)[0]).toBe('Stations');
@@ -421,7 +421,7 @@ describe('createLegend', () => {
     const fake = sample();
     handle = createLegend(fake.asDraw, { target: fake.container });
     fake.change(({ layers }) => {
-      layers.set('l2', { ...(layers.get('l2') as Layer), styleRule: undefined });
+      layers.set('l2', { ...(layers.get('l2') as DocumentLayer), styleRule: undefined });
     });
     flushSync();
     expect(handle.element.textContent).toContain('No layer or dataset has a style rule.');

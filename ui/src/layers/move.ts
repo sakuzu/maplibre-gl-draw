@@ -105,7 +105,7 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
   const behind = shown[shown.indexOf(move.id) + 1];
   if (parent.kind === 'layer') {
     const layer = parent.data as Layer;
-    const to = { layerId: layer.id, index: coreIndex(layer.items, move.id, behind) };
+    const to = { layerId: layer.id, index: coreIndex(parent.order ?? [], move.id, behind) };
     return at.node.kind === 'group'
       ? { kind: 'group', id: move.id, to }
       : { kind: 'feature', id: move.id, to };
@@ -114,6 +114,6 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
   return {
     kind: 'feature',
     id: move.id,
-    to: { groupId: group.id, index: coreIndex(group.featureIds, move.id, behind) },
+    to: { groupId: group.id, index: coreIndex(parent.order ?? [], move.id, behind) },
   };
 }

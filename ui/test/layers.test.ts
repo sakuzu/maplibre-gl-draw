@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { TreeNode } from '@sakuzu/kata/svelte';
-import type { Layer, StyleRule } from '@sakuzu/maplibre-gl-draw';
+import type { DocumentLayer, StyleRule } from '@sakuzu/maplibre-gl-draw';
 import { describe, expect, it } from 'vitest';
 import { datasetShape, legendBlocks, legendShape } from '../src/layers/legend.js';
 import { coreIndex, planMove } from '../src/layers/move.js';
@@ -123,7 +123,7 @@ describe('the nodes of the layer tree', () => {
   it('show as hidden what the document or this client hides', () => {
     const fake = sample();
     fake.change(({ layers }) => {
-      layers.set('l2', { ...(layers.get('l2') as Layer), visible: false });
+      layers.set('l2', { ...(layers.get('l2') as DocumentLayer), visible: false });
     });
     fake.hide('a');
     const nodes = buildNodes(fake.draw, en);
@@ -416,7 +416,7 @@ describe('the legend', () => {
     const fake = sample();
     fake.change(({ layers }) => {
       layers.set('l1', {
-        ...(layers.get('l1') as Layer),
+        ...(layers.get('l1') as DocumentLayer),
         styleRule: { kind: 'single', color: '#123456' },
       });
     });
@@ -446,7 +446,7 @@ describe('the legend', () => {
   it('leaves out the layers without a rule', () => {
     const fake = sample();
     fake.change(({ layers }) => {
-      layers.set('l2', { ...(layers.get('l2') as Layer), styleRule: undefined });
+      layers.set('l2', { ...(layers.get('l2') as DocumentLayer), styleRule: undefined });
     });
     expect(legendBlocks(fake.draw, en)).toEqual([]);
   });
@@ -455,7 +455,7 @@ describe('the legend', () => {
     const fake = sample();
     fake.change(({ layers }) => {
       layers.set('l2', {
-        ...(layers.get('l2') as Layer),
+        ...(layers.get('l2') as DocumentLayer),
         styleRule: {
           kind: 'graduated',
           property: 'n',

@@ -454,7 +454,11 @@ describe('the examples', () => {
           active: w.draw.layers.getActive()?.id,
           parcelsVisible: w.draw.layers.get(w.layerIds.parcels)?.visible,
           paths: w.draw.layers.get(w.layerIds.paths)?.opacity,
-          group: { id: group?.id, size: group?.featureIds.length, locked: group?.locked },
+          group: {
+            id: group?.id,
+            size: group ? w.draw.groups.countFeatures(group.id) : undefined,
+            locked: group?.locked,
+          },
         };
       });
     const before = await state();

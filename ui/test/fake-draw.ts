@@ -6,14 +6,14 @@
 
 import type {
   DatasetOrder,
+  DocumentGroup,
+  DocumentLayer,
   Draw,
   Feature,
   FeatureInput,
   FeaturePatch,
   FeatureStyleResolved,
-  Group,
   GroupPatch,
-  Layer,
   LayerPatch,
   Mode,
   MoveTarget,
@@ -40,8 +40,8 @@ function mergeOptions<T extends object>(base: T, patch: Partial<T>): T {
 
 /** A document for the stand-in: the layers from the back, and their groups and features */
 export interface FakeDocument {
-  layers: Layer[];
-  groups?: Group[];
+  layers: DocumentLayer[];
+  groups?: DocumentGroup[];
   features?: Feature[];
   /** The active layer; the front one when left out */
   active?: string;
@@ -127,7 +127,11 @@ function fakeDataset(spec: FakeDatasetSpec) {
 export type FakeDataset = ReturnType<typeof fakeDataset>;
 
 /** A layer of a fake document */
-export function layer(id: string, items: string[] = [], extra: Partial<Layer> = {}): Layer {
+export function layer(
+  id: string,
+  items: string[] = [],
+  extra: Partial<DocumentLayer> = {},
+): DocumentLayer {
   return {
     id,
     name: `Layer ${id}`,
@@ -142,7 +146,7 @@ export function layer(id: string, items: string[] = [], extra: Partial<Layer> = 
 }
 
 /** A group of a fake document */
-export function group(id: string, layerId: string, featureIds: string[]): Group {
+export function group(id: string, layerId: string, featureIds: string[]): DocumentGroup {
   return { id, layerId, name: `Group ${id}`, featureIds, visible: true, locked: false };
 }
 
@@ -183,8 +187,8 @@ export function fakeDraw(
   let mode: Mode = options.mode ?? 'select';
   let ids: string[] = options.ids ?? [];
   let selType: SelectionType | null = ids.length ? 'feature' : null;
-  const layers = new Map<string, Layer>();
-  const groups = new Map<string, Group>();
+  const layers = new Map<string, DocumentLayer>();
+  const groups = new Map<string, DocumentGroup>();
   const features = new Map<string, Feature>();
   let order: string[] = [];
   const doc = options.doc ?? { layers: [layer('l1')] };
@@ -262,12 +266,12 @@ export function fakeDraw(
   const select = (next: string[]) => setSelection('feature', next);
   const changed = () => emit('document.changed', {});
 
-  const putLayer = (id: string, patch: Partial<Layer>) => {
+  const putLayer = (id: string, patch: Partial<DocumentLayer>) => {
     const now = layers.get(id);
     if (!now) throw new Error(`no layer ${id}`);
     layers.set(id, { ...now, ...patch });
   };
-  const putGroup = (id: string, patch: Partial<Group>) => {
+  const putGroup = (id: string, patch: Partial<DocumentGroup>) => {
     const now = groups.get(id);
     if (!now) throw new Error(`no group ${id}`);
     groups.set(id, { ...now, ...patch });
@@ -336,6 +340,9 @@ export function fakeDraw(
     layers: {
       get: (id: string) => layers.get(id),
       list: () => order.flatMap((id) => layers.get(id) ?? []),
+      countItems: (id: string) => layers.get(id)?.items.length ?? 0,
+      listItemIds: (id: string, range: { start: number; end: number }) =>
+        (layers.get(id)?.items ?? []).slice(range.start, range.end),
       getOrder: () => [...order],
       reorder: vi.fn((next: readonly string[]) => {
         order = [...next];
@@ -347,12 +354,12 @@ export function fakeDraw(
         layers.set(id, layer(id, [], input.name ? { name: input.name } : {}));
         order.push(id);
         changed();
-        return layers.get(id) as Layer;
+        return layers.get(id) as DocumentLayer;
       }),
-      update: vi.fn((id: string, patch: Partial<Layer>) => {
+      update: vi.fn((id: string, patch: Partial<DocumentLayer>) => {
         putLayer(id, patch);
         changed();
-        return layers.get(id) as Layer;
+        return layers.get(id) as DocumentLayer;
       }),
       getActive: () => (active ? (layers.get(active) ?? null) : null),
       setActive: vi.fn((id: string) => {
@@ -362,18 +369,21 @@ export function fakeDraw(
     },
     groups: {
       get: (id: string) => groups.get(id),
-      update: vi.fn((id: string, patch: Partial<Group>) => {
+      countFeatures: (id: string) => groups.get(id)?.featureIds.length ?? 0,
+      listFeatureIds: (id: string, range: { start: number; end: number }) =>
+        (groups.get(id)?.featureIds ?? []).slice(range.start, range.end),
+      update: vi.fn((id: string, patch: Partial<DocumentGroup>) => {
         putGroup(id, patch);
         changed();
-        return groups.get(id) as Group;
+        return groups.get(id) as DocumentGroup;
       }),
       move: vi.fn((id: string, to: MoveTarget) => {
         if (!('layerId' in to)) throw new Error('a group goes into a layer');
-        const g = groups.get(id) as Group;
+        const g = groups.get(id) as DocumentGroup;
         takeOut(id);
         putGroup(id, { layerId: to.layerId });
         for (const fid of g.featureIds) putFeature(fid, { layerId: to.layerId });
-        const target = layers.get(to.layerId) as Layer;
+        const target = layers.get(to.layerId) as DocumentLayer;
         putLayer(to.layerId, { items: insert(target.items, id, to.index) });
         changed();
         return true;
@@ -395,10 +405,10 @@ export function fakeDraw(
         takeOut(id);
         if ('layerId' in to) {
           putFeature(id, { layerId: to.layerId, groupId: undefined });
-          const target = layers.get(to.layerId) as Layer;
+          const target = layers.get(to.layerId) as DocumentLayer;
           putLayer(to.layerId, { items: insert(target.items, id, to.index) });
         } else if (to.groupId) {
-          const g = groups.get(to.groupId) as Group;
+          const g = groups.get(to.groupId) as DocumentGroup;
           putFeature(id, { layerId: g.layerId, groupId: g.id });
           putGroup(g.id, { featureIds: insert(g.featureIds, id, to.index) });
         }
@@ -485,7 +495,9 @@ export function fakeDraw(
       emit('hidden.changed', { ids: createIdSet(hidden) });
     },
     /** Changes the document from outside the interface */
-    change(fn: (doc: { layers: Map<string, Layer>; features: Map<string, Feature> }) => void) {
+    change(
+      fn: (doc: { layers: Map<string, DocumentLayer>; features: Map<string, Feature> }) => void,
+    ) {
       fn({ layers, features });
       changed();
     },
@@ -570,15 +582,15 @@ function merge<T extends object>(base: T, patch: object | undefined): T {
 export function fakeDocument(
   options: {
     features?: Feature[];
-    layers?: Partial<Layer>[];
-    groups?: Group[];
+    layers?: Partial<DocumentLayer>[];
+    groups?: DocumentGroup[];
     selection?: { type: SelectionType; ids: string[] };
     readOnly?: boolean;
   } = {},
 ) {
   const fake = fakeDraw();
   const features = new Map((options.features ?? []).map((f) => [f.id, f]));
-  const layers = new Map<string, Layer>(
+  const layers = new Map<string, DocumentLayer>(
     (options.layers ?? [{ id: 'l1', name: 'Layer 1' }]).map((l) => [
       l.id as string,
       {
@@ -727,6 +739,9 @@ export function fakeDocument(
     },
     groups: {
       get: (id: string) => groups.get(id),
+      countFeatures: (id: string) => groups.get(id)?.featureIds.length ?? 0,
+      listFeatureIds: (id: string, range: { start: number; end: number }) =>
+        (groups.get(id)?.featureIds ?? []).slice(range.start, range.end),
       update: vi.fn((id: string, patch: GroupPatch) => {
         const g = groups.get(id);
         if (!g) throw new Error(`no group ${id}`);
