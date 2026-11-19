@@ -12,18 +12,20 @@
  * the commit in endDrag.
  *
  * Because SelectModeDragHandler is driven in the 3 stages startDrag / updateDrag / endDrag, the
- * drag sequences are assembled and invoked in the same manner as mode.test.ts (MemoryStore + a
- * mock map that maps longitude and latitude linearly).
+ * drag sequences are assembled and invoked in the same manner as mode.test.ts (the layer over the
+ * built-in Store + a mock map that maps longitude and latitude linearly).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDocumentAccess } from '../../api/impl/document-access.js';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
 import { DEFAULT_TOPOLOGY_CONFIG } from '../../shared/config/topology.js';
 import { coordinatesOf as featureCoordinates } from '../../shared/utils/coordinates.js';
 import type { SnapDisableKey } from '../../snapping/types.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
-import { MemoryStore } from '../../store/memory.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { InstanceDocument } from '../../store/document-access.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Coordinate, Feature, StoreChange, VertexRef } from '../../store/types.js';
 import type {
@@ -101,7 +103,7 @@ function makeMap() {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatialIndex: StoreSpatialIndex;
 /** The ids of the features the Store reported as updated (the index follows them) */
 let indexUpdates: string[];
@@ -159,7 +161,8 @@ function coordinatesOf(id: string): unknown {
 }
 
 beforeEach(() => {
-  store = new MemoryStore();
+  // The layer an instance makes over the built-in Store
+  store = createDocumentAccess(createStore());
   store.createLayer({
     id: 'l1',
     name: 'l1',

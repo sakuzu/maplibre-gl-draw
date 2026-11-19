@@ -17,6 +17,7 @@
 
 import type { ClientState } from './memory/ui-state.js';
 import type {
+  BoundingBox,
   BoxSelection,
   DragState,
   Feature,
@@ -279,5 +280,39 @@ export interface DocumentMoves {
   onReset(listener: () => void): () => void;
 }
 
-/** The layer over the Store an instance makes: the four parts, the reads by position and the moves */
-export interface InstanceDocument extends DocumentAccess, DocumentPlaces, DocumentMoves {}
+/**
+ * How the box of a feature is worked out, for the types whose box comes from more than their
+ * positions (an Image, a Circle, a type that works out its own extent)
+ */
+export interface FeatureBoxes {
+  /** Whether the features of a type have the box `boxOf` gives (the others, that of their positions) */
+  gives(type: string): boolean;
+  /** The box of a feature of a type that gives it */
+  boxOf(feature: Feature): BoundingBox;
+}
+
+/** The reads of the features by the boxes they cover, from the spatial index of the Store */
+export interface DocumentBoxes {
+  /**
+   * The IDs of the features whose box meets a box, in no particular order: the hidden features
+   * included, the deleted ones not. The box of a feature is that of its positions, or the one the
+   * boxes set give (`setFeatureBoxes`)
+   */
+  findFeatureIdsInBox(bounds: BoundingBox): string[];
+  /**
+   * Sets how the boxes of the features of some types are worked out, and makes the boxes again
+   * (with the same boxes, it makes them again): null takes them back, so that every feature has
+   * the box of its positions
+   */
+  setFeatureBoxes(boxes: FeatureBoxes | null): void;
+}
+
+/**
+ * The layer over the Store an instance makes: the four parts, the reads by position, the moves
+ * and the reads by box
+ */
+export interface InstanceDocument
+  extends DocumentAccess,
+    DocumentPlaces,
+    DocumentMoves,
+    DocumentBoxes {}

@@ -56,6 +56,7 @@ import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
 import type { Feature } from './shared/types/model.js';
+import { coordinatesOf, forEachCoordinateDeep } from './shared/utils/coordinates.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import { type WorkCounts, workCountsOf } from './shared/work-counts.js';
@@ -68,10 +69,15 @@ import type {
   StoreChange as RowStoreChange,
   StoreGroup,
 } from './store/built-in/types.js';
-import type { FeatureMatch, InstanceDocument, MoveDestination } from './store/document-access.js';
+import type {
+  FeatureBoxes,
+  FeatureMatch,
+  InstanceDocument,
+  MoveDestination,
+} from './store/document-access.js';
 import { listEveryFeatureInOrder } from './store/ordering.js';
 import type { Store } from './store/store.js';
-import type { FileData, Metadata } from './store/types.js';
+import type { BoundingBox, FileData, Metadata } from './store/types.js';
 import type { TerrainContext } from './view/terrain/context.js';
 import { createSelectionExtensionRegistry } from './view/ui/selection-ui/extension-registry.js';
 
@@ -360,6 +366,23 @@ export function documentOverStore(store: Store): InstanceDocument {
     });
   };
 
+  /** The boxes set (`setFeatureBoxes`); without them, a feature has the box of its positions */
+  let boxes: FeatureBoxes | null = null;
+  const boxOf = (feature: Feature): BoundingBox | null => {
+    if (boxes?.gives(feature.type)) return boxes.boxOf(feature);
+    let box: BoundingBox | null = null;
+    forEachCoordinateDeep(coordinatesOf(feature), ([x, y]) => {
+      if (!box) box = { minX: x, minY: y, maxX: x, maxY: y };
+      else {
+        box.minX = Math.min(box.minX, x);
+        box.minY = Math.min(box.minY, y);
+        box.maxX = Math.max(box.maxX, x);
+        box.maxY = Math.max(box.maxY, y);
+      }
+    });
+    return box;
+  };
+
   const extra: Omit<InstanceDocument, keyof Store> = {
     countItems: (layerId) => itemsOf(layerId).length,
     listItemIds: (layerId, start, end) => itemsOf(layerId).slice(start, end),
@@ -386,6 +409,23 @@ export function documentOverStore(store: Store): InstanceDocument {
       store.subscribe((change) => {
         if (change.reset) listener();
       }),
+    findFeatureIdsInBox: (bounds) =>
+      store
+        .listFeatures()
+        .filter((feature) => {
+          const box = boxOf(feature);
+          return (
+            box !== null &&
+            box.minX <= bounds.maxX &&
+            box.maxX >= bounds.minX &&
+            box.minY <= bounds.maxY &&
+            box.maxY >= bounds.minY
+          );
+        })
+        .map((feature) => feature.id),
+    setFeatureBoxes: (given) => {
+      boxes = given;
+    },
   };
   const members = new Map<string | symbol, unknown>(Object.entries(extra));
   return new Proxy(store, {

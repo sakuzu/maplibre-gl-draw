@@ -28,6 +28,7 @@ import { DrawError } from '../../shared/errors.js';
 import { countWork, type WorkCounts, workCountsOf } from '../../shared/work-counts.js';
 import { onChangeTold } from '../../store/built-in/changes.js';
 import { compareKeys, createOrderKeyBetween } from '../../store/built-in/order-keys.js';
+import { setRowBoxes } from '../../store/built-in/row-boxes.js';
 import type {
   FeatureRowField,
   StoreChange as RowChange,
@@ -35,6 +36,7 @@ import type {
   StoreGroup,
 } from '../../store/built-in/types.js';
 import type {
+  FeatureBoxes,
   FeatureMatch,
   FeaturePlace,
   InstanceDocument,
@@ -42,6 +44,7 @@ import type {
 } from '../../store/document-access.js';
 import { ClientState } from '../../store/memory/ui-state.js';
 import type {
+  BoundingBox,
   BoxSelection,
   DragState,
   Feature,
@@ -2682,6 +2685,51 @@ export function createDocumentAccess(
   } = { tentative: null, boxSelection: null, dragState: null, followedVertices: null };
 
   // ==========================================================================
+  // The boxes of the features
+  // ==========================================================================
+
+  /** Takes back the boxes set on the Store (null while none is set) */
+  let takeBoxesBack: (() => void) | null = null;
+
+  const setFeatureBoxes = (boxes: FeatureBoxes | null): void => {
+    if (boxes === null) {
+      const back = takeBoxesBack;
+      takeBoxesBack = null;
+      back?.();
+      return;
+    }
+    takeBoxesBack = setRowBoxes(tables, {
+      gives: (type) => boxes.gives(type),
+      boxOf: (ref, out) => {
+        const id = tables.getRowId(ref);
+        if (id === undefined) return false;
+        // Made from the row as it is when the Store reads its box (the feature kept made may be
+        // that of before a write the layer has not followed yet)
+        const [feature] = makeFeatures(Int32Array.of(ref), [id]);
+        const box = boxes.boxOf(feature);
+        out[0] = box.minX;
+        out[1] = box.minY;
+        out[2] = box.maxX;
+        out[3] = box.maxY;
+        return true;
+      },
+    });
+  };
+
+  /** The IDs of the features whose box meets a box, read from the spatial index of the Store */
+  const findFeatureIdsInBox = (bounds: BoundingBox): string[] => {
+    const cursor = tables.scan({ bbox: [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY] });
+    const ids: string[] = [];
+    for (let batch = cursor.next(); batch !== null; batch = cursor.next()) {
+      for (let i = 0; i < batch.length; i++) {
+        const id = tables.getRowId(batch[i]);
+        if (id !== undefined) ids.push(id);
+      }
+    }
+    return ids;
+  };
+
+  // ==========================================================================
   // The state of this client
   // ==========================================================================
 
@@ -2808,6 +2856,10 @@ export function createDocumentAccess(
     watchMoves(watching: () => boolean) {
       watchingMoves = watching;
     },
+
+    // The reads by box
+    findFeatureIdsInBox,
+    setFeatureBoxes,
 
     // The moves and the replacements
     moveFeatures,

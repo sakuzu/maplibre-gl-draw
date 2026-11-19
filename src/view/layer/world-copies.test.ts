@@ -17,13 +17,14 @@
 import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { LngLatBounds } from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createDocumentAccess } from '../../api/impl/document-access.js';
 import type { HitTestStrategy } from '../../dispatcher/hit-test/strategies/base.js';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import { MemoryStore } from '../../store/memory.js';
+import { createStore } from '../../store/built-in/create-store.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
@@ -206,7 +207,8 @@ function probe(id: string, lng: number): Feature {
 function setup(center: number, halfWidth: number, lngs: Record<string, number>) {
   const { gl } = createGlStub();
   const map = createMapStub(center, halfWidth);
-  const store = new MemoryStore();
+  // The layer an instance makes over the built-in Store
+  const store = createDocumentAccess(createStore());
   store.createLayer({
     id: 'l1',
     name: 'l1',

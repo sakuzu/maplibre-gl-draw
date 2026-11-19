@@ -9,7 +9,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { createDocumentAccess } from '../../api/impl/document-access.js';
 import { PointBoxSelectionStrategy } from '../../dispatcher/hit-test/box-strategies.js';
+import { createStore } from '../../store/built-in/create-store.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
@@ -149,7 +151,8 @@ describe('boxRects across the antimeridian', () => {
   });
 
   it('selects the features on both sides of the line', () => {
-    const store = new MemoryStore();
+    // The layer an instance makes over the built-in Store
+    const store = createDocumentAccess(createStore());
     store.createLayer({
       id: 'l1',
       name: 'l1',

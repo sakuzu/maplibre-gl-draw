@@ -4,159 +4,145 @@
 /**
  * StoreSpatialIndex
  *
- * The spatial index as a value derived from the Store. It subscribes to the Store and
- * re-derives the entry of every feature a StoreChange names (created / updated / deleted)
- * from the Store itself, so it holds exactly the features the Store holds, with the extent
- * they have now:
+ * The spatial index of the Store, as the parts of an instance query it. It holds no index of its
+ * own: each query asks the layer over the Store for the features whose box meets a box, which the
+ * layer reads from the spatial index of the Store (the boxes of its rows). So it answers what the
+ * Store holds now, with the extent each feature has now, whatever wrote it:
  *
- * - every write path (the public API, the drawing modes, the drag, import, plugins, a mode
- *   of an extension, a change applied from elsewhere to a replaced Store) reaches it in the same way
- * - a write the Store refuses (read-only) notifies nothing, so it leaves no trace here
- * - the features a Store holds when the index is created are loaded then, and a notification
- *   with `reset` (the whole document replaced from elsewhere) rebuilds the index from the Store
- * - an update of the properties (the radius of a Circle, the scale and rotation of an Image)
- *   re-indexes the feature like an update of the coordinates
- * - the intermediate updates of a drag are Store updates too (isIntermediate), so the shape
- *   being dragged is the shape that is indexed
+ * - every write path (the public API, the drawing modes, the drag, import, plugins, a mode of an
+ *   extension, a change written to the Store directly) reaches it in the same way, and a write
+ *   the Store refuses leaves no trace
+ * - it reads nothing when it is made and follows no change: the Store keeps the boxes of its rows
+ * - the hidden features are found too, the deleted ones are not; the callers leave out what they
+ *   do not show
  *
- * The extent of a type registered with a custom bounding box calculator can change for
- * reasons outside the Store (a font that arrives later, for example). Its owner announces
- * that with invalidateType(), which re-derives the features of that type from the Store.
+ * The box of a feature is that of its positions, except for the types whose extent comes from
+ * more than their positions: an Image (its size at the zoom it was created at, with the tile
+ * size), a Circle (its radius) and a type registered with a calculator of its own. The index
+ * sets how those boxes are worked out on the Store while it is there (`setFeatureBoxes` of the
+ * layer), and makes them again when what they depend on changes: the tile size, a calculator
+ * registered or cancelled, and `invalidateType` for an extent that changed for a reason outside
+ * the Store (a font that arrives later, for example).
  */
 
-import type { DocumentAccess } from '../document-access.js';
-import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
+import type { DocumentBoxes, DocumentReads, FeatureBoxes } from '../document-access.js';
+import type { BoundingBox, Coordinate, Feature } from '../types.js';
 import {
   type CustomBoundingBoxCalculator,
-  RBushSpatialIndex,
+  getBoundingBox,
   type SpatialIndex,
 } from './spatial-index.js';
 
+/** The types whose box `getBoundingBox` works out from more than their positions */
+const SIZED_TYPES: ReadonlySet<string> = new Set(['Image', 'Circle']);
+
+/** What the index reads of the layer over the Store */
+type IndexedDocument = DocumentBoxes & Pick<DocumentReads, 'getFeature'>;
+
 /**
- * The spatial index derived from a Store
+ * The spatial index of the Store, read through the layer over it
  */
 export class StoreSpatialIndex implements SpatialIndex {
-  readonly #store: DocumentAccess;
-  readonly #index = new RBushSpatialIndex();
-  #unsubscribe: (() => void) | null;
+  readonly #store: IndexedDocument;
+  #tileSize = 512; // the MapLibre default
+  readonly #calculators = new Map<string, CustomBoundingBoxCalculator>();
+  readonly #boxes: FeatureBoxes = {
+    gives: (type) => SIZED_TYPES.has(type) || this.#calculators.has(type),
+    boxOf: (feature) => this.#boxOf(feature),
+  };
+  #destroyed = false;
 
-  constructor(store: DocumentAccess) {
+  constructor(store: IndexedDocument) {
     this.#store = store;
-    this.#unsubscribe = store.subscribe((changes) => this.#apply(changes));
-    // A Store handed in from outside can already hold features
-    this.#index.load(store.listFeatures());
+    store.setFeatureBoxes(this.#boxes);
   }
 
   findNear(coordinate: Coordinate, tolerance: number): string[] {
-    return this.#index.findNear(coordinate, tolerance);
+    const [lng, lat] = coordinate;
+    return this.findInBounds({
+      minX: lng - tolerance,
+      minY: lat - tolerance,
+      maxX: lng + tolerance,
+      maxY: lat + tolerance,
+    });
   }
 
   findInBounds(bounds: BoundingBox): string[] {
-    return this.#index.findInBounds(bounds);
+    return this.#store.findFeatureIdsInBox(bounds);
   }
 
   /**
-   * Sets the tile size used to size an Image, and re-derives every feature (a custom
-   * calculator also receives the tile size)
+   * Sets the tile size used to size an Image, and makes the boxes again (a custom calculator also
+   * receives the tile size)
    */
   setTileSize(tileSize: number): void {
-    this.#index.setTileSize(tileSize);
-    this.#rebuild();
+    this.#tileSize = tileSize;
+    this.#refresh();
   }
 
   /**
-   * Registers the bounding box calculation of a custom feature type, and re-derives the
-   * features of that type the Store already holds
+   * Registers the bounding box calculation of a custom feature type, and makes the boxes again
+   * (the features of that type the Store already holds take it)
    *
-   * @returns a function that cancels the registration and measures those features again
-   *   with the default calculation
+   * @returns a function that cancels the registration and makes the boxes again with the default
+   *   calculation (it does not remove a later registration of the same type)
    */
   setCustomBoundingBoxCalculator(
     type: string,
     calculator: CustomBoundingBoxCalculator,
   ): () => void {
-    const cancel = this.#index.setCustomBoundingBoxCalculator(type, calculator);
-    this.invalidateType(type);
+    this.#calculators.set(type, calculator);
+    this.#refresh();
     return () => {
-      cancel();
-      this.invalidateType(type);
+      if (this.#calculators.get(type) !== calculator) return;
+      this.#calculators.delete(type);
+      this.#refresh();
     };
   }
 
   /**
-   * Re-derives the extent of every feature of the given type from the Store
+   * Makes the boxes of the features of the given type again
    *
-   * For a type whose extent changed for a reason the Store does not see.
+   * For a type whose extent changed for a reason the Store does not see. A type whose box is that
+   * of its positions has nothing to make again.
    */
   invalidateType(type: string): void {
-    for (const feature of this.#store.listFeatures()) {
-      if (feature.type === type) {
-        this.#index.update(feature.id, feature);
-      }
-    }
+    if (this.#boxes.gives(type)) this.#refresh();
   }
 
   /**
-   * Re-derives the entries of the given features from the Store (an id the Store does not
-   * hold is dropped)
+   * Makes the boxes of the given features again, for an extent that changed for a reason the
+   * Store does not see (the box of positions follows the Store by itself)
    */
   invalidate(ids: Iterable<string>): void {
     for (const id of ids) {
-      this.#refresh(id);
+      const type = this.#store.getFeature(id)?.type;
+      if (type !== undefined && this.#boxes.gives(type)) {
+        this.#refresh();
+        return;
+      }
     }
   }
 
   /**
-   * Stops following the Store and empties the index
+   * Takes back the boxes set on the Store: every feature has the box of its positions again
    */
   destroy(): void {
-    this.#unsubscribe?.();
-    this.#unsubscribe = null;
-    this.#index.clear();
+    if (this.#destroyed) return;
+    this.#destroyed = true;
+    this.#store.setFeatureBoxes(null);
   }
 
-  #apply(changes: StoreChange): void {
-    // A replacement of the whole document is read again from the Store, whatever the
-    // notification lists: the index then holds exactly what the new document holds
-    if (changes.reset === true) {
-      this.#rebuild();
-      return;
-    }
-    const features = changes.features;
-    if (!features) return;
-
-    // A bulk creation (import) is loaded in one pass
-    const created = features.created;
-    if (created && created.length > 0) {
-      const present: Feature[] = [];
-      for (const { id } of created) {
-        const feature = this.#store.getFeature(id);
-        if (feature) present.push(feature);
-      }
-      this.#index.load(present);
-    }
-
-    // The final state is read from the Store, so the order of the entries within one
-    // notification (created then deleted, updated several times) does not matter
-    if (features.updated) {
-      for (const { id } of features.updated) this.#refresh(id);
-    }
-    if (features.deleted) {
-      for (const { id } of features.deleted) this.#refresh(id);
-    }
+  /** The box of a feature of a type that gives it: that of its calculator, or the default one */
+  #boxOf(feature: Feature): BoundingBox {
+    const calculator = this.#calculators.get(feature.type);
+    return calculator
+      ? calculator(feature, this.#tileSize)
+      : getBoundingBox(feature, this.#tileSize);
   }
 
-  #refresh(id: string): void {
-    const feature = this.#store.getFeature(id);
-    if (feature) {
-      this.#index.update(id, feature);
-    } else {
-      this.#index.remove(id);
-    }
-  }
-
-  #rebuild(): void {
-    this.#index.clear();
-    this.#index.load(this.#store.listFeatures());
+  /** Makes the boxes again with what they depend on now (nothing once destroyed) */
+  #refresh(): void {
+    if (!this.#destroyed) this.#store.setFeatureBoxes(this.#boxes);
   }
 }

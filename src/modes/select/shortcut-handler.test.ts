@@ -6,15 +6,18 @@
  *
  * The Delete key deletes a feature / group / layer according to the selection type.
  * For a group, the contents are deleted and the emptied group is deleted automatically; for a
- * layer, everything under it is deleted and at least one layer is kept. The spatial index,
- * derived from the Store, follows.
+ * layer, everything under it is deleted and at least one layer is kept. The spatial index of
+ * the Store finds what is left.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createDocumentAccess } from '../../api/impl/document-access.js';
 import { groupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
+import { createStore } from '../../store/built-in/create-store.js';
+import type { DocumentAccess, InstanceDocument } from '../../store/document-access.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
@@ -24,7 +27,7 @@ import { handleDeleteShortcut, handleGroupShortcut } from './shortcut-handler.js
 /** Records the ids the Store reported as deleted (the spatial index drops exactly those) */
 class DeletionLog {
   removed: string[] = [];
-  constructor(store: MemoryStore) {
+  constructor(store: DocumentAccess) {
     store.subscribe((changes) => {
       for (const deleted of changes.features?.deleted ?? []) this.removed.push(deleted.id);
     });
@@ -45,13 +48,14 @@ function feature(id: string, layerId: string): Feature {
   };
 }
 
-let store: MemoryStore;
+let store: InstanceDocument;
 let spatial: DeletionLog;
 let index: StoreSpatialIndex;
 let context: EngineModeContext;
 
 beforeEach(() => {
-  store = new MemoryStore();
+  // The layer an instance makes over the built-in Store
+  store = createDocumentAccess(createStore());
   spatial = new DeletionLog(store);
   index = new StoreSpatialIndex(store);
   context = { store, spatialIndex: index } as unknown as EngineModeContext;
