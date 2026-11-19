@@ -5,7 +5,6 @@
     "sample-follow-drag.ts": 4,
     "sample-main-usage.ts": 27,
     "sample-presence-events.ts": 20,
-    "sample-remote-changes.ts": 9,
     "sample-save-on-change.ts": 5,
     "sample-undo-plugin.ts": 18
   },
@@ -15,9 +14,6 @@
     },
     "2": {
       "main:doc:createDraw": "fe951a5ea03201a46fc150c6079c9d0a0ed99c46a0c07b985b5fb29ee006ef5e"
-    },
-    "3": {
-      "main:doc:DrawOptions.store": "ef2f46d084bb446477f485255f2823829bf30e1b81632e5eda41a57c7a4127e2"
     },
     "4": {
       "main:added:DrawOptions.acceptsId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
@@ -29,9 +25,6 @@
     "6": {
       "main:doc:DrawProperties{0}.maplibre-gl-draw:rotation": "dd91426b461df5b79b54903796238dee9051fb791295389239d64f7315d99388",
       "main:doc:DrawProperties{0}.maplibre-gl-draw:scale": "3e20fa66ad593d19a1df83fb23b018d4479f67cebb712747772ac25f744e1251"
-    },
-    "8": {
-      "main:sig:Draw.getStore": "919b287cc9d135667bdd2f5aa1f27620f67a281d39e09791594a99d479833a58"
     },
     "9": {
       "main:doc:Draw.transact": "f167130fa610c2386d18c8b77878a83df10adaa0d68595d76e9bac712120056e",
@@ -55,12 +48,6 @@
     },
     "16": {
       "main:doc:FeaturesCollection": "0e6f62745b5f12d748824eb2c4db02e121e50dc6322ba8f3ba8e9a3b438576de"
-    },
-    "17": {
-      "main:doc:FeaturesCollection.list": "f6d0971bcf022b082576487cf8564e2f44cf811eefcae6aa8ceaae2e9f4a2a58"
-    },
-    "18": {
-      "main:added:FeaturesCollection.iterate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "19": {
       "main:added:FeaturesCollection.updateAll": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -90,41 +77,11 @@
     "27": {
       "main:doc:FeaturesCollection.create": "85800f1e6240d947ccab20f2a7efcfaaceb3d76a6cc024e4ee96eb67fb7e8bba"
     },
-    "28": {
-      "main:added:LayersCollection.countItems": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "29": {
-      "main:added:LayersCollection.listItemIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "30": {
-      "main:doc:Layer": "66117ffc22d0e5419363d339539216e538a4538fd99c7bb26b2b09b4a09c8ba0",
-      "main:removed:Layer.items": "7721a17ce5f427fa1f2aa469c7ff1799bf9be384365b2a9bd637beef5a864b54"
-    },
     "31": {
       "main:doc:LayersCollection": "18d5bfbc804ca40e2e790c77185a46eda5a25988f6e77328ba5cde5c198164a1",
       "main:doc:LayersCollection.create": "c0130d3102dfefbdd6692ab036699b58463c0cc5a7c579e382ab3f67b599dee0",
       "main:sig:LayersCollection.delete": "037380bbed9125ef01868f477a052edcab24276f09efea9a3ef03bbd1c30f6d5",
       "main:sig:LayersCollection.deleteMany": "fc52394e2e5715bb3814534eb7b055d331327c3070af606329515347b3b07d2a"
-    },
-    "32": {
-      "main:doc:GroupsCollection.list": "b66f33793d0e9332d88cab47f2cb483ef5f55826d7547c57f6460311cf23b342"
-    },
-    "33": {
-      "main:added:GroupsCollection.iterate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "34": {
-      "main:added:GroupsCollection.countFeatures": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "35": {
-      "main:added:GroupsCollection.listFeatureIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "36": {
-      "main:doc:Group": "3d6ba2e6c9e59cbcf31c8cd4edf4263f102ef48f9e94fd4923d1cd87adf80951",
-      "main:removed:Group.featureIds": "d203f0f29488cb000ec82defc0ed1669d5ebc31894bd60a470d78bd73e77cb4b"
-    },
-    "38": {
-      "main:doc:FeaturePatch": "d6fe9f5f81a481f9b14600aa56b5ccb3e36a9bebc58238968fa6a2f8b66b0323",
-      "main:doc:MoveTarget": "c5aed41ec76e3fb8e950764501d9fecb8c0f06fcf6b4611c696a52dd5a1c3e21"
     },
     "39": {
       "main:added:DuplicateOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -146,10 +103,7 @@
       "main:added:FeatureValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FeatureValues.[featureValuesBrand]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FeatureValues.byteLength": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureValues.featureCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IndexRange": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IndexRange.end": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:IndexRange.start": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "main:added:FeatureValues.featureCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "40": {
       "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
@@ -220,18 +174,6 @@
     "56": {
       "main:sig:LoadResult": "a742979caebe2244f118e5655841a1ef0fcd6447a7231511688b04bcd541ace4",
       "main:sig:LoadResult.featureIds": "06d150abae2e13d278d37344acc9fa5b40fd72b73056e3bc115dda322bd4f10a"
-    },
-    "57": {
-      "main:sig:DrawDocument.groups": "2628aa8227d0b8346c85cf3778bccf96feee993d20384464fd63fb6d009d907f",
-      "main:sig:DrawDocument.layers": "98f2447710d4756225aeab6858c836c0457fb95123cb6072eb16ed055f6fc3cc"
-    },
-    "58": {
-      "main:added:DocumentLayer": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentLayer.items": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "59": {
-      "main:added:DocumentGroup": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DocumentGroup.featureIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "61": {
       "main:doc:DrawEvents.feature.deleted": "288a4a9ac3fe66ec1240ec1d056161c304f8e433c2b2ed66399993d87f5abe9e"
@@ -345,9 +287,6 @@
       "main:doc:ModesCollection.list": "4725b2bbf2195216f840d28266fd4c8ca3d4c2367a5745bf4b24a1339c816384",
       "main:doc:ModesCollection.remove": "9e34dfa15a14e58e9d40aefcd1c2f6c3e0bfc6877224ab981a1fc89033a9cdee"
     },
-    "87": {
-      "main:sig:ExtensionContext.store": "43625a59df07d09e439370d9cc09fbe60b0e6990fa3a90b7d3dcba8ebd121638"
-    },
     "88": {
       "main:doc:ProvidersCollection": "ce72041d917b2c787efde42c59fd0cafafe5b9fb6e3258cf5391dc004edbd22a"
     },
@@ -448,9 +387,6 @@
       "main:added:DragResource.remove": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Draw.drag": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "154": {
-      "main:added:FeaturesCollection.getProperty": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "156": {
       "main:added:SketchEdit{1}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{1}.vertices": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -499,12 +435,6 @@
       "main:added:SketchEdit{2}.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "172": {
-      "main:added:Metadata.[index]": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:doc:Metadata": "dd83b18ce737274f65647ede09ff7f5a10bfb2a3f3946ed2c0a4ef640ec0acac",
-      "main:doc:MetadataResource.get": "e284ea27a2e4f162423e15313d968534c5c46991b856d4f9f00ab7a65124d709",
-      "main:doc:MetadataResource.update": "733327115cc185b343deb9d31a6f5f9bf9ec976001d8b820bec98e76a2f85843"
     },
     "173": {
       "main:added:DocumentChange.metadata.keys": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
