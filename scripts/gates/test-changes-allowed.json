@@ -660,6 +660,126 @@
       "path": "src/view/layer/world-copies.test.ts",
       "change": "CHANGES 3, 106 (the index of the candidates built over the layer, the built-in Store)",
       "unit": "the candidates of hits read from the box index of the Store"
+    },
+    {
+      "path": "src/api/impl/import-export/geojson-export.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store); its setup made of a document the Store of rows takes, the values checked kept",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/api/impl/import-export/geojson-import.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/api/impl/import-export/native-upgrade.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/dispatcher/hit-test/antimeridian.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/dispatcher/hit-test/globe-shape.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/dispatcher/hit-test/screen-anchor.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/dispatcher/input-router-longitude.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/modes/draw/circle.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/modes/draw/created-zoom.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/modes/draw/trace-support.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/modes/select/click-handler.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/modes/select/cursor-handler.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/operations/group-selection.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/operations/ungroup.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/shared/utils/name-generator.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store); its setup made of a document the Store of rows takes, the values checked kept",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/snapping/providers/display.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/store/lock.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store); its setup made of a document the Store of rows takes, the values checked kept",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/store/writable-layer.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/view/layer/context-loss.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/view/layer/drape-planner.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/view/layer/store-retained-immediate.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/view/layer/store-retained.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/view/ui/helper.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/view/ui/selection-ui-drawer.test.ts",
+      "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
+      "unit": "the changes of the document as sets of IDs, and the object Store taken out"
     }
   ]
 }
