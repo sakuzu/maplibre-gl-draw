@@ -8,6 +8,8 @@
  * empty, the keys of the metadata, and the events of a change written to the Store directly
  */
 
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from '../../store/built-in/create-store.js';
 import type { FeatureRowField, Store, StoreChange } from '../../store/built-in/types.js';
@@ -144,6 +146,39 @@ describe('the reads one at a time', () => {
     const rest = [...iterator];
     expect(rest.map((f) => f.id)).toEqual(['b', 'd']);
     expect(rest[0].properties).toEqual({ n: 2 });
+  });
+
+  it('lets the state of an iterator left before its end go with it', async () => {
+    const { draw } = instanceOver();
+    vi.useRealTimers();
+    draw.features.createMany(gridPoints(3));
+    // The weak references the instance makes, kept by the test to see what they hold
+    const made: Array<{ deref(): unknown }> = [];
+    const Weak = (
+      globalThis as unknown as { WeakRef: new (target: object) => { deref(): unknown } }
+    ).WeakRef;
+    const spied = vi.spyOn(globalThis as unknown as { WeakRef: typeof Weak }, 'WeakRef');
+    spied.mockImplementation(function made_(this: unknown, target: object) {
+      const held = new Weak(target);
+      made.push(held);
+      return held;
+    } as never);
+    (() => {
+      const iterator = draw.features.iterate();
+      iterator.next();
+    })();
+    spied.mockRestore();
+    expect(made).toHaveLength(1);
+    // Collected once nothing but the instance holds it
+    setFlagsFromString('--expose-gc');
+    const gc = runInNewContext('gc') as () => void;
+    await new Promise((resolve) => setImmediate(resolve));
+    gc();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(made[0].deref()).toBeUndefined();
+    // The instance goes on: a deletion and a new iterator read as before
+    draw.features.delete(draw.features.list()[0].id);
+    expect([...draw.features.iterate()]).toHaveLength(2);
   });
 
   it('reads one attribute of a feature, and throws notFound for an ID that names none', () => {

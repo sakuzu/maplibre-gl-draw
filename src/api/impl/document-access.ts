@@ -328,6 +328,16 @@ interface IteratorState {
   readonly gone: Set<number>;
 }
 
+/** A weak reference to an object: it does not keep the object from being collected */
+interface WeakReference<T extends object> {
+  deref(): T | undefined;
+}
+
+/** The global `WeakRef` of the engines the library runs on (its types come after ES2020) */
+interface WeakReferences {
+  readonly WeakRef: new <T extends object>(target: T) => WeakReference<T>;
+}
+
 /**
  * Makes the layer over a Store of rows. The instance makes one and hands it to its parts.
  *
@@ -2186,15 +2196,30 @@ export function createDocumentAccess(
   // The changes written to the Store directly
   // ==========================================================================
 
-  /** The iterators under way, which skip the rows deleted meanwhile */
-  const iterators = new Set<IteratorState>();
+  /**
+   * The iterators under way, which skip the rows deleted meanwhile: held weakly, so that the
+   * state of an iterator left before its end goes with it
+   */
+  const iterators = new Set<WeakReference<IteratorState>>();
+
+  /** The states of the iterators under way, the ones gone left out */
+  const iteratorStates = (): IteratorState[] => {
+    const out: IteratorState[] = [];
+    for (const held of iterators) {
+      const state = held.deref();
+      if (state) out.push(state);
+      else iterators.delete(held);
+    }
+    return out;
+  };
 
   /** The rows a change deleted leave the iterators under way */
   const noteDeleted = (change: RowChange): void => {
     if (iterators.size === 0 || !change.rows) return;
+    const states = iteratorStates();
     for (const rows of change.rows.layers.values()) {
       if (rows.deleted.length === 0) continue;
-      for (const state of iterators) {
+      for (const state of states) {
         for (const ref of rows.deleted) state.gone.add(ref);
       }
     }
@@ -2933,7 +2958,10 @@ export function createDocumentAccess(
   function* iterateMatching(match: FeatureMatch | undefined): IterableIterator<Feature> {
     const batches = matchingRows(match);
     const state: IteratorState = { gone: new Set() };
-    iterators.add(state);
+    const held = new (globalThis as unknown as WeakReferences).WeakRef(state);
+    // The states of the iterators left before their end go
+    iteratorStates();
+    iterators.add(held);
     try {
       for (const { refs } of batches) {
         for (let i = 0; i < refs.length; i++) {
@@ -2945,7 +2973,7 @@ export function createDocumentAccess(
         }
       }
     } finally {
-      iterators.delete(state);
+      iterators.delete(held);
     }
   }
 
