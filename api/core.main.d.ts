@@ -3686,7 +3686,9 @@ export interface DocumentChange {
  * The IDs of the features one change created, updated, deleted and moved, as sets that read any
  * number of them without an array of every ID. A feature is in one of `created`, `updated` and
  * `deleted` at most, and in none when the change created and deleted it; it is in `moved` too
- * when it was also put in another place.
+ * when it was also put in another place. A change that replaces the whole document
+ * (`DocumentChange.reset`) is the exception: a feature it takes out and writes again with its ID
+ * is in `deleted` and in `created`, as the events of the features tell it.
  */
 export interface ChangedIds {
     /** Created, or brought back (a feature `features.restore` brings back is created again) */
