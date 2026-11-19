@@ -121,7 +121,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     create(input) {
       const prepared = prepareGroup(deps, input, new Set(), new Set());
       if (store.isReadOnly()) return null;
-      store.transact(() => createOne(prepared));
+      if (store.transactUntilRefused(() => createOne(prepared)) === null) return null;
       return store.getGroup(prepared.id) ?? null;
     },
 
@@ -136,9 +136,11 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
         return group;
       });
       if (store.isReadOnly()) return null;
-      store.transact(() => {
+      const written = store.transactUntilRefused(() => {
         for (const group of prepared) createOne(group);
+        return true;
       });
+      if (written === null) return null;
       return prepared.map((group) => store.getGroup(group.id) as StoredGroup);
     },
 
@@ -147,7 +149,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       const updates = prepareGroupPatch(patch);
       if (store.isReadOnly()) return null;
       if (groupLocked(store, group) && !onlyLockOrVisibility(patch)) return null;
-      store.updateGroup(group.id, updates);
+      if (!store.updateGroup(group.id, updates)) return null;
       return store.getGroup(group.id) ?? null;
     },
 
@@ -166,9 +168,11 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
         ({ group, patch }) => groupLocked(store, group) && !onlyLockOrVisibility(patch),
       );
       if (refused) return null;
-      store.transact(() => {
+      const written = store.transactUntilRefused(() => {
         for (const { group, updates } of prepared) store.updateGroup(group.id, updates);
+        return true;
       });
+      if (written === null) return null;
       return prepared.map(({ group }) => store.getGroup(group.id) as StoredGroup);
     },
 
@@ -182,12 +186,13 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     deleteMany(ids) {
       const groups = requireIds(ids).map(require);
       if (store.isReadOnly() || groups.some((group) => groupLocked(store, group))) return false;
-      store.transact(() => {
+      const written = store.transactUntilRefused(() => {
         for (const group of groups) {
           if (store.getGroup(group.id)) store.deleteGroup(group.id);
         }
+        return true;
       });
-      return true;
+      return written !== null;
     },
 
     move(id, to) {
@@ -204,8 +209,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     if (target.kind !== 'layer') throw invalidInput('A group can only be moved to a layer');
     if (store.isReadOnly()) return false;
     if (target.locked || groups.some((group) => groupLocked(store, group))) return false;
-    moveGroups(store, groups, target.layer, target.index);
-    return true;
+    return moveGroups(store, groups, target.layer, target.index);
   }
 }
 

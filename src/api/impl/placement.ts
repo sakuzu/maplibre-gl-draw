@@ -68,27 +68,37 @@ export function resolveMoveTarget(store: DocumentAccess, to: MoveTarget): Resolv
  * Moves features to a target, in one transaction
  *
  * @param features The features, in stacking order
+ * @returns False when the Store refused one of the writes
  * @internal
  */
 export function moveFeatures(
   store: InstanceDocument,
   features: Feature[],
   target: ResolvedTarget,
-): void {
+): boolean {
   const ids = features.map((feature) => feature.id);
   if (target.kind === 'layer') {
-    store.moveFeatures(ids, { kind: 'layer', layerId: target.layer.id, index: target.index });
-  } else if (target.kind === 'group') {
-    store.moveFeatures(ids, { kind: 'group', groupId: target.group.id, index: target.index });
-  } else {
-    store.moveFeatures(ids, { kind: 'ungroup', index: target.index });
+    return store.moveFeatures(ids, {
+      kind: 'layer',
+      layerId: target.layer.id,
+      index: target.index,
+    });
   }
+  if (target.kind === 'group') {
+    return store.moveFeatures(ids, {
+      kind: 'group',
+      groupId: target.group.id,
+      index: target.index,
+    });
+  }
+  return store.moveFeatures(ids, { kind: 'ungroup', index: target.index });
 }
 
 /**
  * Moves groups to a layer, in one transaction
  *
  * @param groups The groups, in stacking order
+ * @returns False when the Store refused one of the writes
  * @internal
  */
 export function moveGroups(
@@ -96,8 +106,8 @@ export function moveGroups(
   groups: Group[],
   layer: Layer,
   index?: number,
-): void {
-  store.moveGroups(
+): boolean {
+  return store.moveGroups(
     groups.map((group) => group.id),
     layer.id,
     index,

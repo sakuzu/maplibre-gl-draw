@@ -78,7 +78,7 @@ export function createDocument(
 
   /**
    * Writes the loads that were read in one transaction and announces each one, or returns
-   * null when the document became read-only while they were read
+   * null when the document became read-only while they were read, or the Store refused a write
    */
   const writeAll = (prepared: readonly PreparedItem[]): LoadResult[] | null => {
     if (store.isReadOnly()) return null;
@@ -93,7 +93,9 @@ export function createDocument(
         }
       }
     }
-    const results = store.transact(() => prepared.map(writeItem), LOAD_SOURCE);
+    // A write the Store refuses stops the load: what it wrote before stays, and nothing is loaded
+    const results = store.transactUntilRefused(() => prepared.map(writeItem), LOAD_SOURCE);
+    if (results === null) return null;
     for (const result of results) onLoaded?.(result, LOAD_SOURCE);
     return results;
   };

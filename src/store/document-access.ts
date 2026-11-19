@@ -65,7 +65,7 @@ export interface DocumentReads {
 /**
  * The writes of the document, with the transactions and the subscription to the changes
  *
- * Every write returns true when it was applied and false when read-only refused it.
+ * Every write returns true when it was applied, and false when read-only or the Store refused it.
  */
 export interface DocumentWrites {
   /** Creates a feature */
@@ -108,6 +108,11 @@ export interface DocumentWrites {
   subscribe(listener: (changes: StoreChange) => void): () => void;
   /** Runs fn and notifies every change it makes as a single StoreChange */
   transact<T>(fn: () => T, source?: UpdateSource): T;
+  /**
+   * Runs fn as `transact` does, stopping at the first write the Store refuses (the writes after
+   * it return false and write nothing); null once a write was refused
+   */
+  transactUntilRefused<T>(fn: () => T, source?: UpdateSource): T | null;
 }
 
 /** The state of this client, which the instance holds */
@@ -271,12 +276,12 @@ export interface DocumentMoves {
    * Moves features, given in stacking order, to a layer, into a group or out of their group,
    * keeping their order, in one transaction
    */
-  moveFeatures(ids: readonly string[], to: MoveDestination): void;
+  moveFeatures(ids: readonly string[], to: MoveDestination): boolean;
   /**
    * Moves groups, given in stacking order, to a layer at a position (the front when it is left
    * out), in one transaction
    */
-  moveGroups(ids: readonly string[], layerId: string, index: number | undefined): void;
+  moveGroups(ids: readonly string[], layerId: string, index: number | undefined): boolean;
   /**
    * Calls the listener whenever the Store tells a change that replaces its whole document
    *

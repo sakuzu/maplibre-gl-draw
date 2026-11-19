@@ -75,6 +75,17 @@ import { makeIdSet } from './id-set.js';
 import { RowIdSet, type RowIds } from './row-id-set.js';
 
 /**
+ * What a write of the layer throws inside itself when the Store refuses one of its writes (a
+ * write of the Store that returns false): the write of the layer stops there, keeps and tells
+ * what the Store applied before it, and returns false
+ */
+class RefusedWrite extends Error {
+  constructor() {
+    super('The Store refused a write');
+  }
+}
+
+/**
  * What a change told to the subscribers of the layer did, in the words of the features: kept
  * with the change, in a field that is not enumerable, so that the change reads, copies and
  * compares as before
@@ -651,9 +662,9 @@ export function createDocumentAccess(
   };
 
   /** Notes the features a change of the instance wrote (`features` of the change) */
-  const noteOwnFeatures = (change: StoreChange): void => {
+  const noteOwnFeatures = (change: StoreChange, target: StoreChange): void => {
     if (!change.features || !wanted()) return;
-    const notes = notesFor(documentPending);
+    const notes = notesFor(target);
     notes.features = true;
     for (const feature of change.features.created ?? []) {
       const ref = tables.getRowRef(feature.id);
@@ -746,8 +757,10 @@ export function createDocumentAccess(
   };
 
   const mergeDocument = (change: StoreChange): void => {
-    noteOwnFeatures(change);
-    appendChange(documentPending, change, documentFolds);
+    // While the places of many rows wait to be written, what the writes did waits with them
+    const target = placeScope ? placeScope.change : documentPending;
+    noteOwnFeatures(change, target);
+    appendChange(target, change, placeScope ? placeScope.folds : documentFolds);
   };
 
   const merge = (change: StoreChange): void => {
@@ -925,6 +938,92 @@ export function createDocumentAccess(
     return result;
   }
 
+  // ==========================================================================
+  // The writes the Store refuses
+  // ==========================================================================
+
+  /** How many writes of the Store were refused */
+  let refusals = 0;
+  /** How many writes of the Store applied */
+  let storeWrites = 0;
+  /**
+   * The transaction that stops at the first write the Store refuses (see
+   * `transactUntilRefused`): the number of the refusals when it started
+   */
+  let stopScope: { readonly mark: number } | null = null;
+
+  /** Stops the write of the layer under way: the Store refused one of its writes */
+  const refuse = (): never => {
+    refusals += 1;
+    throw new RefusedWrite();
+  };
+
+  /** A write of the Store: applied, or the write of the layer stops */
+  const stored = (applied: boolean): void => {
+    if (!applied) refuse();
+    storeWrites += 1;
+    if (placeScope) placeScope.wrote = true;
+  };
+
+  /** Whether the transaction that stops at a refusal has stopped */
+  const stopped = (): boolean => stopScope !== null && refusals !== stopScope.mark;
+
+  /**
+   * Runs `fn` in one transaction of the instance; when it is the outermost one, the Store refused
+   * a write in it and applied none, nothing of it is told (what the writes of the layer noted
+   * before the refusal names nothing the Store holds)
+   */
+  const transactRefusable = <T>(fn: () => T, source: UpdateSource): T => {
+    const outermost = busDepth === 0 && rowDepth === 0 && !awaitingRows;
+    const mark = refusals;
+    const writes = storeWrites;
+    return transact(() => {
+      try {
+        return fn();
+      } finally {
+        if (outermost && refusals !== mark && storeWrites === writes) {
+          documentPending = {};
+          documentFolds = newFolds();
+        }
+      }
+    }, source);
+  };
+
+  /**
+   * Runs one write of the layer: false when the Store refused one of its writes (what it applied
+   * before is kept and told), or when the transaction that stops at a refusal has stopped
+   */
+  const attempt = (fn: () => void, source: UpdateSource): boolean => {
+    if (stopped()) return false;
+    const mark = refusals;
+    try {
+      transactRefusable(fn, source);
+    } catch (error) {
+      if (!(error instanceof RefusedWrite)) throw error;
+    }
+    return refusals === mark;
+  };
+
+  /**
+   * Runs `fn` as one transaction that stops at the first write the Store refuses: the writes of
+   * the layer after it are not written. Null once a write was refused
+   */
+  const transactUntilRefused = <T>(fn: () => T, source: UpdateSource): T | null => {
+    if (stopped()) return null;
+    const outer = stopScope;
+    const scope = { mark: refusals };
+    stopScope = scope;
+    try {
+      const value = transactRefusable(fn, source);
+      return refusals === scope.mark ? value : null;
+    } catch (error) {
+      if (error instanceof RefusedWrite) return null;
+      throw error;
+    } finally {
+      stopScope = outer;
+    }
+  };
+
   /** Runs one transaction of the instance: the writes, then the change they make, told once */
   function transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     return client.hold(() =>
@@ -956,14 +1055,33 @@ export function createDocumentAccess(
   /** The IDs an order written lists before they are items of its container */
   const listings = new Map<string, Listing>();
 
+  /** Settles the placements: one the Store refuses stops them (the writes tell it) */
+  const settleUnlessRefused = (): void => {
+    try {
+      settlePlacements();
+    } catch (error) {
+      if (!(error instanceof RefusedWrite)) throw error;
+    }
+  };
+
   function withOperation<T>(fn: () => T): T {
     operationDepth += 1;
+    let refused = false;
     try {
       return fn();
+    } catch (error) {
+      if (error instanceof RefusedWrite) refused = true;
+      throw error;
     } finally {
       operationDepth -= 1;
       if (operationDepth === 0) {
-        settlePlacements();
+        if (refused || stopped()) {
+          // An operation stopped by a refusal places nothing more
+          pendingGroupPlacement.clear();
+          pendingFeaturePlacement.clear();
+        } else {
+          settleUnlessRefused();
+        }
         unlisted.clear();
         listings.clear();
       }
@@ -1627,9 +1745,82 @@ export function createDocumentAccess(
       write.refs.push(ref);
       for (const [name, value] of fields) write.fields.get(name)?.push(value);
     }
-    for (const { refs, fields } of writes.values()) {
-      store.writeRows({ rows: Int32Array.from(refs), fields });
+    const batches = [...writes.values()];
+    for (let i = 0; i < batches.length; i++) {
+      const rows = Int32Array.from(batches[i].refs);
+      if (!store.writeRows({ rows, fields: batches[i].fields })) {
+        // The rows of this write and of the writes after it are not written
+        for (let k = i; k < batches.length; k++) {
+          for (const ref of batches[k].refs) placeScope?.refused.add(ref);
+        }
+        refuse();
+      }
+      storeWrites += 1;
+      if (placeScope) {
+        placeScope.wrote = true;
+        for (const ref of rows) placeScope.applied.add(ref);
+      }
     }
+  };
+
+  /**
+   * What the writes of the layer did while the places of many rows waited to be written (see
+   * `placesTogether`): told with the writes when the places are written, and without what the
+   * Store refused to write
+   */
+  interface PlaceScope {
+    readonly change: StoreChange;
+    readonly folds: Folds;
+    /** The rows whose places the Store wrote */
+    readonly applied: Set<number>;
+    /** The rows whose places the Store refused, or that were not written after a refusal */
+    readonly refused: Set<number>;
+    /** Whether a write of the Store applied */
+    wrote: boolean;
+  }
+  let placeScope: PlaceScope | null = null;
+
+  /**
+   * Ends what waited with the places of many rows: added to the change being built; after a
+   * refusal, without the features whose places were not written (they are read again from their
+   * rows), and nothing at all when no write applied
+   */
+  const endPlaceScope = (scope: PlaceScope, refused: boolean): void => {
+    placeScope = null;
+    const { change } = scope;
+    if (refused) {
+      const gone = new Set<string>();
+      for (const ref of scope.refused) {
+        if (scope.applied.has(ref)) continue;
+        const id = tables.getRowId(ref);
+        if (id !== undefined) gone.add(id);
+      }
+      for (const id of gone) {
+        featureCache.delete(id);
+        pendingFeaturePlacement.delete(id);
+      }
+      if (!scope.wrote) return;
+      const features = change.features;
+      if (features && gone.size > 0) {
+        if (features.created) features.created = features.created.filter((f) => !gone.has(f.id));
+        if (features.updated) features.updated = features.updated.filter((u) => !gone.has(u.id));
+        if (features.deleted) features.deleted = features.deleted.filter((f) => !gone.has(f.id));
+        for (const key of ['created', 'updated', 'deleted'] as const) {
+          if (features[key]?.length === 0) delete features[key];
+        }
+        if (Object.keys(features).length === 0) delete change.features;
+      }
+      const notes = (change as { [NOTES]?: Notes })[NOTES];
+      if (notes) {
+        for (const id of gone) {
+          notes.created.delete(id);
+          notes.updated.delete(id);
+          notes.moved.delete(id);
+          notes.deleted.delete(id);
+        }
+      }
+    }
+    if (!isEmptyChange(change)) appendChange(documentPending, change, documentFolds);
   };
 
   /**
@@ -1644,15 +1835,38 @@ export function createDocumentAccess(
     }
     pendingPlaces = new Map();
     pendingLeftGroups = [];
-    let left: string[];
+    const scope: PlaceScope = {
+      change: {},
+      folds: newFolds(),
+      applied: new Set(),
+      refused: new Set(),
+      wrote: false,
+    };
+    placeScope = scope;
+    let left: string[] = [];
     try {
-      fn();
-    } finally {
-      left = pendingLeftGroups;
-      writePendingPlaces();
+      try {
+        fn();
+      } catch (error) {
+        // A refusal stops the write: the places taken are not written
+        if (error instanceof RefusedWrite) {
+          for (const ref of pendingPlaces?.keys() ?? []) scope.refused.add(ref);
+          pendingPlaces?.clear();
+        }
+        throw error;
+      } finally {
+        left = pendingLeftGroups;
+        writePendingPlaces();
+      }
+    } catch (error) {
       pendingPlaces = null;
       pendingLeftGroups = null;
+      endPlaceScope(scope, error instanceof RefusedWrite);
+      throw error;
     }
+    pendingPlaces = null;
+    pendingLeftGroups = null;
+    endPlaceScope(scope, false);
     for (const groupId of new Set(left)) {
       if (store.getGroup(groupId) && countMembers(groupId) === 0) deleteGroupRow(groupId);
     }
@@ -1665,16 +1879,19 @@ export function createDocumentAccess(
     geometry?: Geometry,
   ): void => {
     if (fields.size === 0 && geometry === undefined) return;
-    if (fields.has('parent') || fields.has('orderKey')) {
+    /** What a write of the place of the row changes besides the row */
+    const placeWritten = (): void => {
+      if (!fields.has('parent') && !fields.has('orderKey')) return;
       placesWritten();
       if (wanted()) {
         const id = tables.getRowId(ref);
-        if (id !== undefined) noteMoved(notesFor(documentPending), id, ref);
+        if (id !== undefined) noteMoved(notesFor(placeScope?.change ?? documentPending), id, ref);
       }
-    }
-    ownRows.add(ref);
-    wrote();
+    };
     if (pendingPlaces && geometry === undefined && isPlace(fields)) {
+      placeWritten();
+      ownRows.add(ref);
+      wrote();
       const known = pendingPlaces.get(ref);
       if (known) {
         for (const [name, values] of fields) known.fields.set(name, values[0]);
@@ -1687,13 +1904,18 @@ export function createDocumentAccess(
     }
     // A write of other values comes after the places taken
     writePendingPlaces();
-    store.writeRows({
-      rows: Int32Array.of(ref),
-      fields,
-      ...(geometry !== undefined && {
-        geometry: geometryColumnOf([geometry], tables.getValuesPerPosition(layerOfRow(ref)) ?? 2),
+    stored(
+      store.writeRows({
+        rows: Int32Array.of(ref),
+        fields,
+        ...(geometry !== undefined && {
+          geometry: geometryColumnOf([geometry], tables.getValuesPerPosition(layerOfRow(ref)) ?? 2),
+        }),
       }),
-    });
+    );
+    placeWritten();
+    ownRows.add(ref);
+    wrote();
   };
 
   /** The layer of a row */
@@ -1750,11 +1972,13 @@ export function createDocumentAccess(
   // The writes of the document
   // ==========================================================================
 
-  /** Runs one write of the document unless read-only; true once it applied */
+  /**
+   * Runs one write of the document unless read-only; true once it applied, false when the Store
+   * refused one of its writes (see `attempt`)
+   */
   const write = (fn: () => void): boolean => {
     if (client.isReadOnly()) return false;
-    transact(fn, busDepth > 0 ? busSource : 'local');
-    return true;
+    return attempt(fn, busDepth > 0 ? busSource : 'local');
   };
 
   const requireLayer = (layerId: string | undefined): void => {
@@ -1791,7 +2015,11 @@ export function createDocumentAccess(
         if (list) list.push(row);
         else byLayer.set(row.stored.layerId, [row]);
       }
+      /** The layers whose rows the Store created; it refused those of the next, if any */
+      const written = new Set<string>();
+      let refused = false;
       for (const [layerId, inLayer] of byLayer) {
+        // The IDs were found free: a Store that does not create the rows refuses them
         const created = store.createRows({
           ids: inLayer.map((row) => row.stored.id),
           fields: newRowFields(
@@ -1804,11 +2032,20 @@ export function createDocumentAccess(
           ),
         });
         if (!created) {
-          throw new Error(`Feature with id "${inLayer[0].stored.id}" already exists`);
+          refused = true;
+          break;
         }
+        storeWrites += 1;
+        if (placeScope) placeScope.wrote = true;
+        written.add(layerId);
         wrote();
       }
       for (const { stored, container, listed, before } of rows) {
+        if (!written.has(stored.layerId)) {
+          // Not created: the ends of its container are read again
+          endKeys.delete(container);
+          continue;
+        }
         const ref = tables.getRowRef(stored.id);
         if (ref !== undefined) ownRows.add(ref);
         remember(stored);
@@ -1823,6 +2060,11 @@ export function createDocumentAccess(
           if (!listed) layerOrderChanged(container, before as Layer | undefined);
         }
         made.push(stored);
+      }
+      if (refused) {
+        // The positions of the orders written are read again
+        placeVersion += 1;
+        refuse();
       }
     };
     try {
@@ -1988,10 +2230,12 @@ export function createDocumentAccess(
     noteOrderBefore(container);
     const layerBefore = getLayer(feature.layerId);
     const groupBefore = feature.groupId !== undefined ? getGroup(feature.groupId) : undefined;
+    stored(
+      store.writeRows({ rows: Int32Array.of(ref), fields: new Map(), deleted: Uint8Array.of(1) }),
+    );
     ownRows.add(ref);
     wrote();
     endKeys.delete(container);
-    store.writeRows({ rows: Int32Array.of(ref), fields: new Map(), deleted: Uint8Array.of(1) });
     featureCache.delete(id);
     if (feature.groupId === undefined) {
       if (isListed(id)) layerOrderChanged(feature.layerId, layerBefore);
@@ -2040,30 +2284,30 @@ export function createDocumentAccess(
           listings.delete(memberId);
           placedByOrder.add(memberId);
         }
+        // Each feature leaves its group, told with the places written (see `PlaceScope`)
+        for (const member of members) {
+          if (!member) continue;
+          const updated = frozenFeature(member, { groupId: undefined });
+          countWork(counts, 'objectsCreated');
+          remember(updated);
+          // A feature of a group no order lists is listed at the end of the operation, unless an
+          // order placed it
+          if (!groupListed && !placedByOrder.has(member.id)) pendingFeaturePlacement.add(member.id);
+          mergeDocument({
+            features: { updated: [{ id: member.id, feature: updated, previous: member }] },
+          });
+        }
       });
     }
     if (groupListed && free.some((memberId) => isListed(memberId))) {
       layerOrderChanged(layerId, layerBefore);
     }
-    // Each feature leaves its group
-    for (const member of members) {
-      if (!member) continue;
-      const updated = frozenFeature(member, { groupId: undefined });
-      countWork(counts, 'objectsCreated');
-      remember(updated);
-      // A feature of a group no order lists is listed at the end of the operation, unless an
-      // order placed it
-      if (!groupListed && !placedByOrder.has(member.id)) pendingFeaturePlacement.add(member.id);
-      mergeDocument({
-        features: { updated: [{ id: member.id, feature: updated, previous: member }] },
-      });
-    }
+    // The places taken by a write of many places under way, before the group goes
+    writePendingPlaces();
+    stored(store.deleteGroup(id));
     ownGroups.add(id);
     wrote();
     placesWritten();
-    // The places taken by a write of many places under way, before the group goes
-    writePendingPlaces();
-    store.deleteGroup(id);
     bumpLayer(layerId);
     groupWrappers.delete(id);
     if (groupListed) layerOrderChanged(layerId, layerBefore);
@@ -2094,7 +2338,21 @@ export function createDocumentAccess(
       if (!placed[index]) listings.set(id, { container, order, index });
     });
     const kept = risingRun(placed);
-    // The keys of the items that move, between the items around them that keep theirs
+    try {
+      writeKeysOfOrder(order, placed, kept);
+    } finally {
+      // The order is read again, also when the Store refused a key
+      if (isGroup) bumpGroup(container);
+      else bumpLayer(container);
+    }
+  };
+
+  /** Writes the keys of the items of an order that move, between the items that keep theirs */
+  const writeKeysOfOrder = (
+    order: readonly string[],
+    placed: (Placed | undefined)[],
+    kept: Set<number>,
+  ): void => {
     let i = 0;
     while (i < order.length) {
       if (!placed[i] || kept.has(i)) {
@@ -2116,10 +2374,10 @@ export function createDocumentAccess(
         const key = keys[k];
         placed[at] = { id, key };
         if (store.getGroup(id)) {
+          stored(store.updateGroup(id, { orderKey: key }));
           ownGroups.add(id);
           wrote();
           placesWritten();
-          store.updateGroup(id, { orderKey: key });
         } else {
           const ref = tables.getRowRef(id);
           if (ref !== undefined) {
@@ -2129,8 +2387,6 @@ export function createDocumentAccess(
       });
       i = j;
     }
-    if (isGroup) bumpGroup(container);
-    else bumpLayer(container);
   };
 
   /** Moves the groups an order of a layer lists from other layers into the layer */
@@ -2141,10 +2397,10 @@ export function createDocumentAccess(
       const previous = getGroup(id) as Group;
       const from = group.layerId;
       const key = keyOfListing({ container: layerId, order, index });
+      stored(store.updateGroup(id, { layerId, orderKey: key }));
       ownGroups.add(id);
       wrote();
       placesWritten();
-      store.updateGroup(id, { layerId, orderKey: key });
       listings.delete(id);
       bumpLayer(from);
       bumpLayer(layerId);
@@ -2160,18 +2416,16 @@ export function createDocumentAccess(
       throw new Error(`Layer with id "${layer.id}" already exists`);
     }
     const items = [...(layer.items ?? [])];
+    // The ID was found free: a Store that does not create the layer refuses it
+    stored(store.createLayer(storedLayerOf(layer)));
     ownLayers.add(layer.id);
     wrote();
     placesWritten();
-    if (!store.createLayer(storedLayerOf(layer))) {
-      throw new Error(`Layer with id "${layer.id}" already exists`);
-    }
     // The stacking order of the Store gets the layer at the front; it says so in its change
     ownOrder = true;
     items.forEach((id, index) => {
       if (!store.getGroup(id)) listings.set(id, { container: layer.id, order: items, index });
     });
-    takeListedGroups(layer.id, items);
     // The items it was created with, as a field that is not enumerable (see `layerOf`)
     const created = Object.freeze(
       Object.defineProperty({ ...layerOf(store.getLayer(layer.id)) }, 'items', {
@@ -2179,7 +2433,9 @@ export function createDocumentAccess(
         enumerable: false,
       }),
     );
+    // Told before the groups it takes, which the Store may refuse
     mergeDocument({ layers: { created: [created as Layer] } });
+    takeListedGroups(layer.id, items);
   };
 
   const updateLayerRow = (id: string, updates: Partial<Layer>): void => {
@@ -2189,18 +2445,30 @@ export function createDocumentAccess(
     noteOrderBefore(id);
     const fields = storedLayerOf({ ...updates, id } as Layer) as unknown as Record<string, unknown>;
     delete fields.id;
-    ownLayers.add(id);
-    wrote();
-    if (Object.keys(fields).length > 0 || !('items' in updates)) {
-      store.updateLayer(id, fields as Partial<PublicLayer>);
+    const mark = storeWrites;
+    const told = (): void => {
+      ownLayers.add(id);
+      wrote();
+      const layer = getLayer(id) as Layer;
+      mergeDocument({ layers: { updated: [{ id, layer, previous }] } });
+    };
+    try {
+      if (Object.keys(fields).length > 0 || !('items' in updates)) {
+        stored(store.updateLayer(id, fields as Partial<PublicLayer>));
+        ownLayers.add(id);
+        wrote();
+      }
+      if (updates.items) {
+        const order = [...updates.items];
+        writeOrder(id, order);
+        takeListedGroups(id, order);
+      }
+    } catch (error) {
+      // What the Store applied before it refused a write is told
+      if (error instanceof RefusedWrite && storeWrites !== mark) told();
+      throw error;
     }
-    if (updates.items) {
-      const order = [...updates.items];
-      writeOrder(id, order);
-      takeListedGroups(id, order);
-    }
-    const layer = getLayer(id) as Layer;
-    mergeDocument({ layers: { updated: [{ id, layer, previous }] } });
+    told();
   };
 
   const deleteLayerRow = (id: string): void => {
@@ -2223,38 +2491,39 @@ export function createDocumentAccess(
     const groupsBefore = new Map<string, Group>();
     for (const groupId of byGroup.keys()) groupsBefore.set(groupId, getGroup(groupId) as Group);
     const goneGroups: Group[] = [];
-    let touched = false;
+    /** What the deletion tells, once the Store has applied it */
+    const told: StoreChange[] = [];
+    const gone: string[] = [];
     for (const itemId of itemIdsOf(id)) {
       const members = byGroup.get(itemId);
       const group = store.getGroup(itemId);
       if (group) {
         const before = groupsBefore.get(itemId) ?? (getGroup(itemId) as Group);
         for (const member of members ?? []) {
-          featureCache.delete(member.id);
-          mergeDocument({ features: { deleted: [member] } });
-          mergeDocument({ groups: { updated: [{ id: itemId, group: before, previous: before }] } });
+          gone.push(member.id);
+          told.push({ features: { deleted: [member] } });
+          told.push({ groups: { updated: [{ id: itemId, group: before, previous: before }] } });
         }
         goneGroups.push(before);
-        mergeDocument({ groups: { deleted: [before] } });
-        touched = true;
-        mergeDocument({
-          layers: { updated: [{ id, layer: layerBefore, previous: layerBefore }] },
-        });
+        told.push({ groups: { deleted: [before] } });
+        told.push({ layers: { updated: [{ id, layer: layerBefore, previous: layerBefore }] } });
       } else {
         const feature = standalone.get(itemId);
         if (!feature) continue;
-        featureCache.delete(itemId);
-        mergeDocument({ features: { deleted: [feature] } });
-        touched = true;
-        mergeDocument({
-          layers: { updated: [{ id, layer: layerBefore, previous: layerBefore }] },
-        });
+        gone.push(itemId);
+        told.push({ features: { deleted: [feature] } });
+        told.push({ layers: { updated: [{ id, layer: layerBefore, previous: layerBefore }] } });
       }
     }
+    const refs: number[] = [];
     for (const feature of features) {
       const ref = tables.getRowRef(feature.id);
-      if (ref !== undefined) ownRows.add(ref);
+      if (ref !== undefined) refs.push(ref);
     }
+    stored(store.deleteLayer(id));
+    for (const goneId of gone) featureCache.delete(goneId);
+    for (const change of told) mergeDocument(change);
+    for (const ref of refs) ownRows.add(ref);
     for (const group of goneGroups) {
       ownGroups.add(group.id);
       groupWrappers.delete(group.id);
@@ -2263,10 +2532,8 @@ export function createDocumentAccess(
     ownOrder = true;
     wrote();
     placesWritten();
-    store.deleteLayer(id);
     bumpLayer(id);
     layerWrappers.delete(id);
-    void touched;
     mergeDocument({ layers: { deleted: [layerBefore] } });
   };
 
@@ -2300,11 +2567,10 @@ export function createDocumentAccess(
       unlisted.add(group.id);
       key = tailKeyOf(layerId);
     }
+    // The ID was found free: a Store that does not create the group refuses it
+    stored(store.createGroup(storedGroupOf({ ...group, layerId }, key)));
     ownGroups.add(group.id);
     wrote();
-    if (!store.createGroup(storedGroupOf({ ...group, layerId }, key))) {
-      throw new Error(`Group with id "${group.id}" already exists`);
-    }
     // A new item of its layer: the ends of the layer and the front of the order follow it
     if (listing) {
       keyTaken(layerId, key);
@@ -2313,25 +2579,8 @@ export function createDocumentAccess(
       frontTaken(layerId, key);
     }
     bumpLayer(layerId);
-    // The features listed join it in the order given; the others when they are created
-    const memberKeys = keysBetween(undefined, undefined, featureIds.length);
-    placesTogether(() => {
-      featureIds.forEach((featureId, index) => {
-        const feature = getFeature(featureId);
-        if (!feature) {
-          listings.set(featureId, { container: group.id, order: featureIds, index });
-          return;
-        }
-        listings.set(featureId, { container: group.id, order: featureIds, index });
-        updateFeatureRow(featureId, { groupId: group.id }, undefined, {
-          parent: group.id,
-          key: memberKeys[index],
-        });
-        listings.delete(featureId);
-      });
-    });
-    bumpGroup(group.id);
-    // The features it was created with, as a field that is not enumerable (see `groupOf`)
+    // The features it was created with, as a field that is not enumerable (see `groupOf`); told
+    // before its features join it, which the Store may refuse
     const created = Object.freeze(
       Object.defineProperty({ ...groupOf(store.getGroup(group.id)) }, 'featureIds', {
         value: Object.freeze(featureIds),
@@ -2339,6 +2588,27 @@ export function createDocumentAccess(
       }),
     );
     mergeDocument({ groups: { created: [created as Group] } });
+    // The features listed join it in the order given; the others when they are created
+    const memberKeys = keysBetween(undefined, undefined, featureIds.length);
+    try {
+      placesTogether(() => {
+        featureIds.forEach((featureId, index) => {
+          const feature = getFeature(featureId);
+          if (!feature) {
+            listings.set(featureId, { container: group.id, order: featureIds, index });
+            return;
+          }
+          listings.set(featureId, { container: group.id, order: featureIds, index });
+          updateFeatureRow(featureId, { groupId: group.id }, undefined, {
+            parent: group.id,
+            key: memberKeys[index],
+          });
+          listings.delete(featureId);
+        });
+      });
+    } finally {
+      bumpGroup(group.id);
+    }
   };
 
   const updateGroupRow = (id: string, updates: Partial<Group>): void => {
@@ -2351,12 +2621,24 @@ export function createDocumentAccess(
       if (key === 'featureIds' || key === 'id' || key === 'layerId') continue;
       fields[key] = frozenValue((updates as Record<string, unknown>)[key]);
     }
-    ownGroups.add(id);
-    wrote();
-    if (Object.keys(fields).length > 0) store.updateGroup(id, fields as Partial<StoreGroup>);
-    if (updates.featureIds) writeOrder(id, [...updates.featureIds]);
-    const group = getGroup(id) as Group;
-    mergeDocument({ groups: { updated: [{ id, group, previous }] } });
+    const mark = storeWrites;
+    const told = (): void => {
+      ownGroups.add(id);
+      wrote();
+      const group = getGroup(id) as Group;
+      mergeDocument({ groups: { updated: [{ id, group, previous }] } });
+    };
+    try {
+      if (Object.keys(fields).length > 0) {
+        stored(store.updateGroup(id, fields as Partial<StoreGroup>));
+      }
+      if (updates.featureIds) writeOrder(id, [...updates.featureIds]);
+    } catch (error) {
+      // What the Store applied before it refused a write is told
+      if (error instanceof RefusedWrite && storeWrites !== mark) told();
+      throw error;
+    }
+    told();
   };
 
   /** Lists what is still unlisted at the end of an operation: groups at their place, features at the front */
@@ -2372,10 +2654,10 @@ export function createDocumentAccess(
       const before = getLayer(layerId);
       noteOrderBefore(layerId);
       const [key] = keysAt(layerId, [groupId], Math.min(index, countOf(layerId) - 1));
+      stored(store.updateGroup(groupId, { orderKey: key }));
       ownGroups.add(groupId);
       wrote();
       placesWritten();
-      store.updateGroup(groupId, { orderKey: key });
       unlisted.delete(groupId);
       layerOrderChanged(layerId, before);
     }
@@ -2404,12 +2686,12 @@ export function createDocumentAccess(
   // The moves
   // ==========================================================================
 
-  const moveFeatures = (ids: readonly string[], to: MoveDestination): void => {
-    transact(
+  /** Moves features: false when the Store refused one of the writes (see `attempt`) */
+  const moveFeatures = (ids: readonly string[], to: MoveDestination): boolean =>
+    attempt(
       () => placesTogether(() => moveFeaturesTo(ids, to)),
       busDepth > 0 ? busSource : 'local',
     );
-  };
 
   /** Moves features (see `moveFeatures`), in the transaction of the caller */
   const moveFeaturesTo = (ids: readonly string[], to: MoveDestination): void => {
@@ -2517,58 +2799,74 @@ export function createDocumentAccess(
     }
   };
 
-  const moveGroups = (ids: readonly string[], layerId: string, index: number | undefined): void => {
-    transact(
+  /** Moves groups: false when the Store refused one of the writes (see `attempt`) */
+  const moveGroups = (ids: readonly string[], layerId: string, index: number | undefined) =>
+    attempt(
       () => {
         const before = getLayer(layerId);
         noteOrderBefore(layerId);
         const keys = keysAt(layerId, ids, index);
-        ids.forEach((id, i) => {
-          const group = store.getGroup(id);
-          if (!group) return;
-          const previous = getGroup(id) as Group;
-          if (group.layerId === layerId) {
-            ownGroups.add(id);
-            wrote();
-            placesWritten();
-            store.updateGroup(id, { orderKey: keys[i] });
-            return;
+        const mark = storeWrites;
+        /** The order of the layer, then the groups that moved */
+        const told = (): void => {
+          layerOrderChanged(layerId, before);
+          for (const { id, previous } of groupMoved.splice(0)) {
+            const group = getGroup(id);
+            if (group) mergeDocument({ groups: { updated: [{ id, group, previous }] } });
           }
-          const source = group.layerId;
-          const sourceBefore = getLayer(source);
-          noteOrderBefore(source);
-          // Its features move with it: where they were in it is told of each of them
-          noteOrderBefore(id);
-          const memberIds = memberIdsOf(id);
-          const members = memberIds.map((memberId) => getFeature(memberId) as Feature);
-          ownGroups.add(id);
-          wrote();
-          placesWritten();
-          store.updateGroup(id, { layerId, orderKey: keys[i] });
-          for (const memberId of memberIds) {
-            const ref = tables.getRowRef(memberId);
-            if (ref !== undefined) ownRows.add(ref);
-          }
-          layerOrderChanged(source, sourceBefore);
-          for (const member of members) {
-            const updated = frozenFeature(member, { layerId });
-            countWork(counts, 'objectsCreated');
-            remember(updated);
-            mergeDocument({
-              features: { updated: [{ id: member.id, feature: updated, previous: member }] },
-            });
-          }
-          bumpGroup(id);
-          groupMoved.push({ id, previous });
-        });
-        layerOrderChanged(layerId, before);
-        for (const { id, previous } of groupMoved.splice(0)) {
-          const group = getGroup(id);
-          if (group) mergeDocument({ groups: { updated: [{ id, group, previous }] } });
+        };
+        try {
+          ids.forEach((id, i) => {
+            moveGroupTo(id, layerId, keys[i]);
+          });
+        } catch (error) {
+          // The moves the Store applied before it refused one are told
+          if (error instanceof RefusedWrite && storeWrites !== mark) told();
+          throw error;
         }
+        told();
       },
       busDepth > 0 ? busSource : 'local',
     );
+
+  /** Moves a group to a key of a layer (see `moveGroups`), in the transaction of the caller */
+  const moveGroupTo = (id: string, layerId: string, key: string): void => {
+    const group = store.getGroup(id);
+    if (!group) return;
+    const previous = getGroup(id) as Group;
+    if (group.layerId === layerId) {
+      stored(store.updateGroup(id, { orderKey: key }));
+      ownGroups.add(id);
+      wrote();
+      placesWritten();
+      return;
+    }
+    const source = group.layerId;
+    const sourceBefore = getLayer(source);
+    noteOrderBefore(source);
+    // Its features move with it: where they were in it is told of each of them
+    noteOrderBefore(id);
+    const memberIds = memberIdsOf(id);
+    const members = memberIds.map((memberId) => getFeature(memberId) as Feature);
+    stored(store.updateGroup(id, { layerId, orderKey: key }));
+    ownGroups.add(id);
+    wrote();
+    placesWritten();
+    for (const memberId of memberIds) {
+      const ref = tables.getRowRef(memberId);
+      if (ref !== undefined) ownRows.add(ref);
+    }
+    layerOrderChanged(source, sourceBefore);
+    for (const member of members) {
+      const updated = frozenFeature(member, { layerId });
+      countWork(counts, 'objectsCreated');
+      remember(updated);
+      mergeDocument({
+        features: { updated: [{ id: member.id, feature: updated, previous: member }] },
+      });
+    }
+    bumpGroup(id);
+    groupMoved.push({ id, previous });
   };
   const groupMoved: Array<{ id: string; previous: Group }> = [];
 
@@ -3197,9 +3495,9 @@ export function createDocumentAccess(
     setLayerOrder: (order: string[]) =>
       write(() => {
         const previous = [...store.getLayerOrder()];
+        stored(store.setLayerOrder(order));
         ownOrder = true;
         wrote();
-        store.setLayerOrder(order);
         mergeDocument({
           layers: { orderChanged: { order: [...store.getLayerOrder()], previous } },
         });
@@ -3223,26 +3521,26 @@ export function createDocumentAccess(
     createFile: (file: FileData) =>
       write(() => {
         if (store.getFile(file.id)) throw new Error(`File with id "${file.id}" already exists`);
+        stored(store.createFile(frozenValue({ ...file })));
         ownFiles.add(file.id);
         wrote();
-        store.createFile(frozenValue({ ...file }));
         mergeDocument({ files: { created: [store.getFile(file.id) as FileData] } });
       }),
     deleteFile: (id: string) =>
       write(() => {
         const file = store.getFile(id);
         if (!file) throw new Error(`File with id "${id}" not found`);
+        stored(store.deleteFile(id));
         ownFiles.add(id);
         wrote();
-        store.deleteFile(id);
         mergeDocument({ files: { deleted: [file] } });
       }),
     setMetadata: (metadata: Partial<Metadata>) =>
       write(() => {
         const previous = { ...store.getMetadata() } as Metadata;
+        stored(store.setMetadata(frozenValue({ ...metadata })));
         ownMetadata = true;
         wrote();
-        store.setMetadata(frozenValue({ ...metadata }));
         mergeDocument({
           metadata: { metadata: { ...store.getMetadata() } as Metadata, previous },
         });
@@ -3255,6 +3553,8 @@ export function createDocumentAccess(
     },
     transact: <T>(fn: () => T, source?: UpdateSource): T =>
       transact(fn, source ?? (busDepth > 0 ? busSource : 'local')),
+    transactUntilRefused: <T>(fn: () => T, source?: UpdateSource): T | null =>
+      transactUntilRefused(fn, source ?? (busDepth > 0 ? busSource : 'local')),
 
     // The reads by position
     countItems: (layerId: string) => tables.get(layerId)?.itemCount ?? 0,

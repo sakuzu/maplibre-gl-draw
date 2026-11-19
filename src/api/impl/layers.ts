@@ -116,10 +116,12 @@ export function createLayers(
   };
 
   /** Creates prepared layers and puts each at its index of the stacking order */
-  const createAll = (prepared: PreparedLayer[]) => {
-    store.transact(() => {
+  const createAll = (prepared: PreparedLayer[]): StoredLayer[] | null => {
+    const written = store.transactUntilRefused(() => {
       for (const entry of prepared) insertLayer(store, entry);
+      return true;
     });
+    if (written === null) return null;
     return prepared.map(({ layer }) => store.getLayer(layer.id) as StoredLayer);
   };
 
@@ -144,7 +146,7 @@ export function createLayers(
     create(input) {
       const prepared = prepareLayer(deps, input, new Set());
       if (store.isReadOnly()) return null;
-      return createAll([prepared])[0] ?? null;
+      return createAll([prepared])?.[0] ?? null;
     },
 
     createMany(inputs) {
@@ -164,7 +166,7 @@ export function createLayers(
       const updates = prepareLayerPatch(patch);
       if (store.isReadOnly()) return null;
       if (layerLocked(store, layer) && !onlyLockOrVisibility(patch)) return null;
-      store.updateLayer(layer.id, updates);
+      if (!store.updateLayer(layer.id, updates)) return null;
       return store.getLayer(layer.id) ?? null;
     },
 
@@ -186,9 +188,11 @@ export function createLayers(
       ) {
         return null;
       }
-      store.transact(() => {
+      const written = store.transactUntilRefused(() => {
         for (const { layer, updates } of prepared) store.updateLayer(layer.id, updates);
+        return true;
       });
+      if (written === null) return null;
       return prepared.map(({ layer }) => store.getLayer(layer.id) as StoredLayer);
     },
 
@@ -201,10 +205,11 @@ export function createLayers(
     deleteMany(ids) {
       const layers = requireIds(ids).map(require);
       if (store.isReadOnly() || layers.some((layer) => holdsLock(store, layer))) return false;
-      store.transact(() => {
+      const written = store.transactUntilRefused(() => {
         for (const layer of layers) store.deleteLayer(layer.id);
+        return true;
       });
-      return true;
+      return written !== null;
     },
 
     reorder(order) {

@@ -172,7 +172,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     create(input) {
       const feature = prepareFeature(deps, input, new Set());
       if (store.isReadOnly()) return null;
-      store.createFeature(feature);
+      if (!store.createFeature(feature)) return null;
       return store.getFeature(feature.id) ?? null;
     },
 
@@ -187,7 +187,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       if (store.isReadOnly()) return null;
       // The features written are read back as they are kept made, not from their rows
       return store.holdFeatures(() => {
-        store.createFeatures(features);
+        if (!store.createFeatures(features)) return null;
         return features.map((feature) => store.getFeature(feature.id) as StoredFeature);
       });
     },
@@ -197,7 +197,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       const updates = preparePatch(feature, patch);
       if (store.isReadOnly()) return null;
       if (featureLocked(store, feature) && !onlyLockOrVisibility(patch)) return null;
-      store.updateFeature(feature.id, updates);
+      if (!store.updateFeature(feature.id, updates)) return null;
       return store.getFeature(feature.id) ?? null;
     },
 
@@ -216,9 +216,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
         ({ feature, patch }) => featureLocked(store, feature) && !onlyLockOrVisibility(patch),
       );
       if (refused) return null;
-      store.transact(() => {
+      const written = store.transactUntilRefused(() => {
         for (const { feature, updates } of prepared) store.updateFeature(feature.id, updates);
+        return true;
       });
+      if (written === null) return null;
       return prepared.map(({ feature }) => store.getFeature(feature.id) as StoredFeature);
     },
 
@@ -232,12 +234,13 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       const features = requireAll(ids);
       if (store.isReadOnly()) return false;
       if (features.some((feature) => featureLocked(store, feature))) return false;
-      store.transact(() => {
+      const written = store.transactUntilRefused(() => {
         for (const feature of features) {
           if (store.getFeature(feature.id)) store.deleteFeature(feature.id);
         }
+        return true;
       });
-      return true;
+      return written !== null;
     },
 
     move(id, to) {
@@ -291,9 +294,9 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       if (!isAreaFeature(area)) throw invalidInput(`The feature ${area.id} is not an area`);
       if (!isSplitLineFeature(line)) throw invalidInput(`The feature ${line.id} is not a line`);
       if (refuseChange([area])) return null;
-      return runSplit(geometryDeps, area, line, false).map(
-        (resultId) => store.getFeature(resultId) as StoredFeature,
-      );
+      const results = store.transactUntilRefused(() => runSplit(geometryDeps, area, line, false));
+      if (results === null) return null;
+      return results.map((resultId) => store.getFeature(resultId) as StoredFeature);
     },
 
     buffer(ids, options) {
@@ -313,9 +316,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       }
       if (refuseChange(inputs)) return null;
       if (distanceMeters === 0 || inputs.length === 0) return [];
-      return runBuffer(geometryDeps, inputs, { distanceMeters, segments }, false).map(
-        (resultId) => store.getFeature(resultId) as StoredFeature,
+      const results = store.transactUntilRefused(() =>
+        runBuffer(geometryDeps, inputs, { distanceMeters, segments }, false),
       );
+      if (results === null) return null;
+      return results.map((resultId) => store.getFeature(resultId) as StoredFeature);
     },
   };
 
@@ -325,8 +330,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     if (store.isReadOnly()) return false;
     if (features.some((feature) => featureLocked(store, feature))) return false;
     if (target.locked) return false;
-    moveFeatures(store, features, target);
-    return true;
+    return moveFeatures(store, features, target);
   }
 
   /** The features as areas in stacking order, at least `min` of them */
@@ -360,13 +364,14 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     const areas = inputs.map((feature) => toAreaCoordinates(feature) as AreaCoordinates);
     const geometry = toResultGeometry(compute(areas));
     if (geometry === null) return null;
-    const resultId = store.transact(() =>
+    const resultId = store.transactUntilRefused(() =>
       applyResult(geometryDeps, {
         anchor,
         removedIds: removed.map((feature) => feature.id),
         geometry,
       }),
     );
+    if (resultId === null) return null;
     return store.getFeature(resultId) ?? null;
   }
 }
