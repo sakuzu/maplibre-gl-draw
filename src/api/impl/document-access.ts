@@ -398,6 +398,55 @@ function appendChange(target: StoreChange, change: StoreChange, folds: Folds): v
   if (notes) mergeNotes(notesFor(target), notes);
 }
 
+/**
+ * Folds the features a change deleted and created again with their IDs into updates (see
+ * `feature.updated`): one each, from what it was before the change to what it is now. The
+ * updates of such a feature before its deletion and after its creation fold into it. A feature
+ * created by the change before it was deleted is left as it is
+ */
+function foldMadeAgain(features: NonNullable<StoreChange['features']>): void {
+  const { created, deleted } = features;
+  if (!created?.length || !deleted?.length) return;
+  const gone = new Map<string, Feature>();
+  for (const feature of deleted) if (!gone.has(feature.id)) gone.set(feature.id, feature);
+  const madeBefore = new Set(created);
+  const again = created.filter((feature) => {
+    const before = gone.get(feature.id);
+    return before !== undefined && !madeBefore.has(before);
+  });
+  if (again.length === 0) return;
+  const ids = new Set(again.map((feature) => feature.id));
+  type Update = NonNullable<typeof features.updated>[number];
+  const updates = new Map<string, Update[]>();
+  const kept: Update[] = [];
+  for (const update of features.updated ?? []) {
+    if (!ids.has(update.id)) {
+      kept.push(update);
+      continue;
+    }
+    const list = updates.get(update.id) ?? [];
+    list.push(update);
+    updates.set(update.id, list);
+  }
+  for (const feature of again) {
+    const before = gone.get(feature.id) as Feature;
+    const list = updates.get(feature.id) ?? [];
+    // The updates up to the value deleted came before the deletion, the others after the creation
+    const last = list.findIndex((update) => update.feature === before);
+    const after = list.slice(last + 1);
+    kept.push({
+      id: feature.id,
+      feature: after.length > 0 ? after[after.length - 1].feature : feature,
+      previous: last >= 0 ? list[0].previous : before,
+    });
+  }
+  features.created = created.filter((feature) => !ids.has(feature.id));
+  features.deleted = deleted.filter((feature) => !ids.has(feature.id));
+  features.updated = kept;
+  if (features.created.length === 0) delete features.created;
+  if (features.deleted.length === 0) delete features.deleted;
+}
+
 /** Whether a change tells a change of the document (not of the state of this client alone) */
 function changesDocument(change: StoreChange): boolean {
   return (
@@ -798,6 +847,8 @@ export function createDocumentAccess(
     change.source = busSource;
     pending = {};
     pendingFolds = newFolds();
+    // A replacement of the whole document tells what it took out and what it wrote as both
+    if (change.features && change.reset !== true) foldMadeAgain(change.features);
     if (changesDocument(change)) {
       Object.defineProperty(change, SUMMARY, { value: summaryOf(notesFor(change), change) });
     }
