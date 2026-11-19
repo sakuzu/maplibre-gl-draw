@@ -107,7 +107,6 @@ describe('validateRowValues', () => {
       [written([['visible', [true, 'yes']]]), 1, 'visible'],
       [written([['locked', [0, false]]]), 0, 'locked'],
       [written([['style', [{}, { fillColor: Number.NaN }]]]), 1, 'style'],
-      [written([['style', [{}, { fillColor: { r: 1 } }]]]), 1, 'style'],
       [written([['style', [[], {}]]]), 0, 'style'],
       [written([['style', [null, {}]]]), 0, 'style'],
       [written([['style:fillColor', ['#f00', Number.POSITIVE_INFINITY]]]), 1, 'style:fillColor'],
@@ -136,6 +135,8 @@ describe('validateRowValues', () => {
       expect(problem, `${field} of row ${row}`).toEqual({ row, field, reason: expect.any(String) });
       expect(problem?.reason.length).toBeGreaterThan(0);
     }
+    // A key of the style holds any value JSON holds
+    expect(validateRowValues(written([['style', [{}, { fillColor: { r: 1 } }]]]), 2)).toBeNull();
   });
 
   it('refuses a value of an attribute that is in itself', () => {

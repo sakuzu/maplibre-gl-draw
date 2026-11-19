@@ -473,6 +473,62 @@ describe('the keys of the metadata', () => {
   });
 });
 
+describe('a key of the style of an extension', () => {
+  it('holds a boolean, null, an array and an object, written alone and kept through a load', async () => {
+    const { draw, store } = instanceOver();
+    const values: unknown[] = [true, null, [4, 2], { width: 2, dashed: false }];
+    draw.features.createMany(
+      values.map((value, i) => ({
+        ...point(`p${i}`, [i, 0]),
+        style: { fillColor: '#f00', 'example:dashed': value } as never,
+      })),
+    );
+    for (const [i, value] of values.entries()) {
+      expect(draw.features.get(`p${i}`)?.style).toEqual({
+        fillColor: '#f00',
+        'example:dashed': value,
+      });
+    }
+    // Updated, the change holds the style it had before; the key is read alone
+    const changes: StoreChange[] = [];
+    store.subscribe((change) => changes.push(change), { previousValues: true });
+    draw.features.update('p0', {
+      style: { fillColor: '#f00', 'example:dashed': [false] } as never,
+    });
+    const ref = store.tables.getRowRef('p0') as number;
+    expect(store.tables.readValues(Int32Array.of(ref), ['style:example:dashed']).fields).toEqual(
+      new Map([['style:example:dashed', [[false]]]]),
+    );
+    const layerId = draw.features.get('p0')?.layerId ?? '';
+    expect(changes[changes.length - 1]?.previousValues?.get(layerId)?.fields.get('style')).toEqual([
+      { fillColor: '#f00', 'example:dashed': true },
+    ]);
+    // One key written alone to the Store
+    store.transact(() => {
+      store.writeRows({
+        rows: Int32Array.of(store.tables.getRowRef('p1') as number),
+        fields: new Map([['style:example:dashed', [{ on: true }]]]),
+      });
+    }, 'remote');
+    expect(draw.features.get('p1')?.style).toEqual({
+      fillColor: '#f00',
+      'example:dashed': { on: true },
+    });
+    // Saved and loaded, every value is the same
+    const saved = draw.document.toJSON();
+    const reopened = instanceOver().draw;
+    await reopened.document.load(saved);
+    const styles = ['p0', 'p1', 'p2', 'p3'].map((id) => draw.features.get(id)?.style);
+    expect(['p0', 'p1', 'p2', 'p3'].map((id) => reopened.features.get(id)?.style)).toEqual(styles);
+    expect(styles.map((style) => (style as Record<string, unknown>)['example:dashed'])).toEqual([
+      [false],
+      { on: true },
+      [4, 2],
+      { width: 2, dashed: false },
+    ]);
+  });
+});
+
 describe('the events of a change written to the Store directly', () => {
   it('lets a listener update features and write to the Store, and reads what it wrote', () => {
     const { draw, store } = instanceOver();

@@ -66,6 +66,11 @@ export type PointShape = 'circle' | 'square' | 'triangle' | 'star';
  *
  * Colors are CSS colors. Widths and radii are in CSS pixels at the reference zoom of the
  * feature.
+ *
+ * A key this type does not define is kept as it is, whatever value JSON holds: it is stored,
+ * exported and loaded back like the keys above, and the library does not read it. An extension
+ * or an application gives features style keys of its own this way: it declares them with
+ * declaration merging, and checks their values where it reads them.
  */
 export interface FeatureStyle {
   /** The fill color */

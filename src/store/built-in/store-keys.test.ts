@@ -281,6 +281,78 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(view?.getRowStyle(p)).toBe(view?.getRowStyle(q));
     });
 
+    it('hold any value JSON holds under a key the library does not know', () => {
+      const store = make();
+      store.createLayer(layer('a'));
+      const list = [1, 'two', null];
+      const object = { width: 2, dashes: [4, 2] };
+      store.createRows(
+        newRows(['b', 'n', 'l', 'o'], 'a', [
+          ['style', [{ dashed: true }, { dashed: null }, { dashed: list }, { dashed: object }]],
+        ]),
+      );
+      const rows = Int32Array.from(['b', 'n', 'l', 'o'].map((id) => refOf(store, id)));
+      const view = store.tables.get('a');
+      expect(view?.getRowStyle(rows[0])).toEqual({ dashed: true });
+      expect(fieldsOf(store.tables.readValues(rows, ['style:dashed']))).toEqual({
+        'style:dashed': [true, null, list, object],
+      });
+      // One key written alone, the values before being the values it had
+      const changes = record(store, { previousValues: true });
+      store.writeRows(valuesOf([rows[0], rows[1]], [['style:dashed', [{ on: false }, [false]]]]));
+      expect(view?.getRowStyle(rows[0])).toEqual({ dashed: { on: false } });
+      expect(view?.getRowStyle(rows[1])).toEqual({ dashed: [false] });
+      expect(fieldsOf(changes[0].previousValues?.get('a') as RowValues)).toEqual({
+        'style:dashed': [true, null],
+      });
+      store.writeRows(valuesOf([rows[2]], [['style:color', ['#000']]]));
+      expect(view?.getRowStyle(rows[2])).toEqual({ dashed: list, color: '#000' });
+      // Built into a page and taken in by another Store, the values are the same
+      const builder = createRowPageBuilder();
+      ['b', 'n', 'l', 'o'].forEach((id, i) => {
+        builder.addRow({
+          id,
+          type: 'Point',
+          geometry: point(i, 0),
+          orderKey: `k${i}`,
+          style: view?.getRowStyle(rows[i]),
+        });
+      });
+      const other = make();
+      other.createLayer(layer('a'));
+      expect(other.createRowsFromPages('a', builder.finish())).toBe(true);
+      const read = (id: string) => other.tables.get('a')?.getRowStyle(refOf(other, id));
+      expect(read('b')).toEqual({ dashed: { on: false } });
+      expect(read('n')).toEqual({ dashed: [false] });
+      expect(read('l')).toEqual({ dashed: list, color: '#000' });
+      expect(read('o')).toEqual({ dashed: object });
+    });
+
+    it('refuse a value of a key that JSON does not hold, as the attributes do', () => {
+      const store = withRows(make);
+      const p = refOf(store, 'p');
+      for (const fields of [
+        [['style:dashed', [() => true]]],
+        [['style:dashed', [Number.POSITIVE_INFINITY]]],
+        [['style:dashed', [[`a${LONE}`]]]],
+        [['style:dashed', [nested(32)]]],
+        [['style', [{ dashed: nested(32) }]]],
+        [['style', [{ dashed: () => true }]]],
+      ] as Array<Array<[FeatureRowField, unknown[]]>>) {
+        expectCode(() => store.writeRows(valuesOf([p], fields)), 'invalidInput');
+        expect(validateRowValues(valuesOf([p], fields), 2)).not.toBeNull();
+      }
+      // The style is one value: 32 deep with the style itself, for one key and the whole style
+      store.writeRows(valuesOf([p], [['style:dashed', [nested(31)]]]));
+      expect(store.tables.get('a')?.getRowStyle(p)).toEqual({
+        fillColor: '#f00',
+        strokeWidth: 2,
+        dashed: nested(31),
+      });
+      store.writeRows(valuesOf([p], [['style', [{ dashed: nested(31) }]]]));
+      expect(store.tables.get('a')?.getRowStyle(p)).toEqual({ dashed: nested(31) });
+    });
+
     it('are refused with the whole style in one write, and for a value that is not one', () => {
       const store = withRows(make);
       const p = refOf(store, 'p');
@@ -289,7 +361,6 @@ describe.each(STORES)('%s', (_name, make) => {
           ['style', [{}]],
           ['style:fillColor', ['#000']],
         ],
-        [['style:fillColor', [true]]],
         [['style:fillColor', [Number.NaN]]],
         [['style:fillColor', [`a${LONE}`]]],
         [[`style:fill${LONE}`, ['#000']]],
@@ -309,6 +380,9 @@ describe.each(STORES)('%s', (_name, make) => {
       }
       expect(store.tables.get('a')?.getRowStyle(p)).toEqual({ fillColor: '#f00', strokeWidth: 2 });
       expect(store.tables.getRowRef('x')).toBeUndefined();
+      // A key of the style holds any value JSON holds
+      store.writeRows(valuesOf([p], [['style:fillColor', [true]]]));
+      expect(store.tables.get('a')?.getRowStyle(p)).toEqual({ fillColor: true, strokeWidth: 2 });
     });
   });
 

@@ -104,35 +104,30 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return prototype === Object.prototype || prototype === null;
 }
 
-/** Whether a value is one a key of the style holds: a string or a finite number */
-function isStyleValue(value: unknown): boolean {
-  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
-}
-
-/** Why a value is not one a key of the style holds (null when it is) */
-function styleValueProblem(value: unknown): string | null {
-  if (!isStyleValue(value)) return 'a key of the style is neither a string nor a finite number';
-  if (typeof value === 'string' && !isWellFormed(value)) return `the value ${LONE_SURROGATE}`;
-  return null;
-}
+/**
+ * The style a key of the style is in, as the first of the arrays and objects a value of a key
+ * written alone is in: the whole style is one value, nested at most 32 deep with the style itself
+ */
+const THE_STYLE: Readonly<Record<string, never>> = Object.freeze({});
 
 /**
- * Why a style is not one (null when it is): an object whose values are strings and finite numbers
+ * Why a style is not one (null when it is): a plain object whose values are values JSON holds, as
+ * those of an attribute, the style nested at most 32 deep with itself, every key well-formed
  *
  * @internal
  */
 export function styleProblem(style: unknown): string | null {
   if (!isPlainObject(style)) return 'the style is not an object';
+  const within: unknown[] = [];
   // A plain object inherits no key it lists
   for (const key in style) {
     if (!isWellFormed(key)) return `a key of the style ${LONE_SURROGATE}`;
     const value = style[key];
-    if (!isStyleValue(value)) {
-      return `the key ${JSON.stringify(key)} of the style is neither a string nor a finite number`;
-    }
-    if (typeof value === 'string' && !isWellFormed(value)) {
-      return `the value of the key ${JSON.stringify(key)} of the style ${LONE_SURROGATE}`;
-    }
+    if (value === undefined) return `the key ${JSON.stringify(key)} of the style has no value`;
+    within.length = 0;
+    within.push(style);
+    const problem = jsonProblem(value, within);
+    if (problem !== null) return `the key ${JSON.stringify(key)} of the style: ${problem}`;
   }
   return null;
 }
@@ -199,7 +194,12 @@ function valueProblem(
     within.length = 0;
     return jsonProblem(value, within);
   }
-  if (kind === 'style') return value === undefined ? null : styleValueProblem(value);
+  if (kind === 'style') {
+    if (value === undefined) return null;
+    within.length = 0;
+    within.push(THE_STYLE);
+    return jsonProblem(value, within);
+  }
   if (value === undefined) {
     if (created) return NEEDED_FIELDS.includes(field) ? 'a new row needs it' : null;
     return 'the value is missing';
