@@ -461,6 +461,76 @@ describe('the groups left empty', () => {
   });
 });
 
+describe('the IDs of features deleted and created again in one transaction', () => {
+  /** A document of two layers, a group and features with attributes */
+  function drawn(draw: Draw) {
+    const front = draw.layers.create({ id: 'front', name: 'Front' });
+    if (!front) throw new Error('no layer');
+    draw.features.create({ ...square('parcel-1', 0), layerId: 'front', properties: { n: 1 } });
+    draw.features.create({ ...square('parcel-2', 2), layerId: 'front', properties: { n: 2 } });
+    draw.features.create({ ...point('pin'), layerId: 'front', properties: { label: 'A' } });
+    draw.groups.create({ id: 'pair', featureIds: ['parcel-1', 'parcel-2'] });
+  }
+
+  it('loads the document saved, replacing the one with the same IDs', async () => {
+    const { draw } = instanceOver();
+    drawn(draw);
+    const saved = draw.document.toJSON();
+    // Changed after it was saved: an attribute more, one less, a feature deleted
+    draw.features.update('parcel-1', { properties: { n: 10, extra: true } });
+    draw.features.update('pin', { properties: {} });
+    draw.features.delete('parcel-2');
+    const changes: StoreChange[] = [];
+    draw.getStore().subscribe((change) => changes.push(change));
+    await draw.document.load(saved);
+    expect(draw.document.toJSON()).toEqual(saved);
+    expect(draw.features.get('parcel-1')?.properties).toEqual({ n: 1 });
+    expect(draw.features.get('pin')?.properties).toEqual({ label: 'A' });
+    expect(draw.groups.listFeatureIds('pair', { start: 0, end: 10 })).toEqual([
+      'parcel-1',
+      'parcel-2',
+    ]);
+    // One change, in which the rows of the IDs there were come back as written
+    expect(changes).toHaveLength(1);
+    const rows = changes[0].rows?.layers.get('front');
+    const refOf = (id: string) => draw.getStore().tables.getRowRef(id) as number;
+    expect([...(rows?.updated ?? [])]).toEqual(
+      expect.arrayContaining([refOf('parcel-1'), refOf('pin')]),
+    );
+    expect([...(rows?.created ?? [])]).toContain(refOf('parcel-2'));
+  });
+
+  it('creates a feature with the ID of one deleted before it, with its own values only', () => {
+    const { draw } = instanceOver();
+    draw.features.create({
+      ...point('a', [1, 1]),
+      properties: { old: 1 },
+      style: { pointColor: '#f00' },
+    });
+    draw.transact(() => {
+      draw.features.delete('a');
+      draw.features.create({ ...point('a', [2, 2]), properties: { fresh: 2 } });
+    });
+    expect(draw.features.get('a')).toMatchObject({
+      geometry: { type: 'Point', coordinates: [2, 2] },
+      properties: { fresh: 2 },
+      style: {},
+    });
+    expect(draw.features.getProperty('a', 'old')).toBeUndefined();
+    expect(draw.features.count()).toBe(1);
+  });
+
+  it('writes nothing of a createMany refused for an ID in use', () => {
+    const { draw, store } = instanceOver();
+    draw.features.create(point('a'));
+    const before = draw.document.toJSON();
+    const writes = vi.spyOn(store, 'createRows');
+    expect(codeOf(() => draw.features.createMany([point('b'), point('a')]))).toBe('alreadyExists');
+    expect(writes).not.toHaveBeenCalled();
+    expect(draw.document.toJSON()).toEqual(before);
+  });
+});
+
 describe('the keys of the metadata', () => {
   it('writes key by key, deletes a key given undefined, and refuses a value JSON cannot hold', () => {
     const { draw, store } = instanceOver();

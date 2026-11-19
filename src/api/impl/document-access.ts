@@ -1325,6 +1325,18 @@ export function createDocumentAccess(
   /** The layer of a row */
   const layerOfRow = (ref: number): string => placeOf(parentOfRow(ref)).layerId;
 
+  /**
+   * The layer a deleted row the Store keeps is in, by its parent: undefined when its parent (its
+   * layer, or its group) is not there any more
+   */
+  const layerOfDeleted = (ref: number): string | undefined => {
+    const parent = String(
+      tables.readValues(Int32Array.of(ref), ['parent']).fields.get('parent')?.[0],
+    );
+    if (store.getLayer(parent)) return parent;
+    return store.getGroup(parent)?.layerId;
+  };
+
   /** Writes the place of rows (their parent and their key) */
   const writePlaces = (places: ReadonlyArray<{ id: string; parent: string; key: string }>) => {
     for (const { id, parent, key } of places) {
@@ -1418,19 +1430,67 @@ export function createDocumentAccess(
         else byLayer.set(row.stored.layerId, [row]);
       }
       for (const [layerId, inLayer] of byLayer) {
+        // The ids of rows this transaction deleted, which the Store keeps (the layer keeps the
+        // rows it is told were deleted): those rows come back, written as the new features
+        const fresh: Pending[] = [];
+        const back = new Map<string, { refs: number[]; rows: Pending[] }>();
+        for (const row of inLayer) {
+          const found = tables.findRow(row.stored.id);
+          if (!found?.deleted) {
+            fresh.push(row);
+            continue;
+          }
+          const from = layerOfDeleted(found.ref);
+          if (from === undefined) {
+            throw new Error(
+              `Feature with id "${row.stored.id}" cannot be created: the row deleted with this ID has lost its layer or its group`,
+            );
+          }
+          const list = back.get(from) ?? { refs: [], rows: [] };
+          list.refs.push(found.ref);
+          list.rows.push(row);
+          back.set(from, list);
+        }
+        const valuesPerPosition = tables.getValuesPerPosition(layerId) ?? 2;
+        for (const { refs, rows: again } of back.values()) {
+          const rowRefs = Int32Array.from(refs);
+          const fields = newRowFields(
+            again.map((row) => row.stored),
+            again.map((row) => ({ parent: row.container, orderKey: row.key })),
+          );
+          // The attributes the deleted rows had and the new features do not have go
+          for (const key of store.listPropertyKeys(rowRefs)) {
+            const field = `${PROPERTY_FIELD}${key}` as FeatureRowField;
+            if (!fields.has(field)) fields.set(field, new Array<unknown>(refs.length));
+          }
+          const written = store.writeRows({
+            rows: rowRefs,
+            fields,
+            geometry: geometryColumnOf(
+              again.map((row) => row.stored.geometry),
+              valuesPerPosition,
+            ),
+            deleted: new Uint8Array(refs.length),
+          });
+          if (!written) {
+            throw new Error(`Feature with id "${again[0].stored.id}" already exists`);
+          }
+          wrote();
+        }
+        if (fresh.length === 0) continue;
         const created = store.createRows({
-          ids: inLayer.map((row) => row.stored.id),
+          ids: fresh.map((row) => row.stored.id),
           fields: newRowFields(
-            inLayer.map((row) => row.stored),
-            inLayer.map((row) => ({ parent: row.container, orderKey: row.key })),
+            fresh.map((row) => row.stored),
+            fresh.map((row) => ({ parent: row.container, orderKey: row.key })),
           ),
           geometry: geometryColumnOf(
-            inLayer.map((row) => row.stored.geometry),
-            tables.getValuesPerPosition(layerId) ?? 2,
+            fresh.map((row) => row.stored.geometry),
+            valuesPerPosition,
           ),
         });
         if (!created) {
-          throw new Error(`Feature with id "${inLayer[0].stored.id}" already exists`);
+          throw new Error(`Feature with id "${fresh[0].stored.id}" already exists`);
         }
         wrote();
       }
