@@ -23,6 +23,16 @@ import { firstRef, git } from './lib/git.mjs';
 export const name = 'branch';
 
 export const OLD_PREFIXES = ['rebuild/', 'design/', 'proto/'];
+
+/**
+ * Whether a message names an old branch: one of the old prefixes at the start of a name, so that
+ * `redesign/main` (the message git gives a merge of the work branch) is not taken for `design/`
+ *
+ * @param {string} message
+ */
+export function namesOldBranch(message) {
+  return OLD_PREFIXES.some((p) => new RegExp(`(^|[^A-Za-z0-9_.-])${p}`).test(message));
+}
 const EMPTY_BLOB = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
 
 /** The refs of the old branches, local and remote */
@@ -69,7 +79,7 @@ export function check(ctx) {
     const [header, info = ''] = block.split('\n');
     const commit = header.trim();
     const [parents, subject = ''] = info.split('\t');
-    if (OLD_PREFIXES.some((p) => subject.includes(p))) {
+    if (namesOldBranch(subject)) {
       out.errors.push(`${commit.slice(0, 12)} merges an old branch: ${subject}`);
       continue;
     }

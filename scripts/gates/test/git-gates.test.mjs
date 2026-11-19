@@ -100,6 +100,20 @@ describe('the gate of the branch', () => {
     expect(checkBranch({ root }).errors.join('\n')).toContain('has a parent from an old branch');
   });
 
+  it('passes on a merge of the work branch with the message git gives it', () => {
+    const root = repo();
+    git(root, 'checkout', '-q', 'redesign/main');
+    write(root, { 'src/b.ts': 'export const b = 2;\n' });
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'Add b');
+    git(root, 'checkout', '-q', 'redesign/work');
+    write(root, { 'src/c.ts': 'export const c = 3;\n' });
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'Add c');
+    git(root, 'merge', '-q', '--no-ff', '--no-edit', 'redesign/main');
+    expect(checkBranch({ root }).errors).toEqual([]);
+  });
+
   it('fails on a merge commit that names an old branch, even once the branch is gone', () => {
     const root = repo();
     oldBranch(root, 'proto/try');
