@@ -111,7 +111,7 @@ export function openDocument(spatialIndexing?: RowSpatialIndexing, worker?: RowP
     ...(worker && { worker: tablesWorkerOf(worker) }),
     rowBoxes: rowBoxesOfSlot(rowBoxes),
   });
-  rowBoxes.writer = rowWrites;
+  rowBoxes.refresh = () => rowWrites.refreshBoxes();
   const counts = createWorkCounts();
   return {
     /** The reading side of the tables of the rows */

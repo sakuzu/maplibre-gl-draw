@@ -21,8 +21,8 @@
  * size), a Circle (its radius) and a type registered with a calculator of its own. The index
  * sets how those boxes are worked out on the Store while it is there (`setFeatureBoxes` of the
  * layer), and makes them again when what they depend on changes: the tile size, a calculator
- * registered or cancelled, and `invalidateType` for an extent that changed for a reason outside
- * the Store (a font that arrives later, for example).
+ * registered or cancelled, and an extent that changed for a reason outside the Store (a font that
+ * arrives later, for example): its owner announces that with invalidateType().
  */
 
 import type { DocumentBoxes, DocumentReads, FeatureBoxes } from '../document-access.js';

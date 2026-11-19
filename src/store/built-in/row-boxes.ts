@@ -19,7 +19,7 @@
  * @internal
  */
 
-import type { RowBoxes, TablesWriter } from '@sakuzu/kasane';
+import type { RowBoxes } from '@sakuzu/kasane';
 import { DrawError } from '../../shared/errors.js';
 import type { RowRef } from './types.js';
 
@@ -39,15 +39,15 @@ export interface GivenRowBoxes {
 }
 
 /**
- * The boxes set for the tables of one document, and the writer that makes the boxes again
+ * The boxes set for the tables of one document, and what makes the boxes of the rows again
  *
  * @internal
  */
 export interface RowBoxesSlot {
   /** The boxes set, or null while nothing is set */
   given: GivenRowBoxes | null;
-  /** The writer of the tables, once they are made */
-  writer: TablesWriter | null;
+  /** Makes the boxes of the rows again at the next read of a range (once the tables are made) */
+  refresh: (() => void) | null;
 }
 
 /**
@@ -56,7 +56,7 @@ export interface RowBoxesSlot {
  * @internal
  */
 export function createRowBoxesSlot(): RowBoxesSlot {
-  return { given: null, writer: null };
+  return { given: null, refresh: null };
 }
 
 /**
@@ -113,10 +113,10 @@ export function setRowBoxes(tables: unknown, boxes: GivenRowBoxes): () => void {
     throw new DrawError('invalidInput', 'setRowBoxes: the boxes have no gives and boxOf');
   }
   slot.given = boxes;
-  slot.writer?.refreshBoxes();
+  slot.refresh?.();
   return () => {
     if (slot.given !== boxes) return;
     slot.given = null;
-    slot.writer?.refreshBoxes();
+    slot.refresh?.();
   };
 }
