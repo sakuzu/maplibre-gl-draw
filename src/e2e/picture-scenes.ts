@@ -21,7 +21,7 @@
  * them as they are.
  */
 
-import { crc32, deflateSync } from 'node:zlib';
+import { crc32 } from 'node:zlib';
 import type { DrawDocument, Feature, FeatureStyle, StyleRule } from '../index.js';
 import type { Camera } from './harness.js';
 
@@ -414,6 +414,33 @@ function pngChunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([length, typed, crc]);
 }
 
+/**
+ * The data of a zlib stream that holds `data` in stored blocks, without compression (the image
+ * is small, and its bytes need no more)
+ */
+function storedZlib(data: Buffer): Buffer {
+  const blocks: Buffer[] = [Buffer.from([0x78, 0x01])];
+  const BLOCK = 0xffff;
+  for (let at = 0; at < data.length; at += BLOCK) {
+    const part = data.subarray(at, at + BLOCK);
+    const head = Buffer.alloc(5);
+    head[0] = at + BLOCK >= data.length ? 1 : 0; // the last block
+    head.writeUInt16LE(part.length, 1);
+    head.writeUInt16LE(~part.length & 0xffff, 3);
+    blocks.push(head, part);
+  }
+  let a = 1;
+  let b = 0;
+  for (const byte of data) {
+    a = (a + byte) % 65521;
+    b = (b + a) % 65521;
+  }
+  const adler = Buffer.alloc(4);
+  adler.writeUInt32BE(((b << 16) | a) >>> 0);
+  blocks.push(adler);
+  return Buffer.concat(blocks);
+}
+
 /** A PNG of RGBA pixels, 8 bits a channel, without filtering */
 export function encodePng(width: number, height: number, rgba: Uint8Array): Buffer {
   const header = Buffer.alloc(13);
@@ -432,7 +459,7 @@ export function encodePng(width: number, height: number, rgba: Uint8Array): Buff
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     pngChunk('IHDR', header),
-    pngChunk('IDAT', deflateSync(rows)),
+    pngChunk('IDAT', storedZlib(rows)),
     pngChunk('IEND', Buffer.alloc(0)),
   ]);
 }

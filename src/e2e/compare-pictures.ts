@@ -116,7 +116,7 @@ export interface SceneComparison {
   /** The set that has no picture of the scene */
   readonly missingIn?: 'before' | 'after';
   /** Whether the scene is one of those allowed to change */
-  readonly allowed: boolean;
+  readonly mayChange: boolean;
   /** Whether the scene fails: it is not allowed to change, and it changed or is missing */
   readonly failed: boolean;
 }
@@ -133,7 +133,7 @@ export function compareSets(
 ): SceneComparison[] {
   const scenes = [...new Set([...before.keys(), ...after.keys()])].sort();
   return scenes.map((scene) => {
-    const allowed = changed.has(scene);
+    const mayChange = changed.has(scene);
     const a = before.get(scene);
     const b = after.get(scene);
     if (!a || !b) {
@@ -141,12 +141,12 @@ export function compareSets(
         scene,
         difference: null,
         missingIn: a ? 'after' : 'before',
-        allowed,
-        failed: !allowed,
+        mayChange,
+        failed: !mayChange,
       };
     }
     const d = difference(a, b);
-    return { scene, difference: d, allowed, failed: !allowed && d.pixels > 0 };
+    return { scene, difference: d, mayChange, failed: !mayChange && d.pixels > 0 };
   });
 }
 
@@ -155,7 +155,7 @@ export function describeComparison(c: SceneComparison): string {
   const what = c.difference
     ? `${c.difference.pixels} pixels differ, by ${c.difference.largest} at most`
     : `no picture ${c.missingIn}`;
-  const mark = c.failed ? 'FAIL' : c.allowed ? 'allowed' : 'ok';
+  const mark = c.failed ? 'FAIL' : c.mayChange ? 'allowed' : 'ok';
   return `${mark.padEnd(7)} ${c.scene}: ${what}`;
 }
 
@@ -213,7 +213,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const failed = comparisons.filter((c) => c.failed).length;
   console.log(
     `${comparisons.length} scenes: ${failed} failed, ` +
-      `${comparisons.filter((c) => c.allowed).length} allowed to change`,
+      `${comparisons.filter((c) => c.mayChange).length} allowed to change`,
   );
   return failed > 0 || unknown.length > 0 ? 1 : 0;
 }
