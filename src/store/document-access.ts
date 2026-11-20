@@ -77,7 +77,9 @@ export interface DocumentWrites {
   abortIntermediateUpdates?(ids: string[]): void;
   /**
    * Applies the edit being written in parts first to a feature, before a write of this client
-   * reads the feature to write it, so that the write starts from the values the edit gives it.
+   * reads the feature to write it, or to make the values it writes (the features a geometry
+   * operation reads to make its result, say), so that the write starts from the values the edit
+   * gives them. A caller that only reads does not call it.
    * It does nothing when the edit has reached the feature already, or no edit is being written.
    * Outside a transaction, what it writes is a transaction of its own, a part of the operation
    * of the edit; inside one, it is written in that transaction. A write that opens a
