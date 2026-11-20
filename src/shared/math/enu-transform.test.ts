@@ -887,3 +887,63 @@ describe('against the plane computations of the select mode', () => {
     expect(gaps.move).toBeGreaterThan(1000);
   });
 });
+
+// ----------------------------------------------------------------------------
+// The ends of the operations: the latitudes of the points, the ±180 degree meridian, the poles
+// and the distances far from the center
+// ----------------------------------------------------------------------------
+
+describe('the ends of the operations', () => {
+  it('refuses a point of an operation whose latitude is outside -90 to 90', () => {
+    const refused: TransformOperation[] = [
+      { kind: 'translate', from: [0, 90.000001], to: [0, 0] },
+      { kind: 'translate', from: [0, 0], to: [0, -91] },
+      { kind: 'rotate', center: [10, 95], counterclockwiseDegrees: 10 },
+      { kind: 'scale', center: [10, -90.5], eastFactor: 2, northFactor: 2, sizeFactor: 2 },
+    ];
+    for (const operation of refused) {
+      expect(acceptsBuiltInTransform(operation), JSON.stringify(operation)).toBe(false);
+    }
+    const taken: TransformOperation[] = [
+      { kind: 'translate', from: [0, 90], to: [0, -90] },
+      { kind: 'rotate', center: [10, -90], counterclockwiseDegrees: 10 },
+    ];
+    for (const operation of taken) {
+      expect(acceptsBuiltInTransform(operation), JSON.stringify(operation)).toBe(true);
+    }
+  });
+
+  it('moves the way the numbers of from and to say across the ±180 degree meridian', () => {
+    // From 179.5 to 180.5: one degree east, across the meridian
+    const [east] = moved({ kind: 'translate', from: [179.5, 0], to: [180.5, 0] }, [[179.6, 0]]);
+    expect(east?.[0]).toBeCloseTo(180.6, 9);
+    expect(east?.[1]).toBeCloseTo(0, 9);
+    // From 179.5 to -179.5: 359 degrees west
+    const [west] = moved({ kind: 'translate', from: [179.5, 0], to: [-179.5, 0] }, [[179.6, 0]]);
+    expect(west?.[0]).toBeCloseTo(-179.4, 9);
+    expect(west?.[1]).toBeCloseTo(0, 9);
+  });
+
+  it('carries a position over a pole to the other side of it, half a turn of longitude away', () => {
+    // A move half a degree north from 89.5 carries a position at 89.8 over the north pole
+    const [over] = moved({ kind: 'translate', from: [10, 89.5], to: [10, 90] }, [[10, 89.8]]);
+    expect(over?.[1] as number).toBeLessThan(90);
+    expect(over?.[1]).toBeCloseTo(89.7, 3);
+    const turn = ((((over?.[0] as number) - 10) % 360) + 360) % 360;
+    expect(turn).toBeCloseTo(180, 6);
+  });
+
+  it('scales the offsets in the plane of the center: far away the ground differs a little from the factor', () => {
+    // 100 km east of the center along the equator, scaled by 2 along the east
+    const lon = 100_000 / A / RAD;
+    const [after] = moved(
+      { kind: 'scale', center: [0, 0], eastFactor: 2, northFactor: 1, sizeFactor: 1 },
+      [[lon, 0]],
+    );
+    expect(after?.[1]).toBeCloseTo(0, 9);
+    const ground = (after?.[0] as number) * RAD * A;
+    const gap = 200_000 - ground;
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThan(50);
+  });
+});

@@ -30,8 +30,8 @@
  * {@link TransformInput}: a rotation adds its angle to the rotation and takes it from the
  * direction, each then within [0, 360); a scaling multiplies the size by `sizeFactor`.
  *
- * It computes every operation of finite numbers whose factors are above 0, near the poles and
- * across the ±180 degree meridian too. It is computed with the functions of `Math`: the same
+ * It computes every operation of finite numbers whose points have a latitude from -90 to 90 and
+ * whose factors are above 0, near the poles and across the ±180 degree meridian too. It is computed with the functions of `Math`: the same
  * values give the same bits on one device, not on every device. The result of a feature depends on
  * the operation and on its own values only.
  */
@@ -58,13 +58,18 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-/** Whether a value is a point of an operation: an array whose first two numbers are finite */
+/**
+ * Whether a value is a point of an operation: an array whose first two numbers are finite, the
+ * second a latitude from -90 to 90
+ */
 function isPoint(value: unknown): value is readonly number[] {
   return (
     Array.isArray(value) &&
     value.length >= 2 &&
     isFiniteNumber(value[0]) &&
-    isFiniteNumber(value[1])
+    isFiniteNumber(value[1]) &&
+    value[1] >= -90 &&
+    value[1] <= 90
   );
 }
 
@@ -74,8 +79,8 @@ function isFactor(value: unknown): value is number {
 }
 
 /**
- * Whether the built-in computation computes an operation: its points finite, its angle finite and
- * its factors finite and above 0
+ * Whether the built-in computation computes an operation: its points finite with a latitude from
+ * -90 to 90, its angle finite and its factors finite and above 0
  *
  * @internal
  */
