@@ -475,6 +475,57 @@ describe('a move, a rotation and a scaling, as bulk edits', () => {
     // The point at the center does not move, and is not counted
     expect((run.value as EditCounts).changedCount).toBe(3);
   });
+
+  it('are applied first to a feature whose handle is dragged, before the feature is given to its type', async () => {
+    // The drag of the grip of a pin reads where the pin is, and writes nothing
+    const seen: Position[] = [];
+    draw.extensions.featureTypes.add({
+      type: 'pin',
+      geometry: 'Point',
+      renderer,
+      handles: (feature) => [
+        {
+          id: 'grip',
+          position: (feature.geometry as { coordinates: Position }).coordinates,
+          kind: 'grip',
+        },
+      ],
+      onHandleDrag: (feature) => {
+        seen.push([...(feature.geometry as { coordinates: Position }).coordinates]);
+        return null;
+      },
+    });
+    const pinId = create({ type: 'pin', geometry: { type: 'Point', coordinates: [1, 1] } });
+    const ids = [...points(3), pinId];
+    const run = settled(draw.features.translate(ids, { from: [0, 0], to: [0.5, 0] }));
+    const provider = engine.context.selectionScope.auxiliaryHandles.list()[0];
+    const drag = (type: 'dragstart' | 'dragmove' | 'dragend', lng: number) => ({
+      type,
+      point: { x: 0, y: 0 },
+      lngLat: { lng, lat: 1 },
+      originalEvent: {} as MouseEvent,
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      dragStartPoint: { x: 0, y: 0 },
+      dragStartLngLat: { lng: 1, lat: 1 },
+    });
+    // The move has not reached the pin when its grip is dragged
+    expect(
+      provider.onHandleDragStart(
+        { providerId: provider.id, handleId: 'grip', featureId: pinId },
+        drag('dragstart', 1) as never,
+      ),
+    ).toBe(true);
+    expect(xyOf(pinId)).toEqual([1, 1]);
+    provider.onHandleDragMove(drag('dragmove', 2) as never);
+    // The pin given to the type is the one the move has moved
+    expect(seen).toHaveLength(1);
+    expect(seen[0][0]).toBeCloseTo(1.5, 3);
+    expect(seen[0][1]).toBeCloseTo(1, 3);
+    provider.onHandleDragEnd(drag('dragend', 2) as never);
+    await allTasks();
+    expect(xyOf(pinId)[0]).toBeCloseTo(1.5, 3);
+    expect((run.value as EditCounts).changedCount).toBe(4);
+  });
 });
 
 // ----------------------------------------------------------------------------

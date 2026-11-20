@@ -575,6 +575,8 @@ export function adaptHandleProvider(
   };
   const drag = (event: DragNormalizedEvent, final: boolean): void => {
     if (!active) return;
+    // The feature is read to make the patch written: the edit being written is applied to it first
+    if (active.featureId) deps.store.applyEditFirst?.(active.featureId);
     const feature = active.featureId ? deps.store.getFeature(active.featureId) : undefined;
     const patch = provider.onDrag(
       (feature as Feature | undefined) ?? null,
