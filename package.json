@@ -93,6 +93,8 @@
     "format": "biome format --write src examples playground bench ui",
     "test": "vitest run",
     "test:e2e": "node scripts/need-ui.mjs && vitest run --config src/e2e/vitest.config.ts",
+    "pictures:take": "vitest run --config src/e2e/vitest.config.ts src/e2e/pictures.e2e.test.ts",
+    "pictures:compare": "node src/e2e/compare-pictures.ts",
     "test:watch": "vitest",
     "dev": "node scripts/need-ui.mjs && npm run dev -w examples",
     "dev:playground": "npm run dev -w playground",
