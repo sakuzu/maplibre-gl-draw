@@ -265,6 +265,75 @@ async function rest(ctx: SceneContext): Promise<void> {
   await ctx.settle();
 }
 
+/**
+ * The scenes of the bulk edits that move, turn and scale every feature selected
+ * (`draw.features.translate`, `rotate` and `scale` on `{ selection: true }`), about the middle of
+ * the grid: each is timed until its promise settles, written in parts with a frame between two
+ */
+function transformScenes(): Scene[] {
+  const middle = (n: number): [number, number] => {
+    const grid = gridOf(n);
+    return [(grid.west + grid.east) / 2, (grid.south + grid.north) / 2];
+  };
+  const prepare = async (ctx: SceneContext): Promise<void> => {
+    await ctx.openDocument();
+    ctx.draw.selection.set('feature', ctx.featureIds);
+    await rest(ctx);
+  };
+  const noteCounts = (ctx: SceneContext, counts: { changedCount: number } | null) => {
+    ctx.note('changed', counts?.changedCount ?? 0);
+  };
+  return [
+    scene({
+      name: 'translateAll',
+      label: 'Move every feature selected 100 m east (draw.features.translate, in parts)',
+      prepare,
+      async run(ctx) {
+        const [x, y] = middle(ctx.n);
+        const to: [number, number] = [x + 100 / (111_320 * Math.cos((y * Math.PI) / 180)), y];
+        ctx.markChanged();
+        const counts = await ctx.inputAsync(() =>
+          ctx.draw.features.translate({ selection: true }, { from: [x, y], to }),
+        );
+        noteCounts(ctx, counts);
+        await ctx.settle();
+      },
+    }),
+    scene({
+      name: 'rotateAll',
+      label: 'Turn every feature selected 90 degrees (draw.features.rotate, in parts)',
+      prepare,
+      async run(ctx) {
+        ctx.markChanged();
+        const counts = await ctx.inputAsync(() =>
+          ctx.draw.features.rotate(
+            { selection: true },
+            { center: middle(ctx.n), counterclockwiseDegrees: 90 },
+          ),
+        );
+        noteCounts(ctx, counts);
+        await ctx.settle();
+      },
+    }),
+    scene({
+      name: 'scaleAll',
+      label: 'Scale every feature selected by 2 (draw.features.scale, in parts)',
+      prepare,
+      async run(ctx) {
+        ctx.markChanged();
+        const counts = await ctx.inputAsync(() =>
+          ctx.draw.features.scale(
+            { selection: true },
+            { center: middle(ctx.n), eastFactor: 2, northFactor: 2, sizeFactor: 2 },
+          ),
+        );
+        noteCounts(ctx, counts);
+        await ctx.settle();
+      },
+    }),
+  ];
+}
+
 /** The scenes, in the order of the page */
 export const SCENES: readonly Scene[] = [
   scene({
@@ -462,6 +531,7 @@ export const SCENES: readonly Scene[] = [
       await ctx.settle();
     },
   }),
+  ...transformScenes(),
   scene({
     name: 'delete',
     label: 'Delete every feature selected (draw.selection.delete)',

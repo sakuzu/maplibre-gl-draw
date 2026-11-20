@@ -87,6 +87,9 @@ after 20 seconds, preparation included, and nothing runs after it.
 | `selectAll` | Selects every feature with `draw.selection.set` |
 | `boxSelect` | Draws a box over the view with Shift, a move a frame |
 | `drag` | Drags every feature selected, a move a frame |
+| `translateAll` | Moves every feature selected 100 m east (`translate`) |
+| `rotateAll` | Turns every feature selected 90 degrees (`rotate`) |
+| `scaleAll` | Scales every feature selected by 2 (`scale`) |
 | `delete` | Deletes every feature selected with `draw.selection.delete` |
 | `import` | `draw.document.load` of a GeoJSON `File` into the layer |
 | `export` | `draw.document.toJSON` and `JSON.stringify` of the document |

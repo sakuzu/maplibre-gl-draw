@@ -5,8 +5,8 @@
 // parts. What the standard UI does not cover is added through its openings (a tool for a mode,
 // a section of the inspector, an action in the card at the bottom left, switches.ts): the stamps
 // of the plugin of the plugins example, the routes of the custom-feature-types example, terrain,
-// a dataset, read-only, the interaction lock, saving and opening in this browser, and 200,000
-// features.
+// a dataset, read-only, the interaction lock, saving and opening in this browser, 200,000
+// features, and buttons that move, turn and scale the selection (transforms.ts).
 // The globe is the globe button of the map's controls.
 //
 // The page opens on the overview scene (showcase/overview.ts): a drawing of every kind of
@@ -31,6 +31,7 @@ import {
 import { getShowcaseScene, runShowcase } from './showcase/showcase.ts';
 import './showcase/showcase.css';
 import { addSwitches } from './switches.ts';
+import { addTransformButtons } from './transforms.ts';
 import './style.css';
 
 const scene = getShowcaseScene();
@@ -210,6 +211,12 @@ container.addEventListener('drop', async (e) => {
 // read-only, the lock, 200,000 points, save and open. A scene that shows the map alone has no
 // interface, so no switches
 if (ui) addSwitches(ui, draw, map, ja);
+
+// 8. Buttons that move, turn and scale the features selected, with the bulk edits. The pictures
+// of the showcase (`?showcase=<scene>`) are taken without them
+if (ui && !new URLSearchParams(location.search).has('showcase')) {
+  addTransformButtons(draw, container, ja);
+}
 
 // A scene of the showcase loads its drawing once the style is in
 if (scene) map.on('load', () => void runShowcase(scene, draw, map));

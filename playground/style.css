@@ -18,3 +18,23 @@ body {
   position: absolute;
   inset: 0;
 }
+
+/* The buttons that move, turn and scale the selection (transforms.ts), at the bottom middle */
+.pg-transforms {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  transform: translateX(-50%);
+}
+
+.pg-transforms button {
+  padding: 4px 10px;
+  border: 1px solid #b8bec6;
+  border-radius: 6px;
+  background: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
