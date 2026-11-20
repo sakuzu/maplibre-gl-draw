@@ -102,6 +102,11 @@ interface Notes {
   stopped: boolean;
   /** Whether the features were noted (only while the changes are read in their words) */
   features: boolean;
+  /**
+   * Whether the change replaces the whole document: what it took out and what it wrote are
+   * noted apart, so that a feature written again with its ID is in both
+   */
+  reset: boolean;
   readonly created: NotedRows;
   readonly updated: NotedRows;
   readonly moved: NotedRows;
@@ -120,6 +125,7 @@ function newNotes(): Notes {
     hasMoreParts: false,
     stopped: false,
     features: false,
+    reset: false,
     created: new Map(),
     updated: new Map(),
     moved: new Map(),
@@ -141,9 +147,12 @@ function notesFor(change: StoreChange): Notes {
   return notes;
 }
 
-/** A feature created: one deleted before it in the change and created again is updated */
+/**
+ * A feature created: one deleted before it in the change and created again is updated, but in a
+ * change that replaces the whole document, where it stays deleted and is created too
+ */
 function noteCreated(notes: Notes, id: string, ref: number): void {
-  if (notes.deleted.delete(id)) notes.updated.set(id, ref);
+  if (!notes.reset && notes.deleted.delete(id)) notes.updated.set(id, ref);
   else notes.created.set(id, ref);
 }
 
@@ -164,6 +173,17 @@ function noteDeleted(notes: Notes, id: string): void {
   if (!notes.created.delete(id)) notes.deleted.add(id);
 }
 
+/**
+ * A feature a change that replaces the whole document took out: deleted, whatever the change
+ * writes with its ID
+ */
+function noteTakenOut(notes: Notes, id: string): void {
+  notes.reset = true;
+  notes.updated.delete(id);
+  notes.moved.delete(id);
+  notes.deleted.add(id);
+}
+
 /** Adds the notes of a change to those of the change being built */
 function mergeNotes(target: Notes, from: Notes): void {
   if (from.operationId !== undefined) {
@@ -173,6 +193,8 @@ function mergeNotes(target: Notes, from: Notes): void {
   }
   if (from.features) target.features = true;
   for (const id of from.deleted) noteDeleted(target, id);
+  // What a replacement of the whole document writes is created, besides what it took out
+  if (from.reset) target.reset = true;
   for (const [id, ref] of from.created) noteCreated(target, id, ref);
   for (const [id, ref] of from.updated) noteUpdated(target, id, ref);
   for (const [id, ref] of from.moved) noteMoved(target, id, ref);
@@ -743,6 +765,11 @@ export function createDocumentAccess(
   /** The sets of IDs of a change whose features were not noted, read from its features */
   const notesOfFeatures = (change: StoreChange): Notes => {
     const notes = newNotes();
+    // A replacement of the whole document: what it took out, then what it wrote
+    const reset = change.reset === true;
+    if (reset) {
+      for (const feature of change.features?.deleted ?? []) noteTakenOut(notes, feature.id);
+    }
     for (const feature of change.features?.created ?? []) {
       const ref = tables.getRowRef(feature.id);
       if (ref !== undefined) noteCreated(notes, feature.id, ref);
@@ -755,7 +782,9 @@ export function createDocumentAccess(
       if (placeChanged) noteMoved(notes, id, ref);
       if (!placeChanged || valuesChanged(feature, previous)) noteUpdated(notes, id, ref);
     }
-    for (const feature of change.features?.deleted ?? []) noteDeleted(notes, feature.id);
+    if (!reset) {
+      for (const feature of change.features?.deleted ?? []) noteDeleted(notes, feature.id);
+    }
     return notes;
   };
 
@@ -3061,7 +3090,11 @@ export function createDocumentAccess(
     const watching = watchingMoves();
     // The features of the change in their own words, while they are read so
     const notes = wanted() ? notesFor(out) : undefined;
-    if (notes) notes.features = true;
+    if (notes) {
+      notes.features = true;
+      // What a replacement of the whole document takes out and what it writes are noted apart
+      if (change.reset) notes.reset = true;
+    }
     for (const [layerId, rows] of change.rows?.layers ?? []) {
       const createdRefs = rows.created.filter((ref) => !ownRows.has(ref));
       const updatedRefs = rows.updated.filter((ref) => !ownRows.has(ref));
@@ -3421,7 +3454,7 @@ export function createDocumentAccess(
     const make = watch?.deletedFeatures() === true;
     if (refs.length === 0 || (!notes && !make)) return;
     const ids = Array.from(refs, (ref) => tables.getRowId(ref));
-    if (notes) for (const id of ids) if (id !== undefined) noteDeleted(notes, id);
+    if (notes) for (const id of ids) if (id !== undefined) noteTakenOut(notes, id);
     if (!make) return;
     const made = before ? featuresBefore(layerId, before, change) : new Map<number, Feature>();
     for (let i = 0; i < refs.length; i++) {

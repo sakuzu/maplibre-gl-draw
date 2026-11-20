@@ -13,6 +13,9 @@
  *   state of this client holds nothing, no ID of a row taken out is read
  * - The built-in Store carries every field of the rows taken out to a listener that asked for
  *   the values before, and reads nothing for them otherwise
+ * - The summary of the change (`document.changed` and `draw.document.subscribe`) lists every
+ *   feature, layer and group taken out as deleted and every one written as created: one written
+ *   again with its ID is in both, and none is updated
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +33,7 @@ import {
   workDuring,
 } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
+import type { DocumentChange } from '../events.js';
 import type { Feature, Layer } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
@@ -214,6 +218,105 @@ describe('a change that replaces the whole document', () => {
       { zero: true },
     );
     expect(work).toEqual({ small: 0, large: 0, ratio: 0 });
+  });
+});
+
+/** The IDs of a summary of the features, read while the change is told */
+interface ReadIds {
+  deletedCount: number;
+  deletedHas: boolean[];
+  created: string[];
+  updatedCount: number;
+}
+
+/** Reads a summary of the features against the IDs that were there before the change */
+function readIds(features: DocumentChange['features'], before: readonly string[]): ReadIds {
+  return {
+    deletedCount: features.deleted.count(),
+    deletedHas: before.map((id) => features.deleted.has(id)),
+    created: [...features.created.iterate()].sort(),
+    updatedCount: features.updated.count(),
+  };
+}
+
+describe('the summary of a change that replaces the whole document', () => {
+  it.each([3, 1_500])(
+    'lists every one of %i features taken out as deleted, and one written again as created too',
+    (size) => {
+      const { draw, store } = instance();
+      const ids = fill(draw, size);
+      const told: ReadIds[] = [];
+      const subscribed: ReadIds[] = [];
+      draw.on('document.changed', (change) => {
+        if (change.reset) told.push(readIds(change.features, ids));
+      });
+      draw.document.subscribe((change) => {
+        if (change.reset) subscribed.push(readIds(change.features, ids));
+      });
+      replace(store, [ids[1], 'written']);
+      const expected: ReadIds = {
+        deletedCount: size,
+        deletedHas: ids.map(() => true),
+        created: [ids[1], 'written'].sort(),
+        updatedCount: 0,
+      };
+      expect(told).toEqual([expected]);
+      expect(subscribed).toEqual([expected]);
+    },
+  );
+
+  it('lists a layer and a group written again with their IDs as deleted and created', () => {
+    const { draw, store } = instance();
+    const ids = fill(draw, 3);
+    const groupId = draw.features.get(ids[0])?.groupId as string;
+    const layerId = draw.features.get(ids[0])?.layerId as string;
+    const read = (change: DocumentChange) => ({
+      layersCreated: (change.layers?.created ?? []).map((item) => item.id).sort(),
+      layersDeleted: (change.layers?.deleted ?? []).map((item) => item.id).sort(),
+      layersUpdated: (change.layers?.updated ?? []).map((item) => item.id),
+      groupsCreated: (change.groups?.created ?? []).map((item) => item.id).sort(),
+      groupsDeleted: (change.groups?.deleted ?? []).map((item) => item.id).sort(),
+      groupsUpdated: (change.groups?.updated ?? []).map((item) => item.id),
+      features: readIds(change.features, ids),
+    });
+    const told: Array<ReturnType<typeof read>> = [];
+    const subscribed: Array<ReturnType<typeof read>> = [];
+    draw.on('document.changed', (change) => {
+      if (change.reset) told.push(read(change));
+    });
+    draw.document.subscribe((change) => {
+      if (change.reset) subscribed.push(read(change));
+    });
+    store.transact(() => {
+      store.clear();
+      store.createLayer(layer(layerId));
+      store.createLayer(layer('next'));
+      store.createGroup({
+        id: groupId,
+        layerId,
+        orderKey: 'm',
+        name: 'Again',
+        visible: true,
+        locked: false,
+      } as Parameters<Store['createGroup']>[0]);
+      rowWrites(store).createFeature({ ...nextPoint(ids[0]), layerId, groupId });
+    }, 'remote');
+    const expected = {
+      layersCreated: [layerId, 'next'].sort(),
+      layersDeleted: [layerId],
+      layersUpdated: [],
+      groupsCreated: [groupId],
+      groupsDeleted: [groupId],
+      groupsUpdated: [],
+      features: {
+        deletedCount: 3,
+        deletedHas: [true, true, true],
+        created: [ids[0]],
+        updatedCount: 0,
+      },
+    };
+    expect(told).toEqual([expected]);
+    expect(subscribed).toEqual([expected]);
   });
 });
 
