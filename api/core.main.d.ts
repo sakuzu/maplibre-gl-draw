@@ -4630,7 +4630,9 @@ export interface FeatureTypesCollection {
      * the built-in type when it has them, and the built-in ones stay for the members it leaves
      * out. Its `handles` are shown with those of the built-in type. With `appliesTo`, it takes
      * only the features for which that returns true, and the others keep the built-in type
-     * entirely. Its `transformFields` apply to the features it takes.
+     * entirely. Its `transformFields`, when it has them, apply to the features it takes in
+     * place of all those of the built-in type; when it has none, those of the built-in type
+     * stay (the rotation and the scale of an image, the radius of a circle).
      *
      * The built-in type comes back with the function it returns, with `remove(type)`, and, for
      * a plugin that overrode it through its context, when the plugin is removed. `add` keeps
