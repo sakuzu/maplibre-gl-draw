@@ -10,7 +10,9 @@
  * time, from a button or from `window.runEditBench(name)`. A scene first puts the page in the
  * state it starts from (not measured), then runs while every frame is drawn, until the drawing
  * has nothing left to do. A scene stops when it has run for 20 seconds, preparation included;
- * nothing runs between scenes.
+ * nothing runs between scenes. An edit written in parts writes them in later tasks, so when the
+ * time runs out the instance is made read-only, which stops the edit at its next part, and it is
+ * made writable again once the scene has given its result.
  *
  * Address parameters:
  *   - `n`: the number of features (default 1000; 1000, 10000 and 100000 are linked)
@@ -276,6 +278,15 @@ async function runScene(scene: Scene): Promise<SceneResult> {
     expired,
   };
 
+  // When the time runs out, an edit still writing its parts is stopped by making the instance
+  // read-only (it stops at its next part, and its promise settles); given back after the scene
+  let stoppedAtLimit = false;
+  const limitTimer = setTimeout(() => {
+    if (draw.isReadOnly()) return;
+    stoppedAtLimit = true;
+    draw.setReadOnly(true);
+  }, SCENE_LIMIT_MS);
+
   let error: string | null = null;
   let completed = false;
   let prepareMs = 0;
@@ -302,6 +313,9 @@ async function runScene(scene: Scene): Promise<SceneResult> {
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
     completed = false;
+  } finally {
+    clearTimeout(limitTimer);
+    if (stoppedAtLimit) draw.setReadOnly(false);
   }
 
   const longest = (values: readonly number[]): number => Math.max(0, ...values);

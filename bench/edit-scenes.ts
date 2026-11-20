@@ -268,7 +268,9 @@ async function rest(ctx: SceneContext): Promise<void> {
 /**
  * The scenes of the bulk edits that move, turn and scale every feature selected
  * (`draw.features.translate`, `rotate` and `scale` on `{ selection: true }`), about the middle of
- * the grid: each is timed until its promise settles, written in parts with a frame between two
+ * the grid, and the scene that moves every feature of the layer with nothing selected (`{
+ * layerIds }`), which leaves out the drawing of the selection: each is timed until its promise
+ * settles, written in parts with a frame between two
  */
 function transformScenes(): Scene[] {
   const middle = (n: number): [number, number] => {
@@ -280,8 +282,18 @@ function transformScenes(): Scene[] {
     ctx.draw.selection.set('feature', ctx.featureIds);
     await rest(ctx);
   };
-  const noteCounts = (ctx: SceneContext, counts: { changedCount: number } | null) => {
+  const noteCounts = (
+    ctx: SceneContext,
+    counts: { changedCount: number; stopped: boolean } | null,
+  ) => {
     ctx.note('changed', counts?.changedCount ?? 0);
+    // An edit stopped when the time of the scene ran out (the page made the instance read-only)
+    if (counts?.stopped) ctx.note('stopped', 'yes');
+  };
+  /** The positions a move of 100 m east goes from and to */
+  const eastward = (n: number): { from: [number, number]; to: [number, number] } => {
+    const [x, y] = middle(n);
+    return { from: [x, y], to: [x + 100 / (111_320 * Math.cos((y * Math.PI) / 180)), y] };
   };
   return [
     scene({
@@ -289,11 +301,9 @@ function transformScenes(): Scene[] {
       label: 'Move every feature selected 100 m east (draw.features.translate, in parts)',
       prepare,
       async run(ctx) {
-        const [x, y] = middle(ctx.n);
-        const to: [number, number] = [x + 100 / (111_320 * Math.cos((y * Math.PI) / 180)), y];
         ctx.markChanged();
         const counts = await ctx.inputAsync(() =>
-          ctx.draw.features.translate({ selection: true }, { from: [x, y], to }),
+          ctx.draw.features.translate({ selection: true }, eastward(ctx.n)),
         );
         noteCounts(ctx, counts);
         await ctx.settle();
@@ -326,6 +336,25 @@ function transformScenes(): Scene[] {
             { selection: true },
             { center: middle(ctx.n), eastFactor: 2, northFactor: 2, sizeFactor: 2 },
           ),
+        );
+        noteCounts(ctx, counts);
+        await ctx.settle();
+      },
+    }),
+    scene({
+      name: 'translateLayer',
+      label:
+        'Move every feature of the layer 100 m east, with nothing selected ' +
+        '(draw.features.translate on { layerIds }, in parts)',
+      async prepare(ctx) {
+        await ctx.openDocument();
+        ctx.draw.selection.clear();
+        await rest(ctx);
+      },
+      async run(ctx) {
+        ctx.markChanged();
+        const counts = await ctx.inputAsync(() =>
+          ctx.draw.features.translate({ layerIds: [LAYER_ID] }, eastward(ctx.n)),
         );
         noteCounts(ctx, counts);
         await ctx.settle();

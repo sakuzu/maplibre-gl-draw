@@ -78,7 +78,9 @@ the page in the state it starts from (the document opened, the selection
 made, the camera over the whole grid), which is not measured. Then it
 makes the edit while every frame is drawn (`triggerRepaint` in every
 animation frame), until the drawing has nothing left to do. A scene stops
-after 20 seconds, preparation included, and nothing runs after it.
+after 20 seconds, preparation included, and nothing runs after it: an
+edit written in parts is stopped at its next part (the page makes the
+instance read-only, and writable again after the scene).
 
 | Scene | What it does |
 | --- | --- |
@@ -90,6 +92,7 @@ after 20 seconds, preparation included, and nothing runs after it.
 | `translateAll` | Moves every feature selected 100 m east (`translate`) |
 | `rotateAll` | Turns every feature selected 90 degrees (`rotate`) |
 | `scaleAll` | Scales every feature selected by 2 (`scale`) |
+| `translateLayer` | Moves every feature of the layer 100 m east, nothing selected |
 | `delete` | Deletes every feature selected with `draw.selection.delete` |
 | `import` | `draw.document.load` of a GeoJSON `File` into the layer |
 | `export` | `draw.document.toJSON` and `JSON.stringify` of the document |

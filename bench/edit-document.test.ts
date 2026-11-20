@@ -49,6 +49,7 @@ describe('the scenes', () => {
       'translateAll',
       'rotateAll',
       'scaleAll',
+      'translateLayer',
       'delete',
       'import',
       'export',
