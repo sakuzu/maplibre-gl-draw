@@ -238,6 +238,13 @@
       "from": "bench/table-worker-core.ts",
       "to": "bench/store-page-worker.ts",
       "note": "only a Worker that builds rows into pages and posts them with the transfer of their buffers, answering the request it is given; the reading of the files in parts, the batches, the rows picked at random and the rows of the edits are not brought, and the merges and builds a Store hands it are new"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "ceb8cda24fa2e713e304543f8b423bba31407680",
+      "from": "src/operations/bulk-sliced.ts",
+      "to": "src/api/impl/bulk-edits.ts",
+      "note": "only the way the parts are cut: a budget of time per part, one transaction per part, the next part in a later task, the rows deleted meanwhile left out and the locked ones kept; told per part with the last part always told, applied first only to the features a write touches, and read through the public interface of the Store"
     }
   ]
 }

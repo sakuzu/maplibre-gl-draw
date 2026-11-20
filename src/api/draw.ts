@@ -26,7 +26,10 @@ import type { LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
 
 /** The options of {@link Draw.transact} */
 export interface TransactOptions {
-  /** Where the writes come from; `'local'` when left out */
+  /**
+   * Where the writes come from. When it is left out, the source of the outer `draw.transact`
+   * this instance has open, or `'local'` when there is none (see {@link Draw.transact})
+   */
   source?: UpdateSource;
   /**
    * Whether the writes ignore the locks of the features, groups and layers; read-only still
@@ -107,7 +110,11 @@ export interface Draw {
 
   /** Whether the document is read-only. */
   isReadOnly(): boolean;
-  /** Turns read-only on or off. */
+  /**
+   * Turns read-only on or off. Turned on while a bulk edit writes in parts, it stops the
+   * edit: the parts written stay, and its last change arrives with `stopped: true` (see
+   * {@link FeaturesCollection}). Turned on during a drag, it ends the drag as cancelled.
+   */
   setReadOnly(value: boolean): void;
   /** Whether the interaction lock is on. */
   isInteractionLocked(): boolean;
@@ -117,19 +124,63 @@ export interface Draw {
   // Transactions and events
 
   /**
-   * Runs `fn` as one transaction: its writes arrive as one `document.changed`.
+   * Runs `fn` as one transaction: its writes arrive as one `document.changed`, with one
+   * `operationId`.
    *
-   * In nested calls the source of the outermost call wins. With `ignoreLocks`, the writes of
+   * Nested transactions keep the one rule of the Store (see `StoreView.transact` of the
+   * `/store` entry): a nested call with a source other than that of the outer call throws
+   * `DrawError` with the code `invalidState`, and one with the same source folds into the
+   * outer call. A call that gives no source takes the source of the outer `draw.transact` this
+   * instance has open, and has the source `'local'` when there is none. Inside a transaction
+   * opened on the Store directly (`store.transact`, not one this instance opened) it takes
+   * nothing: it has the source `'local'`, and throws by the rule above unless the outer
+   * source is `'local'`, so that an edit of the user never mixes into a change made outside
+   * the instance being written. With `ignoreLocks`, the writes of
    * `fn` through the resources of this instance ignore the locks of the features, groups and
-   * layers, as a change applied again from a record needs; read-only still refuses them, and
+   * layers, as writing back the values a change had before needs; read-only still refuses them, and
    * what the user does with the pointer and the keys still respects the locks. A nested call
    * inside such a call ignores them as well.
+   *
+   * A bulk edit started in `fn` (`features.translate`, `deleteMany`, `restore` and the others
+   * that return a promise) takes the `operationId` of this transaction: the change of the
+   * transaction is the first part of the edit, and its other parts follow, as transactions of
+   * their own, after `fn` returns, with the same `operationId`. It takes its source and
+   * `ignoreLocks` from the transaction unless its own options give them; a source it gives
+   * other than that of the transaction throws `invalidState`. A write of a few features
+   * (`features.update` and the others) made in `fn` is written with the source of the
+   * transaction. When `fn` throws, the
+   * edit does not start. One bulk edit at most can be started in `fn`: starting a second one
+   * throws `DrawError` with the code `invalidState` at once (the call throws, rather than its
+   * promise rejecting), so that `fn` stops instead of making two operations silently.
+   *
+   * The transactions of this instance are transactions of its Store, so the same rule holds
+   * between this one and the transaction of the Store (`store.transact`), whichever is inside
+   * the other: a write made to the Store directly, with another source, inside an edit of the
+   * user throws `invalidState`, and so does an edit of the user inside a write made directly.
    *
    * @param options - `source` names where the writes come from; `ignoreLocks` lets them
    *   change locked features, groups and layers
    * @returns What `fn` returns
+   * @throws `DrawError` with the code `invalidState` when it is called inside a transaction (of
+   *   this instance or of the Store) of another source, or when `fn` starts a second bulk edit
    */
   transact<T>(fn: () => T, options?: TransactOptions): T;
+  /**
+   * Waits for the edits of this client that are being written to the document in parts (not a
+   * saving elsewhere): the bulk edits under
+   * way, the one a drag that was let go of writes, and the loads. It waits for those that were
+   * started and had not ended when it was called (those waiting for an earlier edit to end
+   * included), and resolves once the last change of each of them has arrived, whether it was
+   * written whole or stopped; at once when none is under way. An edit that starts while it
+   * waits is not waited for, so that it ends however many edits follow (a key held down).
+   *
+   * A button that keeps the document and must not keep half an edit, or an extension that
+   * writes back the values a change had before and must not write over an edit still being
+   * written, waits for it first.
+   *
+   * @returns A promise that resolves when no edit of this client is being written
+   */
+  waitForWrites(): Promise<void>;
   /**
    * Subscribes to an event.
    *
@@ -165,7 +216,12 @@ export interface Draw {
   /**
    * Removes the instance from the map and releases everything it holds. A second call does
    * nothing; every other method of the instance and of its collections then throws `DrawError`
-   * with the code `invalidState` (`document.load` rejects with it).
+   * with the code `invalidState` (`document.load` rejects with it). A bulk edit under way stops:
+   * its last part is written first, with `stopped: true` and nothing more in it, so that a
+   * subscriber of the Store, which may live longer than the instance, sees the operation end;
+   * then its promise rejects with `invalidState`, and no more of its changes arrive. An edit
+   * waiting for an earlier one to end rejects as well, and writes nothing. An operation that a
+   * caller of the Store left open (see `StoreTransactOptions`) is taken as ended.
    */
   destroy(): void;
 }

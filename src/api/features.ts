@@ -5,23 +5,65 @@
  * `draw.features`: the features of the document
  */
 
+import type { UpdateSource } from './extension/store.js';
 import type {
   Feature,
   FeatureFilter,
   FeatureInput,
   FeaturePatch,
   FeatureStyleResolved,
+  IdSet,
   MoveTarget,
 } from './model.js';
 
 /**
- * The features of the document, with the standard methods of a collection and the verbs
- * that move, combine and split them.
+ * The features of the document, with the standard methods of a collection, the verbs that
+ * combine and split them, and the bulk edits.
  *
  * A wrong argument (an ID that does not exist, an input of the wrong shape) throws a
  * `DrawError` and changes nothing. A refusal because of the state (read-only, a lock) returns
- * `null` or `false` and changes nothing. A method whose name ends in `Many` runs in one
- * transaction: all of it happens or none of it does.
+ * `null` or `false` and changes nothing.
+ *
+ * Two kinds of writes:
+ *
+ * - The writes of a few features (`create`, `createMany`, `update`, `updateMany`, `delete`,
+ *   `move`, `moveMany` and the geometry operations) are done when the method returns: reading
+ *   the instance then gives the new state. A method among them whose name ends in `Many` runs
+ *   in one transaction: all of it happens or none of it does.
+ * - The bulk edits (`translate`, `rotate`, `scale`, `deleteMany`, `updateAll`, `duplicate` and
+ *   `restore`, `layers.delete` and `layers.deleteMany`, `selection.delete`, and
+ *   `document.load` and `document.loadMany`) take any number of features. Each is one
+ *   operation, with one `operationId`: it writes in parts, each short enough to keep the map
+ *   responsive (within 100 ms, the work of the listeners of its change included) and drawn as
+ *   soon as it is written, and each part arrives as a `document.changed` with that
+ *   `operationId`. Every change of the operation but the last has `hasMoreParts: true`; the
+ *   last one always arrives, also when the operation stops before it has written everything
+ *   (`stopped: true`). The promise resolves with {@link EditCounts} once the last change has
+ *   arrived.
+ *
+ * What a bulk edit does with the features of its target that are not there, or change while it
+ * writes, is the same for every bulk edit, and written here only:
+ *
+ * - An ID of the target that names nothing when the edit starts is left out and counted
+ *   (`EditCounts.missingCount`); the edit goes on with the others. Only a target of the wrong
+ *   shape (an ID that is not a string) is refused, and then nothing is written.
+ * - A feature deleted while the edit writes, before the edit reaches it, is left out of the
+ *   parts written after; nothing writes it again.
+ * - A feature that is locked, or is in a locked group or layer, stays as it is and is counted
+ *   (`EditCounts.lockedCount`), and the others change; so does one locked while the edit writes.
+ * - The edit stops before it has written everything only when the document turns read-only or
+ *   the instance is destroyed (`stopped: true`). The parts written stay.
+ *
+ * The bulk edits of this client are written one at a time, in the order they were started: an
+ * edit started while another is being written waits until the last change of that one has
+ * arrived, and then writes its own parts (a move and a turn give another result in another
+ * order, so the edits are never mixed feature by feature). A write of a few features of this
+ * client (a click, a key, `update` and the other methods above) does not wait: when it touches
+ * features that the edit being written has not reached yet, the edit is first applied to those
+ * features only, as a part of it, and then the write is made. The order of the edits is kept so,
+ * and the work is that of the features touched. A change written to the Store directly from
+ * outside the instance is applied at once, and may arrive between two parts; a later part reads
+ * the values the features have then.
  */
 export interface FeaturesCollection {
   /**
@@ -229,4 +271,82 @@ export interface FeaturesCollection {
     ids: readonly string[],
     options: { distanceMeters: number; segments?: number },
   ): Feature[] | null;
+}
+
+/**
+ * The features a bulk edit acts on (`features.translate`, `deleteMany`, `updateAll` and the
+ * others):
+ *
+ * - an array of IDs, or an {@link IdSet} (the selection, the features of a load, of a change)
+ * - `{ selection: true }`: the features selected in this client when the edit starts, or the
+ *   features of the groups and layers selected
+ * - `{ layerIds }`: every feature of the layers, with those of their groups, without an array
+ *   of their IDs (one layer is a list of one). The same form names the features of layers in
+ *   `selection.set` and in a sketch
+ *
+ * The target is read once, when the edit starts: a feature created afterwards is not part of
+ * it. What happens to an ID that names nothing, and to a feature deleted or locked meanwhile,
+ * is written in {@link FeaturesCollection}.
+ */
+export type FeatureTarget =
+  | readonly string[]
+  | IdSet
+  | {
+      /** Always true: the features selected in this client when the edit starts */
+      readonly selection: true;
+    }
+  | {
+      readonly layerIds: readonly string[];
+    };
+
+/** The options of a bulk edit. */
+export interface EditOptions {
+  /**
+   * Where the writes come from (an {@link UpdateSource}, not a source of data of the map), as
+   * the changes carry it; `'local'` when left out, or the source
+   * of the `draw.transact` the edit is started in. Inside a `draw.transact`, a source other than
+   * that of the transaction throws `DrawError` with the code `invalidState`
+   */
+  source?: UpdateSource;
+  /**
+   * Whether the writes ignore the locks of the features, groups and layers, as writing back the
+   * values a change had before needs; read-only still refuses them. False when left out, or
+   * that of the `draw.transact` the edit is started in.
+   */
+  ignoreLocks?: boolean;
+}
+
+/**
+ * What a bulk edit did (`features.translate`, `deleteMany`, `updateAll`, `duplicate`,
+ * `restore`, `layers.delete`, `document.load` and the others): the counts of the features,
+ * never the features themselves.
+ */
+export interface EditCounts {
+  /** The number of the operation, as its changes carry it (`DocumentChange.operationId`) */
+  operationId: number;
+  /** The number of features the edit changed (created, for a copy or a load): never a locked one */
+  changedCount: number;
+  /**
+   * The number of features that stayed as they were because they, their group or their layer
+   * are locked, when the edit started or while it wrote
+   */
+  lockedCount: number;
+  /**
+   * The number of IDs of the target that named nothing when the edit started, and were left
+   * out (see {@link FeaturesCollection})
+   */
+  missingCount: number;
+  /**
+   * True when the edit stopped before it had written everything: the document turned
+   * read-only, or the instance was destroyed. The parts written stay.
+   */
+  stopped: boolean;
+  /** The features the edit created (the copies of `duplicate`, the features of a load) */
+  createdIds?: IdSet;
+  /**
+   * For `features.restore`: the number of vertices it left as they are, because the edits
+   * made since changed their rings so that they could not be followed from the change to now
+   * (see {@link VertexRef}), and left as they are
+   */
+  skippedVertexCount?: number;
 }

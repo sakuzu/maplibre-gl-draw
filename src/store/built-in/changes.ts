@@ -8,7 +8,8 @@
  * transaction ends: to every listener, in the order they subscribed, before `transact` returns.
  * A write made outside a transaction is a transaction of its own, of the source `'remote'`. A
  * transaction inside another folds into it when it has the same source (the options of the
- * outermost one win: those of the inner one are not used), and throws `invalidState` otherwise;
+ * outermost one win, but for `hasMoreParts: true`, which an inner one turns on), and throws
+ * `invalidState` otherwise;
  * so does a write or a transaction while the listeners are told. Each
  * part of an operation written in several transactions is told as it ends: nothing is held back to
  * a later part.
@@ -131,7 +132,8 @@ interface Transaction {
   readonly operationId: number;
   /** Whether the caller gave the number of the operation */
   readonly givenOperation: boolean;
-  readonly hasMoreParts: boolean;
+  /** Whether more parts follow: a nested call may turn it on (see `StoreView.transact`) */
+  hasMoreParts: boolean;
   readonly stopped: boolean;
   readonly pending: PendingChange;
   /** The listeners whose changes of this transaction carry the values before */
@@ -368,7 +370,9 @@ export function transact<T>(
         `transact: a transaction of the source ${JSON.stringify(source)} inside one of ${JSON.stringify(outer.source)}`,
       );
     }
-    // The options of the outermost transaction win: those of this one are not used
+    // The options of the outermost transaction win, but for `hasMoreParts: true`, which makes
+    // the change of the transaction a part that more follow
+    if (options?.hasMoreParts === true) outer.hasMoreParts = true;
     changes.depth += 1;
     try {
       return fn();
@@ -1103,10 +1107,9 @@ function changedDocument(change: StoreChange): boolean {
 function tell(changes: Changes, transaction: Transaction): boolean {
   const change = changeOf(transaction);
   const { operationId, givenOperation, hasMoreParts } = transaction;
-  if (givenOperation) {
-    if (hasMoreParts) changes.openOperations.add(operationId);
-    else changes.openOperations.delete(operationId);
-  }
+  // A nested call may make a transaction whose number the Store gave the first of several parts
+  if (hasMoreParts) changes.openOperations.add(operationId);
+  else if (givenOperation) changes.openOperations.delete(operationId);
   // A change that replaces the document ends the operations left open
   if (change.reset) {
     for (const open of changes.openOperations) {

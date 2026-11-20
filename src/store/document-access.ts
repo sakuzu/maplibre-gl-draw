@@ -15,6 +15,7 @@
  * only for what it needs.
  */
 
+import type { StoreTransactOptions } from './built-in/types.js';
 import type { ClientState } from './memory/ui-state.js';
 import type {
   BoundingBox,
@@ -106,8 +107,13 @@ export interface DocumentWrites {
    * @returns The unsubscribe function
    */
   subscribe(listener: (changes: StoreChange) => void): () => void;
-  /** Runs fn and notifies every change it makes as a single StoreChange */
-  transact<T>(fn: () => T, source?: UpdateSource): T;
+  /**
+   * Runs fn and notifies every change it makes as a single StoreChange
+   *
+   * @param options - Given to the transaction of the Store as they are: the operation the
+   *   transaction is a part of, when one operation is written in several transactions
+   */
+  transact<T>(fn: () => T, source?: UpdateSource, options?: StoreTransactOptions): T;
   /**
    * Runs fn as `transact` does, stopping at the first write the Store refuses (the writes after
    * it return false and write nothing); null once a write was refused
@@ -317,12 +323,34 @@ export interface DocumentBoxes {
   setFeatureBoxes(boxes: FeatureBoxes | null): void;
 }
 
+/** What the operations written in parts read of the layer, and the call before a write */
+export interface DocumentOperations {
+  /**
+   * The number of the operation of the transaction of the Store open now (undefined outside
+   * one): what an operation started inside a transaction takes as its own
+   */
+  currentOperationId(): number | undefined;
+  /**
+   * Sets the function called before a write of this client writes the row of a feature (a write
+   * of its values, its deletion, or a move; not its creation), with the ID of the feature, or
+   * takes it back (null). Only one is set at a time; a change written to the Store directly does
+   * not call it
+   */
+  setBeforeFeatureWrite(before: ((id: string) => void) | null): void;
+  /**
+   * Lets go of what the layer keeps for the operations whose last part has not come (the parts
+   * of an operation told so far, for its last part to be told even when it is empty)
+   */
+  releaseOpenOperations(): void;
+}
+
 /**
- * The layer over the Store an instance makes: the four parts, the reads by position, the moves
- * and the reads by box
+ * The layer over the Store an instance makes: the four parts, the reads by position, the moves,
+ * the reads by box and what the operations written in parts read of it
  */
 export interface InstanceDocument
   extends DocumentAccess,
     DocumentPlaces,
     DocumentMoves,
-    DocumentBoxes {}
+    DocumentBoxes,
+    DocumentOperations {}

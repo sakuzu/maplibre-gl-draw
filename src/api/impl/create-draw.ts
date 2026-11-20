@@ -6,8 +6,9 @@
  */
 
 import type { Map as MaplibreMap } from 'maplibre-gl';
-import type { Draw } from '../draw.js';
+import type { Draw, TransactOptions } from '../draw.js';
 import type { DrawOptions } from '../options.js';
+import { createBulkEdits, holdBulkEdits } from './bulk-edits.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 import { createDocument } from './document.js';
@@ -63,6 +64,8 @@ export function createDrawOnEngine(
   };
   const features = createFeatures(deps);
   const groups = createGroups(deps);
+  // The edits of any number of features, written in parts, one at a time
+  const edits = createBulkEdits(store, exposedStore);
   // Set once destroy has run to the end, so that the extensions removed by it can still read
   // the instance
   let destroyed = false;
@@ -103,6 +106,8 @@ export function createDrawOnEngine(
     isReadOnly: () => client.isReadOnly(),
     setReadOnly(value) {
       client.setReadOnly(value === true);
+      // Read-only stops the edits being written
+      if (value === true) edits.stopAll();
     },
     isInteractionLocked: () => client.isInteractionLocked(),
     setInteractionLocked(value) {
@@ -111,11 +116,25 @@ export function createDrawOnEngine(
       if (value === true && modeManager.getMode() !== 'select') modeManager.setMode('select');
     },
 
-    transact(fn, transactOptions) {
+    transact<T>(fn: () => T, transactOptions?: TransactOptions): T {
       if (transactOptions !== undefined) requireRecord(transactOptions, 'The options');
-      const run = () => store.transact(fn, transactOptions?.source);
-      return transactOptions?.ignoreLocks === true ? withLocksIgnored(store, run) : run();
+      const ignoreLocks = transactOptions?.ignoreLocks === true;
+      const open = (body: () => T): T => {
+        const run = () => store.transact(body, transactOptions?.source);
+        return ignoreLocks ? withLocksIgnored(store, run) : run();
+      };
+      // Inside a transaction of the instance: it folds into it
+      if (store.currentOperationId() !== undefined) return open(fn);
+      // The outermost one: a bulk edit started in `fn` makes its change the first part
+      return edits.inTransaction(transactOptions?.source ?? 'local', ignoreLocks, (endOfFn) =>
+        open(() => {
+          const result = fn();
+          endOfFn();
+          return result;
+        }),
+      );
     },
+    waitForWrites: () => edits.waitForWrites(),
     on: (event, listener) => events.on(event, listener),
     off: (event, listener) => events.off(event, listener),
     once: (event, listener) => events.once(event, listener),
@@ -125,6 +144,10 @@ export function createDrawOnEngine(
     destroy() {
       if (destroyed) return;
       try {
+        // The edit being written ends its operation first, then every edit rejects
+        edits.destroy();
+        // The operations a caller of the Store left open are taken as ended
+        store.releaseOpenOperations();
         engine.destroy();
       } finally {
         destroyed = true;
@@ -136,6 +159,7 @@ export function createDrawOnEngine(
     asyncMembers: ASYNC_MEMBERS,
     skip: new Set(['destroy']),
   });
+  holdBulkEdits(draw, edits);
   engine.extensions.attach(draw);
   return draw;
 }

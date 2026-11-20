@@ -343,7 +343,11 @@ export interface StoreView {
    *
    * A nested call with a source other than that of the outer call throws `DrawError` with the
    * code `invalidState`, writing nothing; one with the same source folds into the outer call, and
-   * the options of the outermost call win. The transactions of an instance (`draw.transact`) are
+   * the options of the outermost call win, but for one: a nested call that gives
+   * `hasMoreParts: true` makes the change of the transaction a part that more follow, whatever
+   * the outermost call gave (an operation written in parts that starts inside a transaction;
+   * the caller that gives it ends the operation with a later transaction, as
+   * `StoreTransactOptions.hasMoreParts` says). The transactions of an instance (`draw.transact`) are
    * transactions of its Store, so this one rule holds between them and the transactions of the
    * Store, whichever is inside the other. When `fn` throws, the writes it made before stay, and
    * are told as one change before the error is thrown again.

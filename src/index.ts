@@ -67,7 +67,12 @@ export type {
   TracingOptions,
 } from './api/options.js';
 export type { Messages } from './messages.js';
-export type { FeaturesCollection } from './api/features.js';
+export type {
+  EditCounts,
+  EditOptions,
+  FeaturesCollection,
+  FeatureTarget,
+} from './api/features.js';
 export type { LayersCollection } from './api/layers.js';
 export type { GroupsCollection } from './api/groups.js';
 export type { HiddenCollection } from './api/hidden.js';

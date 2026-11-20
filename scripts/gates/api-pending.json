@@ -5,7 +5,6 @@
     "sample-follow-drag.ts": 4,
     "sample-main-usage.ts": 27,
     "sample-presence-events.ts": 20,
-    "sample-save-on-change.ts": 5,
     "sample-undo-plugin.ts": 18
   },
   "declarations": {
@@ -26,25 +25,9 @@
       "main:doc:DrawProperties{0}.maplibre-gl-draw:rotation": "dd91426b461df5b79b54903796238dee9051fb791295389239d64f7315d99388",
       "main:doc:DrawProperties{0}.maplibre-gl-draw:scale": "3e20fa66ad593d19a1df83fb23b018d4479f67cebb712747772ac25f744e1251"
     },
-    "9": {
-      "main:doc:Draw.transact": "f167130fa610c2386d18c8b77878a83df10adaa0d68595d76e9bac712120056e",
-      "main:doc:TransactOptions.source": "110bcbaa693679d510edbc911a6e3a59b3fa5699d54cbc30df2c7d00e1edb360"
-    },
-    "10": {
-      "main:doc:Draw.setReadOnly": "661287166143e84fe483c71f6194691250bc2094a03ecec5037c25234f65b824"
-    },
-    "11": {
-      "main:added:Draw.waitForWrites": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "13": {
       "main:added:Draw.rendered": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "14": {
-      "main:doc:Draw.destroy": "4af9041a7ae56b6b60a8c0e5f19e5aeb546d1489331e2cd6839ec2ebed5b217b"
-    },
-    "16": {
-      "main:doc:FeaturesCollection": "0e6f62745b5f12d748824eb2c4db02e121e50dc6322ba8f3ba8e9a3b438576de"
     },
     "19": {
       "main:added:FeaturesCollection.updateAll": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -79,21 +62,7 @@
     },
     "39": {
       "main:added:DuplicateOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DuplicateOptions.offset": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts.changedCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts.createdIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts.lockedCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts.missingCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts.skippedVertexCount": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditCounts.stopped": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditOptions.ignoreLocks": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:EditOptions.source": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureTarget": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureTarget{0}.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:FeatureTarget{1}.layerIds": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      "main:added:DuplicateOptions.offset": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "40": {
       "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
@@ -296,9 +265,6 @@
       "main:added:SketchEdit{2}.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "180": {
-      "store:doc:StoreView.transact": "6dc48f0bdb35f7c889b0e0803bd134d407db046fec9387baff199a735a126bf5"
     }
   }
 }

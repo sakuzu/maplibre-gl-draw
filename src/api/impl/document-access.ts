@@ -35,6 +35,7 @@ import type {
   Store as RowStore,
   RowValues,
   StoreGroup,
+  StoreTransactOptions,
 } from '../../store/built-in/types.js';
 import type {
   FeatureBoxes,
@@ -136,6 +137,11 @@ function newNotes(): Notes {
     valuesBefore: undefined,
     askedBy: null,
   };
+}
+
+/** The notes of a change, or undefined when it has none */
+function notesOf(change: StoreChange): Notes | undefined {
+  return (change as { [NOTES]?: Notes })[NOTES];
 }
 
 /** The notes of a change, made for it when it has none */
@@ -854,6 +860,32 @@ export function createDocumentAccess(
     if (busDepth === 0) flush();
   };
 
+  /**
+   * The operations a part was told of that more parts follow: their last part is told even when
+   * it changes nothing, so that the subscribers of the layer see each operation end
+   */
+  const partsTold = new Set<number>();
+
+  /**
+   * Whether a change that holds nothing is told all the same: the last change of an operation
+   * that stopped, and the last part of an operation a part of which was told
+   */
+  const toldWhenEmpty = (notes: Notes | undefined): boolean => {
+    if (notes?.operationId === undefined) return false;
+    return notes.stopped || (!notes.hasMoreParts && partsTold.has(notes.operationId));
+  };
+
+  /** Keeps or forgets the operation of a change told (a replacement forgets the others) */
+  const partTold = (notes: Notes, reset: boolean): void => {
+    const { operationId } = notes;
+    if (reset) {
+      for (const open of partsTold) if (open !== operationId) partsTold.delete(open);
+    }
+    if (operationId === undefined) return;
+    if (notes.hasMoreParts) partsTold.add(operationId);
+    else partsTold.delete(operationId);
+  };
+
   /** Takes the changes of the document the writes made into the change, and follows them */
   const followDocument = (): void => {
     if (isEmptyChange(documentPending)) return;
@@ -868,7 +900,7 @@ export function createDocumentAccess(
 
   const flush = (): void => {
     if (awaitingRows) return;
-    if (isEmptyChange(pending)) {
+    if (isEmptyChange(pending) && !toldWhenEmpty(notesOf(pending))) {
       ordersBefore = new Map();
       return;
     }
@@ -878,8 +910,10 @@ export function createDocumentAccess(
     pendingFolds = newFolds();
     // A replacement of the whole document tells what it took out and what it wrote as both
     if (change.features && change.reset !== true) foldMadeAgain(change.features);
-    if (changesDocument(change)) {
-      Object.defineProperty(change, SUMMARY, { value: summaryOf(notesFor(change), change) });
+    if (changesDocument(change) || toldWhenEmpty(notesOf(change))) {
+      const notes = notesFor(change);
+      Object.defineProperty(change, SUMMARY, { value: summaryOf(notes, change) });
+      partTold(notes, change.reset === true);
     }
     const orders = ordersBefore;
     ordersBefore = new Map();
@@ -1008,8 +1042,8 @@ export function createDocumentAccess(
   };
 
   /** Runs `fn` in a transaction of the Store, folding into one of the Store already open */
-  function rowTransact<T>(fn: () => T, source: UpdateSource): T {
-    if (rowDepth > 0) return store.transact(fn, rowSource);
+  function rowTransact<T>(fn: () => T, source: UpdateSource, options?: StoreTransactOptions): T {
+    if (rowDepth > 0) return store.transact(fn, rowSource, options);
     const run = (): T => {
       opening = false;
       rowDepth += 1;
@@ -1024,7 +1058,7 @@ export function createDocumentAccess(
     rowSource = source;
     let result: T;
     try {
-      result = store.transact(run, source);
+      result = store.transact(run, source, options);
     } catch (error) {
       const nested =
         opening &&
@@ -1039,7 +1073,7 @@ export function createDocumentAccess(
       // Inside a transaction of the Store opened from elsewhere: the writes fold into it
       opening = false;
       rowSource = lastOuterSource as UpdateSource;
-      result = store.transact(run, rowSource);
+      result = store.transact(run, rowSource, options);
     } finally {
       opening = false;
     }
@@ -1138,12 +1172,19 @@ export function createDocumentAccess(
     }
   };
 
-  /** Runs one transaction of the instance: the writes, then the change they make, told once */
-  function transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
+  /**
+   * Runs one transaction of the instance: the writes, then the change they make, told once. The
+   * options go to the transaction of the Store as they are
+   */
+  function transact<T>(
+    fn: () => T,
+    source: UpdateSource = 'local',
+    options?: StoreTransactOptions,
+  ): T {
     return client.hold(() =>
       busTransact(() => {
         try {
-          return rowTransact(fn, busDepth > 1 ? busSource : source);
+          return rowTransact(fn, busDepth > 1 ? busSource : source, options);
         } finally {
           // What was written before a throw stays, and is told
           if (rowDepth === 0 && !awaitingRows) {
@@ -2123,6 +2164,12 @@ export function createDocumentAccess(
   // ==========================================================================
 
   /**
+   * What is called before a write of this client writes the row of a feature, with its ID (see
+   * `DocumentOperations.setBeforeFeatureWrite`)
+   */
+  let beforeFeatureWrite: ((id: string) => void) | null = null;
+
+  /**
    * Runs one write of the document unless read-only; true once it applied, false when the Store
    * refused one of its writes (see `attempt`)
    */
@@ -2273,6 +2320,7 @@ export function createDocumentAccess(
     options?: UpdateFeatureOptions,
     place?: { parent: string; key: string },
   ): void => {
+    beforeFeatureWrite?.(id);
     const previous = getFeature(id);
     if (!previous) throw new Error(`Feature with id "${id}" not found`);
     if ('layerId' in updates && updates.layerId !== previous.layerId) {
@@ -2373,6 +2421,7 @@ export function createDocumentAccess(
 
   /** Deletes the row of a feature, and the group its going leaves empty */
   const deleteFeatureRow = (id: string): void => {
+    beforeFeatureWrite?.(id);
     const feature = getFeature(id);
     if (!feature) throw new Error(`Feature with id "${id}" not found`);
     const ref = tables.getRowRef(id) as number;
@@ -2853,6 +2902,7 @@ export function createDocumentAccess(
       noteOrderBefore(layerId);
       const keys = keysAt(layerId, ids, to.index);
       ids.forEach((id, i) => {
+        beforeFeatureWrite?.(id);
         const feature = getFeature(id);
         if (!feature) return;
         if (feature.layerId !== layerId || feature.groupId !== undefined) {
@@ -2880,6 +2930,7 @@ export function createDocumentAccess(
       noteOrderBefore(groupId);
       const keys = keysAt(groupId, ids, to.index);
       ids.forEach((id, i) => {
+        beforeFeatureWrite?.(id);
         const feature = getFeature(id);
         if (!feature) return;
         if (feature.groupId !== groupId) {
@@ -2900,6 +2951,7 @@ export function createDocumentAccess(
     // Out of their groups: each feature stays in its layer
     const byLayer = new Map<string, Feature[]>();
     for (const id of ids) {
+      beforeFeatureWrite?.(id);
       const feature = getFeature(id);
       if (!feature) continue;
       const list = byLayer.get(feature.layerId) ?? [];
@@ -3569,7 +3621,8 @@ export function createDocumentAccess(
         if (!isEmptyChange(foreign)) appendChange(documentPending, foreign, documentFolds);
         return;
       }
-      if (isEmptyChange(foreign)) return;
+      // An empty change is told when it ends an operation (see `toldWhenEmpty`)
+      if (isEmptyChange(foreign) && !toldWhenEmpty(rowNotes)) return;
       const { source } = change;
       const orders = foreignOrdersBefore;
       afterTold.push(() =>
@@ -3773,10 +3826,19 @@ export function createDocumentAccess(
         listeners.delete(listener);
       };
     },
-    transact: <T>(fn: () => T, source?: UpdateSource): T =>
-      transact(fn, source ?? (busDepth > 0 ? busSource : 'local')),
+    transact: <T>(fn: () => T, source?: UpdateSource, options?: StoreTransactOptions): T =>
+      transact(fn, source ?? (busDepth > 0 ? busSource : 'local'), options),
     transactUntilRefused: <T>(fn: () => T, source?: UpdateSource): T | null =>
       transactUntilRefused(fn, source ?? (busDepth > 0 ? busSource : 'local')),
+
+    // What the operations written in parts read, and the call before a write
+    currentOperationId: () => (rowDepth > 0 ? operationNow : undefined),
+    setBeforeFeatureWrite(before: ((id: string) => void) | null) {
+      beforeFeatureWrite = before;
+    },
+    releaseOpenOperations() {
+      partsTold.clear();
+    },
 
     // The reads by position
     countItems: (layerId: string) => tables.get(layerId)?.itemCount ?? 0,
