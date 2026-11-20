@@ -120,8 +120,18 @@ describe(`the editing benchmark with ${COUNT.toLocaleString('en')} features`, ()
       expect(result.error).toMatch(/time ran out/);
       // The scene gave its result in about its time: an edit left writing would take minutes
       expect(took).toBeLessThan(SCENE_LIMIT_MS * 2);
-      // The edit had started and was stopped before it had written every feature
-      expect(result.notes, JSON.stringify({ took, result })).toMatchObject({ stopped: 'yes' });
+      // The edit had started: it gave the number of features it changed
+      const detail = JSON.stringify({ took, result });
+      expect(typeof result.notes.changed, detail).toBe('number');
+      if (result.notes.changed === COUNT) {
+        // A fast machine writes every feature within the time, and the drawing after it runs
+        // out: nothing was left to stop
+        expect(result.notes.stopped, detail).toBeUndefined();
+      } else {
+        // The edit was still writing when the time ran out, and was stopped
+        expect(result.notes.changed as number, detail).toBeLessThan(COUNT);
+        expect(result.notes, detail).toMatchObject({ stopped: 'yes' });
+      }
     });
   }
 
