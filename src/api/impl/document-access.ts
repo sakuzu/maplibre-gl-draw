@@ -31,6 +31,7 @@ import { compareKeys, createOrderKeyBetween } from '../../store/built-in/order-k
 import { setRowBoxes } from '../../store/built-in/row-boxes.js';
 import type {
   FeatureRowField,
+  LayerTableView,
   StoreChange as RowChange,
   Store as RowStore,
   RowValues,
@@ -41,6 +42,7 @@ import type {
   FeatureBoxes,
   FeatureMatch,
   FeaturePlace,
+  FeatureValuesRead,
   InstanceDocument,
   MoveDestination,
 } from '../../store/document-access.js';
@@ -1549,6 +1551,39 @@ export function createDocumentAccess(
     };
   };
   const getGroup = (id: string): Group | undefined => groupOf(store.getGroup(id));
+
+  /** The values of fields of the rows of features, a run of the rows of one layer (see `DocumentPlaces`) */
+  const readFeatureValues = (
+    ids: readonly string[],
+    fields: readonly FeatureRowField[],
+    start = 0,
+  ): FeatureValuesRead => {
+    writePendingPlaces();
+    const from = Math.max(0, Math.min(start, ids.length));
+    const refs = new Int32Array(ids.length - from);
+    const indices = new Int32Array(ids.length - from);
+    let count = 0;
+    let at = from;
+    // The rows of the layer of the first row read; a row of another layer ends the run
+    let view: LayerTableView | undefined;
+    for (; at < ids.length; at++) {
+      const id = ids[at];
+      const ref = typeof id === 'string' ? tables.getRowRef(id) : undefined;
+      if (ref === undefined) continue;
+      if (view === undefined) {
+        view = tables.get(layerOfRow(ref));
+        if (view === undefined) continue;
+      } else if (view.getRowType(ref) === null) {
+        break;
+      }
+      refs[count] = ref;
+      indices[count] = at;
+      count += 1;
+    }
+    const values = tables.readValues(refs.subarray(0, count), fields);
+    countWork(counts, 'objectsCreated', 3);
+    return { values, indices: indices.subarray(0, count), end: at };
+  };
 
   // ==========================================================================
   // The keys of the order
@@ -3859,6 +3894,7 @@ export function createDocumentAccess(
       return tables.get(layerOfRow(ref))?.getRowProperty(ref, key);
     },
     getFeaturePlace,
+    readFeatureValues,
     holdFeatures<T>(fn: () => T): T {
       cacheHolds += 1;
       try {

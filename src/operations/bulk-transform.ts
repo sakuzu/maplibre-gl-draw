@@ -5,7 +5,7 @@
  * The moves, rotations and scalings of any number of features (the bulk edits `translate`,
  * `rotate` and `scale`): what an edit writes to each batch of its features
  *
- * - A batch is read from the rows of the Store as arrays, a run of the rows of one layer at a
+ * - A batch is read from the rows through the layer as arrays, a run of the rows of one layer at a
  *   time: the positions as the Store gives them, and the fields of rotation, direction and size
  *   that the type of each feature declares (`FeatureTypeDefinition.transformFields`), or those
  *   of the built-in types (the rotation and the scale of an image, the radius of a circle). A
@@ -25,7 +25,8 @@
  *   changes, so that a feature without it is not given it for nothing.
  *
  * The rows are read per layer because the Store reads the rows of one layer at a time (one
- * number of values per position).
+ * number of values per position). The types of the rows are read with their positions, and the
+ * fields their types declare in a second read when there are any.
  */
 
 import type { Geometry, Position } from 'geojson';
@@ -37,15 +38,10 @@ import type {
   TransformOutput,
   TransformProvider,
 } from '../shared/types/model.js';
-import { countWork, workCountsOf } from '../shared/work-counts.js';
-import type {
-  FeatureRowField,
-  GeometryColumn,
-  LayerTableView,
-  Store as RowStore,
-} from '../store/built-in/types.js';
+import { countWork, type WorkCounts } from '../shared/work-counts.js';
+import type { FeatureRowField, GeometryColumn } from '../store/built-in/types.js';
 import { GEOMETRY_TYPES } from '../store/built-in/types.js';
-import type { InstanceDocument } from '../store/document-access.js';
+import type { FeatureValuesRead, InstanceDocument } from '../store/document-access.js';
 import type { Feature } from '../store/types.js';
 
 /**
@@ -65,10 +61,10 @@ export interface RegisteredType {
  * @internal
  */
 export interface TransformDeps {
-  /** The layer over the Store, through which the features are written */
-  readonly layer: Pick<InstanceDocument, 'getFeature' | 'getFeaturePlace' | 'updateFeature'>;
-  /** The Store of the instance, whose rows are read as arrays */
-  readonly store: RowStore;
+  /** The layer over the Store, through which the rows are read as arrays and the features written */
+  readonly layer: Pick<InstanceDocument, 'getFeature' | 'readFeatureValues' | 'updateFeature'>;
+  /** The amounts of work of the Store of the instance, to which the arrays made are added */
+  readonly counts: WorkCounts | undefined;
   /** The definition registered under the name of a type, or undefined for none */
   readonly typeOf: (type: string) => RegisteredType | undefined;
 }
@@ -261,24 +257,55 @@ export interface TransformRun {
   readonly geometry: GeometryColumn;
   /** The fields of each row (one shared object per kind of row) */
   readonly fields: readonly Fields[];
+  /** The position among the IDs of the ID of each row */
+  readonly indices: Int32Array;
+  /** The position among the IDs of the first ID the run did not look at, where the next starts */
+  readonly end: number;
 }
 
 /**
- * Reads a run of rows of one layer as the arrays of the computation
+ * The values of one field for each row of a read, from another read of the same IDs: entry `i`
+ * for row `i` of `read`, undefined for a row the other read does not have
+ */
+function alignedValues(
+  read: FeatureValuesRead,
+  other: FeatureValuesRead,
+  field: FeatureRowField,
+): (i: number) => unknown {
+  const values = other.values.fields.get(field);
+  if (!values) return () => undefined;
+  // The two reads have the same rows unless one of them was deleted between them
+  const { indices } = read;
+  if (other.indices.length === indices.length && other.end === read.end) {
+    return (i) => values[i];
+  }
+  const match = new Int32Array(indices.length).fill(-1);
+  let j = 0;
+  for (let i = 0; i < indices.length; i++) {
+    while (j < other.indices.length && other.indices[j] < indices[i]) j += 1;
+    if (j < other.indices.length && other.indices[j] === indices[i]) match[i] = j;
+  }
+  return (i) => (match[i] < 0 ? undefined : values[match[i]]);
+}
+
+/**
+ * Reads a run of rows of one layer through the layer, as the arrays of the computation: the
+ * rows of the IDs from `start` on, up to the first of another layer
  *
  * @internal
  */
 export function readTransformRun(
-  store: RowStore,
-  view: LayerTableView,
-  refs: Int32Array,
+  deps: TransformDeps,
   ids: readonly string[],
-  index: Int32Array,
+  start: number,
   fieldsOf: FieldsResolver,
   operationId: number,
 ): TransformRun {
-  const counts = workCountsOf(store);
-  const n = refs.length;
+  const { counts } = deps;
+  const read = deps.layer.readFeatureValues(ids, ['type', 'geometry'], start);
+  const { indices } = read;
+  const types = read.values.fields.get('type') ?? [];
+  const n = indices.length;
   const fields: Fields[] = new Array(n);
   const keys = new Set<string>();
   let rotations = false;
@@ -286,7 +313,7 @@ export function readTransformRun(
   let sizes = false;
   let uniform = false;
   for (let i = 0; i < n; i++) {
-    const own = fieldsOf(view.getRowType(refs[i]) ?? '', ids[index[i]]);
+    const own = fieldsOf(String(types[i] ?? ''), ids[indices[i]]);
     fields[i] = own;
     if (own.rotation !== undefined) {
       rotations = true;
@@ -302,24 +329,26 @@ export function readTransformRun(
     }
     if (own.uniform) uniform = true;
   }
-  const read: FeatureRowField[] = ['geometry'];
-  for (const key of keys) read.push(`properties:${key}`);
-  const values = store.tables.readValues(refs, read);
-  const geometry = values.geometry as GeometryColumn;
+  const geometry = read.values.geometry as GeometryColumn;
+  // The fields the types declare, read for the same IDs
+  const named: FeatureRowField[] = [];
+  for (const key of keys) named.push(`properties:${key}`);
+  const declared = named.length > 0 ? deps.layer.readFeatureValues(ids, named, start) : undefined;
   // The positions of each row start at the first position of its first ring
   const positionStarts = new Int32Array(n + 1);
   for (let i = 0; i <= n; i++) {
     positionStarts[i] = geometry.positionStarts[geometry.ringStarts[geometry.partStarts[i]]];
+  }
+  const valuesOf = new Map<string, (i: number) => unknown>();
+  for (const key of keys) {
+    if (declared) valuesOf.set(key, alignedValues(read, declared, `properties:${key}`));
   }
   /** The column of one field: its value per row, the value it starts from, NaN without it */
   const column = (keyOf: (own: Fields) => string | undefined, otherwise: number): Float64Array => {
     const out = new Float64Array(n);
     for (let i = 0; i < n; i++) {
       const key = keyOf(fields[i]);
-      out[i] =
-        key === undefined
-          ? Number.NaN
-          : startOf(values.fields.get(`properties:${key}`)?.[i], otherwise);
+      out[i] = key === undefined ? Number.NaN : startOf(valuesOf.get(key)?.(i), otherwise);
     }
     return out;
   };
@@ -351,8 +380,8 @@ export function readTransformRun(
     size: like(size),
   };
   // The arrays of the run, its input and its output: as many whatever the number of rows
-  countWork(counts, 'objectsCreated', 14);
-  return { input, output, geometry, fields };
+  countWork(counts, 'objectsCreated', 14 + keys.size);
+  return { input, output, geometry, fields, indices, end: read.end };
 }
 
 /**
@@ -362,10 +391,9 @@ function writeRun(
   deps: TransformDeps,
   run: TransformRun,
   ids: readonly string[],
-  index: Int32Array,
   changed: Uint8Array,
 ): void {
-  const { input, output, geometry, fields } = run;
+  const { input, output, geometry, fields, indices } = run;
   const stride = input.valuesPerPosition;
   for (let i = 0; i < input.featureCount; i++) {
     const from = input.positionStarts[i] * stride;
@@ -397,7 +425,7 @@ function writeRun(
       continue;
     }
     if (!moved && keys.length === 0) continue;
-    const id = ids[index[i]];
+    const id = ids[indices[i]];
     const updates: Partial<Feature> = {};
     if (moved) updates.geometry = geometryAt(geometry, output.coordinates, i);
     if (keys.length > 0) {
@@ -407,7 +435,7 @@ function writeRun(
       for (let k = 0; k < keys.length; k++) properties = withValue(properties, keys[k], after[k]);
       updates.properties = properties;
     }
-    if (deps.layer.updateFeature(id, updates)) changed[index[i]] = 1;
+    if (deps.layer.updateFeature(id, updates)) changed[indices[i]] = 1;
   }
 }
 
@@ -429,46 +457,16 @@ export function createTransformWork(
   operationId: number,
 ): TransformWork {
   const fieldsOf = createFieldsResolver(deps);
-  const { store, layer } = deps;
   return {
     writeFeatures(ids, changed) {
-      const { tables } = store;
-      const refs = new Int32Array(ids.length);
-      const index = new Int32Array(ids.length);
-      countWork(workCountsOf(store), 'objectsCreated', 2);
-      let i = 0;
-      while (i < ids.length) {
-        // The layer of the first row of the run
-        const first = tables.getRowRef(ids[i]);
-        const place = first === undefined ? undefined : layer.getFeaturePlace(ids[i]);
-        const view = place ? tables.get(place.layerId) : undefined;
-        if (first === undefined || !view) {
-          i += 1;
-          continue;
-        }
-        // The rows that follow in the same layer (a row deleted meanwhile is passed over)
-        let n = 0;
-        while (i < ids.length) {
-          const ref = n === 0 ? first : tables.getRowRef(ids[i]);
-          if (ref !== undefined) {
-            if (view.getRowType(ref) === null) break;
-            refs[n] = ref;
-            index[n] = i;
-            n += 1;
-          }
-          i += 1;
-        }
-        const run = readTransformRun(
-          store,
-          view,
-          refs.subarray(0, n),
-          ids,
-          index.subarray(0, n),
-          fieldsOf,
-          operationId,
-        );
+      // A run of the rows of one layer at a time (a row deleted meanwhile is passed over)
+      let at = 0;
+      while (at < ids.length) {
+        const run = readTransformRun(deps, ids, at, fieldsOf, operationId);
+        at = run.end;
+        if (run.input.featureCount === 0) continue;
         provider.apply(operation, run.input, run.output);
-        writeRun(deps, run, ids, index.subarray(0, n), changed);
+        writeRun(deps, run, ids, changed);
       }
     },
   };

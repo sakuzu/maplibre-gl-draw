@@ -34,6 +34,7 @@ import type { FeatureTypeDefinition } from '../api/extension/feature-type.js';
 import type { EditCounts } from '../api/features.js';
 import { bulkEditsOf } from '../api/impl/bulk-edits.js';
 import { createDrawOnEngine } from '../api/impl/create-draw.js';
+import { createDocumentAccess } from '../api/impl/document-access.js';
 import { createEngine, type Engine } from '../api/impl/engine.js';
 import { toEngineOptions } from '../api/impl/options.js';
 import { haversineDistanceMeters } from '../geometry/distance.js';
@@ -694,6 +695,27 @@ describe('a rotation of a single feature of a Point geometry', () => {
     expect(attributeOf(one, 'maplibre-gl-draw:rotation')).toBe(90);
   });
 
+  it('turns a point alone about its position once the edits started before it have moved it', async () => {
+    const ids = points(40);
+    const one = image(1, 0, { 'maplibre-gl-draw:rotation': 10 });
+    draw.extensions.setTransformProvider(slowBuiltIn(5));
+    const all = [...ids, one];
+    // Two moves of every feature, one after the other, and then a rotation of the image alone
+    const north = settled(draw.features.translate(all, { from: [0, 0], to: [0, 0.5] }));
+    const east = settled(draw.features.translate(all, { from: [0, 0], to: [0.5, 0] }));
+    const turn = settled(
+      draw.features.rotate([one], { center: [0, 0], counterclockwiseDegrees: 90 }),
+    );
+    await allTasks();
+    expect((north.value as EditCounts).changedCount).toBe(41);
+    expect((east.value as EditCounts).changedCount).toBe(41);
+    expect((turn.value as EditCounts).changedCount).toBe(1);
+    // Where the two moves put it: only its rotation changes
+    expect(xyOf(one)[0]).toBeCloseTo(1.5, 3);
+    expect(xyOf(one)[1]).toBeCloseTo(0.5, 3);
+    expect(attributeOf(one, 'maplibre-gl-draw:rotation')).toBe(100);
+  });
+
   it('turns a point without a field of rotation about the center given', async () => {
     const id = point(1, 0);
     await finish(draw.features.rotate([id], { center: [0, 0], counterclockwiseDegrees: 90 }));
@@ -1144,22 +1166,19 @@ describe('one call of the computation', () => {
     const scene = (size: number, measure: 'counted' | 'reachable'): number => {
       store = createStore();
       const ids = manyFeaturesIn(store, size);
+      const layer = createDocumentAccess(store);
       const deps: TransformDeps = {
         layer: {
           getFeature: () => undefined,
-          getFeaturePlace: () => undefined,
+          readFeatureValues: layer.readFeatureValues,
           updateFeature: () => false,
         },
-        store,
+        counts: countsOf(store),
         typeOf: () => undefined,
       };
-      const view = store.tables.get('many');
-      if (!view) throw new Error('no layer');
-      const refs = Int32Array.from(ids, (id) => store.tables.getRowRef(id) as number);
-      const index = Int32Array.from(ids, (_, i) => i);
       const counts = countsOf(store);
       const before = counts.objectsCreated;
-      const run = readTransformRun(store, view, refs, ids, index, createFieldsResolver(deps), 1);
+      const run = readTransformRun(deps, ids, 0, createFieldsResolver(deps), 1);
       createBuiltInTransform().apply(
         { kind: 'rotate', center: [139.1, 35.1], counterclockwiseDegrees: 17 },
         run.input,

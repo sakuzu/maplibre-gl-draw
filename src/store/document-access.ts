@@ -15,7 +15,7 @@
  * only for what it needs.
  */
 
-import type { StoreTransactOptions } from './built-in/types.js';
+import type { FeatureRowField, RowValues, StoreTransactOptions } from './built-in/types.js';
 import type { ClientState } from './memory/ui-state.js';
 import type {
   BoundingBox,
@@ -206,6 +206,22 @@ export interface FeaturePlace {
   readonly locked: boolean;
 }
 
+/** The values of the rows of features read as arrays (see `DocumentPlaces.readFeatureValues`) */
+export interface FeatureValuesRead {
+  /**
+   * The values, as `readValues` of the tables of the Store gives them: entry `k` of each field for
+   * the `k`-th row read
+   */
+  readonly values: RowValues;
+  /** The position among the IDs given of the ID of each row read, rising */
+  readonly indices: Int32Array;
+  /**
+   * The position among the IDs given of the first ID not looked at, where a next read starts
+   * (the number of the IDs once every one is looked at)
+   */
+  readonly end: number;
+}
+
 /** What a read of the features keeps: every key given must match */
 export interface FeatureMatch {
   /** Only the features in this layer */
@@ -255,6 +271,20 @@ export interface DocumentPlaces {
    * (undefined for none)
    */
   getFeaturePlace(id: string): FeaturePlace | undefined;
+  /**
+   * The values of fields of features, read from their rows as arrays, as the Store reads them
+   * (one array per field, the geometries as one column), without the features being made: the
+   * rows of the IDs from `start` on that are in the layer of the first of them that is a
+   * feature, up to the first ID of a feature of another layer. An ID that is not a feature is
+   * left out
+   *
+   * @param start - The position among `ids` of the first ID read (0 when left out)
+   */
+  readFeatureValues(
+    ids: readonly string[],
+    fields: readonly FeatureRowField[],
+    start?: number,
+  ): FeatureValuesRead;
   /**
    * Runs `fn` while the features made are kept beyond the number the layer keeps, and lets go
    * of those over it afterwards: for a caller that reads back the many features it wrote

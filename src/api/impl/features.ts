@@ -12,12 +12,13 @@ import {
   createTransformWork,
   rotationCenterOf,
   type TransformDeps,
+  type TransformWork,
 } from '../../operations/bulk-transform.js';
 import { createBuiltInTransform } from '../../shared/math/enu-transform.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { TransformOperation } from '../../shared/types/model.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
-import type { Store as RowStore } from '../../store/built-in/types.js';
+import type { WorkCounts } from '../../shared/work-counts.js';
 import type { DocumentAccess, FeatureMatch } from '../../store/document-access.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -99,8 +100,8 @@ export interface FeatureBulkDeps {
   readonly edits: BulkEdits;
   /** The computation set and the feature types, read only */
   readonly extensions: Pick<ExtensionsCollections, 'getTransformProvider' | 'featureTypes'>;
-  /** The Store of the instance, whose rows the moves, rotations and scalings read */
-  readonly store: RowStore;
+  /** The amounts of work of the Store of the instance, to which the moves, rotations and scalings add */
+  readonly counts: WorkCounts | undefined;
 }
 
 /**
@@ -116,7 +117,7 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
   const builtInTransform = createBuiltInTransform();
   const transformDeps: TransformDeps | undefined = bulk && {
     layer: store,
-    store: bulk.store,
+    counts: bulk.counts,
     typeOf: (type) => {
       const definition = bulk.extensions.featureTypes.get(type);
       return definition && { definition, overrides: OVERRIDABLE_TYPES.has(type) };
@@ -125,8 +126,9 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
 
   /**
    * Starts a move, a rotation or a scaling of features: the computation is the one set when it
-   * starts, asked whether it computes the operation once the target is read; a wrong input
-   * rejects the promise, and changes nothing
+   * starts, asked whether it computes the operation once the target is read (for a rotation of a
+   * single feature, once its center is settled); a wrong input rejects the promise, and changes
+   * nothing
    */
   const startTransform = (
     target: FeatureTarget,
@@ -139,22 +141,30 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
     try {
       const operation = read();
       return bulk.edits.start(target, options, (started) => {
-        let computed = operation;
-        // A single feature of a Point geometry with a field of rotation turns about its position
-        if (operation.kind === 'rotate') {
-          // Its position is read to make the values written: the edit being written is applied
-          // to it first
-          if (started.onlyId !== undefined) store.applyEditFirst?.(started.onlyId);
-          const center = rotationCenterOf(transformDeps, started.onlyId);
-          if (center) computed = { ...operation, center };
-        }
         const provider = bulk.extensions.getTransformProvider() ?? builtInTransform;
-        if (!provider.accepts(computed)) {
-          throw invalidInput(
-            `The computation ${JSON.stringify(provider.name)} does not compute it`,
-          );
-        }
-        return createTransformWork(transformDeps, provider, computed, started.operationId);
+        /** The work of the operation as it is computed, once the computation takes it */
+        const workOf = (computed: TransformOperation): TransformWork => {
+          if (!provider.accepts(computed)) {
+            throw invalidInput(
+              `The computation ${JSON.stringify(provider.name)} does not compute it`,
+            );
+          }
+          return createTransformWork(transformDeps, provider, computed, started.operationId);
+        };
+        const { onlyId } = started;
+        if (operation.kind !== 'rotate' || onlyId === undefined) return workOf(operation);
+        // A single feature of a Point geometry with a field of rotation turns about its position,
+        // read when the edit writes to it first: the edits started before it have all ended then
+        let work: TransformWork | undefined;
+        return {
+          writeFeatures(ids, changed) {
+            if (!work) {
+              const center = rotationCenterOf(transformDeps, onlyId);
+              work = workOf(center ? { ...operation, center } : operation);
+            }
+            work.writeFeatures(ids, changed);
+          },
+        };
       });
     } catch (error) {
       if (error instanceof DrawError && error.code === 'invalidInput') return Promise.reject(error);

@@ -6,6 +6,7 @@
  */
 
 import type { Map as MaplibreMap } from 'maplibre-gl';
+import { workCountsOf } from '../../shared/work-counts.js';
 import type { UpdateSource } from '../../store/types.js';
 import type { Draw, TransactOptions } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -66,12 +67,12 @@ export function createDrawOnEngine(
   };
   // The edits of any number of features, written in parts, one at a time
   const edits = createBulkEdits(store, exposedStore);
-  // The bulk edits of the features read the computation set and the feature types, and the
-  // rows of the Store
+  // The bulk edits of the features read the computation set and the feature types, and add to
+  // the amounts of work of the Store
   const features = createFeatures(deps, {
     edits,
     extensions: engine.extensions.collections,
-    store: exposedStore,
+    counts: workCountsOf(exposedStore),
   });
   const groups = createGroups(deps);
   // Set once destroy has run to the end, so that the extensions removed by it can still read
