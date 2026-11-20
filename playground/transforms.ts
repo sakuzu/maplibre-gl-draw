@@ -43,7 +43,7 @@ async function report(name: string, edit: Promise<EditCounts | null>): Promise<v
   }
 }
 
-/** Puts the three buttons at the top right of the map, in English or in Japanese */
+/** Puts the three buttons over the map, above the bar of the drawing tools, in English or in Japanese */
 export function addTransformButtons(draw: Draw, container: HTMLElement, ja: boolean): void {
   const bar = document.createElement('div');
   bar.className = 'pg-transforms';

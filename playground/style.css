@@ -19,13 +19,18 @@ body {
   inset: 0;
 }
 
-/* The buttons that move, turn and scale the selection (transforms.ts), at the bottom middle */
+/*
+ * The buttons that move, turn and scale the selection (transforms.ts): one above the other in the
+ * middle, just above the bar of the drawing tools (48px high, 14px from the bottom), so that they
+ * stay clear of it and of the panels at the left and at the right on a page 900px wide
+ */
 .pg-transforms {
   position: absolute;
-  bottom: 36px;
+  bottom: 72px;
   left: 50%;
   z-index: 2;
   display: flex;
+  flex-direction: column;
   gap: 6px;
   transform: translateX(-50%);
 }

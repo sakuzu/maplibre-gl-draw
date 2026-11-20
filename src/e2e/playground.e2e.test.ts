@@ -4,7 +4,8 @@
 /**
  * End-to-end test of the playground: the page opens on the overview scene with the standard UI
  * and its added tools, `?plain` opens it empty, the switches in the card of actions work by a
- * press and by their keys, and nothing throws an error
+ * press and by their keys, the buttons that move, turn and scale the selection lie clear of the
+ * bar of the drawing tools and of the panels, and nothing throws an error
  *
  * The playground is built with its own vite configuration (in memory, the library from its
  * sources and the standard UI from ui/dist/) and served to headless Chromium from that build.
@@ -60,11 +61,15 @@ afterAll(async () => {
   await browser?.close();
 });
 
-/** Opens the playground at the given query (after the replaced basemap) and waits for its map */
+/**
+ * Opens the playground at the given query (after the replaced basemap), in a page of the given
+ * size, and waits for its map
+ */
 async function open(
   query = '',
+  viewport = { width: 1024, height: 720 },
 ): Promise<{ page: Page; context: BrowserContext; errors: string[] }> {
-  const context = await browser.newContext({ viewport: { width: 1024, height: 720 } });
+  const context = await browser.newContext({ viewport });
   await context.route('**/*', (route) => {
     const url = new URL(route.request().url());
     if (url.origin !== ORIGIN) return route.abort();
@@ -199,6 +204,88 @@ describe('the playground', () => {
     await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
     await context.close();
     expect(errors).toEqual([]);
+  });
+
+  it('shows the buttons that move, turn and scale the selection whole, clear of the bar of the drawing tools and of the panels, on a page 900 and 1280 pixels wide', {
+    timeout: 60_000,
+  }, async () => {
+    for (const width of [900, 1280]) {
+      const { page, context, errors } = await open('&plain', { width, height: 757 });
+      await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
+      /** The boxes of the buttons, of the bar and of the panels, and what a press in each button meets */
+      const layout = () =>
+        page.evaluate(() => {
+          const box = (element: Element) => {
+            const r = element.getBoundingClientRect();
+            return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+          };
+          const buttons = Array.from(document.querySelectorAll('.pg-transforms button'));
+          return {
+            page: { width: window.innerWidth, height: window.innerHeight },
+            buttons: buttons.map((button) => {
+              const b = box(button);
+              const hit = document.elementFromPoint((b.left + b.right) / 2, (b.top + b.bottom) / 2);
+              return { ...b, pressed: hit === button || button.contains(hit) };
+            }),
+            others: Array.from(
+              document.querySelectorAll(
+                '.mgd-ui [data-role="drawbar"], .mgd-ui [data-role="floating"]',
+              ),
+            )
+              .map(box)
+              .filter((b) => b.right > b.left && b.bottom > b.top),
+          };
+        });
+      const check = async (when: string) => {
+        const { page: size, buttons, others } = await layout();
+        expect(buttons, `${width} ${when}`).toHaveLength(3);
+        for (const b of buttons) {
+          expect(b.pressed, `${width} ${when}`).toBe(true);
+          expect(b.left >= 0 && b.top >= 0, `${width} ${when}`).toBe(true);
+          expect(b.right <= size.width && b.bottom <= size.height, `${width} ${when}`).toBe(true);
+          for (const o of others) {
+            const meets =
+              b.left < o.right && o.left < b.right && b.top < o.bottom && o.top < b.bottom;
+            expect(meets, `${width} ${when}: ${JSON.stringify(b)} meets ${JSON.stringify(o)}`).toBe(
+              false,
+            );
+          }
+        }
+        // The bar of the drawing tools is among the boxes compared
+        expect(others.length, `${width} ${when}`).toBeGreaterThan(0);
+      };
+      await check('with nothing selected');
+      // A feature selected opens the panel at the right
+      await page.evaluate(() => {
+        const { draw, map } = window as unknown as E2EWindow;
+        const { lng, lat } = map.getCenter();
+        const ring = [
+          [lng, lat],
+          [lng + 0.01, lat],
+          [lng + 0.01, lat + 0.01],
+          [lng, lat],
+        ];
+        const feature = draw.features.create({
+          type: 'Polygon',
+          geometry: { type: 'Polygon', coordinates: [ring] },
+        });
+        if (feature) draw.selection.set('feature', [feature.id]);
+      });
+      await settle(page);
+      // The panel at the right is open: a floating panel in the right half, as tall as the page
+      await page.waitForFunction(
+        () =>
+          Array.from(document.querySelectorAll('.mgd-ui [data-role="floating"]')).some((panel) => {
+            const r = panel.getBoundingClientRect();
+            return r.left > window.innerWidth / 2 && r.height > window.innerHeight / 2;
+          }),
+        undefined,
+        { timeout: browserTimeout(10_000) },
+      );
+      await check('with a feature selected');
+      await context.close();
+      expect(errors).toEqual([]);
+    }
   });
 
   it('has its switches in the card of actions, which a press and Shift with a letter run, and which show changes made by code', {
