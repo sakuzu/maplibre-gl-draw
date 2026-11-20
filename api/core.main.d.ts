@@ -1293,8 +1293,8 @@ export interface FeaturesCollection {
      * @returns The counts of the edit, or `null` when the move is refused (read-only, or every
      *   feature is locked)
      * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
-     *   the wrong shape, a position is not finite or the provider does not compute the move;
-     *   nothing moves then
+     *   the wrong shape, a position is not finite or has a latitude outside -90 to 90, or the
+     *   provider does not compute the move; nothing moves then
      */
     translate(target: FeatureTarget, translation: Translation, options?: EditOptions): Promise<EditCounts | null>;
     /**
@@ -1319,8 +1319,8 @@ export interface FeaturesCollection {
      * @returns The counts of the edit, or `null` when the rotation is refused (read-only, or
      *   every feature is locked)
      * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
-     *   the wrong shape, the center or the angle is not finite, or the provider does not compute
-     *   the rotation; nothing turns then
+     *   the wrong shape, the center or the angle is not finite, the center has a latitude outside
+     *   -90 to 90, or the provider does not compute the rotation; nothing turns then
      */
     rotate(target: FeatureTarget, rotation: Rotation, options?: EditOptions): Promise<EditCounts | null>;
     /**
@@ -1340,8 +1340,9 @@ export interface FeaturesCollection {
      * @returns The counts of the edit, or `null` when the change is refused (read-only, or every
      *   feature is locked)
      * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
-     *   the wrong shape, the center is not finite, a factor is not a finite number above 0, or
-     *   the provider does not compute the scaling; nothing changes then
+     *   the wrong shape, the center is not finite or has a latitude outside -90 to 90, a factor
+     *   is not a finite number above 0, or the provider does not compute the scaling; nothing
+     *   changes then
      */
     scale(target: FeatureTarget, scaling: Scaling, options?: EditOptions): Promise<EditCounts | null>;
     /**
@@ -2169,6 +2170,14 @@ export interface IndexRange {
  * the WGS 84 ellipsoid so that it keeps its offset in meters, east and north, from `from` as it
  * stands at `to` (the east, north and up axes of the earth at each of the two points). It is not
  * the difference of the longitudes and latitudes added to them.
+ *
+ * Longitudes are not brought back into -180 to 180. The features move the way the numbers of
+ * `from` and `to` say: from 179.5 to 180.5 is one degree east, across the antimeridian, and
+ * from 179.5 to -179.5 is 359 degrees west. Each longitude comes out as the value nearest to
+ * that move, so that a feature stays in one piece. A position carried over a pole comes out on
+ * the other side of it, half a turn of longitude away: a feature that lies across a pole after
+ * an operation is drawn across the world by a map, and the computation does not prevent it
+ * (the same holds for {@link Rotation} and {@link Scaling}).
  */
 export interface Translation {
     /** The point the features move from, as `[longitude, latitude]` in degrees (WGS 84) */
@@ -2198,9 +2207,11 @@ export interface Rotation {
  * (the opposite corner, or the middle of the opposite side) divided by that distance when the
  * drag started; a drag gives no factor below 0.1.
  *
- * The built-in computation scales the distances on the ground, in meters, along the east and the
- * north axes of the center on the WGS 84 ellipsoid: a position 100 m east of the center goes 200
- * m east of it with an `eastFactor` of 2. A factor of 1 changes nothing along its axis.
+ * The built-in computation scales the offsets in meters along the east and the north axes of
+ * the center, in the plane that touches the WGS 84 ellipsoid there: a position 100 m east of the
+ * center goes 200 m east of it with an `eastFactor` of 2. Far from the center the distances
+ * along the ground differ a little from the factor (100 km east scaled by 2 comes out about 40 m
+ * short of 200 km). A factor of 1 changes nothing along its axis.
  */
 export interface Scaling {
     /** The center, as `[longitude, latitude]` in degrees (WGS 84); it stays where it is */
@@ -2558,10 +2569,15 @@ export interface VertexSelection {
  *
  * - A vertex before the span keeps its index.
  * - A vertex after the span moves its index by the difference of the lengths of the ring.
- * - A vertex inside the span keeps its index when the ring keeps its length (the vertex was
- *   moved), and cannot be followed when the length changed.
+ * - A vertex inside the span cannot be followed when the length of the ring changed. When the
+ *   ring keeps its length, it goes to the index where its position is now, when the span holds
+ *   that position at one other index only (vertices were taken out and put in at once, or the
+ *   ring was turned around); otherwise it keeps its index (the vertex was moved).
  *
- * A vertex whose ring is not there after the change cannot be followed either. A vertex that a
+ * The rings are matched by their numbers only while there are as many of them as before: when
+ * the geometry has another type or another number of parts, no vertex of the feature can be
+ * followed, and when a part has another number of rings, no vertex of that part can be (a ring
+ * taken out would give its number to the next one). A vertex that a
  * drag of vertices cannot follow leaves the drag, as do the vertices of a feature that is
  * deleted or locked, and the drag goes on with the others (the other features of a drag of
  * shared vertices, say); it ends as cancelled (`drag.ended` with `cancelled: true`) only when

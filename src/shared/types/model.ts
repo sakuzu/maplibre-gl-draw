@@ -968,6 +968,14 @@ export interface DragState {
  * the WGS 84 ellipsoid so that it keeps its offset in meters, east and north, from `from` as it
  * stands at `to` (the east, north and up axes of the earth at each of the two points). It is not
  * the difference of the longitudes and latitudes added to them.
+ *
+ * Longitudes are not brought back into -180 to 180. The features move the way the numbers of
+ * `from` and `to` say: from 179.5 to 180.5 is one degree east, across the antimeridian, and
+ * from 179.5 to -179.5 is 359 degrees west. Each longitude comes out as the value nearest to
+ * that move, so that a feature stays in one piece. A position carried over a pole comes out on
+ * the other side of it, half a turn of longitude away: a feature that lies across a pole after
+ * an operation is drawn across the world by a map, and the computation does not prevent it
+ * (the same holds for {@link Rotation} and {@link Scaling}).
  */
 export interface Translation {
   /** The point the features move from, as `[longitude, latitude]` in degrees (WGS 84) */
@@ -997,9 +1005,11 @@ export interface Rotation {
  * (the opposite corner, or the middle of the opposite side) divided by that distance when the
  * drag started; a drag gives no factor below 0.1.
  *
- * The built-in computation scales the distances on the ground, in meters, along the east and the
- * north axes of the center on the WGS 84 ellipsoid: a position 100 m east of the center goes 200
- * m east of it with an `eastFactor` of 2. A factor of 1 changes nothing along its axis.
+ * The built-in computation scales the offsets in meters along the east and the north axes of
+ * the center, in the plane that touches the WGS 84 ellipsoid there: a position 100 m east of the
+ * center goes 200 m east of it with an `eastFactor` of 2. Far from the center the distances
+ * along the ground differ a little from the factor (100 km east scaled by 2 comes out about 40 m
+ * short of 200 km). A factor of 1 changes nothing along its axis.
  */
 export interface Scaling {
   /** The center, as `[longitude, latitude]` in degrees (WGS 84); it stays where it is */
