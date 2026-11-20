@@ -164,6 +164,43 @@ function optionalNumber(
   }
 }
 
+/** The keys of `properties` a feature type may name in its `transformFields` */
+const TRANSFORM_FIELD_KEYS: readonly ('rotationDegreesKey' | 'bearingDegreesKey' | 'sizeKey')[] = [
+  'rotationDegreesKey',
+  'bearingDegreesKey',
+  'sizeKey',
+];
+
+/**
+ * Checks the `transformFields` of a feature type, when it has them: an object whose keys are
+ * non-empty strings and whose `isScaledUniformly` is a boolean, each of them optional
+ */
+function checkTransformFields(fields: unknown): void {
+  const kind = 'feature type';
+  if (fields === undefined) return;
+  if (!isObject(fields)) {
+    throw wrongShape(kind, 'has transformFields that is not an object', 'transformFields');
+  }
+  for (const key of TRANSFORM_FIELD_KEYS) {
+    const name = fields[key];
+    if (name !== undefined && (typeof name !== 'string' || name === '')) {
+      throw wrongShape(
+        kind,
+        `has transformFields.${key} that is not a non-empty string`,
+        `transformFields.${key}`,
+      );
+    }
+  }
+  const uniform = fields.isScaledUniformly;
+  if (uniform !== undefined && typeof uniform !== 'boolean') {
+    throw wrongShape(
+      kind,
+      'has transformFields.isScaledUniformly that is not a boolean',
+      'transformFields.isScaledUniformly',
+    );
+  }
+}
+
 /**
  * Checks that a value has the shape of an extension of the kind; the name is not checked
  *
@@ -194,6 +231,7 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       if (!isObject(renderer)) throw wrongShape(kind, 'must have a renderer', 'renderer');
       requireFunctions(kind, renderer, ['onAdd', 'draw', 'onRemove'], [], 'renderer.');
       optionalNumber(kind, value, 'hitPaddingPx', true);
+      checkTransformFields(value.transformFields);
       return;
     }
     case 'overlay':

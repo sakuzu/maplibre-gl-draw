@@ -28,6 +28,43 @@ export interface Handle {
 }
 
 /**
+ * The fields of the features of a type that the moves, rotations and scalings change with their
+ * geometry, as the type declares them (`FeatureTypeDefinition.transformFields`): the keys of
+ * `properties` that hold them. A feature without a key of them starts from 0 for a rotation and
+ * a direction, and from 1 for a size.
+ *
+ * For example, a type of signboards whose features keep their rotation under `boardAngle` and the
+ * factor of their size under `boardScale`, and keep their shape when they are scaled, declares
+ * `{ rotationDegreesKey: 'boardAngle', sizeKey: 'boardScale', isScaledUniformly: true }`.
+ */
+export interface TransformFields {
+  /**
+   * The key that holds the rotation of a feature, in degrees counterclockwise seen from above.
+   * A rotation adds its angle to it, within [0, 360). A rotation of a single feature of a
+   * `Point` geometry with this key turns it about its position.
+   */
+  readonly rotationDegreesKey?: string;
+  /**
+   * The key that holds a direction of a feature, in degrees clockwise from the north, unlike
+   * `rotationDegreesKey` (a turn counterclockwise of the shape itself) (a
+   * bearing): the direction a symbol on a point faces, say. A rotation takes its angle away from
+   * it, within [0, 360), so the feature still faces the same way on the ground after it.
+   */
+  readonly bearingDegreesKey?: string;
+  /**
+   * The key that holds the factor of the size of a feature, 1 for the size it was made at. A
+   * scaling multiplies it by `sizeFactor`.
+   */
+  readonly sizeKey?: string;
+  /**
+   * Whether a scaling moves the positions of a feature by `sizeFactor` along both the east and
+   * the north, so that it keeps its shape, in place of `eastFactor` and `northFactor`; false
+   * when it is left out.
+   */
+  readonly isScaledUniformly?: boolean;
+}
+
+/**
  * The definition of a custom feature type. Its handles and snapping candidates are written
  * here; a provider is only for the types an extension does not define.
  */
@@ -57,6 +94,21 @@ export interface FeatureTypeDefinition {
    * definition given to `add`: a custom type takes every feature of its type.
    */
   appliesTo?(feature: Feature): boolean;
+  /**
+   * The fields of its features that the moves, rotations and scalings change with their
+   * geometry: the keys of `properties` that hold their rotation, their direction and their
+   * size, and whether a scaling keeps their shape. The bulk edits `rotate` and `scale` write
+   * them (and so do the drags of the rotate and resize handles, which write with them), and the
+   * computation of moves is given their values (`TransformInput.rotationDegrees`,
+   * `bearingDegrees`, `size` and `isScaledUniformly`).
+   *
+   * A definition that overrides a built-in type can declare them for the features it takes
+   * (`appliesTo`): a point that shows a symbol turned to a direction declares the key of that
+   * direction. Without it, the moves, rotations and scalings change the geometry of the features
+   * only, whatever keys they have; the built-in types have their own (the rotation and the
+   * factor of an image, the radius of a circle).
+   */
+  readonly transformFields?: TransformFields;
   /**
    * The extent of a feature on the map, `[west, south, east, north]` in degrees, for a type
    * that draws beyond its geometry by a distance on the ground. The spatial index takes it:

@@ -5,6 +5,7 @@
  * `draw.features`: the features of the document
  */
 
+import type { Rotation, Scaling, Translation } from '../shared/types/model.js';
 import type { UpdateSource } from './extension/store.js';
 import type {
   Feature,
@@ -272,6 +273,84 @@ export interface FeaturesCollection {
     ids: readonly string[],
     options: { distanceMeters: number; segments?: number },
   ): Feature[] | null;
+  /**
+   * Moves features as a move from one point to another moves them, the same for every
+   * feature: a bulk edit, in parts (see {@link FeaturesCollection}).
+   *
+   * The built-in interactions write with this method: a drag of the selection calls it once,
+   * when the pointer is let go of, on the features the drag moves then (`featureIds` of
+   * `drag.ended`: those deleted or taken out of the drag meanwhile are not among them; the
+   * drag itself writes nothing, see `drag.changed`), and a move with the arrow keys calls it
+   * for every key, on `{ selection: true }`. The positions are computed by the provider set
+   * with `draw.extensions.setTransformProvider`, or by the built-in computation (see
+   * {@link Translation}).
+   *
+   * @param target - The features to move; none gives counts of 0
+   * @param translation - The point the features move from and the point they move to
+   * @param options - Where the writes come from, and whether they ignore the locks
+   * @returns The counts of the edit, or `null` when the move is refused (read-only, or every
+   *   feature is locked)
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
+   *   the wrong shape, a position is not finite or has a latitude outside -90 to 90, or the
+   *   provider does not compute the move; nothing moves then
+   */
+  translate(
+    target: FeatureTarget,
+    translation: Translation,
+    options?: EditOptions,
+  ): Promise<EditCounts | null>;
+  /**
+   * Turns features around a center by an angle, counterclockwise seen from above: a bulk
+   * edit, in parts (see {@link FeaturesCollection}).
+   *
+   * The built-in interactions write with this method: a drag of the rotate handle of the
+   * selection calls it once, when the pointer is let go of, on the features the drag changes
+   * then (`featureIds` of `drag.ended`). The positions, and the fields of
+   * rotation and direction of the features that have them (see
+   * {@link FeatureTypeDefinition.transformFields}), are computed by the provider set with
+   * `draw.extensions.setTransformProvider`, or by the built-in computation.
+   *
+   * An edit that turns a single feature of a `Point` geometry with a field of rotation turns it
+   * about its position (see {@link TransformFields.rotationDegreesKey}): the instance puts that
+   * position in `center` before the computation is called, so that a provider needs not know
+   * how many features the edit has.
+   *
+   * @param target - The features to turn; none gives counts of 0
+   * @param rotation - The center, as `[longitude, latitude]` in degrees, and the angle
+   * @param options - Where the writes come from, and whether they ignore the locks
+   * @returns The counts of the edit, or `null` when the rotation is refused (read-only, or
+   *   every feature is locked)
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
+   *   the wrong shape, the center or the angle is not finite, the center has a latitude outside
+   *   -90 to 90, or the provider does not compute the rotation; nothing turns then
+   */
+  rotate(
+    target: FeatureTarget,
+    rotation: Rotation,
+    options?: EditOptions,
+  ): Promise<EditCounts | null>;
+  /**
+   * Scales features from a center, by a factor along the east and one along the north: a bulk
+   * edit, in parts (see {@link FeaturesCollection}).
+   *
+   * The built-in interactions write with this method: a drag of a resize handle of the
+   * selection calls it once, when the pointer is let go of, on the features the drag changes
+   * then (`featureIds` of `drag.ended`). The positions, and the field of
+   * size of the features that have one (see {@link FeatureTypeDefinition.transformFields}),
+   * are computed by the provider set with `draw.extensions.setTransformProvider`, or by the
+   * built-in computation.
+   *
+   * @param target - The features to scale; none gives counts of 0
+   * @param scaling - The center, as `[longitude, latitude]` in degrees, and the factors
+   * @param options - Where the writes come from, and whether they ignore the locks
+   * @returns The counts of the edit, or `null` when the change is refused (read-only, or every
+   *   feature is locked)
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
+   *   the wrong shape, the center is not finite or has a latitude outside -90 to 90, a factor
+   *   is not a finite number above 0, or the provider does not compute the scaling; nothing
+   *   changes then
+   */
+  scale(target: FeatureTarget, scaling: Scaling, options?: EditOptions): Promise<EditCounts | null>;
 }
 
 /**

@@ -5,10 +5,19 @@
  * `draw.features`: the features of the document
  */
 
+import type { Position } from 'geojson';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
+import {
+  createTransformWork,
+  rotationCenterOf,
+  type TransformDeps,
+} from '../../operations/bulk-transform.js';
+import { createBuiltInTransform } from '../../shared/math/enu-transform.js';
 import { drawPropertyKey } from '../../shared/properties.js';
+import type { TransformOperation } from '../../shared/types/model.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
+import type { Store as RowStore } from '../../store/built-in/types.js';
 import type { DocumentAccess, FeatureMatch } from '../../store/document-access.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -18,7 +27,8 @@ import type {
 } from '../../store/types.js';
 import { getStyleRuleChannel, resolveFeatureStyle } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
-import type { FeaturesCollection } from '../features.js';
+import type { ExtensionsCollections } from '../extensions.js';
+import type { EditCounts, EditOptions, FeaturesCollection, FeatureTarget } from '../features.js';
 import type {
   Feature,
   FeatureFilter,
@@ -28,6 +38,8 @@ import type {
   MoveTarget,
 } from '../model.js';
 import type { RuntimeOptions } from '../options.js';
+import type { BulkEdits } from './bulk-edits.js';
+import { OVERRIDABLE_TYPES } from './extensions.js';
 import { applyResult } from './geometry/apply.js';
 import { runBuffer } from './geometry/buffer.js';
 import { runSplit } from './geometry/split.js';
@@ -78,12 +90,77 @@ const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'shown', 'locked',
 const LIST_LIMIT = 10_000;
 
 /**
- * Creates `draw.features`
+ * What the bulk edits of `draw.features` are written with
  *
  * @internal
  */
-export function createFeatures(deps: ResourceDeps): FeaturesCollection {
+export interface FeatureBulkDeps {
+  /** The bulk edits of the instance */
+  readonly edits: BulkEdits;
+  /** The computation set and the feature types, read only */
+  readonly extensions: Pick<ExtensionsCollections, 'getTransformProvider' | 'featureTypes'>;
+  /** The Store of the instance, whose rows the moves, rotations and scalings read */
+  readonly store: RowStore;
+}
+
+/**
+ * Creates `draw.features`
+ *
+ * @param bulk - What the bulk edits are written with; `translate`, `rotate` and `scale` throw
+ *   `invalidState` without it
+ * @internal
+ */
+export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): FeaturesCollection {
   const { store } = deps;
+  // The computation used when none is set, made once for the instance
+  const builtInTransform = createBuiltInTransform();
+  const transformDeps: TransformDeps | undefined = bulk && {
+    layer: store,
+    store: bulk.store,
+    typeOf: (type) => {
+      const definition = bulk.extensions.featureTypes.get(type);
+      return definition && { definition, overrides: OVERRIDABLE_TYPES.has(type) };
+    },
+  };
+
+  /**
+   * Starts a move, a rotation or a scaling of features: the computation is the one set when it
+   * starts, asked whether it computes the operation once the target is read; a wrong input
+   * rejects the promise, and changes nothing
+   */
+  const startTransform = (
+    target: FeatureTarget,
+    options: EditOptions | undefined,
+    read: () => TransformOperation,
+  ): Promise<EditCounts | null> => {
+    if (!bulk || !transformDeps) {
+      throw new DrawError('invalidState', 'The bulk edits are not available on these features');
+    }
+    try {
+      const operation = read();
+      return bulk.edits.start(target, options, (started) => {
+        let computed = operation;
+        // A single feature of a Point geometry with a field of rotation turns about its position
+        if (operation.kind === 'rotate') {
+          // Its position is read to make the values written: the edit being written is applied
+          // to it first
+          if (started.onlyId !== undefined) store.applyEditFirst?.(started.onlyId);
+          const center = rotationCenterOf(transformDeps, started.onlyId);
+          if (center) computed = { ...operation, center };
+        }
+        const provider = bulk.extensions.getTransformProvider() ?? builtInTransform;
+        if (!provider.accepts(computed)) {
+          throw invalidInput(
+            `The computation ${JSON.stringify(provider.name)} does not compute it`,
+          );
+        }
+        return createTransformWork(transformDeps, provider, computed, started.operationId);
+      });
+    } catch (error) {
+      if (error instanceof DrawError && error.code === 'invalidInput') return Promise.reject(error);
+      throw error;
+    }
+  };
   const geometryDeps: GeometryDeps = {
     store,
     generateFeatureId: deps.generateId,
@@ -309,6 +386,42 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       return results.map((resultId) => store.getFeature(resultId) as StoredFeature);
     },
 
+    translate: (target, translation, options) =>
+      startTransform(target, options, () => {
+        requireRecord(translation, 'The translation');
+        return {
+          kind: 'translate',
+          from: requirePosition(translation.from, 'from'),
+          to: requirePosition(translation.to, 'to'),
+        };
+      }),
+
+    rotate: (target, rotation, options) =>
+      startTransform(target, options, () => {
+        requireRecord(rotation, 'The rotation');
+        const center = requirePosition(rotation.center, 'center');
+        const { counterclockwiseDegrees } = rotation;
+        if (
+          typeof counterclockwiseDegrees !== 'number' ||
+          !Number.isFinite(counterclockwiseDegrees)
+        ) {
+          throw invalidInput('counterclockwiseDegrees must be a finite number');
+        }
+        return { kind: 'rotate', center, counterclockwiseDegrees };
+      }),
+
+    scale: (target, scaling, options) =>
+      startTransform(target, options, () => {
+        requireRecord(scaling, 'The scaling');
+        return {
+          kind: 'scale',
+          center: requirePosition(scaling.center, 'center'),
+          eastFactor: requireFactor(scaling.eastFactor, 'eastFactor'),
+          northFactor: requireFactor(scaling.northFactor, 'northFactor'),
+          sizeFactor: requireFactor(scaling.sizeFactor, 'sizeFactor'),
+        };
+      }),
+
     buffer(ids, options) {
       const inputs = inStackingOrder(requireAllToWrite(ids));
       requireRecord(options, 'The options');
@@ -387,6 +500,40 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     if (resultId === null) return null;
     return store.getFeature(resultId) ?? null;
   }
+}
+
+// ============================================================================
+// The moves, rotations and scalings
+// ============================================================================
+
+/**
+ * A point of a move, a rotation or a scaling, copied (the edit reads it while it writes): a
+ * longitude and a latitude, finite, the latitude from -90 to 90 (what follows them is copied)
+ */
+function requirePosition(value: unknown, name: string): Position {
+  if (
+    !Array.isArray(value) ||
+    value.length < 2 ||
+    typeof value[0] !== 'number' ||
+    !Number.isFinite(value[0]) ||
+    typeof value[1] !== 'number' ||
+    !Number.isFinite(value[1])
+  ) {
+    throw invalidInput(`${name} must be [longitude, latitude] in degrees, finite numbers`);
+  }
+  const latitude = value[1];
+  if (latitude < -90 || latitude > 90) {
+    throw invalidInput(`The latitude of ${name} must be from -90 to 90`);
+  }
+  return [...(value as number[])];
+}
+
+/** A factor of a scaling: a finite number above 0 */
+function requireFactor(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !(value > 0)) {
+    throw invalidInput(`${name} must be a finite number above 0`);
+  }
+  return value;
 }
 
 // ============================================================================

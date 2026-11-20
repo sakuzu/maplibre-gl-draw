@@ -64,10 +64,16 @@ export function createDrawOnEngine(
     getZoom: () => map.getZoom(),
     spatialIndex: context.spatialIndex,
   };
-  const features = createFeatures(deps);
-  const groups = createGroups(deps);
   // The edits of any number of features, written in parts, one at a time
   const edits = createBulkEdits(store, exposedStore);
+  // The bulk edits of the features read the computation set and the feature types, and the
+  // rows of the Store
+  const features = createFeatures(deps, {
+    edits,
+    extensions: engine.extensions.collections,
+    store: exposedStore,
+  });
+  const groups = createGroups(deps);
   // Set once destroy has run to the end, so that the extensions removed by it can still read
   // the instance
   let destroyed = false;

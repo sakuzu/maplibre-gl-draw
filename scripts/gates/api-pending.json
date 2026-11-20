@@ -36,15 +36,6 @@
     "20": {
       "main:sig:FeaturesCollection.deleteMany": "c679da1dea719c50fd8645606d7afacb0a0b43eb2f4df956a56e17f04b09cc58"
     },
-    "21": {
-      "main:added:FeaturesCollection.translate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "22": {
-      "main:added:FeaturesCollection.rotate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "23": {
-      "main:added:FeaturesCollection.scale": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "24": {
       "main:added:FeaturesCollection.duplicate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
@@ -183,14 +174,6 @@
     },
     "91": {
       "main:sig:FeatureTypeDefinition.appliesTo": "c41cbb00276f90b9d43ff4b9fc614e3898f026f0381f70b28bfe1eb584bc2308"
-    },
-    "92": {
-      "main:added:FeatureTypeDefinition.transformFields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformFields": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformFields.bearingDegreesKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformFields.isScaledUniformly": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformFields.rotationDegreesKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:TransformFields.sizeKey": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "93": {
       "main:added:FeatureCandidate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",

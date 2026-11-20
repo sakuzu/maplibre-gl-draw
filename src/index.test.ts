@@ -163,6 +163,7 @@ const MAIN = [
   'TopologyOptions',
   'TracingOptions',
   'TransactOptions',
+  'TransformFields',
   'TransformInput',
   'TransformOperation',
   'TransformOutput',

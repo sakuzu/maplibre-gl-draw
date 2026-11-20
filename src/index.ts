@@ -182,7 +182,11 @@ export type {
   SnapContext,
   TerrainAnchors,
 } from './api/extension/context.js';
-export type { FeatureTypeDefinition, Handle } from './api/extension/feature-type.js';
+export type {
+  FeatureTypeDefinition,
+  Handle,
+  TransformFields,
+} from './api/extension/feature-type.js';
 export type {
   DrawKeyEvent,
   DrawPointerEvent,
