@@ -296,6 +296,9 @@
       "main:added:SketchEdit{2}.featureId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.kind": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:SketchEdit{2}.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    "180": {
+      "store:doc:StoreView.transact": "6dc48f0bdb35f7c889b0e0803bd134d407db046fec9387baff199a735a126bf5"
     }
   }
 }
