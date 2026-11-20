@@ -60,7 +60,8 @@ import type {
  * order, so the edits are never mixed feature by feature). A write of a few features of this
  * client (a click, a key, `update` and the other methods above) does not wait: when it touches
  * features that the edit being written has not reached yet, the edit is first applied to those
- * features only, as a part of it, and then the write is made. The order of the edits is kept so,
+ * features only, as a part of it (inside a transaction that is already open, as a part of that
+ * transaction), and then the write is made. The order of the edits is kept so,
  * and the work is that of the features touched. A change written to the Store directly from
  * outside the instance is applied at once, and may arrive between two parts; a later part reads
  * the values the features have then.
