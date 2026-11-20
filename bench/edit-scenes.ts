@@ -265,6 +265,31 @@ async function rest(ctx: SceneContext): Promise<void> {
   await ctx.settle();
 }
 
+/** What the ledger of the GPU memory of the drawing tells (the numbers the scene notes) */
+interface GpuMemoryRead {
+  readonly bytes: number;
+  readonly rowBytes: number;
+  readonly outsideRowBytes: number;
+  readonly objects: number;
+  readonly byPart: Readonly<Record<string, number>>;
+}
+
+/**
+ * What the drawing of the page holds on the GPU, read from the ledger of its instance: the
+ * custom layer of the drawing on the map holds it. Not part of the interface of the library
+ * (the page reads it from the layer, as a measuring tool does), so null when it is not there
+ */
+function gpuMemoryOf(map: maplibregl.Map): GpuMemoryRead | null {
+  for (const { id } of map.getStyle()?.layers ?? []) {
+    const layer = map.getLayer(id) as
+      | { implementation?: { getGpuLedger?: () => { snapshot(): GpuMemoryRead } } }
+      | undefined;
+    const ledger = layer?.implementation?.getGpuLedger?.();
+    if (ledger) return ledger.snapshot();
+  }
+  return null;
+}
+
 /**
  * The scenes of the bulk edits that move, turn and scale every feature selected
  * (`draw.features.translate`, `rotate` and `scale` on `{ selection: true }`), about the middle of
@@ -911,6 +936,27 @@ export const SCENES: readonly Scene[] = [
     async run(ctx, { store }) {
       const keys = ctx.input(() => store.listPropertyKeys());
       ctx.note('keys', keys.length);
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'gpuMemory',
+    label:
+      'Read what the drawing holds on the GPU with the document open, per part: the rows, and ' +
+      'what is held outside them under the limit',
+    async prepare(ctx) {
+      await ctx.openDocument();
+      ctx.draw.selection.clear();
+      await rest(ctx);
+    },
+    async run(ctx) {
+      const held = ctx.input(() => gpuMemoryOf(ctx.map));
+      if (!held) throw new Error('the drawing of the page has no ledger of its GPU memory');
+      ctx.note('bytes', held.bytes);
+      ctx.note('rowBytes', held.rowBytes);
+      ctx.note('outsideRowBytes', held.outsideRowBytes);
+      ctx.note('objects', held.objects);
+      for (const [part, bytes] of Object.entries(held.byPart)) ctx.note(`part:${part}`, bytes);
       await ctx.settle();
     },
   }),

@@ -96,6 +96,7 @@ instance read-only, and writable again after the scene).
 | `delete` | Deletes every feature selected with `draw.selection.delete` |
 | `import` | `draw.document.load` of a GeoJSON `File` into the layer |
 | `export` | `draw.document.toJSON` and `JSON.stringify` of the document |
+| `gpuMemory` | Reads what the drawing holds on the GPU, per part, the document open |
 
 `open` and `import` start from a document with the layer and no
 features. The box and the drag are made with the events of the mouse sent

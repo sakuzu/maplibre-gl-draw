@@ -61,6 +61,7 @@ describe('the scenes', () => {
       'storePages',
       'storeStyleKey',
       'storePropertyKeys',
+      'gpuMemory',
     ]);
   });
 });
