@@ -82,6 +82,16 @@ export function buildTerrainMeshArrays(meshSize: number): {
 }
 
 /**
+ * The bytes the buffers of a mesh hold: its vertices (2 shorts each) and its indices (6 per cell,
+ * 4 bytes each)
+ *
+ * @internal
+ */
+export function terrainMeshBytes(meshSize: number): number {
+  return (meshSize + 1) * (meshSize + 1) * 2 * 2 + meshSize * meshSize * 6 * 4;
+}
+
+/**
  * Uploads the mesh to the GPU
  *
  * One mesh is enough regardless of the tile (the tile coordinate system is common).

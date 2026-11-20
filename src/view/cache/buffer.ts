@@ -6,6 +6,9 @@
  *
  * A class for caching and reusing WebGL VAOs and buffers.
  * It improves performance by eliminating per-frame VAO/buffer creation and deletion.
+ *
+ * What it holds stays within the ceiling of its part in the GPU ledger: past it, the oldest
+ * entries go first, and an entry that went is made again when it is drawn next.
  */
 
 import type { GpuLedgerPart } from '../gpu-ledger.js';
@@ -22,6 +25,8 @@ export interface CachedGeometry {
   geometryHash: string;
   /** Time of last use (for LRU) */
   lastUsed: number;
+  /** The bytes of the buffer */
+  bytes: number;
 }
 
 /**
@@ -38,15 +43,33 @@ export class BufferCache {
   private maxCacheSize: number;
   /** Where what the cache holds on the GPU is recorded, and under which part */
   private readonly ledger: GpuLedgerPart;
+  /** The most bytes the buffers hold, with a buffer drawn once (the ceiling of the part) */
+  private readonly maxBytes: number;
+  /** The bytes the buffers of the entries hold */
+  private heldBytes = 0;
 
   constructor(gl: WebGL2RenderingContext, ledger: GpuLedgerPart, maxCacheSize = 2000) {
     this.gl = gl;
     this.ledger = ledger;
     this.maxCacheSize = maxCacheSize;
+    this.maxBytes = ledger.ledger.ceilingOf(ledger.part) ?? Number.POSITIVE_INFINITY;
+  }
+
+  /**
+   * Makes room for a buffer of a size, besides the entries, within the ceiling: the oldest
+   * entries go first
+   *
+   * @returns false when the buffer alone is larger than the ceiling (it is then not made)
+   */
+  makeRoom(bytes: number): boolean {
+    if (bytes > this.maxBytes) return false;
+    while (this.heldBytes + bytes > this.maxBytes && this.cache.size > 0) this.evictOldest();
+    return true;
   }
 
   /** Deletes the VAO and the buffer of a geometry, and takes them out of the ledger */
   private deleteGeometry(cached: CachedGeometry): void {
+    this.heldBytes -= cached.bytes;
     this.ledger.ledger.release(cached.vao);
     this.ledger.ledger.release(cached.buffer);
     this.gl.deleteVertexArray(cached.vao);
@@ -59,6 +82,7 @@ export class BufferCache {
    * @param key Cache key (for example "feature_1:fill")
    * @param geometryHash Hash of the geometry (regenerated when the coordinates change)
    * @param createFn Function that creates the geometry
+   * @returns null when the geometry alone is larger than the ceiling of the part (not drawn)
    */
   getOrCreate(
     key: string,
@@ -70,7 +94,7 @@ export class BufferCache {
       stride: number;
       attributes: Array<{ index: number; size: number; offset: number }>;
     },
-  ): CachedGeometry {
+  ): CachedGeometry | null {
     const cached = this.cache.get(key);
 
     // If an entry is cached and its hash matches, reuse it
@@ -91,6 +115,7 @@ export class BufferCache {
 
     // Create the new geometry
     const { vertices, vertexCount, drawMode, stride, attributes } = createFn();
+    if (!this.makeRoom(vertices.byteLength)) return null;
 
     const gl = this.gl;
     const { ledger, part } = this.ledger;
@@ -118,8 +143,10 @@ export class BufferCache {
       drawMode,
       geometryHash,
       lastUsed: Date.now(),
+      bytes: vertices.byteLength,
     };
 
+    this.heldBytes += geometry.bytes;
     this.cache.set(key, geometry);
     return geometry;
   }

@@ -51,6 +51,7 @@ import {
   disposeTerrainMeshBuffers,
   type TerrainMeshBuffers,
   TILE_EXTENT,
+  terrainMeshBytes,
 } from './mesh.js';
 import {
   applyDrapeProjectionUniforms,
@@ -577,12 +578,20 @@ export class DrapeRenderer {
 
   /**
    * Allocates the shader and the mesh
+   *
+   * @returns false when they cannot be allocated, a mesh that does not fit under the limit of the
+   *   instance included: the caller then draws the frame without the analytic drape
    */
   ensure(shaderData: ShaderData, meshSize: number): boolean {
     const gl = this.gl;
 
     if (!this.mesh || this.mesh.meshSize !== meshSize) {
       if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
+      this.mesh = null;
+      if (!this.ledger.ledger.fits(terrainMeshBytes(meshSize))) {
+        this.lastError = `gpu-limit: the mesh of ${meshSize}`;
+        return false;
+      }
       this.mesh = createTerrainMeshBuffers(gl, meshSize, this.ledger);
       if (!this.mesh) {
         this.lastError = 'mesh-alloc-failed';

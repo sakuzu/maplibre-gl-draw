@@ -54,8 +54,11 @@ import {
   type QuadGridSize,
 } from './quad-grid.js';
 
-/** The part the images record what they hold on the GPU under */
-const IMAGES_PART = 'images';
+/**
+ * The part the quads and the grids of the images are recorded under in the GPU ledger (the
+ * textures of the images are recorded by the texture cache, under a part of their own)
+ */
+const IMAGE_QUADS_PART = 'imageQuads';
 
 /**
  * The four corners of a quad, each `[lng, lat]` in degrees, as {@link computeQuadVertices}
@@ -174,21 +177,21 @@ export class QuadShader {
     const ledger = this.ledger;
 
     this.vao = gl.createVertexArray();
-    ledger.record(this.vao, IMAGES_PART, 'vertex-array');
+    ledger.record(this.vao, IMAGE_QUADS_PART, 'vertex-array');
     gl.bindVertexArray(this.vao);
 
     // The position buffer (updated dynamically)
     this.positionBuffer = gl.createBuffer();
-    ledger.record(this.positionBuffer, IMAGES_PART, 'buffer');
+    ledger.record(this.positionBuffer, IMAGE_QUADS_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, 8 * 4, gl.DYNAMIC_DRAW); // 4 vertices x 2 components
-    ledger.record(this.positionBuffer, IMAGES_PART, 'buffer', 8 * 4);
+    ledger.record(this.positionBuffer, IMAGE_QUADS_PART, 'buffer', 8 * 4);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(0);
 
     // The texture coordinate buffer (fixed)
     this.texCoordBuffer = gl.createBuffer();
-    ledger.record(this.texCoordBuffer, IMAGES_PART, 'buffer');
+    ledger.record(this.texCoordBuffer, IMAGE_QUADS_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
     // prettier-ignore
     const texCoords = new Float32Array([
@@ -202,7 +205,7 @@ export class QuadShader {
       1.0, // bottom-right
     ]);
     gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-    ledger.record(this.texCoordBuffer, IMAGES_PART, 'buffer', texCoords.byteLength);
+    ledger.record(this.texCoordBuffer, IMAGE_QUADS_PART, 'buffer', texCoords.byteLength);
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(1);
 
@@ -232,7 +235,7 @@ export class QuadShader {
     }
 
     this.program = this.createQuadProgram(shaderData.vertexShaderPrelude, shaderData.define);
-    this.ledger.record(this.program, IMAGES_PART, 'program');
+    this.ledger.record(this.program, IMAGE_QUADS_PART, 'program');
     this.variantName = shaderData.variantName;
 
     // Obtain the projection uniform locations
@@ -466,7 +469,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.gridPositionBuffer);
     if (this.gridPositionCapacity < needed) {
       gl.bufferData(gl.ARRAY_BUFFER, offsets.subarray(0, needed), gl.DYNAMIC_DRAW);
-      this.ledger.record(this.gridPositionBuffer, IMAGES_PART, 'buffer', needed * 4);
+      this.ledger.record(this.gridPositionBuffer, IMAGE_QUADS_PART, 'buffer', needed * 4);
       this.gridPositionCapacity = needed;
     } else {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, offsets.subarray(0, needed));
@@ -485,13 +488,13 @@ void main() {
     if (!this.gridVao) {
       const ledger = this.ledger;
       this.gridVao = gl.createVertexArray();
-      ledger.record(this.gridVao, IMAGES_PART, 'vertex-array');
+      ledger.record(this.gridVao, IMAGE_QUADS_PART, 'vertex-array');
       this.gridPositionBuffer = gl.createBuffer();
-      ledger.record(this.gridPositionBuffer, IMAGES_PART, 'buffer');
+      ledger.record(this.gridPositionBuffer, IMAGE_QUADS_PART, 'buffer');
       this.gridTexCoordBuffer = gl.createBuffer();
-      ledger.record(this.gridTexCoordBuffer, IMAGES_PART, 'buffer');
+      ledger.record(this.gridTexCoordBuffer, IMAGE_QUADS_PART, 'buffer');
       this.gridIndexBuffer = gl.createBuffer();
-      ledger.record(this.gridIndexBuffer, IMAGES_PART, 'buffer');
+      ledger.record(this.gridIndexBuffer, IMAGE_QUADS_PART, 'buffer');
       if (
         !this.gridVao ||
         !this.gridPositionBuffer ||
@@ -515,10 +518,15 @@ void main() {
     gl.bindVertexArray(this.gridVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.gridTexCoordBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, grid.texCoords, gl.STATIC_DRAW);
-    this.ledger.record(this.gridTexCoordBuffer, IMAGES_PART, 'buffer', grid.texCoords.byteLength);
+    this.ledger.record(
+      this.gridTexCoordBuffer,
+      IMAGE_QUADS_PART,
+      'buffer',
+      grid.texCoords.byteLength,
+    );
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.gridIndexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, grid.indices, gl.STATIC_DRAW);
-    this.ledger.record(this.gridIndexBuffer, IMAGES_PART, 'buffer', grid.indices.byteLength);
+    this.ledger.record(this.gridIndexBuffer, IMAGE_QUADS_PART, 'buffer', grid.indices.byteLength);
     gl.bindVertexArray(null);
     return true;
   }

@@ -96,7 +96,9 @@ export class TextureCache {
    *
    * Call it while rendering. It returns null while the image is not decoded yet; the decode is
    * started once per src (every caller shares it), and `onReady` is called when it finishes so
-   * that a frame can be requested. A decode that finishes after dispose() is dropped.
+   * that a frame can be requested. A decode that finishes after dispose() is dropped. It also
+   * returns null while a decoded image has no room under the limit; the image is kept decoded and
+   * the next call tries again.
    *
    * @param src An embedded PNG/JPEG/WebP/GIF data URL
    * @param onReady Called when the decode has finished (not called on failure)
@@ -113,8 +115,11 @@ export class TextureCache {
 
     const decoded = this.decodedImages.get(src);
     if (decoded) {
-      this.decodedImages.delete(src);
-      return this.uploadImage(src, decoded);
+      // An image with no room for its texture waits decoded: a later frame tries again with the
+      // room it has then, with no decode and no frame asked for
+      const info = this.uploadImage(src, decoded);
+      if (info) this.decodedImages.delete(src);
+      return info;
     }
 
     if (this.failedImages.has(src) || this.loadingImages.has(src)) return null;

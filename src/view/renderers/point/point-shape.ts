@@ -547,6 +547,7 @@ void main() {
           attributes: [{ index: 0, size: 2, offset: 0 }],
         };
       });
+      if (!geometry) return;
 
       gl.bindVertexArray(geometry.vao);
       gl.drawArrays(geometry.drawMode, 0, geometry.vertexCount);
@@ -554,8 +555,10 @@ void main() {
       return;
     }
 
-    // No cache (a transient draw)
+    // No cache (a transient draw), within the ceiling of the part with what the cache holds
     const vertices = build(outerRatio);
+    const data = toVertexData(vertices);
+    if (!this.bufferCache.makeRoom(data.byteLength)) return;
     const ledger = this.ledger;
     const vao = gl.createVertexArray();
     ledger.record(vao, POINT_SHAPES_PART, 'vertex-array');
@@ -564,7 +567,6 @@ void main() {
     const buffer = gl.createBuffer();
     ledger.record(buffer, POINT_SHAPES_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    const data = toVertexData(vertices);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     ledger.record(buffer, POINT_SHAPES_PART, 'buffer', data.byteLength);
 

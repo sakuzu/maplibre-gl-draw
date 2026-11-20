@@ -51,6 +51,7 @@ import {
   disposeTerrainMeshBuffers,
   type TerrainMeshBuffers,
   TILE_EXTENT,
+  terrainMeshBytes,
 } from './mesh.js';
 import { binQuadGlyphs } from './quad-glyphs.js';
 import { DRAPE_LIFT_RATIO, type DrapeLight } from './renderer.js';
@@ -563,6 +564,8 @@ interface GlyphBuffers {
   key: string;
   /** Serial number of the most recent use (LRU) */
   usedAt: number;
+  /** Serial number of the frame that used it last */
+  frame: number;
 }
 
 /** The uniforms specific to pasting an image */
@@ -616,6 +619,9 @@ export class QuadDrapeRenderer {
   /** A 1x1 texture bound to the samplers in frames that have no text */
   private placeholderTex: WebGLTexture | null = null;
   private useCounter = 0;
+  /** The frame the glyph data textures were used in last, and its serial number */
+  private lastFrame: QuadDrapeFrame | null = null;
+  private frameSerial = 0;
   /** The most recent failure reason (for diagnostics) */
   lastError = '';
   /** Where the bytes of the textures and of the mesh are recorded */
@@ -648,6 +654,13 @@ export class QuadDrapeRenderer {
     const gl = this.gl;
     if (this.mesh && this.mesh.meshSize === meshSize) return true;
     if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
+    this.mesh = null;
+    // A mesh that does not fit under the limit of the instance is not made: the quad is then
+    // drawn another way, without the drape
+    if (!this.ledger.ledger.fits(terrainMeshBytes(meshSize))) {
+      this.lastError = `gpu-limit: the mesh of ${meshSize}`;
+      return false;
+    }
     this.mesh = createTerrainMeshBuffers(gl, meshSize, this.ledger);
     if (!this.mesh) {
       this.lastError = 'mesh-alloc-failed';
@@ -750,7 +763,9 @@ export class QuadDrapeRenderer {
    * the same per-pixel evaluation.
    *
    * @returns true if it could be painted. false is returned only when the
-   *   resources cannot be prepared.
+   *   resources cannot be prepared, the glyph data textures that do not fit
+   *   under the limit of the instance included: the quad is then not painted
+   *   here at all (its text is never left out of a fill painted here).
    */
   drawSurface(
     corners: DrapeQuadCorners,
@@ -764,7 +779,15 @@ export class QuadDrapeRenderer {
     if (!slot) return false;
 
     const text = surface.text && surface.text.glyphCount > 0 ? surface.text : null;
-    const glyphs = text ? this.ensureGlyphBuffers(text) : null;
+    let glyphs: GlyphBuffers | null = null;
+    if (text) {
+      const held = this.ensureGlyphBuffers(text, frame);
+      if (held === 'refused') return false;
+      glyphs = held;
+    }
+    // A sampler that is not bound leads to undefined behavior, so something is bound even when
+    // there is no text
+    if (!glyphs && !this.ensurePlaceholder()) return false;
 
     return this.drawTiles(corners, opacity, frame, slot, (set) => {
       const fill = surface.fill;
@@ -818,14 +841,6 @@ export class QuadDrapeRenderer {
    */
   private bindPlaceholderSamplers(set: UniformSet): void {
     const gl = this.gl;
-    if (!this.placeholderTex) {
-      this.placeholderTex = createDataTexture(gl, 1, 1, this.ledger);
-      if (this.placeholderTex) {
-        gl.bindTexture(gl.TEXTURE_2D, this.placeholderTex);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.FLOAT, new Float32Array(4));
-        gl.bindTexture(gl.TEXTURE_2D, null);
-      }
-    }
     for (const [name, unit] of [
       ['u_atlas', UNIT_ATLAS],
       ['u_glyph_tex', UNIT_GLYPH],
@@ -835,6 +850,26 @@ export class QuadDrapeRenderer {
       gl.bindTexture(gl.TEXTURE_2D, this.placeholderTex);
       if (set[name]) gl.uniform1i(set[name], unit);
     }
+  }
+
+  /**
+   * Allocates the 1x1 texture bound when there is no text, under the limit of the instance
+   *
+   * @returns false when it cannot be allocated
+   */
+  private ensurePlaceholder(): boolean {
+    if (this.placeholderTex) return true;
+    if (!this.ledger.ledger.fits(textureBytes(1, 1, 16))) {
+      this.lastError = 'gpu-limit: the placeholder texture';
+      return false;
+    }
+    const gl = this.gl;
+    this.placeholderTex = createDataTexture(gl, 1, 1, this.ledger);
+    if (!this.placeholderTex) return false;
+    gl.bindTexture(gl.TEXTURE_2D, this.placeholderTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.FLOAT, new Float32Array(4));
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return true;
   }
 
   /**
@@ -948,15 +983,27 @@ export class QuadDrapeRenderer {
   }
 
   /**
-   * Allocates the glyph data textures (no repacking if the key is the same)
+   * Allocates the glyph data textures (no repacking if the key is the same), under the limit of
+   * the instance: the ones not used in this frame go first when they do not fit
+   *
+   * @returns null when there is no glyph to draw, and `'refused'` when they cannot be allocated
+   *   (the text would be missing)
    */
-  private ensureGlyphBuffers(text: QuadDrapeGlyphs): GlyphBuffers | null {
+  private ensureGlyphBuffers(
+    text: QuadDrapeGlyphs,
+    frame: QuadDrapeFrame,
+  ): GlyphBuffers | null | 'refused' {
     const gl = this.gl;
     this.useCounter++;
+    if (frame !== this.lastFrame) {
+      this.lastFrame = frame;
+      this.frameSerial++;
+    }
 
     const cached = this.glyphCache.get(text.key);
     if (cached) {
       cached.usedAt = this.useCounter;
+      cached.frame = this.frameSerial;
       return cached;
     }
 
@@ -967,13 +1014,20 @@ export class QuadDrapeRenderer {
     const texels = bins.entryCount * 2;
     const glyphRows = Math.max(1, Math.ceil(texels / GLYPH_TEX_WIDTH));
 
+    const bytes =
+      textureBytes(GLYPH_TEX_WIDTH, glyphRows, 16) + textureBytes(bins.grid, bins.grid, 16);
+    if (!this.makeGlyphRoom(bytes)) {
+      this.lastError = 'gpu-limit: glyph textures';
+      return 'refused';
+    }
+
     const glyphTex = createDataTexture(gl, GLYPH_TEX_WIDTH, glyphRows, this.ledger);
     const binTex = createDataTexture(gl, bins.grid, bins.grid, this.ledger);
     if (!glyphTex || !binTex) {
       if (glyphTex) this.deleteTexture(glyphTex);
       if (binTex) this.deleteTexture(binTex);
       this.lastError = 'glyph-texture-alloc-failed';
-      return null;
+      return 'refused';
     }
 
     const payload = new Float32Array(GLYPH_TEX_WIDTH * glyphRows * 4);
@@ -1002,10 +1056,31 @@ export class QuadDrapeRenderer {
       grid: bins.grid,
       key: text.key,
       usedAt: this.useCounter,
+      frame: this.frameSerial,
     };
     this.glyphCache.set(text.key, entry);
     this.evictGlyphBuffers();
     return entry;
+  }
+
+  /**
+   * Gives up the glyph data textures not used in this frame, the oldest first, until a size fits
+   * under the limit of the instance
+   *
+   * @returns whether it fits
+   */
+  private makeGlyphRoom(bytes: number): boolean {
+    const { ledger } = this.ledger;
+    if (ledger.fits(bytes)) return true;
+    const sorted = [...this.glyphCache.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt);
+    for (const [key, entry] of sorted) {
+      if (entry.frame === this.frameSerial) continue;
+      this.deleteTexture(entry.glyphTex);
+      this.deleteTexture(entry.binTex);
+      this.glyphCache.delete(key);
+      if (ledger.fits(bytes)) return true;
+    }
+    return false;
   }
 
   /**
@@ -1041,6 +1116,7 @@ export class QuadDrapeRenderer {
       this.deleteTexture(entry.binTex);
     }
     this.glyphCache.clear();
+    this.lastFrame = null;
     if (this.placeholderTex) {
       this.deleteTexture(this.placeholderTex);
       this.placeholderTex = null;

@@ -18,9 +18,11 @@
  * swapped), the GL holds nothing and neither does the ledger. A part that forgets something is
  * found there: it is deleted and counted.
  *
- * Then the limit: the bytes held outside the rows stay under it (the images give up what is not
- * on the screen, draw smaller and wait; the drape draws without its tables), the rows are not held
- * under it, and what is held outside the rows does not grow with the features.
+ * Then the limit: after every allocation, the bytes held outside the rows stay under it, each part
+ * that is always held within its ceiling and the parts that give way within their share (the
+ * images give up what is not on the screen, draw smaller and wait, keeping their decoded image;
+ * the drape draws without its tables, its meshes or its glyphs), the rows are not held under it,
+ * and what is held outside the rows does not grow with the features.
  */
 
 import { readdir, readFile } from 'node:fs/promises';
@@ -44,14 +46,28 @@ import {
   gridPoints,
   renderInput,
 } from '../test-utils.js';
+import { BufferCache } from './cache/buffer.js';
 import { TextureCache } from './cache/texture.js';
-import { GpuLedger, mipmappedTextureBytes } from './gpu-ledger.js';
+import {
+  DEFAULT_GPU_LIMIT_BYTES,
+  GPU_FLOOR_BYTES,
+  GpuLedger,
+  HELD_PART_CEILINGS,
+  mipmappedTextureBytes,
+} from './gpu-ledger.js';
 import { createRenderScope } from './layer/render-scope.js';
 import { disposeRenderers, initRenderers } from './layer/renderers.js';
 import { createProgram } from './shaders/helpers.js';
-import { DemAtlas } from './terrain/dem-atlas.js';
+import { computeAtlasLayout, DemAtlas } from './terrain/dem-atlas.js';
+import { terrainMeshBytes } from './terrain/drape/mesh.js';
+import {
+  type DrapeQuadCorners,
+  type QuadDrapeFrame,
+  QuadDrapeRenderer,
+  type QuadDrapeSurface,
+} from './terrain/drape/quad.js';
 import { DrapeRenderer } from './terrain/drape/renderer.js';
-import { getTerrainDrapeDebug } from './terrain/state.js';
+import { getTerrainDrapeDebug, isTerrainElevationActive } from './terrain/state.js';
 import { createSelectionScope } from './ui/selection-scope.js';
 
 // ---------------------------------------------------------------------------
@@ -313,6 +329,8 @@ function storageGL() {
     state,
     /** The objects held, with their kind */
     live,
+    /** The storage of the objects held */
+    storage: storage as ReadonlyMap<object, Storage>,
     /** The bytes of the buffers held */
     bufferBytes: () => sum(['buffer']),
     /** The bytes of the textures and of the render buffers held */
@@ -373,6 +391,59 @@ function failingAt(mock: StorageGL, step: number): void {
   }
 }
 
+/** The parts that give way, as the ledger has them */
+const YIELDING_PARTS = new Set(['images', 'drape']);
+
+/**
+ * Watches what a GL holds after every allocation it is asked for (a mipmap chain made included):
+ * the bytes held outside the rows within the limit of the ledger, those of the parts that give way
+ * within their share, and those of each part that is always held within its ceiling. The bytes are
+ * the GL's, the parts the ledger's
+ */
+function watchLimits(mock: StorageGL, ledger: GpuLedger) {
+  const broken: string[] = [];
+  let allocations = 0;
+  const gl = mock.gl as unknown as Record<string, (...args: unknown[]) => unknown>;
+  for (const name of [...ALLOCATIONS, 'generateMipmap']) {
+    const call = gl[name] as (...args: unknown[]) => unknown;
+    gl[name] = (...args) => {
+      const result = call(...args);
+      allocations++;
+      let outside = 0;
+      let yielding = 0;
+      const held = new Map<string, number>();
+      for (const [object, { bytes }] of mock.storage) {
+        const part = ledger.partOf(object);
+        if (part === undefined) {
+          broken.push(`${name}: an object out of the ledger`);
+          continue;
+        }
+        if (ledger.ceilingOf(part) !== undefined) {
+          held.set(part, (held.get(part) ?? 0) + bytes);
+        } else if (YIELDING_PARTS.has(part)) {
+          yielding += bytes;
+        } else {
+          // The rows are not held under the limit
+          continue;
+        }
+        outside += bytes;
+      }
+      if (outside > ledger.limitBytes) {
+        broken.push(`${name}: ${outside} bytes outside the rows, over ${ledger.limitBytes}`);
+      }
+      if (yielding > ledger.shareBytes) {
+        broken.push(`${name}: ${yielding} bytes giving way, over ${ledger.shareBytes}`);
+      }
+      for (const [part, bytes] of held) {
+        const ceiling = ledger.ceilingOf(part) ?? 0;
+        if (bytes > ceiling) broken.push(`${name}: ${bytes} bytes of ${part}, over ${ceiling}`);
+      }
+      return result;
+    };
+  }
+  return { broken, allocations: (): number => allocations };
+}
+
 /** Counts the calls that give something storage */
 function countingAllocations(mock: StorageGL): () => number {
   let count = 0;
@@ -398,15 +469,22 @@ const PNG =
 /** The images decoded so far; a test finishes their decode */
 let images: FakeImage[] = [];
 
+/** The images made since the test began, each a decode */
+let imagesMade = 0;
+
+/** The size of the images the next decodes give */
+let imageSize = { width: 300, height: 100 };
+
 class FakeImage {
-  width = 300;
-  height = 100;
+  width = imageSize.width;
+  height = imageSize.height;
   crossOrigin = '';
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
   src = '';
   constructor() {
     images.push(this);
+    imagesMade++;
   }
 }
 
@@ -580,8 +658,83 @@ function fillDocument(instance: LedgerInstance): string[] {
   );
 }
 
+/** Puts images on the map, each of an image of its own */
+function placeImages(instance: LedgerInstance, count: number): void {
+  const { draw, store } = instance;
+  for (let i = 0; i < count; i++) {
+    // Another image for each: the cache keeps the textures by their data
+    const dataURL = PNG.replace('base64,', `base64,${'A'.repeat(4 * (i + 1))}`);
+    store.createFile({ id: `image-${i}`, mimeType: 'image/png', dataURL });
+  }
+  draw.features.createMany(
+    Array.from({ length: count }, (_, i) => ({
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [-0.6 + 0.3 * i, 0.2] },
+      properties: {
+        'maplibre-gl-draw:imageFileId': `image-${i}`,
+        'maplibre-gl-draw:imageWidth': 300,
+        'maplibre-gl-draw:imageHeight': 100,
+      },
+    })) as never,
+  );
+}
+
+/** Four corners around the place the map stub shows */
+const CORNERS: DrapeQuadCorners = {
+  topLeft: [-10, 10],
+  topRight: [10, 10],
+  bottomLeft: [-10, -10],
+  bottomRight: [10, -10],
+};
+
+/** A frame of the quad drape over the world tile, with a mesh of 4 */
+function quadFrame(renderer: QuadDrapeRenderer): QuadDrapeFrame {
+  const projection = renderInput().defaultProjectionData;
+  const data = {
+    texture: { id: 'dem' },
+    matrix: new Float64Array(16).fill(1),
+    unpack: [6553.6, 25.6, 0.1, 10000],
+    dim: 512,
+    exaggeration: 1,
+  };
+  return {
+    renderer,
+    shaderData: { variantName: 'mercator', vertexShaderPrelude: '', define: '' },
+    tiles: [{ x: 0, y: 0, z: 0, tileID: { key: '0/0/0' } }],
+    meshSize: 4,
+    light: { direction: [0, 0, 1], strength: 0 },
+    keepDepthTest: false,
+    getTerrainData: () => data,
+    getProjectionData: () => projection as never,
+  };
+}
+
+/** A fill with one glyph of text, its tables told by a key */
+function textSurface(key: string): QuadDrapeSurface {
+  return {
+    fill: { color: [1, 1, 1, 1], borderColor: [0, 0, 0, 1], border: [0, 0] },
+    text: {
+      atlas: { id: 'atlas' },
+      atlasWidth: 64,
+      atlasHeight: 64,
+      glyphs: new Float32Array([0.1, 0.1, 0.9, 0.9, 0, 0, 1, 1]),
+      glyphCount: 1,
+      key,
+      atlasTexelsPerUnit: [64, 64],
+      color: [0, 0, 0, 1],
+      haloColor: [0, 0, 0, 0],
+      haloWidth: 0,
+      edge: 0.5,
+      valuePerTexel: 0.1,
+      lodBias: 0,
+    },
+  };
+}
+
 beforeEach(() => {
   images = [];
+  imagesMade = 0;
+  imageSize = { width: 300, height: 100 };
   vi.stubGlobal('Image', FakeImage);
   vi.stubGlobal('document', {
     createElement: () => ({
@@ -761,15 +914,15 @@ describe('the GPU side of an instance gives everything back', () => {
     map.render();
     // A part that makes a buffer and never gives it back
     const forgotten = mock.gl.createBuffer();
-    ledger.record(forgotten, 'forgetful', 'buffer');
+    ledger.record(forgotten, 'strokes', 'buffer');
     mock.gl.bindBuffer(mock.gl.ARRAY_BUFFER, forgotten);
     mock.gl.bufferData(mock.gl.ARRAY_BUFFER, 1_000, mock.gl.STATIC_DRAW);
-    ledger.record(forgotten, 'forgetful', 'buffer', 1_000);
+    ledger.record(forgotten, 'strokes', 'buffer', 1_000);
     draw.destroy();
     expectNothingHeld(mock, ledger);
     expect(ledger.snapshot()).toMatchObject({ leakedBytes: 1_000, leakedObjects: 1 });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('left behind'), {
-      forgetful: 1_000,
+      strokes: 1_000,
     });
   });
 
@@ -825,6 +978,7 @@ describe('the parts of the terrain', () => {
     const renderer = new DrapeRenderer(mock.gl, ledger);
     const shaderData = { vertexShaderPrelude: '', define: '', variantName: 'mercator' };
     expect(renderer.ensure(shaderData, 64)).toBe(true);
+    expect(mock.bufferBytes()).toBe(terrainMeshBytes(64));
     expectLedgerMatches(mock, ledger);
     expect(renderer.ensure(shaderData, 128)).toBe(true);
     expectLedgerMatches(mock, ledger);
@@ -930,15 +1084,16 @@ describe('the limit of what is held outside the rows', () => {
     };
   }
 
-  it('is 64,000,000 bytes', () => {
+  it('is 64,000,000 bytes, more than the floor', () => {
     expect(new GpuLedger().limitBytes).toBe(64_000_000);
     expect(tracked().ledger.limitBytes).toBe(64_000_000);
+    expect(GPU_FLOOR_BYTES).toBeLessThan(DEFAULT_GPU_LIMIT_BYTES);
+    expect(() => new GpuLedger(GPU_FLOOR_BYTES - 1)).toThrow();
   });
 
   it('makes the texture of an image whole while it fits', () => {
     const mock = storageGL();
-    const ledger = new GpuLedger();
-    ledger.limitBytes = 10_000_000;
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + 10_000_000);
     const { upload } = cacheOf(mock, ledger, { a: decoded(1000, 1000) });
     upload('a');
     expect(mock.textureBytes()).toBe(mipmappedTextureBytes(1000, 1000, 4));
@@ -948,8 +1103,7 @@ describe('the limit of what is held outside the rows', () => {
 
   it('gives up the images not on the screen first, for one that does not fit', () => {
     const mock = storageGL();
-    const ledger = new GpuLedger();
-    ledger.limitBytes = 6_000_000;
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + 6_000_000);
     const sources = { a: decoded(1000, 1000), b: decoded(1000, 1000) };
     const { cache, upload } = cacheOf(mock, ledger, sources);
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
@@ -966,8 +1120,7 @@ describe('the limit of what is held outside the rows', () => {
 
   it('draws an image on the screen from a smaller picture past the limit, and whole again', () => {
     const mock = storageGL();
-    const ledger = new GpuLedger();
-    ledger.limitBytes = 6_000_000;
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + 6_000_000);
     const sources = { a: decoded(1000, 1000), b: decoded(1000, 1000) };
     const { cache, upload } = cacheOf(mock, ledger, sources);
     upload('a');
@@ -979,7 +1132,7 @@ describe('the limit of what is held outside the rows', () => {
     expect(mock.textureBytes()).toBeLessThan(2 * mipmappedTextureBytes(1000, 1000, 4));
     expectLedgerMatches(mock, ledger);
     // The room comes back: its whole picture is made again
-    ledger.limitBytes = 20_000_000;
+    ledger.limitBytes = GPU_FLOOR_BYTES + 20_000_000;
     cache.sweep(Date.now());
     expect(held(cache, 'b')).toBeNull();
     expect(upload('b')).not.toBeNull();
@@ -989,8 +1142,7 @@ describe('the limit of what is held outside the rows', () => {
 
   it('waits with an image when next to nothing is left', () => {
     const mock = storageGL();
-    const ledger = new GpuLedger();
-    ledger.limitBytes = 100;
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + 100);
     const { upload } = cacheOf(mock, ledger, { a: decoded(1000, 1000) });
     expect(upload('a')).toBeNull();
     expectNothingHeld(mock, ledger);
@@ -1002,18 +1154,18 @@ describe('the limit of what is held outside the rows', () => {
     const renderer = new DrapeRenderer(mock.gl, ledger) as unknown as {
       rowsUnderLimit(width: number, channels: number, needed: number, most: number): number;
     };
-    ledger.limitBytes = 1_000_000;
+    ledger.limitBytes = GPU_FLOOR_BYTES + 1_000_000;
     // A row of 1,024 texels of 16 bytes is 16 KB: 61 rows fit
     expect(renderer.rowsUnderLimit(1024, 4, 10, 4096)).toBe(15);
     expect(renderer.rowsUnderLimit(1024, 4, 50, 4096)).toBe(50);
     expect(renderer.rowsUnderLimit(1024, 4, 100, 4096)).toBe(0);
   });
 
-  it('refuses a table of the drape that does not fit, and the frames still draw', () => {
+  it('refuses the tables and the mesh of the drape that do not fit, and the frames still draw', () => {
     const instance = tracked({ terrain: true });
     const { mock, map, ledger, draw } = instance;
-    // Next to nothing is left outside the rows
-    ledger.limitBytes = 1;
+    // Next to nothing is left to the parts that give way
+    ledger.limitBytes = GPU_FLOOR_BYTES + 1;
     draw.features.createMany([
       { type: 'Polygon', geometry: { type: 'Polygon', coordinates: [ring(0.1, 0.1, 0.3)] } },
       { type: 'Polygon', geometry: { type: 'Polygon', coordinates: [ring(-0.5, -0.5, 0.3)] } },
@@ -1021,19 +1173,21 @@ describe('the limit of what is held outside the rows', () => {
     expect(() => {
       for (let frame = 0; frame < 4; frame++) map.render();
     }).not.toThrow();
-    const drape = getTerrainDrapeDebug(instance.engine.customLayer.getTerrainContext());
+    const terrain = instance.engine.customLayer.getTerrainContext();
+    const drape = getTerrainDrapeDebug(terrain);
     expect(drape.used).toBe(false);
-    expect(ledger.snapshot().byPart.drape ?? 0).toBeLessThan(
-      2 * mipmappedTextureBytes(2048, 1, 16),
-    );
-    // The features are drawn without it, as rows
+    expect(ledger.snapshot().byPart.drape ?? 0).toBe(0);
+    // The features are drawn without it, as rows, on the ground: the atlas of the elevations is
+    // always held
     expect(ledger.snapshot().rowBytes).toBeGreaterThan(0);
+    expect(ledger.snapshot().byPart.demAtlas ?? 0).toBeGreaterThan(0);
+    expect(isTerrainElevationActive(terrain)).toBe(true);
     expectLedgerMatches(mock, ledger);
   });
 
   it('does not refuse the rows', () => {
     const { map, ledger, draw } = tracked();
-    ledger.limitBytes = 1;
+    ledger.limitBytes = GPU_FLOOR_BYTES + 1;
     draw.features.createMany(gridPoints(500) as never);
     map.render();
     expect(ledger.snapshot().byPart.points ?? 0).toBeGreaterThan(500 * 40);
@@ -1042,7 +1196,7 @@ describe('the limit of what is held outside the rows', () => {
   it('keeps an image waiting past it, and the frames still draw', async () => {
     const instance = tracked();
     const { mock, map, ledger } = instance;
-    ledger.limitBytes = 1_000;
+    ledger.limitBytes = GPU_FLOOR_BYTES + 1_000;
     fillDocument(instance);
     map.render();
     await decodeImages();
@@ -1050,6 +1204,271 @@ describe('the limit of what is held outside the rows', () => {
     expect(ledger.snapshot().byPart.images ?? 0).toBeLessThan(1_000);
     expect(ledger.snapshot().rowBytes).toBeGreaterThan(0);
     expectLedgerMatches(mock, ledger);
+  });
+
+  it('keeps an image that waits decoded, asks for no frame, and draws it once there is room', async () => {
+    const instance = tracked();
+    const { mock, map, ledger } = instance;
+    const repaint = (map.map as unknown as { triggerRepaint: ReturnType<typeof vi.fn> })
+      .triggerRepaint;
+    ledger.limitBytes = GPU_FLOOR_BYTES + 1_000;
+    fillDocument(instance);
+    map.render();
+    await decodeImages();
+    expect(imagesMade).toBe(1);
+    const asked = repaint.mock.calls.length;
+    for (let frame = 0; frame < 5; frame++) {
+      map.render();
+      await decodeImages();
+    }
+    // The image is not decoded again, and no frame is asked for while it waits
+    expect(imagesMade).toBe(1);
+    expect(repaint.mock.calls.length).toBe(asked);
+    expect(ledger.snapshot().byPart.images ?? 0).toBe(0);
+    // The room comes back: the next frame draws it, from the image kept decoded
+    ledger.limitBytes = DEFAULT_GPU_LIMIT_BYTES;
+    map.render();
+    expect(imagesMade).toBe(1);
+    expect(ledger.snapshot().byPart.images ?? 0).toBe(mipmappedTextureBytes(300, 100, 4));
+    expectLedgerMatches(mock, ledger);
+  });
+});
+
+/** Draws the frames of a scene with its images decoded */
+async function drawScene(instance: LedgerInstance, input?: () => CustomRenderMethodInput) {
+  const { map } = instance;
+  for (let frame = 0; frame < 3; frame++) map.render(input?.());
+  await decodeImages();
+  for (let frame = 0; frame < 3; frame++) map.render(input?.());
+}
+
+describe('after every allocation, what is held outside the rows', () => {
+  const scenes: Array<{
+    name: string;
+    terrain?: boolean;
+    globe?: boolean;
+    largeImages?: number;
+    share?: number;
+  }> = [
+    { name: 'on a flat map' },
+    { name: 'on the terrain', terrain: true },
+    { name: 'on the globe', globe: true },
+    { name: 'with many large images', largeImages: 4 },
+    { name: 'with many large images, on the terrain', largeImages: 4, terrain: true },
+    { name: 'under a lowered limit, on the terrain', terrain: true, largeImages: 2, share: 3e5 },
+  ];
+
+  for (const scene of scenes) {
+    it(`stays within the limit, the share and the ceilings, ${scene.name}`, async () => {
+      if (scene.largeImages) imageSize = { width: 2048, height: 2048 };
+      const instance = tracked({ terrain: scene.terrain });
+      const { mock, draw, ledger } = instance;
+      if (scene.share !== undefined) ledger.limitBytes = GPU_FLOOR_BYTES + scene.share;
+      const watch = watchLimits(mock, ledger);
+      const ids = fillDocument(instance);
+      if (scene.largeImages) placeImages(instance, scene.largeImages);
+      await drawScene(instance, scene.globe ? globeInput : undefined);
+      draw.selection.set('feature', ids);
+      await drawScene(instance, scene.globe ? globeInput : undefined);
+      expect(watch.allocations()).toBeGreaterThan(0);
+      expect(watch.broken).toEqual([]);
+      if (scene.largeImages && !scene.share) {
+        // The images take their share, and no more
+        expect(ledger.snapshot().byPart.images ?? 0).toBeGreaterThan(ledger.shareBytes / 2);
+      }
+      if (scene.terrain) expect(ledger.snapshot().byPart.demAtlas ?? 0).toBeGreaterThan(0);
+      expectLedgerMatches(mock, ledger);
+    });
+  }
+
+  it('stays within the limit when the terrain comes after images that took their share', async () => {
+    imageSize = { width: 2048, height: 2048 };
+    const instance = tracked();
+    const { mock, map, draw, ledger } = instance;
+    const watch = watchLimits(mock, ledger);
+    placeImages(instance, 3);
+    await drawScene(instance);
+    // Next to nothing is left of the share
+    expect(ledger.roomBytes).toBeLessThan(ledger.shareBytes / 100);
+    draw.features.createMany([
+      { type: 'Polygon', geometry: { type: 'Polygon', coordinates: [ring(0.1, 0.1, 0.3)] } },
+    ] as never);
+    (map.map as unknown as { terrain: unknown }).terrain = demTerrain().terrain;
+    for (let frame = 0; frame < 4; frame++) map.render();
+    expect(watch.broken).toEqual([]);
+    expect(ledger.outsideRowBytes).toBeLessThanOrEqual(ledger.limitBytes);
+    // The atlas of the elevations is made, and the features follow the ground
+    expect(ledger.snapshot().byPart.demAtlas ?? 0).toBeGreaterThan(0);
+    expect(isTerrainElevationActive(instance.engine.customLayer.getTerrainContext())).toBe(true);
+    expectLedgerMatches(mock, ledger);
+  });
+
+  it('holds the largest atlas of the elevations within its ceiling', () => {
+    // Tiles of zoom 7, 8 x 8 of them: the most texels the atlas lays out on each side
+    const tiles: { x: number; y: number; z: number; tileID: { key: string } }[] = [];
+    for (let x = 40; x < 48; x++) {
+      for (let y = 40; y < 48; y++) tiles.push({ x, y, z: 7, tileID: { key: `7/${x}/${y}` } });
+    }
+    const layout = computeAtlasLayout(tiles, 0.34);
+    expect(layout).toMatchObject({ width: 2048, height: 2048 });
+    const mock = storageGL();
+    const ledger = new GpuLedger();
+    const watch = watchLimits(mock, ledger);
+    const terrain = {
+      exaggeration: 1,
+      tileManager: {
+        getRenderableTiles: () =>
+          tiles.map((tile) => ({
+            tileID: { canonical: { x: tile.x, y: tile.y, z: 7 }, key: tile.tileID.key, wrap: 0 },
+          })),
+      },
+      getTerrainData: () => ({
+        texture: { id: 'dem' },
+        u_terrain_matrix: new Float64Array(16).fill(1),
+        u_terrain_unpack: [6553.6, 25.6, 0.1, 10000],
+        u_terrain_dim: 512,
+      }),
+    };
+    const atlas = new DemAtlas(mock.gl, ledger);
+    expect(atlas.build(terrain as never, 0.34, true)).not.toBeNull();
+    expect(ledger.snapshot().byPart.demAtlas).toBe(HELD_PART_CEILINGS.get('demAtlas'));
+    expect(watch.broken).toEqual([]);
+    atlas.dispose();
+    expectNothingHeld(mock, ledger);
+  });
+
+  it('holds the shapes of the points within their ceiling, the oldest going first', () => {
+    const mock = storageGL();
+    const ledger = new GpuLedger();
+    const watch = watchLimits(mock, ledger);
+    const cache = new BufferCache(mock.gl, { ledger, part: 'pointShapes' });
+    const ceiling = ledger.ceilingOf('pointShapes') ?? 0;
+    expect(ceiling).toBe(2_000_000);
+    let made = 0;
+    // Shapes of 300,000 bytes: 6 fit under the ceiling
+    const shape = () => {
+      made++;
+      return {
+        vertices: new Float32Array(75_000),
+        vertexCount: 37_500,
+        drawMode: 0,
+        stride: 8,
+        attributes: [{ index: 0, size: 2, offset: 0 }],
+      };
+    };
+    const now = vi.spyOn(Date, 'now');
+    for (let i = 0; i < 10; i++) {
+      now.mockReturnValue(1_000 + i);
+      expect(cache.getOrCreate(`shape-${i}`, 'same', shape)).not.toBeNull();
+    }
+    expect(watch.broken).toEqual([]);
+    expect(made).toBe(10);
+    expect(cache.size).toBe(6);
+    expect(ledger.snapshot().byPart.pointShapes).toBe(6 * 300_000);
+    // The oldest went: it is made again when it is drawn next
+    now.mockReturnValue(2_000);
+    const again = cache.getOrCreate('shape-0', 'same', shape);
+    expect(again).not.toBeNull();
+    expect(made).toBe(11);
+    expect(mock.live.has(again?.buffer as object)).toBe(true);
+    // A shape drawn once, out of the cache, has its room made too
+    expect(cache.makeRoom(600_000)).toBe(true);
+    expect((ledger.snapshot().byPart.pointShapes ?? 0) + 600_000).toBeLessThanOrEqual(ceiling);
+    // One larger than the ceiling is not made
+    expect(cache.makeRoom(ceiling + 1)).toBe(false);
+    expect(watch.broken).toEqual([]);
+    expectLedgerMatches(mock, ledger);
+    cache.dispose();
+    expectNothingHeld(mock, ledger);
+  });
+});
+
+describe('the drape past the share of the parts that give way', () => {
+  const shaderData = { vertexShaderPrelude: '', define: '', variantName: 'mercator' };
+
+  it('makes no mesh of the drape that does not fit, and the frame is drawn without the drape', () => {
+    const mock = storageGL();
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + terrainMeshBytes(64) - 1);
+    const renderer = new DrapeRenderer(mock.gl, ledger);
+    expect(renderer.ensure(shaderData, 64)).toBe(false);
+    expect(renderer.lastError).toContain('gpu-limit');
+    expectNothingHeld(mock, ledger);
+    ledger.limitBytes = GPU_FLOOR_BYTES + terrainMeshBytes(64);
+    expect(renderer.ensure(shaderData, 64)).toBe(true);
+    expect(ledger.snapshot().byPart.drape).toBe(terrainMeshBytes(64));
+    renderer.dispose();
+    expectNothingHeld(mock, ledger);
+  });
+
+  it('pastes no image with a mesh that does not fit (it is drawn without the drape)', () => {
+    const mock = storageGL();
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + terrainMeshBytes(4) - 1);
+    const renderer = new QuadDrapeRenderer(mock.gl, ledger);
+    const frame = quadFrame(renderer);
+    expect(renderer.drawQuad(CORNERS, { id: 'image' }, 1, frame)).toBe(false);
+    expect(renderer.lastError).toContain('gpu-limit');
+    expectNothingHeld(mock, ledger);
+    ledger.limitBytes = GPU_FLOOR_BYTES + terrainMeshBytes(4);
+    expect(renderer.drawQuad(CORNERS, { id: 'image' }, 1, frame)).toBe(true);
+    renderer.dispose();
+    expectNothingHeld(mock, ledger);
+  });
+
+  it('draws an image on the terrain without the drape when its mesh does not fit', async () => {
+    const instance = tracked({ terrain: true });
+    const { mock, map, ledger } = instance;
+    // Room for the whole picture of the image, and not for a mesh of the drape
+    ledger.limitBytes = GPU_FLOOR_BYTES + mipmappedTextureBytes(300, 100, 4) + 1_000;
+    const watch = watchLimits(mock, ledger);
+    placeImages(instance, 1);
+    await drawScene(instance);
+    expect(ledger.snapshot().byPart.images ?? 0).toBeGreaterThan(0);
+    expect(ledger.roomBytes).toBeLessThan(terrainMeshBytes(32));
+    expect(ledger.snapshot().byPart.drape ?? 0).toBe(0);
+    // The quads of the images draw it, with their own program
+    const used: string[] = [];
+    const gl = mock.gl as unknown as Record<string, (...args: unknown[]) => unknown>;
+    const useProgram = gl.useProgram;
+    gl.useProgram = (program) => {
+      used.push(ledger.partOf(program as object) ?? 'none');
+      return useProgram(program);
+    };
+    map.render();
+    expect(used).toContain('imageQuads');
+    expect(watch.broken).toEqual([]);
+    expectLedgerMatches(mock, ledger);
+  });
+
+  it('paints no quad whose glyphs do not fit, and gives up the glyphs not used in the frame first', () => {
+    const roomy = storageGL();
+    const probe = new GpuLedger();
+    const sized = new QuadDrapeRenderer(roomy.gl, probe);
+    expect(sized.drawSurface(CORNERS, textSurface('one'), 1, quadFrame(sized))).toBe(true);
+    const glyphBytes = (probe.snapshot().byPart.drape ?? 0) - terrainMeshBytes(4);
+    expect(glyphBytes).toBeGreaterThan(16);
+    sized.dispose();
+
+    const mock = storageGL();
+    // Room for the mesh and the glyphs of one text, not for a texture of 16 bytes more
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + terrainMeshBytes(4) + glyphBytes + 8);
+    const watch = watchLimits(mock, ledger);
+    const renderer = new QuadDrapeRenderer(mock.gl, ledger);
+    const first = quadFrame(renderer);
+    expect(renderer.drawSurface(CORNERS, textSurface('one'), 1, first)).toBe(true);
+    // The glyphs of the first text are used in this frame: the second is not painted at all,
+    // rather than painted without its text
+    expect(renderer.drawSurface(CORNERS, textSurface('two'), 1, first)).toBe(false);
+    expect(renderer.lastError).toContain('gpu-limit');
+    // In the next frame the glyphs of the first text are not used yet: they go for the second
+    const second = quadFrame(renderer);
+    expect(renderer.drawSurface(CORNERS, textSurface('two'), 1, second)).toBe(true);
+    // A fill without text needs a texture bound to its samplers, which does not fit either
+    const fill = textSurface('none').fill;
+    expect(renderer.drawSurface(CORNERS, { fill, text: null }, 1, second)).toBe(false);
+    expect(watch.broken).toEqual([]);
+    expectLedgerMatches(mock, ledger);
+    renderer.dispose();
+    expectNothingHeld(mock, ledger);
   });
 });
 

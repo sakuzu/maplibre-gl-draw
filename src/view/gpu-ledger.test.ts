@@ -4,7 +4,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_GPU_LIMIT_BYTES,
+  GPU_FLOOR_BYTES,
   GpuLedger,
+  HELD_PART_CEILINGS,
   mipmappedTextureBytes,
   textureBytes,
 } from './gpu-ledger.js';
@@ -71,19 +73,19 @@ describe('GpuLedger', () => {
     const ledger = new GpuLedger();
     const a = {};
     const b = {};
-    ledger.record(a, 'x', 'buffer', 100);
-    ledger.record(b, 'x', 'texture', 50);
+    ledger.record(a, 'points', 'buffer', 100);
+    ledger.record(b, 'points', 'texture', 50);
     ledger.release(a);
-    ledger.record(a, 'x', 'buffer', 10);
+    ledger.record(a, 'points', 'buffer', 10);
     expect(ledger.snapshot()).toMatchObject({ bytes: 60, peakBytes: 150, allocations: 3 });
   });
 
-  it('tells what it holds outside the rows, from the parts or from what is recorded', () => {
+  it('tells what it holds outside the rows', () => {
     const ledger = new GpuLedger();
     const [rows, atlas, kept] = [{}, {}, {}];
     ledger.record(rows, 'polygons', 'buffer', 100);
     ledger.record(atlas, 'demAtlas', 'texture', 30);
-    ledger.record(kept, 'a part', 'buffer', 5, true);
+    ledger.record(kept, 'lines', 'buffer', 5);
     expect(ledger.outsideRowBytes).toBe(30);
     expect(ledger.snapshot()).toMatchObject({ rowBytes: 105, outsideRowBytes: 30 });
     ledger.release(rows);
@@ -97,34 +99,79 @@ describe('GpuLedger', () => {
     for (const part of ['polygons', 'lines', 'points', 'fills', 'strokes', 'outlines']) {
       ledger.record({}, part, 'buffer', 1);
     }
-    for (const part of ['images', 'pointShapes', 'demAtlas', 'drape']) {
+    for (const part of ['images', 'imageQuads', 'pointShapes', 'demAtlas', 'drape']) {
       ledger.record({}, part, 'buffer', 10);
     }
     expect(ledger.rowBytesHeld).toBe(6);
-    expect(ledger.outsideRowBytes).toBe(40);
+    expect(ledger.outsideRowBytes).toBe(50);
   });
 
-  it('measures what fits outside the rows against its limit, the rows aside', () => {
+  it('declares the ceilings of the parts that are always held, and their sum as its floor', () => {
+    expect(Object.fromEntries(HELD_PART_CEILINGS)).toEqual({
+      // 2048 x 2048 texels of RGBA8, and the quad of 4 corners of 2 floats
+      demAtlas: 2048 * 2048 * 4 + 32,
+      pointShapes: 2_000_000,
+      // The four corners and their texture coordinates, and a grid of 128 x 128 cells
+      imageQuads: 64 + 129 * 129 * 8 * 2 + 128 * 128 * 6 * 2,
+    });
+    expect(GPU_FLOOR_BYTES).toBe(19_240_176);
+    const ledger = new GpuLedger();
+    expect(ledger.floorBytes).toBe(GPU_FLOOR_BYTES);
+    expect(ledger.ceilingOf('pointShapes')).toBe(2_000_000);
+    expect(ledger.ceilingOf('images')).toBeUndefined();
+    expect(ledger.ceilingOf('points')).toBeUndefined();
+  });
+
+  it('is 64,000,000 bytes, more than the floor, and takes no limit under the floor', () => {
+    expect(DEFAULT_GPU_LIMIT_BYTES).toBe(64_000_000);
+    expect(GPU_FLOOR_BYTES).toBeLessThan(DEFAULT_GPU_LIMIT_BYTES);
     const ledger = new GpuLedger();
     expect(ledger.limitBytes).toBe(DEFAULT_GPU_LIMIT_BYTES);
-    expect(DEFAULT_GPU_LIMIT_BYTES).toBe(64_000_000);
-    ledger.limitBytes = 100;
+    expect(ledger.shareBytes).toBe(DEFAULT_GPU_LIMIT_BYTES - GPU_FLOOR_BYTES);
+    expect(() => new GpuLedger(GPU_FLOOR_BYTES - 1)).toThrow('less than');
+    expect(() => new GpuLedger(Number.NaN)).toThrow('less than');
+    expect(new GpuLedger(GPU_FLOOR_BYTES).shareBytes).toBe(0);
+    expect(() => {
+      ledger.limitBytes = GPU_FLOOR_BYTES - 1;
+    }).toThrow('less than');
+    expect(ledger.limitBytes).toBe(DEFAULT_GPU_LIMIT_BYTES);
+  });
+
+  it('measures what fits for the parts that give way against their share alone', () => {
+    const ledger = new GpuLedger(GPU_FLOOR_BYTES + 100);
+    expect(ledger.shareBytes).toBe(100);
     ledger.record({}, 'images', 'texture', 60);
-    // The rows do not take the room of the limit
+    // The rows and the parts that are always held do not take the room of the share
     ledger.record({}, 'polygons', 'buffer', 1_000);
+    ledger.record({}, 'demAtlas', 'texture', 5_000);
     expect(ledger.fits(40)).toBe(true);
     expect(ledger.fits(41)).toBe(false);
     expect(ledger.roomBytes).toBe(40);
+    // The parts that give way share it
+    ledger.record({}, 'drape', 'texture', 30);
+    expect(ledger.fits(10)).toBe(true);
+    expect(ledger.fits(11)).toBe(false);
+    expect(ledger.roomBytes).toBe(10);
   });
 
-  it('takes no allocation without a part', () => {
+  it('takes no allocation without a part, nor under a part it does not know', () => {
     expect(() => new GpuLedger().record({}, '', 'buffer', 1)).toThrow();
+    expect(() => new GpuLedger().record({}, 'a part', 'buffer', 1)).toThrow('unknown part');
+  });
+
+  it('tells the part an object is recorded under', () => {
+    const ledger = new GpuLedger();
+    const buffer = {};
+    ledger.record(buffer, 'imageQuads', 'buffer', 32);
+    expect(ledger.partOf(buffer)).toBe('imageQuads');
+    expect(ledger.partOf({})).toBeUndefined();
+    expect(ledger.partOf(null)).toBeUndefined();
   });
 
   it('finds that its sums do not agree with what it holds', () => {
     const ledger = new GpuLedger();
-    ledger.record({}, 'a', 'buffer', 10);
-    ledger.record({}, 'b', 'texture', 20);
+    ledger.record({}, 'points', 'buffer', 10);
+    ledger.record({}, 'lines', 'texture', 20);
     expect(ledger.audit()).toBe(true);
     (ledger as unknown as { bufferBytes: number }).bufferBytes = 11;
     expect(ledger.audit()).toBe(false);
@@ -132,9 +179,9 @@ describe('GpuLedger', () => {
 
   it('finds the sums of its parts that do not agree with what they hold', () => {
     const ledger = new GpuLedger();
-    ledger.record({}, 'a', 'buffer', 10);
+    ledger.record({}, 'points', 'buffer', 10);
     expect(ledger.audit()).toBe(true);
-    (ledger as unknown as { parts: Map<string, number> }).parts.set('a', 9);
+    (ledger as unknown as { parts: Map<string, number> }).parts.set('points', 9);
     expect(ledger.audit()).toBe(false);
   });
 
@@ -148,13 +195,13 @@ describe('GpuLedger', () => {
       deleteFramebuffer: vi.fn(),
     } as unknown as WebGL2RenderingContext;
     const ledger = new GpuLedger();
-    ledger.record({}, 'a', 'buffer', 10);
-    ledger.record({}, 'a', 'texture', 20);
-    ledger.record({}, 'b', 'renderbuffer', 5);
-    ledger.record({}, 'b', 'vertex-array');
-    ledger.record({}, 'b', 'program');
-    ledger.record({}, 'b', 'framebuffer');
-    expect(ledger.drain(gl)).toEqual({ a: 30, b: 5 });
+    ledger.record({}, 'points', 'buffer', 10);
+    ledger.record({}, 'points', 'texture', 20);
+    ledger.record({}, 'lines', 'renderbuffer', 5);
+    ledger.record({}, 'lines', 'vertex-array');
+    ledger.record({}, 'lines', 'program');
+    ledger.record({}, 'lines', 'framebuffer');
+    expect(ledger.drain(gl)).toEqual({ points: 30, lines: 5 });
     expect(gl.deleteBuffer).toHaveBeenCalledTimes(1);
     expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
     expect(gl.deleteRenderbuffer).toHaveBeenCalledTimes(1);
@@ -174,8 +221,8 @@ describe('GpuLedger', () => {
     const gl = { deleteBuffer: vi.fn() } as unknown as WebGL2RenderingContext;
     const one = new GpuLedger();
     const other = new GpuLedger();
-    one.record({}, 'a', 'buffer', 10);
-    other.record({}, 'a', 'buffer', 20);
+    one.record({}, 'points', 'buffer', 10);
+    other.record({}, 'points', 'buffer', 20);
     one.drain(gl);
     expect(one.snapshot().leakedBytes).toBe(10);
     expect(other.snapshot()).toMatchObject({ bytes: 20, leakedBytes: 0 });
@@ -188,11 +235,11 @@ describe('GpuLedger', () => {
     } as unknown as WebGL2RenderingContext;
     const ledger = new GpuLedger();
     const kept = { name: 'kept' };
-    ledger.record(kept, 'a', 'buffer', 10);
+    ledger.record(kept, 'points', 'buffer', 10);
     expect(() =>
       ledger.scope(gl, () => {
-        ledger.record({ name: 'made' }, 'a', 'buffer', 20);
-        ledger.record({ name: 'array' }, 'a', 'vertex-array');
+        ledger.record({ name: 'made' }, 'points', 'buffer', 20);
+        ledger.record({ name: 'array' }, 'points', 'vertex-array');
         throw new Error('failed');
       }),
     ).toThrow('failed');
