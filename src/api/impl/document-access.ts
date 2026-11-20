@@ -3758,6 +3758,8 @@ export function createDocumentAccess(
       write(() => updateFeatureRow(id, updates, options)),
     // A drag given up has written the values it started from back: nothing is left to drop
     abortIntermediateUpdates: () => {},
+    // The function the edits written in parts set, called before a write reads the feature
+    applyEditFirst: (id: string) => beforeFeatureWrite?.(id),
     deleteFeature: (id: string) =>
       write(() => {
         deleteFeatureRow(id);
@@ -3833,6 +3835,7 @@ export function createDocumentAccess(
 
     // What the operations written in parts read, and the call before a write
     currentOperationId: () => (rowDepth > 0 ? operationNow : undefined),
+    currentSource: () => (rowDepth > 0 ? rowSource : undefined),
     setBeforeFeatureWrite(before: ((id: string) => void) | null) {
       beforeFeatureWrite = before;
     },

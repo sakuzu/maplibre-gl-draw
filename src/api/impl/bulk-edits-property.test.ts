@@ -10,7 +10,8 @@
  * feature lists the edits applied to it, in the order they were applied. A model applies each edit
  * whole when it starts being written (the earlier edits have ended), to the features of its target
  * there then and not locked; the writes of this client meanwhile (a lock, a deletion, a new
- * geometry) come after it, as the edit is applied first to the feature they touch. An edit that
+ * geometry, another attribute written with those the feature has) come after it, as the edit is
+ * applied first to the feature they touch, before they read it. An edit that
  * read-only or destroy stops has written a part of its features: those must be features the model
  * applies it to. The random numbers come from a generator of a fixed seed, so a failure repeats.
  */
@@ -91,6 +92,8 @@ async function runOnce(seed: number): Promise<void> {
   }
   const alive = new Set(ids);
   const locked = new Set<string>();
+  /** The last value a write of this client gave the attribute `mark` of each feature */
+  const marks = new Map<string, number>();
   let readOnly = false;
   let destroyed = false;
   const model: ModelEdit[] = [];
@@ -207,11 +210,16 @@ async function runOnce(seed: number): Promise<void> {
       draw.setReadOnly(readOnly);
       if (readOnly) stopAll(false);
       await flush();
-    } else if (living.length > 0) {
+    } else if (roll < 0.92 && living.length > 0) {
       const id = pick(living);
       draw.features.update(id, {
         geometry: { type: 'Point', coordinates: [random(), random()] },
       });
+    } else if (living.length > 0) {
+      // A write of the same field the edits write: update reads the attributes and writes them
+      // with its own, so the edit is applied to the feature before the write reads it
+      const id = pick(living);
+      if (draw.features.update(id, { properties: { mark: step } }) !== null) marks.set(id, step);
     }
   }
   if (random() < 0.3) {
@@ -237,6 +245,8 @@ async function runOnce(seed: number): Promise<void> {
       .filter((edit) => (edit.stopped ? tags.includes(edit.tag) : edit.applied?.has(id)))
       .map((edit) => edit.tag);
     expect(tags, `the edits applied to ${id} (seed ${seed})`).toEqual(expected);
+    const mark = (destroyed ? readRowFeature(store, id) : draw.features.get(id))?.properties.mark;
+    expect(mark, `the mark of ${id} (seed ${seed})`).toBe(marks.get(id));
     for (const edit of model) if (tags.includes(edit.tag)) seen.get(edit)?.add(id);
   }
   for (const edit of model) {

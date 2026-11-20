@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from '../../store/built-in/create-store.js';
 import type { Store, StoreChange } from '../../store/built-in/types.js';
 import type { InstanceDocument } from '../../store/document-access.js';
-import { createMapStub } from '../../test-utils.js';
+import { createMapStub, createParityMap, readRowFeature } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -70,6 +70,25 @@ function tag(name: string, time = ROW_TIME, target: Draw = draw) {
     },
   };
 }
+
+/** An edit of the tests that moves each point by `dx` degrees to the east */
+function shift(dx: number, target: Draw = draw) {
+  return {
+    writeFeature(id: string): boolean {
+      clock += ROW_TIME;
+      const [x, y] = xyOf(id, target);
+      const geometry = { type: 'Point' as const, coordinates: [x + dx, y] };
+      return target.features.update(id, { geometry }) !== null;
+    },
+  };
+}
+
+/** The position of a point */
+const xyOf = (id: string, target: Draw = draw): [number, number] => {
+  const geometry = target.features.get(id)?.geometry;
+  if (geometry?.type !== 'Point') throw new Error(`${id} is not a point`);
+  return [geometry.coordinates[0], geometry.coordinates[1]];
+};
 
 /** The log of a feature */
 const logOf = (id: string): string =>
@@ -258,9 +277,12 @@ describe('the order of the edits', () => {
       .toBeNull;
     expect(logOf(ids[11])).toBe('A;');
     expect(logOf(ids[10])).toBe('');
-    // In the change of the write
-    const written = changes[changes.length - 1];
-    expect(written.operationId).not.toBe((changes[0] as DocumentChange).operationId);
+    // Outside a transaction, as a part of the edit, with its number; then the change of the write
+    const operationId = (changes[0] as DocumentChange).operationId;
+    const [early, written] = changes.slice(-2);
+    expect([early.operationId, early.hasMoreParts]).toEqual([operationId, true]);
+    expect([...early.features.updated.iterate()]).toEqual([ids[11]]);
+    expect(written.operationId).not.toBe(operationId);
     expect([...written.features.updated.iterate()]).toEqual([ids[11]]);
     await allTasks();
     // The later parts leave it out: the edit is applied to it once
@@ -268,6 +290,56 @@ describe('the order of the edits', () => {
     expect(draw.features.get(ids[11])?.geometry).toEqual({ type: 'Point', coordinates: [5, 5] });
     expect(ids.every((id) => logOf(id) === 'A;')).toBe(true);
     expect((run.value as EditCounts).changedCount).toBe(12);
+  });
+
+  it('applies it before a write reads the feature, so a write of the same field keeps it', async () => {
+    const ids = points(12);
+    const told = storeChanges();
+    const run = settled(edits.start(ids, undefined, tag('A')));
+    await nextTask();
+    const { operationId } = told[0];
+    // update reads the attributes of the feature and writes them with its own
+    expect(draw.features.update(ids[11], { properties: { x: 1 } })).not.toBeNull();
+    expect(draw.features.get(ids[11])?.properties).toEqual({ log: 'A;', x: 1 });
+    // What was applied first is a transaction of its own, a part of the edit, with its number
+    const [early, written] = told.slice(-2);
+    expect([early.operationId, early.hasMoreParts]).toEqual([operationId, true]);
+    expect(written.operationId).not.toBe(operationId);
+    await allTasks();
+    expect(draw.features.get(ids[11])?.properties).toEqual({ log: 'A;', x: 1 });
+    expect(ids.every((id) => logOf(id) === 'A;')).toBe(true);
+    expect(partsOf(told, operationId)).toEqual([
+      [true, false],
+      [true, false],
+      [true, false],
+      [false, false],
+    ]);
+    expect((run.value as EditCounts).changedCount).toBe(12);
+  });
+
+  it('applies it before an arrow key reads the features it moves', async () => {
+    const input = createParityMap();
+    const keyed = createDraw(input.map, { store });
+    const keyedEdits = bulkEditsOf(keyed) as BulkEdits;
+    const ids = createIn(keyed, 12);
+    // How far one press of the arrow key moves a point, read on a point no edit touches
+    const probe = createIn(keyed, 1)[0];
+    keyed.selection.set('feature', [probe]);
+    input.key('ArrowRight');
+    const step = xyOf(probe, keyed)[0];
+    expect(step).toBeGreaterThan(0);
+    const start = xyOf(ids[11], keyed)[0];
+    const run = settled(keyedEdits.start(ids, undefined, shift(1, keyed)));
+    await nextTask();
+    // The edit has not reached the last feature: the key moves it from where the edit put it
+    keyed.selection.set('feature', [ids[11]]);
+    input.key('ArrowRight');
+    expect(xyOf(ids[11], keyed)[0]).toBeCloseTo(start + 1 + step, 9);
+    await allTasks();
+    expect(xyOf(ids[11], keyed)[0]).toBeCloseTo(start + 1 + step, 9);
+    expect(xyOf(ids[10], keyed)[0]).toBeCloseTo(0.1 + 1, 9);
+    expect((run.value as EditCounts).changedCount).toBe(12);
+    keyed.destroy();
   });
 
   it('applies it first as well for a write an operation of the instance makes on the layer', async () => {
@@ -533,6 +605,27 @@ describe('a bulk edit started in draw.transact', () => {
     expect(run?.value).toBeNull();
     expect(ids.map(logOf)).toEqual(['', '']);
     expect(told.map((change) => change.hasMoreParts)).toEqual([false]);
+  });
+
+  it('does not start the edit when fn destroys the instance: it rejects, and no part follows', async () => {
+    const ids = points(3);
+    const told = storeChanges();
+    let run: ReturnType<typeof settled<EditCounts | null>> | undefined;
+    draw.transact(() => {
+      draw.features.update(ids[0], { properties: { first: true } });
+      run = settled(edits.start(ids, undefined, tag('A')));
+      draw.destroy();
+    });
+    await allTasks();
+    expect(codeOf(run?.error)).toBe('invalidState');
+    // The change of the transaction is no part that more follow, and nothing else is written
+    expect(told.map((change) => change.hasMoreParts)).toEqual([false]);
+    expect(ids.map((id) => readRowFeature(store, id)?.properties.log)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(readRowFeature(store, ids[0])?.properties.first).toBe(true);
   });
 
   it('is stopped by the Store between a transaction of the Store and draw.transact', () => {

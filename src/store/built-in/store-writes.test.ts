@@ -915,7 +915,7 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(changes[0].layers?.created?.map((l) => l.id)).toEqual(['a']);
     });
 
-    it('fold a transaction inside another given options into it, the options of the outermost winning', () => {
+    it('fold a transaction inside another given options into it, the options of the outermost winning but for hasMoreParts: true', () => {
       const store = make();
       const outer = store.newOperationId();
       const inner = store.newOperationId();
@@ -935,7 +935,7 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(store.getLayer('c')).toBeDefined();
       expect(changes).toHaveLength(1);
       expect(changes[0]).toEqual(
-        expect.objectContaining({ operationId: outer, hasMoreParts: false, stopped: false }),
+        expect.objectContaining({ operationId: outer, hasMoreParts: true, stopped: false }),
       );
       expect(changes[0].layers?.created?.map((l) => l.id)).toEqual(['b', 'c']);
     });

@@ -60,6 +60,8 @@ export function deleteSelectedItems(store: DocumentAccess): boolean {
   if (selection.ids.length === 0) return false;
 
   if (selection.type === 'feature') {
+    // The edit being written in parts is applied first to the features read to be deleted
+    for (const id of selection.ids) store.applyEditFirst?.(id);
     // Locked features (themselves / their group / their layer) are not deleted
     const selectedIds = selection.ids.filter((id) => {
       const feature = store.getFeature(id);
@@ -84,6 +86,13 @@ export function deleteSelectedItems(store: DocumentAccess): boolean {
       return group !== undefined && !isGroupLocked(group, findLayerOfGroup);
     });
     if (groupIds.length === 0) return false;
+    // The edit being written in parts is applied first to the members read to be deleted, before
+    // the transaction opens
+    for (const groupId of groupIds) {
+      for (const featureId of store.getGroup(groupId)?.featureIds ?? []) {
+        store.applyEditFirst?.(featureId);
+      }
+    }
     store.transact(() => {
       store.setSelection(null, []);
       for (const groupId of groupIds) {
@@ -146,6 +155,8 @@ function holdsLockedItem(store: DocumentAccess, layerId: string): boolean {
  * @returns The number of vertices deleted
  */
 export function deleteSelectedVertices(store: DocumentAccess, selection: VertexSelection): number {
+  // The edit being written in parts is applied first to the feature read to be written
+  store.applyEditFirst?.(selection.featureId);
   const feature = store.getFeature(selection.featureId);
   if (!feature) return 0;
 

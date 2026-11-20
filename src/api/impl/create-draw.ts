@@ -6,7 +6,9 @@
  */
 
 import type { Map as MaplibreMap } from 'maplibre-gl';
+import type { UpdateSource } from '../../store/types.js';
 import type { Draw, TransactOptions } from '../draw.js';
+import { DrawError } from '../errors.js';
 import type { DrawOptions } from '../options.js';
 import { createBulkEdits, holdBulkEdits } from './bulk-edits.js';
 import { createDatasets } from './datasets.js';
@@ -69,6 +71,9 @@ export function createDrawOnEngine(
   // Set once destroy has run to the end, so that the extensions removed by it can still read
   // the instance
   let destroyed = false;
+  // How many `draw.transact` of this instance are open (their `fn` runs): a nested one takes the
+  // source of the outer one
+  let transactDepth = 0;
 
   const members: Draw = {
     features,
@@ -118,16 +123,34 @@ export function createDrawOnEngine(
 
     transact<T>(fn: () => T, transactOptions?: TransactOptions): T {
       if (transactOptions !== undefined) requireRecord(transactOptions, 'The options');
+      const given = transactOptions?.source;
       const ignoreLocks = transactOptions?.ignoreLocks === true;
-      const open = (body: () => T): T => {
-        const run = () => store.transact(body, transactOptions?.source);
+      const open = (source: UpdateSource, body: () => T): T => {
+        const run = () =>
+          store.transact(() => {
+            transactDepth += 1;
+            try {
+              return body();
+            } finally {
+              transactDepth -= 1;
+            }
+          }, source);
         return ignoreLocks ? withLocksIgnored(store, run) : run();
       };
-      // Inside a transaction of the instance: it folds into it
-      if (store.currentOperationId() !== undefined) return open(fn);
+      if (transactDepth > 0) {
+        // Inside a draw.transact of this instance: the source of the outer one, and no other
+        const outer = store.currentSource() ?? 'local';
+        if (given !== undefined && given !== outer) throw nestedSourceError(given, outer);
+        return open(outer, fn);
+      }
       // The outermost one: a bulk edit started in `fn` makes its change the first part
-      return edits.inTransaction(transactOptions?.source ?? 'local', ignoreLocks, (endOfFn) =>
-        open(() => {
+      const source = given ?? 'local';
+      return edits.inTransaction(source, ignoreLocks, (endOfFn) =>
+        open(source, () => {
+          // Inside a transaction opened on the Store directly, whose source is another, it writes
+          // nothing: what the writes of the instance would fold into is that transaction
+          const outer = store.currentSource();
+          if (outer !== undefined && outer !== source) throw nestedSourceError(source, outer);
           const result = fn();
           endOfFn();
           return result;
@@ -162,6 +185,14 @@ export function createDrawOnEngine(
   holdBulkEdits(draw, edits);
   engine.extensions.attach(draw);
   return draw;
+}
+
+/** The error of a `draw.transact` inside a transaction of another source */
+function nestedSourceError(source: UpdateSource, outer: UpdateSource): DrawError {
+  return new DrawError(
+    'invalidState',
+    `transact: a transaction of the source ${JSON.stringify(source)} inside one of ${JSON.stringify(outer)}`,
+  );
 }
 
 /**

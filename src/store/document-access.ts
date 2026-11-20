@@ -75,6 +75,15 @@ export interface DocumentWrites {
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean;
   /** Tells that intermediate states were given up (the values were written back already) */
   abortIntermediateUpdates?(ids: string[]): void;
+  /**
+   * Applies the edit being written in parts first to a feature, before a write of this client
+   * reads the feature to write it, so that the write starts from the values the edit gives it.
+   * It does nothing when the edit has reached the feature already, or no edit is being written.
+   * Outside a transaction, what it writes is a transaction of its own, a part of the operation
+   * of the edit; inside one, it is written in that transaction. A write that opens a
+   * transaction and then reads the feature calls it before it opens the transaction
+   */
+  applyEditFirst?(id: string): void;
   /** Deletes a feature */
   deleteFeature(id: string): boolean;
   /** Creates a layer */
@@ -331,10 +340,16 @@ export interface DocumentOperations {
    */
   currentOperationId(): number | undefined;
   /**
+   * The source of the transaction of the Store open now through the instance (undefined outside
+   * one): the source the writes of the instance have in it, that of a transaction opened on the
+   * Store directly when they fold into one
+   */
+  currentSource(): UpdateSource | undefined;
+  /**
    * Sets the function called before a write of this client writes the row of a feature (a write
    * of its values, its deletion, or a move; not its creation), with the ID of the feature, or
-   * takes it back (null). Only one is set at a time; a change written to the Store directly does
-   * not call it
+   * takes it back (null). `applyEditFirst` calls the same function, before a write reads the
+   * feature. Only one is set at a time; a change written to the Store directly does not call it
    */
   setBeforeFeatureWrite(before: ((id: string) => void) | null): void;
   /**

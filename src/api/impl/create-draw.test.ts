@@ -110,13 +110,11 @@ describe('transact', () => {
     const result = draw.transact(
       () => {
         draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
-        draw.transact(
-          () => {
-            draw.layers.create({ name: 'Second' });
-            draw.metadata.update({ title: 'Map' });
-          },
-          { source: 'inner' },
-        );
+        // A nested call that gives no source takes the source of the outer one
+        draw.transact(() => {
+          draw.layers.create({ name: 'Second' });
+          draw.metadata.update({ title: 'Map' });
+        });
         return 42;
       },
       { source: 'outer' },
@@ -129,6 +127,60 @@ describe('transact', () => {
     expect(rows.flatMap((layer) => [...layer.created])).toHaveLength(1);
     expect(notifications[0].layers?.created).toHaveLength(1);
     expect(notifications[0].metadata?.metadata.title).toBe('Map');
+  });
+
+  it('throws invalidState for a nested call of another source, before its fn writes', () => {
+    const notifications: StoreChange[] = [];
+    draw.getStore().subscribe((changes) => notifications.push(changes));
+    const inner = vi.fn(() => draw.metadata.update({ title: 'Map' }));
+    let thrown: unknown;
+    draw.transact(
+      () => {
+        draw.layers.create({ name: 'Second' });
+        try {
+          draw.transact(inner, { source: 'inner' });
+        } catch (error) {
+          thrown = error;
+        }
+        // The same source as the outer one folds into it
+        draw.transact(() => draw.layers.create({ name: 'Third' }), { source: 'outer' });
+      },
+      { source: 'outer' },
+    );
+    expect((thrown as DrawError).code).toBe('invalidState');
+    expect(inner).not.toHaveBeenCalled();
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].source).toBe('outer');
+    expect(notifications[0].layers?.created).toHaveLength(2);
+    expect(notifications[0].metadata).toBeUndefined();
+  });
+
+  it('throws inside a transaction of the Store of another source, and folds into one of local', () => {
+    const store = draw.getStore();
+    const notifications: StoreChange[] = [];
+    store.subscribe((changes) => notifications.push(changes));
+    const inner = vi.fn(() => draw.layers.create({ name: 'Second' }));
+    let thrown: unknown;
+    store.transact(() => {
+      store.setMetadata({ title: 'Remote' });
+      try {
+        draw.transact(inner);
+      } catch (error) {
+        thrown = error;
+      }
+    }, 'remote');
+    expect((thrown as DrawError).code).toBe('invalidState');
+    expect(inner).not.toHaveBeenCalled();
+    expect(notifications.map((change) => change.source)).toEqual(['remote']);
+    expect(notifications[0].layers).toBeUndefined();
+    // Inside one of the source local, it folds into it
+    store.transact(() => {
+      store.setMetadata({ title: 'Local' });
+      draw.transact(() => draw.layers.create({ name: 'Third' }));
+    }, 'local');
+    expect(notifications.map((change) => change.source)).toEqual(['remote', 'local']);
+    expect(notifications[1].layers?.created).toHaveLength(1);
+    expect(notifications[1].metadata?.metadata.title).toBe('Local');
   });
 
   it('lets the writes change locked features, groups and layers with ignoreLocks', () => {

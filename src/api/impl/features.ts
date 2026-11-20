@@ -95,6 +95,15 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     return feature;
   };
   const requireAll = (ids: unknown): StoredFeature[] => requireIds(ids).map(require);
+  /**
+   * A feature read to be written: the edit being written in parts is applied to it first, before
+   * it is read, so that the write starts from the values the edit gives it
+   */
+  const requireToWrite = (id: unknown): StoredFeature => {
+    if (typeof id === 'string') store.applyEditFirst?.(id);
+    return require(id);
+  };
+  const requireAllToWrite = (ids: unknown): StoredFeature[] => requireIds(ids).map(requireToWrite);
 
   /** The features in stacking order, from the back */
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] => {
@@ -193,7 +202,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
 
     update(id, patch) {
-      const feature = require(id);
+      const feature = requireToWrite(id);
       const updates = preparePatch(feature, patch);
       if (store.isReadOnly()) return null;
       if (featureLocked(store, feature) && !onlyLockOrVisibility(patch)) return null;
@@ -206,7 +215,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       const seen = new Set<string>();
       const prepared = patches.map((entry) => {
         requireRecord(entry, 'Each entry');
-        const feature = require((entry as { id: unknown }).id);
+        const feature = requireToWrite((entry as { id: unknown }).id);
         if (seen.has(feature.id)) throw invalidInput(`The ID ${feature.id} is given twice`);
         seen.add(feature.id);
         return { feature, patch: entry.patch, updates: preparePatch(feature, entry.patch) };
@@ -225,13 +234,13 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
 
     delete(id) {
-      const feature = require(id);
+      const feature = requireToWrite(id);
       if (store.isReadOnly() || featureLocked(store, feature)) return false;
       return store.deleteFeature(feature.id);
     },
 
     deleteMany(ids) {
-      const features = requireAll(ids);
+      const features = requireAllToWrite(ids);
       if (store.isReadOnly()) return false;
       if (features.some((feature) => featureLocked(store, feature))) return false;
       const written = store.transactUntilRefused(() => {
@@ -261,14 +270,14 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
 
     union(ids) {
-      const inputs = requireAreas(ids, 2);
+      const inputs = requireAreas(ids, 2, true);
       if (refuseChange(inputs)) return null;
       return runAreaOperation(inputs, inputs[inputs.length - 1], inputs, unionAll);
     },
 
     difference(id, subtractIds) {
-      const [subject] = requireAreas([id], 1);
-      const others = requireAreas(subtractIds, 1);
+      const [subject] = requireAreas([id], 1, true);
+      const others = requireAreas(subtractIds, 1, false);
       if (others.some((other) => other.id === subject.id)) {
         throw invalidInput('An area cannot be subtracted from itself');
       }
@@ -283,13 +292,14 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
 
     intersection(ids) {
-      const inputs = requireAreas(ids, 2);
+      const inputs = requireAreas(ids, 2, true);
       if (refuseChange(inputs)) return null;
       return runAreaOperation(inputs, inputs[inputs.length - 1], inputs, intersectionAll);
     },
 
     split(id, lineId) {
-      const area = require(id);
+      // The area is deleted, the line stays
+      const area = requireToWrite(id);
       const line = require(lineId);
       if (!isAreaFeature(area)) throw invalidInput(`The feature ${area.id} is not an area`);
       if (!isSplitLineFeature(line)) throw invalidInput(`The feature ${line.id} is not a line`);
@@ -325,7 +335,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   };
 
   function moveMany(ids: readonly string[], to: MoveTarget): boolean {
-    const features = inStackingOrder(requireAll(ids));
+    const features = inStackingOrder(requireAllToWrite(ids));
     const target = resolveMoveTarget(store, to);
     if (store.isReadOnly()) return false;
     if (features.some((feature) => featureLocked(store, feature))) return false;
@@ -333,9 +343,12 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     return moveFeatures(store, features, target);
   }
 
-  /** The features as areas in stacking order, at least `min` of them */
-  function requireAreas(ids: unknown, min: number): StoredFeature[] {
-    const features = inStackingOrder(requireAll(ids));
+  /**
+   * The features as areas in stacking order, at least `min` of them; `written` when the operation
+   * writes them (it deletes them), which applies the edit being written to them first
+   */
+  function requireAreas(ids: unknown, min: number, written: boolean): StoredFeature[] {
+    const features = inStackingOrder(written ? requireAllToWrite(ids) : requireAll(ids));
     if (features.length < min) {
       throw invalidInput(`At least ${min} areas are needed`);
     }

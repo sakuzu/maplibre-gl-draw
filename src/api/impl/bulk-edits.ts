@@ -20,10 +20,12 @@
  *   as missing; a row deleted afterwards leaves the target (the Store tells it), and is not
  *   counted; a locked feature stays as it is and is counted, when the edit starts or meanwhile.
  * - The edits of this client are written one at a time, in the order they were started. A write
- *   of a few features of this client does not wait: the layer calls this before it writes the row
- *   of a feature, and the edit being written is first applied to that feature alone, in the
- *   transaction of the write. A change written to the Store directly is not held up: a later part
- *   reads the values the features have then.
+ *   of a few features of this client does not wait: before it reads a feature to write it (and,
+ *   as a net, the layer before it writes the row of a feature), the edit being written is first
+ *   applied to that feature alone. Outside a transaction, that is a transaction of its own, a
+ *   part of the operation of the edit; inside one (the fn of `draw.transact`, or the transaction
+ *   a write opened before it writes the row), it is written in that transaction. A change written
+ *   to the Store directly is not held up: a later part reads the values the features have then.
  * - Read-only stops the edits: each writes its last part, with nothing in it and
  *   `stopped: true`. `destroy` writes that part for the edit being written, and then rejects
  *   every edit with `invalidState`; the edits waiting write nothing.
@@ -413,19 +415,43 @@ export function createBulkEdits(
   // ==========================================================================
 
   /**
-   * Called by the layer before a write of this client writes the row of a feature: the edit
-   * being written is applied to it first when it has not reached it yet
+   * Called by the layer before a write of this client reads a feature to write it, and before it
+   * writes the row of a feature: the edit being written is applied to it first when it has not
+   * reached it yet. Outside a transaction, in a transaction of its own with the number of the
+   * edit, a part that more follow; inside one, in that transaction (a transaction of the Store
+   * has one number)
    */
   const beforeFeatureWrite = (id: string): void => {
     if (writing) return;
     const edit = queue[0];
-    if (!edit || edit.stopping) return;
+    if (!edit || edit.stopping || layer.isReadOnly()) return;
     const ref = tables.getRowRef(id);
     if (ref === undefined || !notReached(edit, ref)) return;
     edit.early.add(ref);
     writing = true;
     try {
-      withLocksOf(edit, () => visit(edit, id));
+      withLocksOf(edit, () => {
+        if (layer.currentOperationId() !== undefined) {
+          visit(edit, id);
+          return;
+        }
+        layer.transact(
+          () => {
+            // A part that more follow, the last one of the edit being written later; only in a
+            // transaction of its own, not one of the Store opened elsewhere that it folded into
+            if (layer.currentOperationId() === edit.operationId) {
+              layer.transact(nothing, edit.source, { hasMoreParts: true });
+            }
+            visit(edit, id);
+          },
+          edit.source,
+          { operationId: edit.operationId },
+        );
+      });
+    } catch (error) {
+      // A write that threw is not taken as applied (the Store refused it): a later part writes it
+      edit.early.delete(ref);
+      throw error;
     } finally {
       writing = false;
     }
@@ -687,8 +713,9 @@ export function createBulkEdits(
     let returned = false;
     try {
       const result = run(() => {
-        // The change of the transaction is the first part of the edit started in `fn`
-        if (own.edit) layer.transact(nothing, source, { hasMoreParts: true });
+        // The change of the transaction is the first part of the edit started in `fn`, unless
+        // `fn` destroyed the instance (the edit then does not start: destroy rejected it)
+        if (own.edit && !destroyed) layer.transact(nothing, source, { hasMoreParts: true });
       });
       returned = true;
       return result;

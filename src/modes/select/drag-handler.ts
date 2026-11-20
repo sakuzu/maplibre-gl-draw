@@ -93,6 +93,10 @@ export class SelectModeDragHandler {
     // Group / layer selections are also resolved to their member features (so that a group is
     // moved / resized / rotated as one).
     const selectedIds = getSelectedFeatureIds(store);
+    // A drag reads the features it writes when it starts: the edit being written in parts is
+    // applied to them first
+    for (const id of selectedIds) store.applyEditFirst?.(id);
+    if (hitResult.featureId !== undefined) store.applyEditFirst?.(hitResult.featureId);
     const selectedFeatures = selectedIds
       .map((id) => store.getFeature(id))
       .filter((f): f is Feature => f !== undefined);

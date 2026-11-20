@@ -296,6 +296,8 @@ function prepareGroup(
   const ids = requireIds(input.featureIds, 'featureIds');
   if (ids.length === 0) throw invalidInput('A group needs at least one feature');
   const members = ids.map((featureId) => {
+    // The group writes its members: the edit being written in parts is applied to them first
+    store.applyEditFirst?.(featureId);
     const feature = store.getFeature(featureId);
     if (!feature) throw notFound('feature', featureId);
     if (claimed.has(featureId)) {

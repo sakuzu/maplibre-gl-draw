@@ -29,6 +29,8 @@ function deleteGroupIfEmpty(store: DocumentAccess, groupId: string): void {
  * @internal
  */
 export function takeOutOfGroup(store: DocumentAccess, featureId: string): void {
+  // The edit being written in parts is applied first to the feature read to be written
+  store.applyEditFirst?.(featureId);
   const feature = store.getFeature(featureId);
   if (!feature?.groupId) return;
 
@@ -87,6 +89,9 @@ export function groupSelection(
   if (selection.type !== 'feature') return null;
 
   const selectedIds = selection.ids;
+
+  // The group writes the features read: the edit being written in parts is applied to them first
+  for (const id of selectedIds) store.applyEditFirst?.(id);
 
   // Condition 1: two or more features are selected
   const features = selectedIds
@@ -231,6 +236,9 @@ export function ungroupSelection(store: DocumentAccess): boolean {
 
   // A feature selection -> take only the selected members out of the group (do not dissolve)
   if (selection.type === 'feature') {
+    // Before the transaction opens, the edit being written in parts is applied first to the
+    // features read to be taken out of their group
+    for (const id of selection.ids) store.applyEditFirst?.(id);
     const memberIds = selection.ids.filter((id) => store.getFeature(id)?.groupId !== undefined);
     if (memberIds.length === 0) return false;
 

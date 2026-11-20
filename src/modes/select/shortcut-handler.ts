@@ -82,7 +82,11 @@ export function handleNudgeShortcut(
   if (!direction || modifiers.ctrl || modifiers.alt || modifiers.meta) return false;
 
   const { store, map } = context;
-  const features = getSelectedFeatureIds(store)
+  const ids = getSelectedFeatureIds(store);
+  // Before the transaction opens, the edit being written in parts is applied first to the
+  // features read to be moved
+  for (const id of ids) store.applyEditFirst?.(id);
+  const features = ids
     .map((id) => store.getFeature(id))
     .filter((f): f is Feature => f !== undefined);
   if (features.length === 0) return false;
