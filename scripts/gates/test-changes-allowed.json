@@ -780,6 +780,21 @@
       "path": "src/view/ui/selection-ui-drawer.test.ts",
       "change": "CHANGES 104, 106, 107, 118 (the object Store taken out: the test runs over the layer on the built-in Store)",
       "unit": "the changes of the document as sets of IDs, and the object Store taken out"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 39 (FeatureTarget, EditOptions, EditCounts join the main entry)",
+      "unit": "the base of the bulk edits"
+    },
+    {
+      "path": "src/store/built-in/store-writes.test.ts",
+      "change": "CHANGES 180 (a nested transaction that gives hasMoreParts: true makes the change a part that more follow)",
+      "unit": "the base of the bulk edits"
+    },
+    {
+      "path": "src/api/impl/create-draw.test.ts",
+      "change": "CHANGES 9 (a nested transact of another source throws invalidState, writing nothing)",
+      "unit": "the base of the bulk edits"
     }
   ]
 }
