@@ -805,6 +805,11 @@
       "path": "bench/edit-document.test.ts",
       "change": "CHANGES 16 (the list of the scenes of the editing benchmark gains translateAll, rotateAll and scaleAll)",
       "unit": "the moves, rotations and scalings of the bulk edits"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "CHANGES 16 (the list of the scenes of the editing benchmark gains translateLayer, a move of every feature of the layer with nothing selected)",
+      "unit": "the baseline of the pictures, and the stop of the bulk edits of the editing benchmark"
     }
   ]
 }
