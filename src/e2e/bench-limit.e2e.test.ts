@@ -91,16 +91,29 @@ afterAll(async () => {
   await browser?.close();
 });
 
+/** Runs a scene of the page and gives its result */
+function run(name: string): Promise<SceneResult> {
+  return page.evaluate((scene) => (window as unknown as BenchWindow).runEditBench(scene), name);
+}
+
+/**
+ * Opens the document of the page with the scene `open`, so that the scene after it starts from
+ * the document as made without loading it again in its preparation; it would be refused if the
+ * scene before had left the page read-only
+ */
+async function openDocument(): Promise<void> {
+  const result = await run('open');
+  expect(result.error ?? '').not.toMatch(/read-only/);
+}
+
 describe(`the editing benchmark with ${COUNT.toLocaleString('en')} features`, () => {
   for (const scene of SCENES) {
     it(`${scene} stops when its time runs out and gives its result`, {
-      timeout: browserTimeout(90_000),
+      timeout: browserTimeout(120_000),
     }, async () => {
+      await openDocument();
       const started = Date.now();
-      const result = await page.evaluate(
-        (name) => (window as unknown as BenchWindow).runEditBench(name),
-        scene,
-      );
+      const result = await run(scene);
       const took = Date.now() - started;
       expect(result.scene).toBe(scene);
       expect(result.completed).toBe(false);
@@ -112,12 +125,9 @@ describe(`the editing benchmark with ${COUNT.toLocaleString('en')} features`, ()
     });
   }
 
-  it('the page is writable after them: a scene that opens the document again is not refused', {
-    timeout: browserTimeout(90_000),
+  it('the page is writable after the last of them', {
+    timeout: browserTimeout(60_000),
   }, async () => {
-    const result = await page.evaluate(() =>
-      (window as unknown as BenchWindow).runEditBench('updateOne'),
-    );
-    expect(result.error ?? '').not.toMatch(/read-only/);
+    await openDocument();
   });
 });
