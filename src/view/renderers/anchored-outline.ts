@@ -20,6 +20,7 @@ import { getDashPattern, RENDERING_DEFAULTS } from '../../shared/math/index.js';
 import type { StrokeStyle } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -40,6 +41,9 @@ export interface OutlineOffset {
 /** Floats per vertex: the offset (x, y in device px), the signed distance across, the distance along */
 const FLOATS_PER_VERTEX = 4;
 const STRIDE = FLOATS_PER_VERTEX * 4;
+
+/** The part this renderer records what it holds on the GPU under */
+const OUTLINES_PART = 'outlines';
 
 /**
  * The vertices of a closed outline as a triangle strip: two per corner (the two sides of the
@@ -139,20 +143,26 @@ export class AnchoredOutlineRenderer {
 
   private vao: WebGLVertexArrayObject | null;
   private vertexBuffer: WebGLBuffer | null;
+  /** Where what this renderer holds on the GPU is recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
+    ledger: GpuLedger = new GpuLedger(),
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
+    this.ledger = ledger;
     // An outline around an anchor is a symbol: it keeps the height of its anchor on the frames
     // that lay the surfaces flat, as the marker does
     this.projectionUniformManager = new ProjectionUniformManager(gl).useTerrainState(terrain);
     this.vertexBuffer = gl.createBuffer();
+    ledger.record(this.vertexBuffer, OUTLINES_PART, 'buffer');
     this.vao = gl.createVertexArray();
+    ledger.record(this.vao, OUTLINES_PART, 'vertex-array');
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.enableVertexAttribArray(0);
@@ -167,8 +177,12 @@ export class AnchoredOutlineRenderer {
   /** Makes sure the shader of the projection variant exists */
   ensureShader(shaderData: ShaderData): void {
     if (this.variantName === shaderData.variantName) return;
-    if (this.program) this.gl.deleteProgram(this.program);
+    if (this.program) {
+      this.ledger.release(this.program);
+      this.gl.deleteProgram(this.program);
+    }
     this.program = this.createShaderProgram(shaderData.vertexShaderPrelude, shaderData.define);
+    this.ledger.record(this.program, OUTLINES_PART, 'program');
     this.variantName = shaderData.variantName;
     this.projectionUniformManager.getLocations(this.program);
     const gl = this.gl;
@@ -282,6 +296,7 @@ void main() {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.vertexBuffer, OUTLINES_PART, 'buffer', data.byteLength);
     gl.bindVertexArray(this.vao);
     gl.useProgram(this.program);
     this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
@@ -320,14 +335,17 @@ void main() {
   /** Releases the GPU resources */
   dispose(): void {
     if (this.program) {
+      this.ledger.release(this.program);
       this.gl.deleteProgram(this.program);
       this.program = null;
     }
     if (this.vao) {
+      this.ledger.release(this.vao);
       this.gl.deleteVertexArray(this.vao);
       this.vao = null;
     }
     if (this.vertexBuffer) {
+      this.ledger.release(this.vertexBuffer);
       this.gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }

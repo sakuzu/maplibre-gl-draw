@@ -22,6 +22,7 @@ import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
+import { GpuLedger } from '../../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import { calculateOffsetUniforms, createProgram } from '../../shaders/helpers.js';
 import { ProjectionUniformManager } from '../../shaders/projection.js';
@@ -47,6 +48,7 @@ import {
   createRetainedLineBatch,
   deleteRetainedLineBatch,
   ImmediateCoordTexture,
+  LINES_PART,
   patchRetainedCoordTexels,
   releaseInstanceAttribs,
   setupInstanceAttribs,
@@ -119,18 +121,22 @@ export class SDFLineRenderer {
   private pixelRatio: PixelRatioInput | undefined;
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
+  /** Where what this renderer holds on the GPU is recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
+    ledger: GpuLedger = new GpuLedger(),
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
+    this.ledger = ledger;
     this.uniforms = new LineUniforms(gl);
-    this.immCoordTexture = new ImmediateCoordTexture(gl);
+    this.immCoordTexture = new ImmediateCoordTexture(gl, ledger);
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(terrain);
@@ -143,12 +149,16 @@ export class SDFLineRenderer {
   private initBuffers(): void {
     const gl = this.gl;
 
+    const ledger = this.ledger;
     this.quadVAO = gl.createVertexArray();
+    ledger.record(this.quadVAO, LINES_PART, 'vertex-array');
     gl.bindVertexArray(this.quadVAO);
 
     this.quadVBO = gl.createBuffer();
+    ledger.record(this.quadVBO, LINES_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVBO);
     gl.bufferData(gl.ARRAY_BUFFER, STATION_VERTICES, gl.STATIC_DRAW);
+    ledger.record(this.quadVBO, LINES_PART, 'buffer', STATION_VERTICES.byteLength);
 
     setupQuadAttribs(gl);
 
@@ -156,6 +166,7 @@ export class SDFLineRenderer {
 
     // The instance buffer for immediate mode (orphaned and reused on every draw)
     this.immInstanceBuffer = gl.createBuffer();
+    ledger.record(this.immInstanceBuffer, LINES_PART, 'buffer');
   }
 
   /**
@@ -231,6 +242,7 @@ export class SDFLineRenderer {
   ensureShader(shaderData: ShaderData): void {
     if (this.variantName !== shaderData.variantName) {
       if (this.program) {
+        this.ledger.release(this.program);
         this.gl.deleteProgram(this.program);
       }
 
@@ -239,6 +251,7 @@ export class SDFLineRenderer {
         buildLineVertexSource(shaderData.vertexShaderPrelude, shaderData.define),
         LINE_FRAGMENT_SOURCE,
       );
+      this.ledger.record(this.program, LINES_PART, 'program');
       this.variantName = shaderData.variantName;
 
       // Get the renderer-specific uniform locations (this also discards the record of the
@@ -405,6 +418,7 @@ export class SDFLineRenderer {
     // Upload into the instance buffer (orphaned and reused)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.immInstanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STREAM_DRAW);
+    this.ledger.record(this.immInstanceBuffer, LINES_PART, 'buffer', instanceData.byteLength);
 
     // widthOverride: the GPU computation (0) when createdZoom is specified, otherwise u_width
     // Convert the line width into physical pixels (CSS pixels * devicePixelRatio)
@@ -486,6 +500,12 @@ export class SDFLineRenderer {
     // Upload into the instance buffer (orphaned and reused)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.immInstanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, arrays.instanceData, gl.STREAM_DRAW);
+    this.ledger.record(
+      this.immInstanceBuffer,
+      LINES_PART,
+      'buffer',
+      arrays.instanceData.byteLength,
+    );
 
     this.executeDrawCall(
       arrays.instanceCount,
@@ -542,6 +562,7 @@ export class SDFLineRenderer {
       origin,
       options.widthZoom ?? null,
       this.textureSizeLimit(),
+      this.ledger,
     );
   }
 
@@ -582,6 +603,7 @@ export class SDFLineRenderer {
       origin,
       options.widthZoom ?? null,
       this.textureSizeLimit(),
+      this.ledger,
     );
   }
 
@@ -704,7 +726,7 @@ export class SDFLineRenderer {
    * @internal
    */
   disposeRetainedBatch(batch: RetainedLineBatch): void {
-    deleteRetainedLineBatch(this.gl, batch);
+    deleteRetainedLineBatch(this.gl, batch, this.ledger);
   }
 
   /**
@@ -715,19 +737,23 @@ export class SDFLineRenderer {
   dispose(): void {
     const gl = this.gl;
     if (this.program) {
+      this.ledger.release(this.program);
       gl.deleteProgram(this.program);
       this.program = null;
     }
     if (this.quadVAO) {
+      this.ledger.release(this.quadVAO);
       gl.deleteVertexArray(this.quadVAO);
       this.quadVAO = null;
     }
     if (this.quadVBO) {
+      this.ledger.release(this.quadVBO);
       gl.deleteBuffer(this.quadVBO);
       this.quadVBO = null;
     }
     this.immCoordTexture.dispose();
     if (this.immInstanceBuffer) {
+      this.ledger.release(this.immInstanceBuffer);
       gl.deleteBuffer(this.immInstanceBuffer);
       this.immInstanceBuffer = null;
     }

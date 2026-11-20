@@ -51,6 +51,7 @@ import type { DocumentAccess } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { installAnchorProjector, uninstallAnchorProjector } from '../terrain/anchor.js';
 import {
@@ -180,6 +181,13 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   getTerrainContext(): TerrainContext;
   /** The WebGL context of the map while the drawing is on it, or null */
   getGL(): WebGL2RenderingContext | null;
+  /** What the drawing of this instance holds on the GPU, per part */
+  getGpuLedger(): GpuLedger;
+  /**
+   * The instance is gone: the GPU side is dropped if it is still there, and what is still in the
+   * ledger was left behind. It is deleted and counted (`leakedBytes` of the ledger)
+   */
+  destroyGpu(): void;
   /**
    * Whether work remains that later frames finish without the host doing anything (see
    * `draw.hasPendingWork()`)
@@ -291,12 +299,13 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
    */
   const renderScope = createRenderScope(deps.selectionScope);
   const terrainContext = renderScope.terrain;
-  const terrainResolver = new TerrainResolver(map, terrainContext);
+  const terrainResolver = new TerrainResolver(map, terrainContext, renderScope.gpu);
   const drape = new DrapePlanner({
     map,
     store,
     terrain: terrainContext,
     datasets,
+    gpu: renderScope.gpu,
     // Read at each build, so a change of the rendering switches applies to the next one
     get timeSlicing() {
       return renderingConfig.timeSlicing;
@@ -444,19 +453,22 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     const { gl, mapInstance } = engine;
     if (engine.renderers || !gl || !mapInstance || gl.isContextLost()) return;
 
-    engine.renderers = initRenderers({
-      gl,
-      map: mapInstance,
-      store,
-      spatialIndex,
-      featureStyle,
-      selectionConfig,
-      renderingConfig,
-      customFeatureHandlers,
-      pixelRatio,
-      scope: renderScope,
-      onImageError: deps.onImageError,
-    });
+    // A build that throws halfway gives back what it had made
+    engine.renderers = renderScope.gpu.scope(gl, () =>
+      initRenderers({
+        gl,
+        map: mapInstance,
+        store,
+        spatialIndex,
+        featureStyle,
+        selectionConfig,
+        renderingConfig,
+        customFeatureHandlers,
+        pixelRatio,
+        scope: renderScope,
+        onImageError: deps.onImageError,
+      }),
+    );
 
     if (renderingConfig.storeRetained !== false) {
       engine.storeRetainedCache = new StoreRetainedCache(store, {
@@ -511,6 +523,23 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     disposeRenderers(r);
     engine.renderers = null;
+
+    // Every part has given back what it held: what is still in the ledger was forgotten
+    drainGpu();
+  }
+
+  /**
+   * Deletes what is still in the ledger once the GPU side is gone, and tells it: 0 unless a part
+   * forgot something. The sums of the ledger are checked as well
+   */
+  function drainGpu(): void {
+    const { gpu } = renderScope;
+    if (!gpu.audit()) console.warn('The sums of the GPU ledger do not agree with what it holds');
+    if (!engine.gl) return;
+    const left = gpu.drain(engine.gl);
+    if (Object.keys(left).length > 0) {
+      console.warn('GPU memory left behind by the drawing, now deleted:', left);
+    }
   }
 
   /**
@@ -554,6 +583,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Declare the switch to a new frame (this invalidates the memoized uniforms held by each
     // renderer; see shaders/frame.ts)
     beginRenderFrame();
+    // The textures of the images not drawn for a while go, and an image drawn from a smaller
+    // picture takes its whole picture again once there is room for it
+    r.textureCache.sweep(Date.now());
 
     // While the camera is moving, the re-baking of the retained batches is deferred (read by
     // dataset/chunk-set.ts)
@@ -776,6 +808,15 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     getGL(): WebGL2RenderingContext | null {
       return engine.renderers ? engine.gl : null;
+    },
+
+    getGpuLedger(): GpuLedger {
+      return renderScope.gpu;
+    },
+
+    destroyGpu(): void {
+      releaseGpuResources();
+      drainGpu();
     },
 
     hasPendingWork(): boolean {

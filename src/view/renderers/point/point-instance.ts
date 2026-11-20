@@ -25,6 +25,7 @@
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
+import { GpuLedger } from '../../gpu-ledger.js';
 import { getRenderFrame } from '../../shaders/frame.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
@@ -132,6 +133,9 @@ const INSTANCE_BYTES = INSTANCE_STRIDE * 4;
 
 /** Number of vertices of the billboard (quad) */
 const QUAD_VERTEX_COUNT = 4;
+
+/** The part this renderer records what it holds on the GPU under */
+const POINTS_PART = 'points';
 
 /** Value of the uniform that represents the shape */
 const SHAPE_UNIFORM: Readonly<Record<PointShape, number>> = POINT_SHAPE_CODE;
@@ -484,17 +488,22 @@ export class PointInstanceRenderer {
   private pixelRatio: PixelRatioInput | undefined;
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
+  /** Where what this renderer holds on the GPU is recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
+    ledger: GpuLedger = new GpuLedger(),
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
+    this.ledger = ledger;
     this.instanceBuffer = gl.createBuffer();
+    ledger.record(this.instanceBuffer, POINTS_PART, 'buffer');
     this.quadVertices = generateQuadVertices();
   }
 
@@ -511,6 +520,7 @@ export class PointInstanceRenderer {
       this.disposePrograms();
 
       this.program = this.createPointProgram(shaderData.vertexShaderPrelude, shaderData.define);
+      this.ledger.record(this.program, POINTS_PART, 'program');
       this.variantName = shaderData.variantName;
     }
   }
@@ -633,13 +643,17 @@ void main() {
   } {
     const gl = this.gl;
 
+    const ledger = this.ledger;
     const vao = gl.createVertexArray()!;
+    ledger.record(vao, POINTS_PART, 'vertex-array');
     gl.bindVertexArray(vao);
 
     // Vertex buffer of the billboard (location = 0)
     const vertexBuffer = gl.createBuffer()!;
+    ledger.record(vertexBuffer, POINTS_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.quadVertices, gl.STATIC_DRAW);
+    ledger.record(vertexBuffer, POINTS_PART, 'buffer', this.quadVertices.byteLength);
 
     gl.enableVertexAttribArray(0); // a_quad
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -866,6 +880,7 @@ void main() {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.instanceBuffer, POINTS_PART, 'buffer', instanceData.byteLength);
 
     gl.useProgram(this.program);
     this.setProjectionUniforms(this.program, zoom);
@@ -906,12 +921,11 @@ void main() {
     const origin = normalizeOrigin(options.origin ?? defaultPointOrigin(points));
 
     const instanceBuffer = gl.createBuffer()!;
+    this.ledger.record(instanceBuffer, POINTS_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      buildPointInstanceData(points, origin, this.pixelRatio, this.terrain),
-      gl.STATIC_DRAW,
-    );
+    const data = buildPointInstanceData(points, origin, this.pixelRatio, this.terrain);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    this.ledger.record(instanceBuffer, POINTS_PART, 'buffer', data.byteLength);
 
     const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer);
 
@@ -946,12 +960,11 @@ void main() {
     const origin = normalizeOrigin(options.origin ?? [points.lngLat[0], points.lngLat[1]]);
 
     const instanceBuffer = gl.createBuffer()!;
+    this.ledger.record(instanceBuffer, POINTS_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      buildPackedPointInstanceData(points, origin, this.pixelRatio, this.terrain),
-      gl.STATIC_DRAW,
-    );
+    const data = buildPackedPointInstanceData(points, origin, this.pixelRatio, this.terrain);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    this.ledger.record(instanceBuffer, POINTS_PART, 'buffer', data.byteLength);
 
     const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer);
 
@@ -1019,6 +1032,9 @@ void main() {
   disposeRetained(batch: RetainedPointBatch): void {
     const gl = this.gl;
 
+    this.ledger.release(batch.vao);
+    this.ledger.release(batch.shapeBuffer);
+    this.ledger.release(batch.instanceBuffer);
     gl.deleteVertexArray(batch.vao);
     gl.deleteBuffer(batch.shapeBuffer);
     gl.deleteBuffer(batch.instanceBuffer);
@@ -1030,6 +1046,7 @@ void main() {
   private disposePrograms(): void {
     const gl = this.gl;
     if (this.program) {
+      this.ledger.release(this.program);
       gl.deleteProgram(this.program);
       this.program = null;
     }
@@ -1041,6 +1058,8 @@ void main() {
 
     // Clear the VAOs and the vertex buffers of the billboard
     for (const entry of this.quadVaos.values()) {
+      this.ledger.release(entry.vao);
+      this.ledger.release(entry.shapeBuffer);
       gl.deleteVertexArray(entry.vao);
       gl.deleteBuffer(entry.shapeBuffer);
     }
@@ -1056,6 +1075,7 @@ void main() {
     this.disposePrograms();
 
     if (this.instanceBuffer) {
+      this.ledger.release(this.instanceBuffer);
       gl.deleteBuffer(this.instanceBuffer);
       this.instanceBuffer = null;
     }

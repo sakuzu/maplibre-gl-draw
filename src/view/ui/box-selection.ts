@@ -14,6 +14,7 @@ import type { BoxSelectionStyleConfig } from '../../shared/config/rendering.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from '../../shared/config/rendering.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import type { BoxSelection, Coordinate } from '../../store/types.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import { FillShaderManager } from '../renderers/polygon/fill.js';
 import type { Color, StrokeStyle } from '../renderers/stroke.js';
 import { StrokeRenderer } from '../renderers/stroke.js';
@@ -34,11 +35,12 @@ export class BoxSelectionRenderer {
     gl: WebGL2RenderingContext,
     styleConfig?: BoxSelectionStyleConfig,
     pixelRatio?: PixelRatioInput,
+    ledger?: GpuLedger,
   ) {
     // The rubber band is a rectangle on the screen, so it is never given elevation: its
     // renderers are built without the draw instance's terrain (they draw flat)
-    this.strokeRenderer = new StrokeRenderer(map, gl, pixelRatio);
-    this.fillShaderManager = new FillShaderManager(gl);
+    this.strokeRenderer = new StrokeRenderer(map, gl, pixelRatio, undefined, ledger);
+    this.fillShaderManager = new FillShaderManager(gl, undefined, ledger);
     this.styleConfig = styleConfig ?? DEFAULT_BOX_SELECTION_STYLE_CONFIG;
   }
 

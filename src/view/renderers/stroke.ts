@@ -15,6 +15,7 @@ import type { StrokeStyle } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import { getSurfaceTessellationStep } from '../globe-subdivision.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -31,6 +32,9 @@ import type { WidthUnit } from './line/line-types.js';
 
 /** Sentinel meaning that there is no per-vertex elevation (the same convention as the shader) */
 const NO_ELEVATION = -1.0e6;
+
+/** The part this renderer records what it holds on the GPU under */
+const STROKES_PART = 'strokes';
 
 /**
  * The upper limit on subdivision points that may be inserted when draping the
@@ -153,22 +157,28 @@ export class StrokeRenderer {
   // at construction)
   private vao: WebGLVertexArrayObject | null = null;
   private vertexBuffer: WebGLBuffer | null = null;
+  /** Where what this renderer holds on the GPU is recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     map: MapLibreMap,
     gl: WebGL2RenderingContext,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
+    ledger: GpuLedger = new GpuLedger(),
   ) {
     this.map = map;
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
+    this.ledger = ledger;
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(terrain);
     this.vertexBuffer = gl.createBuffer();
+    ledger.record(this.vertexBuffer, STROKES_PART, 'buffer');
     this.vao = gl.createVertexArray();
+    ledger.record(this.vao, STROKES_PART, 'vertex-array');
     this.setupVAO();
   }
 
@@ -206,10 +216,12 @@ export class StrokeRenderer {
   ensureShader(shaderData: ShaderData): void {
     if (this.variantName !== shaderData.variantName) {
       if (this.program) {
+        this.ledger.release(this.program);
         this.gl.deleteProgram(this.program);
       }
 
       this.program = this.createShaderProgram(shaderData.vertexShaderPrelude, shaderData.define);
+      this.ledger.record(this.program, STROKES_PART, 'program');
       this.variantName = shaderData.variantName;
 
       // Get the uniform locations specific to this renderer
@@ -618,6 +630,7 @@ void main() {
     // Transfer the vertex data (the VAO and the vertex buffer are reused)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.vertexBuffer, STROKES_PART, 'buffer', vertexData.byteLength);
     gl.bindVertexArray(this.vao);
 
     gl.useProgram(this.program);
@@ -693,14 +706,17 @@ void main() {
    */
   dispose(): void {
     if (this.program) {
+      this.ledger.release(this.program);
       this.gl.deleteProgram(this.program);
       this.program = null;
     }
     if (this.vao) {
+      this.ledger.release(this.vao);
       this.gl.deleteVertexArray(this.vao);
       this.vao = null;
     }
     if (this.vertexBuffer) {
+      this.ledger.release(this.vertexBuffer);
       this.gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }

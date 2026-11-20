@@ -25,6 +25,15 @@
  * at the boundary (drape/stitch.ts and drape_constrain in the vertex shader).
  */
 
+import type { GpuLedgerPart } from '../../gpu-ledger.js';
+
+/**
+ * The part the drape records its textures and its meshes under in the GPU ledger
+ *
+ * @internal
+ */
+export const DRAPE_PART = 'drape';
+
 /** The EXTENT of MapLibre's tile coordinate system */
 export const TILE_EXTENT = 8192;
 
@@ -76,26 +85,44 @@ export function buildTerrainMeshArrays(meshSize: number): {
  * Uploads the mesh to the GPU
  *
  * One mesh is enough regardless of the tile (the tile coordinate system is common).
+ *
+ * @param ledger Where the buffers are recorded, and under which part
  */
 export function createTerrainMeshBuffers(
   gl: WebGL2RenderingContext,
   meshSize: number,
+  ledger: GpuLedgerPart,
 ): TerrainMeshBuffers | null {
   const { vertices, indices } = buildTerrainMeshArrays(meshSize);
+  const { ledger: gpu, part } = ledger;
 
   const vao = gl.createVertexArray();
+  gpu.record(vao, part, 'vertex-array');
   const vertexBuffer = gl.createBuffer();
+  gpu.record(vertexBuffer, part, 'buffer');
   const indexBuffer = gl.createBuffer();
-  if (!vao || !vertexBuffer || !indexBuffer) return null;
+  gpu.record(indexBuffer, part, 'buffer');
+  if (!vao || !vertexBuffer || !indexBuffer) {
+    // What was made is given back (a lost context makes none of them)
+    gpu.release(vao);
+    gpu.release(vertexBuffer);
+    gpu.release(indexBuffer);
+    if (vao) gl.deleteVertexArray(vao);
+    if (vertexBuffer) gl.deleteBuffer(vertexBuffer);
+    if (indexBuffer) gl.deleteBuffer(indexBuffer);
+    return null;
+  }
 
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+  gpu.record(vertexBuffer, part, 'buffer', vertices.byteLength);
   gl.enableVertexAttribArray(0);
   // The integer attribute is read as a float (the shader side is a vec2)
   gl.vertexAttribPointer(0, 2, gl.SHORT, false, 4, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+  gpu.record(indexBuffer, part, 'buffer', indices.byteLength);
   gl.bindVertexArray(null);
 
   return { vao, vertexBuffer, indexBuffer, indexCount: indices.length, meshSize };
@@ -107,7 +134,11 @@ export function createTerrainMeshBuffers(
 export function disposeTerrainMeshBuffers(
   gl: WebGL2RenderingContext,
   mesh: TerrainMeshBuffers,
+  ledger: GpuLedgerPart,
 ): void {
+  ledger.ledger.release(mesh.vao);
+  ledger.ledger.release(mesh.vertexBuffer);
+  ledger.ledger.release(mesh.indexBuffer);
   gl.deleteVertexArray(mesh.vao);
   gl.deleteBuffer(mesh.vertexBuffer);
   gl.deleteBuffer(mesh.indexBuffer);

@@ -6,7 +6,8 @@
  *
  * Everything the rendering of one CustomLayer keeps between frames and that must never be seen
  * by another draw instance: the selection scope shared with the modes, the terrain state, and
- * the caches of triangulation and style evaluation keyed by feature id. Two instances on the
+ * the caches of triangulation and style evaluation keyed by feature id, and the ledger of what
+ * it holds on the GPU. Two instances on the
  * same page (a print preview next to the editor, a duplicated document with the same ids)
  * therefore never read each other's triangles, styles or terrain.
  *
@@ -16,6 +17,7 @@
 
 import { EarcutCache } from '../cache/earcut.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 
@@ -28,6 +30,8 @@ export interface RenderScope {
   readonly earcut: EarcutCache;
   /** Evaluated style rules keyed by feature id */
   readonly styleRules: StyleRuleCache;
+  /** What the drawing of the instance holds on the GPU, per part */
+  readonly gpu: GpuLedger;
 }
 
 /**
@@ -39,5 +43,6 @@ export function createRenderScope(selection: SelectionScope): RenderScope {
     terrain: new TerrainContext(),
     earcut: new EarcutCache(),
     styleRules: new StyleRuleCache(),
+    gpu: new GpuLedger(),
   };
 }

@@ -245,6 +245,41 @@
       "from": "src/operations/bulk-sliced.ts",
       "to": "src/api/impl/bulk-edits.ts",
       "note": "only the way the parts are cut: a budget of time per part, one transaction per part, the next part in a later task, the rows deleted meanwhile left out and the locked ones kept; told per part with the last part always told, applied first only to the features a write touches, and read through the public interface of the Store"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/gpu-ledger.ts",
+      "to": "src/view/gpu-ledger.ts",
+      "note": "the ledger, the limit of 64,000,000 bytes and the parts of the rows; the count of what was left behind belongs to the ledger of an instance, not to the module, the limit is not set by the application, the parts are named after the renderers here, and the frame buffer is a kind of its own"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/gpu-ledger.test.ts",
+      "to": "src/view/gpu-ledger.test.ts",
+      "note": "the tests of the ledger, with the count of what was left behind kept per ledger"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/gpu-ledger-coverage.test.ts",
+      "to": "src/view/gpu-ledger-coverage.test.ts",
+      "note": "only the GL that counts the storage it is asked for, the failures of the allocations and of the programs, the limit of the images and of the tables of the drape, and the check of the sources; the renderers of the rows and the allocations of the extensions are not brought, and the instances drawn on the GL, the objects counted by kind and the work of 1,000 and 10,000 features are new"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/cache/texture.ts",
+      "to": "src/view/cache/texture.ts",
+      "note": "the textures of the images recorded in the ledger under the limit: given up off the screen, drawn from a smaller picture, whole again when there is room, waiting when next to nothing is left, and given back after a time not drawn"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/terrain/drape/renderer.ts",
+      "to": "src/view/terrain/drape/renderer.ts",
+      "note": "only the rows of a table of the drape under the limit (rowsUnderLimit) and the record of the textures and of the mesh in the ledger; the drape of the rows is not brought"
     }
   ]
 }

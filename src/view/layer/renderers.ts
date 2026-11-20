@@ -98,9 +98,10 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     scope,
     onImageError,
   } = deps;
-  const textureCache = new TextureCache(gl);
+  const gpu = scope.gpu;
+  const textureCache = new TextureCache(gl, gpu);
   const terrain = scope.terrain;
-  const quadShader = new QuadShader(gl).useTerrainState(terrain);
+  const quadShader = new QuadShader(gl).useLedger(gpu).useTerrainState(terrain);
   const imageRenderer = new ImageRenderer(
     mapInstance,
     gl,
@@ -110,15 +111,21 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     onImageError,
   );
 
-  const strokeRenderer = new StrokeRenderer(mapInstance, gl, pixelRatio, terrain);
-  const outlineRenderer = new AnchoredOutlineRenderer(mapInstance, gl, pixelRatio, terrain);
-  const sdfLineRenderer = new SDFLineRenderer(mapInstance, gl, pixelRatio, terrain);
-  const pointShapeRenderer = new PointShapeRenderer(mapInstance, gl, pixelRatio, terrain);
-  const pointInstanceRenderer = new PointInstanceRenderer(mapInstance, gl, pixelRatio, terrain);
-  const polygonScope = { terrain, earcut: scope.earcut };
+  const strokeRenderer = new StrokeRenderer(mapInstance, gl, pixelRatio, terrain, gpu);
+  const outlineRenderer = new AnchoredOutlineRenderer(mapInstance, gl, pixelRatio, terrain, gpu);
+  const sdfLineRenderer = new SDFLineRenderer(mapInstance, gl, pixelRatio, terrain, gpu);
+  const pointShapeRenderer = new PointShapeRenderer(mapInstance, gl, pixelRatio, terrain, gpu);
+  const pointInstanceRenderer = new PointInstanceRenderer(
+    mapInstance,
+    gl,
+    pixelRatio,
+    terrain,
+    gpu,
+  );
+  const polygonScope = { terrain, earcut: scope.earcut, gpu };
   const polygonBatchRenderer = new PolygonBatchRenderer(gl, polygonScope);
   const sdfPolygonRenderer = new SDFPolygonRenderer(gl, pixelRatio, polygonScope);
-  const fillShaderManager = new FillShaderManager(gl, terrain);
+  const fillShaderManager = new FillShaderManager(gl, terrain, gpu);
 
   const selectionExtensions = scope.selection.extensions;
   const selectionUIRenderer = new SelectionUIRenderer(
@@ -159,6 +166,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     featureStyle,
     styleRules: scope.styleRules,
     terrain,
+    gpu,
   });
 
   const tentativeRenderer = new TentativeRenderer({
@@ -168,6 +176,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     pointShapeRenderer,
     tentativeStyle: featureStyle.tentative,
     terrain,
+    gpu,
   });
 
   const boxSelectionRenderer = new BoxSelectionRenderer(
@@ -175,6 +184,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     gl,
     renderingConfig.boxSelectionStyle,
     pixelRatio,
+    gpu,
   );
 
   const viewportFilter = new ViewportFilter({ map: mapInstance, spatialIndex });

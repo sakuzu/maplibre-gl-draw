@@ -10,9 +10,20 @@
  * immediate mode.
  */
 
+import { GpuLedger, textureBytes } from '../../gpu-ledger.js';
 import { calculateLngLatOffset } from '../../shaders/helpers.js';
 import { INSTANCE_BYTES, type LineBatchArrays, STATION_VERTICES } from './line-geometry.js';
 import type { LineBatchShape, RetainedLineBatch } from './line-types.js';
+
+/**
+ * The part the line renderer records what it holds on the GPU under
+ *
+ * @internal
+ */
+export const LINES_PART = 'lines';
+
+/** The bytes of a texel of the coordinate textures (RGBA32F) */
+const COORD_TEXEL_BYTES = 16;
 
 /**
  * Sets up the quad vertex attributes (call it with the quad bound to ARRAY_BUFFER)
@@ -83,12 +94,15 @@ export function createCoordTexture(
   texData: Float32Array,
   texSize: number,
   limit: number,
+  ledger: GpuLedger = new GpuLedger(),
 ): WebGLTexture | null {
   if (texSize > limit) return null;
   const texture = gl.createTexture();
   if (!texture) return null;
+  ledger.record(texture, LINES_PART, 'texture');
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, texSize, texSize);
+  ledger.record(texture, LINES_PART, 'texture', textureBytes(texSize, texSize, COORD_TEXEL_BYTES));
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texSize, texSize, gl.RGBA, gl.FLOAT, texData);
   setCoordTextureParams(gl);
   return texture;
@@ -107,7 +121,13 @@ export class ImmediateCoordTexture {
   texture: WebGLTexture | null = null;
   size = 0;
 
-  constructor(private readonly gl: WebGL2RenderingContext) {}
+  /**
+   * @param ledger Where the texture is recorded
+   */
+  constructor(
+    private readonly gl: WebGL2RenderingContext,
+    private readonly ledger: GpuLedger = new GpuLedger(),
+  ) {}
 
   /**
    * Uploads the coordinates (returns with the texture bound to TEXTURE_2D)
@@ -125,15 +145,27 @@ export class ImmediateCoordTexture {
     if (texSize > limit) return false;
 
     if (!this.texture || texSize > this.size) {
-      if (this.texture) gl.deleteTexture(this.texture);
+      if (this.texture) {
+        this.ledger.release(this.texture);
+        gl.deleteTexture(this.texture);
+        this.texture = null;
+        this.size = 0;
+      }
 
       let size = 2;
       while (size < texSize) size *= 2;
       size = Math.min(size, limit);
 
       const texture = gl.createTexture()!;
+      this.ledger.record(texture, LINES_PART, 'texture');
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, size, size);
+      this.ledger.record(
+        texture,
+        LINES_PART,
+        'texture',
+        textureBytes(size, size, COORD_TEXEL_BYTES),
+      );
       setCoordTextureParams(gl);
 
       this.texture = texture;
@@ -149,6 +181,7 @@ export class ImmediateCoordTexture {
   /** Deletes the texture */
   dispose(): void {
     if (this.texture) {
+      this.ledger.release(this.texture);
       this.gl.deleteTexture(this.texture);
       this.texture = null;
       this.size = 0;
@@ -163,6 +196,7 @@ export class ImmediateCoordTexture {
  * them is shared with immediate mode.
  *
  * @param limit The largest side of a texture this GPU allows (MAX_TEXTURE_SIZE)
+ * @param ledger Where what the batch holds on the GPU is recorded
  * @returns null when the coordinates do not fit in a texture of this GPU
  *
  * @internal
@@ -174,23 +208,29 @@ export function createRetainedLineBatch(
   origin: [number, number],
   widthZoom: number | null,
   limit: number,
+  ledger: GpuLedger,
 ): RetainedLineBatch | null {
-  const texture = createCoordTexture(gl, arrays.texData, arrays.texSize, limit);
+  const texture = createCoordTexture(gl, arrays.texData, arrays.texSize, limit, ledger);
   if (!texture) return null;
 
   const vao = gl.createVertexArray()!;
+  ledger.record(vao, LINES_PART, 'vertex-array');
   gl.bindVertexArray(vao);
 
   // The quad vertices (held separately from the shared immediate-mode buffer)
   const quadBuffer = gl.createBuffer()!;
+  ledger.record(quadBuffer, LINES_PART, 'buffer');
   gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, STATION_VERTICES, gl.STATIC_DRAW);
+  ledger.record(quadBuffer, LINES_PART, 'buffer', STATION_VERTICES.byteLength);
   setupQuadAttribs(gl);
 
   // The instance attributes (the layout is identical to immediate mode)
   const instanceBuffer = gl.createBuffer()!;
+  ledger.record(instanceBuffer, LINES_PART, 'buffer');
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, arrays.instanceData, gl.STATIC_DRAW);
+  ledger.record(instanceBuffer, LINES_PART, 'buffer', arrays.instanceData.byteLength);
   setupInstanceAttribs(gl);
 
   gl.bindVertexArray(null);
@@ -264,7 +304,12 @@ export function patchRetainedCoordTexels(
 export function deleteRetainedLineBatch(
   gl: WebGL2RenderingContext,
   batch: RetainedLineBatch,
+  ledger: GpuLedger,
 ): void {
+  ledger.release(batch.vao);
+  ledger.release(batch.quadBuffer);
+  ledger.release(batch.instanceBuffer);
+  ledger.release(batch.texture);
   gl.deleteVertexArray(batch.vao);
   gl.deleteBuffer(batch.quadBuffer);
   gl.deleteBuffer(batch.instanceBuffer);

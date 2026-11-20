@@ -8,6 +8,8 @@
  * It improves performance by eliminating per-frame VAO/buffer creation and deletion.
  */
 
+import type { GpuLedgerPart } from '../gpu-ledger.js';
+
 /**
  * Cached geometry
  */
@@ -34,10 +36,21 @@ export class BufferCache {
   private gl: WebGL2RenderingContext;
   private cache: Map<string, CachedGeometry> = new Map();
   private maxCacheSize: number;
+  /** Where what the cache holds on the GPU is recorded, and under which part */
+  private readonly ledger: GpuLedgerPart;
 
-  constructor(gl: WebGL2RenderingContext, maxCacheSize = 2000) {
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedgerPart, maxCacheSize = 2000) {
     this.gl = gl;
+    this.ledger = ledger;
     this.maxCacheSize = maxCacheSize;
+  }
+
+  /** Deletes the VAO and the buffer of a geometry, and takes them out of the ledger */
+  private deleteGeometry(cached: CachedGeometry): void {
+    this.ledger.ledger.release(cached.vao);
+    this.ledger.ledger.release(cached.buffer);
+    this.gl.deleteVertexArray(cached.vao);
+    this.gl.deleteBuffer(cached.buffer);
   }
 
   /**
@@ -68,8 +81,7 @@ export class BufferCache {
 
     // Delete the stale cache entry if there is one
     if (cached) {
-      this.gl.deleteVertexArray(cached.vao);
-      this.gl.deleteBuffer(cached.buffer);
+      this.deleteGeometry(cached);
     }
 
     // Check the cache size
@@ -81,12 +93,16 @@ export class BufferCache {
     const { vertices, vertexCount, drawMode, stride, attributes } = createFn();
 
     const gl = this.gl;
+    const { ledger, part } = this.ledger;
     const vao = gl.createVertexArray()!;
+    ledger.record(vao, part, 'vertex-array');
     gl.bindVertexArray(vao);
 
     const buffer = gl.createBuffer()!;
+    ledger.record(buffer, part, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    ledger.record(buffer, part, 'buffer', vertices.byteLength);
 
     for (const attr of attributes) {
       gl.enableVertexAttribArray(attr.index);
@@ -133,8 +149,7 @@ export class BufferCache {
   invalidate(key: string): void {
     const cached = this.cache.get(key);
     if (cached) {
-      this.gl.deleteVertexArray(cached.vao);
-      this.gl.deleteBuffer(cached.buffer);
+      this.deleteGeometry(cached);
       this.cache.delete(key);
     }
   }
@@ -160,8 +175,7 @@ export class BufferCache {
    */
   clear(): void {
     for (const cached of this.cache.values()) {
-      this.gl.deleteVertexArray(cached.vao);
-      this.gl.deleteBuffer(cached.buffer);
+      this.deleteGeometry(cached);
     }
     this.cache.clear();
   }

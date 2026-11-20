@@ -34,6 +34,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import { GpuLedger, type GpuLedgerPart, textureBytes } from '../../gpu-ledger.js';
 import { setDepthTestEnabled } from '../../layer/depth-state.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import { createProgram } from '../../shaders/helpers.js';
@@ -46,6 +47,7 @@ import {
 } from './edge-constrain.js';
 import {
   createTerrainMeshBuffers,
+  DRAPE_PART,
   disposeTerrainMeshBuffers,
   type TerrainMeshBuffers,
   TILE_EXTENT,
@@ -616,9 +618,27 @@ export class QuadDrapeRenderer {
   private useCounter = 0;
   /** The most recent failure reason (for diagnostics) */
   lastError = '';
+  /** Where the bytes of the textures and of the mesh are recorded */
+  private readonly ledger: GpuLedgerPart;
 
-  constructor(gl: WebGL2RenderingContext) {
+  /**
+   * @param ledger Where what it holds on the GPU is recorded
+   */
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedger = new GpuLedger()) {
     this.gl = gl;
+    this.ledger = { ledger, part: DRAPE_PART };
+  }
+
+  /** Deletes a texture and takes it out of the ledger */
+  private deleteTexture(texture: WebGLTexture): void {
+    this.ledger.ledger.release(texture);
+    this.gl.deleteTexture(texture);
+  }
+
+  /** Deletes the program of a slot and takes it out of the ledger */
+  private deleteSlot(slot: ProgramSlot): void {
+    this.ledger.ledger.release(slot.program);
+    this.gl.deleteProgram(slot.program);
   }
 
   /**
@@ -627,8 +647,8 @@ export class QuadDrapeRenderer {
   private ensureMesh(meshSize: number): boolean {
     const gl = this.gl;
     if (this.mesh && this.mesh.meshSize === meshSize) return true;
-    if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh);
-    this.mesh = createTerrainMeshBuffers(gl, meshSize);
+    if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
+    this.mesh = createTerrainMeshBuffers(gl, meshSize, this.ledger);
     if (!this.mesh) {
       this.lastError = 'mesh-alloc-failed';
       return false;
@@ -647,7 +667,7 @@ export class QuadDrapeRenderer {
   ): ProgramSlot | null {
     const gl = this.gl;
     if (slot && slot.variantName === shaderData.variantName) return slot;
-    if (slot) gl.deleteProgram(slot.program);
+    if (slot) this.deleteSlot(slot);
 
     let program: WebGLProgram;
     try {
@@ -660,6 +680,7 @@ export class QuadDrapeRenderer {
       this.lastError = `shader: ${String(error)}`;
       return null;
     }
+    this.ledger.ledger.record(program, DRAPE_PART, 'program');
 
     const locations: UniformSet = {};
     for (const name of [...QUAD_COMMON_UNIFORMS, ...extraUniforms]) {
@@ -798,7 +819,7 @@ export class QuadDrapeRenderer {
   private bindPlaceholderSamplers(set: UniformSet): void {
     const gl = this.gl;
     if (!this.placeholderTex) {
-      this.placeholderTex = createDataTexture(gl, 1, 1);
+      this.placeholderTex = createDataTexture(gl, 1, 1, this.ledger);
       if (this.placeholderTex) {
         gl.bindTexture(gl.TEXTURE_2D, this.placeholderTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.FLOAT, new Float32Array(4));
@@ -946,11 +967,11 @@ export class QuadDrapeRenderer {
     const texels = bins.entryCount * 2;
     const glyphRows = Math.max(1, Math.ceil(texels / GLYPH_TEX_WIDTH));
 
-    const glyphTex = createDataTexture(gl, GLYPH_TEX_WIDTH, glyphRows);
-    const binTex = createDataTexture(gl, bins.grid, bins.grid);
+    const glyphTex = createDataTexture(gl, GLYPH_TEX_WIDTH, glyphRows, this.ledger);
+    const binTex = createDataTexture(gl, bins.grid, bins.grid, this.ledger);
     if (!glyphTex || !binTex) {
-      if (glyphTex) gl.deleteTexture(glyphTex);
-      if (binTex) gl.deleteTexture(binTex);
+      if (glyphTex) this.deleteTexture(glyphTex);
+      if (binTex) this.deleteTexture(binTex);
       this.lastError = 'glyph-texture-alloc-failed';
       return null;
     }
@@ -992,12 +1013,11 @@ export class QuadDrapeRenderer {
    */
   private evictGlyphBuffers(): void {
     if (this.glyphCache.size <= GLYPH_CACHE_LIMIT) return;
-    const gl = this.gl;
     const sorted = [...this.glyphCache.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt);
     for (const [key, entry] of sorted) {
       if (this.glyphCache.size <= GLYPH_CACHE_LIMIT) break;
-      gl.deleteTexture(entry.glyphTex);
-      gl.deleteTexture(entry.binTex);
+      this.deleteTexture(entry.glyphTex);
+      this.deleteTexture(entry.binTex);
       this.glyphCache.delete(key);
     }
   }
@@ -1008,21 +1028,21 @@ export class QuadDrapeRenderer {
   dispose(): void {
     const gl = this.gl;
     for (const slot of [this.imageSlot, this.surfaceSlot]) {
-      if (slot) gl.deleteProgram(slot.program);
+      if (slot) this.deleteSlot(slot);
     }
     this.imageSlot = null;
     this.surfaceSlot = null;
     if (this.mesh) {
-      disposeTerrainMeshBuffers(gl, this.mesh);
+      disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
       this.mesh = null;
     }
     for (const entry of this.glyphCache.values()) {
-      gl.deleteTexture(entry.glyphTex);
-      gl.deleteTexture(entry.binTex);
+      this.deleteTexture(entry.glyphTex);
+      this.deleteTexture(entry.binTex);
     }
     this.glyphCache.clear();
     if (this.placeholderTex) {
-      gl.deleteTexture(this.placeholderTex);
+      this.deleteTexture(this.placeholderTex);
       this.placeholderTex = null;
     }
   }
@@ -1046,11 +1066,14 @@ function createDataTexture(
   gl: WebGL2RenderingContext,
   width: number,
   height: number,
+  ledger: GpuLedgerPart,
 ): WebGLTexture | null {
   const texture = gl.createTexture();
   if (!texture) return null;
+  ledger.ledger.record(texture, ledger.part, 'texture');
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, width, height);
+  ledger.ledger.record(texture, ledger.part, 'texture', textureBytes(width, height, 16));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);

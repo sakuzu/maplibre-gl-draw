@@ -11,6 +11,7 @@
 import earcut from 'earcut';
 import type { ProjectionData } from 'maplibre-gl';
 import type { Coordinate } from '../../../store/types.js';
+import { GpuLedger } from '../../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -25,6 +26,9 @@ import {
 } from '../../shaders/terrain-shade.js';
 import { TerrainContext } from '../../terrain/context.js';
 import { buildEarcutInput } from './earcut-input.js';
+
+/** The part this renderer records what it holds on the GPU under */
+const FILLS_PART = 'fills';
 
 /**
  * The fill renderer core uses for polygons, shared with custom feature renderers.
@@ -51,18 +55,29 @@ export class FillShaderManager {
   private vao: WebGLVertexArrayObject | null = null;
   private vertexBuffer: WebGLBuffer | null = null;
   private indexBuffer: WebGLBuffer | null = null;
+  /** Where what this renderer holds on the GPU is recorded */
+  private readonly ledger: GpuLedger;
 
   /**
    * @param terrain The terrain state of the draw instance (an inactive one draws flat)
+   * @param ledger Where what it holds on the GPU is recorded
    */
-  constructor(gl: WebGL2RenderingContext, terrain: TerrainContext = new TerrainContext()) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    terrain: TerrainContext = new TerrainContext(),
+    ledger: GpuLedger = new GpuLedger(),
+  ) {
     this.gl = gl;
+    this.ledger = ledger;
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(terrain);
     this.vertexBuffer = gl.createBuffer();
+    ledger.record(this.vertexBuffer, FILLS_PART, 'buffer');
     this.indexBuffer = gl.createBuffer();
+    ledger.record(this.indexBuffer, FILLS_PART, 'buffer');
     this.vao = gl.createVertexArray();
+    ledger.record(this.vao, FILLS_PART, 'vertex-array');
     this.setupVAO();
   }
 
@@ -92,10 +107,12 @@ export class FillShaderManager {
   ensureShader(shaderData: ShaderData): void {
     if (this.variantName !== shaderData.variantName) {
       if (this.program) {
+        this.ledger.release(this.program);
         this.gl.deleteProgram(this.program);
       }
 
       this.program = this.createShaderProgram(shaderData.vertexShaderPrelude, shaderData.define);
+      this.ledger.record(this.program, FILLS_PART, 'program');
       this.variantName = shaderData.variantName;
 
       // Get the projection uniform locations
@@ -223,9 +240,11 @@ void main() {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.vertexBuffer, FILLS_PART, 'buffer', vertexData.byteLength);
 
     gl.bindVertexArray(this.vao);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.indexBuffer, FILLS_PART, 'buffer', indexData.byteLength);
 
     gl.useProgram(this.program);
 
@@ -248,18 +267,22 @@ void main() {
    */
   dispose(): void {
     if (this.program) {
+      this.ledger.release(this.program);
       this.gl.deleteProgram(this.program);
       this.program = null;
     }
     if (this.vao) {
+      this.ledger.release(this.vao);
       this.gl.deleteVertexArray(this.vao);
       this.vao = null;
     }
     if (this.vertexBuffer) {
+      this.ledger.release(this.vertexBuffer);
       this.gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }
     if (this.indexBuffer) {
+      this.ledger.release(this.indexBuffer);
       this.gl.deleteBuffer(this.indexBuffer);
       this.indexBuffer = null;
     }

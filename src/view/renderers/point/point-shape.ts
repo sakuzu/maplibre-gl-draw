@@ -14,6 +14,7 @@ import type { PointShape, PointStyle } from '../../../shared/types/style.js';
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
 import { BufferCache } from '../../cache/buffer.js';
+import { GpuLedger } from '../../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -38,6 +39,9 @@ interface ShapeVertex {
 
 // Number of segments that approximate a circle
 const CIRCLE_SEGMENTS = RENDERING_DEFAULTS.CIRCLE_SEGMENTS;
+
+/** The part this renderer records what it holds on the GPU under */
+const POINT_SHAPES_PART = 'pointShapes';
 
 /**
  * Generates the vertices of a normalized circle (for TRIANGLE_FAN)
@@ -224,18 +228,22 @@ export class PointShapeRenderer {
   private pixelRatio: PixelRatioInput | undefined;
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
+  /** Where what this renderer holds on the GPU is recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
+    ledger: GpuLedger = new GpuLedger(),
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
+    this.ledger = ledger;
     this.projectionUniformManager = new ProjectionUniformManager(gl).useTerrainState(terrain);
-    this.bufferCache = new BufferCache(gl);
+    this.bufferCache = new BufferCache(gl, { ledger, part: POINT_SHAPES_PART });
   }
 
   /**
@@ -245,10 +253,12 @@ export class PointShapeRenderer {
     if (this.variantName === shaderData.variantName) return;
 
     if (this.program) {
+      this.ledger.release(this.program);
       this.gl.deleteProgram(this.program);
     }
 
     this.program = this.createShaderProgram(shaderData.vertexShaderPrelude, shaderData.define);
+    this.ledger.record(this.program, POINT_SHAPES_PART, 'program');
     this.variantName = shaderData.variantName;
 
     // Get the projection uniform locations
@@ -546,12 +556,17 @@ void main() {
 
     // No cache (a transient draw)
     const vertices = build(outerRatio);
+    const ledger = this.ledger;
     const vao = gl.createVertexArray();
+    ledger.record(vao, POINT_SHAPES_PART, 'vertex-array');
     gl.bindVertexArray(vao);
 
     const buffer = gl.createBuffer();
+    ledger.record(buffer, POINT_SHAPES_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, toVertexData(vertices), gl.STATIC_DRAW);
+    const data = toVertexData(vertices);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    ledger.record(buffer, POINT_SHAPES_PART, 'buffer', data.byteLength);
 
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -559,6 +574,8 @@ void main() {
     gl.drawArrays(drawMode, 0, vertices.length);
 
     gl.bindVertexArray(null);
+    ledger.release(buffer);
+    ledger.release(vao);
     gl.deleteBuffer(buffer);
     gl.deleteVertexArray(vao);
   }
@@ -570,6 +587,7 @@ void main() {
    */
   dispose(): void {
     if (this.program) {
+      this.ledger.release(this.program);
       this.gl.deleteProgram(this.program);
       this.program = null;
     }

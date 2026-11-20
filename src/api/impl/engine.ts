@@ -289,6 +289,9 @@ export function createEngine(
     onImageError: (featureId, error) =>
       eventEmitter.emit('load.error', { source: 'image', featureId, error }),
   });
+  // Runs after the layers are taken off the map (the releases run in the reverse order): what
+  // the drawing still holds on the GPU is given back, and what a part forgot is counted
+  teardown.add(() => customLayer.destroyGpu());
 
   // 3.5 Add the snapping indicator as a built-in overlay
   // (it comes in front of the selection UI because order: 'overlay')

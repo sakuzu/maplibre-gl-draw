@@ -19,6 +19,7 @@ import { resolveContentPixelRatio, resolvePixelRatio } from '../../../shared/uti
 import type { Coordinate } from '../../../store/types.js';
 import { EarcutCache } from '../../cache/earcut.js';
 import { getSurfaceTessellationStep, tessellateSurfaceFill } from '../../globe-subdivision.js';
+import { GpuLedger } from '../../gpu-ledger.js';
 import { getRenderFrame } from '../../shaders/frame.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
@@ -44,7 +45,7 @@ import {
 import { reportTerrainCoarsening } from '../../terrain/state.js';
 import type { TessellationStep } from '../../terrain/tessellation.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
-import type { PolygonRendererScope } from './batch.js';
+import { POLYGONS_PART, type PolygonRendererScope } from './batch.js';
 import { buildEarcutInput } from './earcut-input.js';
 import { drawFillWithTerrainCull } from './terrain-cull.js';
 import type { PolygonTriangulator } from './triangulator.js';
@@ -216,6 +217,8 @@ export class SDFPolygonRenderer {
   private readonly terrain: TerrainContext;
   /** Triangulation results of the draw instance, keyed by feature id */
   private readonly earcutCache: EarcutCache;
+  /** Where what this renderer holds on the GPU is recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -226,12 +229,16 @@ export class SDFPolygonRenderer {
     this.pixelRatio = pixelRatio;
     this.terrain = scope.terrain ?? new TerrainContext();
     this.earcutCache = scope.earcut ?? new EarcutCache();
+    this.ledger = scope.gpu ?? new GpuLedger();
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(this.terrain);
     this.vertexBuffer = gl.createBuffer();
+    this.ledger.record(this.vertexBuffer, POLYGONS_PART, 'buffer');
     this.indexBuffer = gl.createBuffer();
+    this.ledger.record(this.indexBuffer, POLYGONS_PART, 'buffer');
     this.vao = gl.createVertexArray();
+    this.ledger.record(this.vao, POLYGONS_PART, 'vertex-array');
   }
 
   /**
@@ -240,10 +247,12 @@ export class SDFPolygonRenderer {
   ensureShader(shaderData: ShaderData): void {
     if (this.variantName !== shaderData.variantName) {
       if (this.program) {
+        this.ledger.release(this.program);
         this.gl.deleteProgram(this.program);
       }
 
       this.program = this.createShaderProgram(shaderData.vertexShaderPrelude, shaderData.define);
+      this.ledger.record(this.program, POLYGONS_PART, 'program');
       this.variantName = shaderData.variantName;
 
       // Get the projection uniform locations
@@ -565,6 +574,7 @@ void main() {
     // Transfer the data to the buffer
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.vertexBuffer, POLYGONS_PART, 'buffer', vertexData.byteLength);
 
     // Draw
     gl.useProgram(this.program);
@@ -577,6 +587,7 @@ void main() {
     // The ELEMENT_ARRAY_BUFFER binding is VAO state, so the transfer is done after
     // binding the VAO
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.DYNAMIC_DRAW);
+    this.ledger.record(this.indexBuffer, POLYGONS_PART, 'buffer', indexData.byteLength);
     drawFillWithTerrainCull(gl, this.terrain, () => {
       gl.drawElements(gl.TRIANGLES, indexData.length, gl.UNSIGNED_INT, 0);
     });
@@ -645,19 +656,25 @@ void main() {
     );
     if (indexData.length === 0) return null;
 
+    const ledger = this.ledger;
     const vao = gl.createVertexArray()!;
+    ledger.record(vao, POLYGONS_PART, 'vertex-array');
     gl.bindVertexArray(vao);
 
     const vertexBuffer = gl.createBuffer()!;
+    ledger.record(vertexBuffer, POLYGONS_PART, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
+    ledger.record(vertexBuffer, POLYGONS_PART, 'buffer', vertexData.byteLength);
 
     this.setupVertexAttribs();
 
     // The ELEMENT_ARRAY_BUFFER binding is part of the VAO state
     const indexBuffer = gl.createBuffer()!;
+    ledger.record(indexBuffer, POLYGONS_PART, 'buffer');
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW);
+    ledger.record(indexBuffer, POLYGONS_PART, 'buffer', indexData.byteLength);
 
     gl.bindVertexArray(null);
 
@@ -728,6 +745,9 @@ void main() {
    */
   disposeRetained(batch: RetainedPolygonBatch): void {
     const gl = this.gl;
+    this.ledger.release(batch.vao);
+    this.ledger.release(batch.vertexBuffer);
+    this.ledger.release(batch.indexBuffer);
     gl.deleteVertexArray(batch.vao);
     gl.deleteBuffer(batch.vertexBuffer);
     gl.deleteBuffer(batch.indexBuffer);
@@ -1115,18 +1135,22 @@ void main() {
     const gl = this.gl;
 
     if (this.program) {
+      this.ledger.release(this.program);
       gl.deleteProgram(this.program);
       this.program = null;
     }
     if (this.vertexBuffer) {
+      this.ledger.release(this.vertexBuffer);
       gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }
     if (this.indexBuffer) {
+      this.ledger.release(this.indexBuffer);
       gl.deleteBuffer(this.indexBuffer);
       this.indexBuffer = null;
     }
     if (this.vao) {
+      this.ledger.release(this.vao);
       gl.deleteVertexArray(this.vao);
       this.vao = null;
     }

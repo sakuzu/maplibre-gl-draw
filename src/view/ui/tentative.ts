@@ -12,6 +12,7 @@ import { destinationPoint } from '../../geometry/distance.js';
 import type { TentativeStyle } from '../../shared/config/feature-style.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
 import type { Coordinate, TentativeState } from '../../store/types.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import type { SDFLineRenderer, SDFStrokeStyle } from '../renderers/line/sdf-line.js';
 import type { PointShapeRenderer, PointStyle } from '../renderers/point/point-shape.js';
 import { FillShaderManager } from '../renderers/polygon/fill.js';
@@ -31,6 +32,8 @@ export interface TentativeRendererDeps {
   tentativeStyle: TentativeStyle;
   /** The terrain state of the draw instance (an inactive one draws flat) */
   terrain?: TerrainContext;
+  /** Where what it holds on the GPU is recorded (a ledger of its own when omitted) */
+  gpu?: GpuLedger;
 }
 
 /**
@@ -77,7 +80,7 @@ export class TentativeRenderer {
     this.circleRadiusHandleStyle = deps.tentativeStyle.circleRadiusHandle;
     // The fill color for Tentative (translucent pink)
     this.fillColor = [1.0, 0.176, 0.333, 0.2];
-    this.fillShaderManager = new FillShaderManager(deps.gl, deps.terrain);
+    this.fillShaderManager = new FillShaderManager(deps.gl, deps.terrain, deps.gpu);
   }
 
   /**

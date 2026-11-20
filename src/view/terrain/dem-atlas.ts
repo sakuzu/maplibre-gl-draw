@@ -33,6 +33,7 @@
  * the exaggerated elevation.
  */
 
+import { GpuLedger, giveStorage, textureBytes } from '../gpu-ledger.js';
 import { createProgram } from '../shaders/helpers.js';
 import {
   getRenderableTerrainTiles,
@@ -81,6 +82,9 @@ export interface DemAtlasResult {
 }
 
 const QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
+
+/** The part the atlas and its quad are recorded under in the GPU ledger */
+const DEM_ATLAS_PART = 'demAtlas';
 
 const VERTEX_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_corner;
@@ -150,8 +154,15 @@ export class DemAtlas {
   /** The number of bakes done (diagnostics and tests) */
   bakeCount = 0;
 
-  constructor(gl: WebGL2RenderingContext) {
+  /** Where the bytes of the atlas and of its quad are recorded */
+  private readonly ledger: GpuLedger;
+
+  /**
+   * @param ledger Where what it holds on the GPU is recorded
+   */
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedger = new GpuLedger()) {
     this.gl = gl;
+    this.ledger = ledger;
   }
 
   /**
@@ -312,23 +323,29 @@ export class DemAtlas {
     const gl = this.gl;
     this.bakedKey = null;
     this.bakedResult = null;
+    const ledger = this.ledger;
     if (this.program) {
+      ledger.release(this.program);
       gl.deleteProgram(this.program);
       this.program = null;
     }
     if (this.vao) {
+      ledger.release(this.vao);
       gl.deleteVertexArray(this.vao);
       this.vao = null;
     }
     if (this.quadBuffer) {
+      ledger.release(this.quadBuffer);
       gl.deleteBuffer(this.quadBuffer);
       this.quadBuffer = null;
     }
     if (this.framebuffer) {
+      ledger.release(this.framebuffer);
       gl.deleteFramebuffer(this.framebuffer);
       this.framebuffer = null;
     }
     if (this.texture) {
+      ledger.release(this.texture);
       gl.deleteTexture(this.texture);
       this.texture = null;
     }
@@ -348,6 +365,8 @@ export class DemAtlas {
     } catch {
       return false;
     }
+    const ledger = this.ledger;
+    ledger.record(this.program, DEM_ATLAS_PART, 'program');
 
     this.destLoc = gl.getUniformLocation(this.program, 'u_dest');
     this.extentLoc = gl.getUniformLocation(this.program, 'u_extent');
@@ -358,10 +377,13 @@ export class DemAtlas {
     this.exaggerationLoc = gl.getUniformLocation(this.program, 'u_terrain_exaggeration');
 
     this.quadBuffer = gl.createBuffer();
+    ledger.record(this.quadBuffer, DEM_ATLAS_PART, 'buffer');
     this.vao = gl.createVertexArray();
+    ledger.record(this.vao, DEM_ATLAS_PART, 'vertex-array');
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, QUAD, gl.STATIC_DRAW);
+    ledger.record(this.quadBuffer, DEM_ATLAS_PART, 'buffer', QUAD.byteLength);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
     gl.bindVertexArray(null);
@@ -373,12 +395,30 @@ export class DemAtlas {
     const gl = this.gl;
     if (this.texture && this.textureWidth === width && this.textureHeight === height) return true;
 
-    if (this.texture) gl.deleteTexture(this.texture);
-    if (this.framebuffer) gl.deleteFramebuffer(this.framebuffer);
+    const ledger = this.ledger;
+    if (this.texture) {
+      ledger.release(this.texture);
+      gl.deleteTexture(this.texture);
+    }
+    if (this.framebuffer) {
+      ledger.release(this.framebuffer);
+      gl.deleteFramebuffer(this.framebuffer);
+    }
+    // Nothing is left pointing at what was just deleted (a failure below keeps none of it)
+    this.texture = null;
+    this.framebuffer = null;
+    this.textureWidth = 0;
+    this.textureHeight = 0;
 
     const texture = gl.createTexture();
+    ledger.record(texture, DEM_ATLAS_PART, 'texture');
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
+    if (texture) {
+      giveStorage(gl, ledger, texture, () =>
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height),
+      );
+    }
+    ledger.record(texture, DEM_ATLAS_PART, 'texture', textureBytes(width, height, 4));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -387,12 +427,15 @@ export class DemAtlas {
 
     const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
     const framebuffer = gl.createFramebuffer();
+    ledger.record(framebuffer, DEM_ATLAS_PART, 'framebuffer');
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
     const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
     gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
 
     if (!complete) {
+      ledger.release(texture);
+      ledger.release(framebuffer);
       gl.deleteTexture(texture);
       gl.deleteFramebuffer(framebuffer);
       this.texture = null;

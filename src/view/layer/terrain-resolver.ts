@@ -11,6 +11,7 @@
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { GpuLedger } from '../gpu-ledger.js';
 import {
   INACTIVE_TERRAIN_STATE,
   type TerrainContext,
@@ -51,10 +52,13 @@ export class TerrainResolver {
   private demAtlas: DemAtlas | null = null;
   /** Key of the conditions under which the tile step index was built most recently */
   private tilingCacheKey = '';
+  /** Where the DEM atlas is recorded (a ledger of its own when omitted) */
+  private readonly ledger: GpuLedger | undefined;
 
-  constructor(map: MapLibreMap, terrainContext: TerrainContext) {
+  constructor(map: MapLibreMap, terrainContext: TerrainContext, ledger?: GpuLedger) {
     this.map = map;
     this.terrainContext = terrainContext;
+    this.ledger = ledger;
   }
 
   /**
@@ -71,7 +75,7 @@ export class TerrainResolver {
     const terrain = getMapTerrain(map);
     if (!terrain || !gl) return this.markInactive();
 
-    if (!this.demAtlas) this.demAtlas = new DemAtlas(gl);
+    if (!this.demAtlas) this.demAtlas = new DemAtlas(gl, this.ledger);
     const center = map.getCenter();
     // The tiles are placed around the camera (across the antimeridian the two ends of the world
     // sit next to each other in the atlas)

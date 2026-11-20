@@ -29,6 +29,7 @@ import {
   SELECTION_HIGHLIGHT_RGB,
   SELECTION_HIGHLIGHT_STROKE_EXTRA,
 } from '../../../shared/config/selection-highlight.js';
+import { GpuLedger, type GpuLedgerPart, textureBytes } from '../../gpu-ledger.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import { createProgram } from '../../shaders/helpers.js';
 import type { TerrainTileData } from '../detect.js';
@@ -46,6 +47,7 @@ import {
 } from './edge-constrain.js';
 import {
   createTerrainMeshBuffers,
+  DRAPE_PART,
   disposeTerrainMeshBuffers,
   type TerrainMeshBuffers,
   TILE_EXTENT,
@@ -555,8 +557,22 @@ export class DrapeRenderer {
   /** MAX_TEXTURE_SIZE of the context (read once, 0 = not read yet) */
   private maxTextureSize = 0;
 
-  constructor(gl: WebGL2RenderingContext) {
+  /** Where the bytes of the textures and of the mesh are recorded */
+  private readonly ledger: GpuLedgerPart;
+
+  /**
+   * @param ledger Where what it holds on the GPU is recorded, under the limit of the instance
+   */
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedger = new GpuLedger()) {
     this.gl = gl;
+    this.ledger = { ledger, part: DRAPE_PART };
+  }
+
+  /** Deletes a texture and takes it out of the ledger */
+  private deleteTexture(texture: WebGLTexture | null): void {
+    if (!texture) return;
+    this.ledger.ledger.release(texture);
+    this.gl.deleteTexture(texture);
   }
 
   /**
@@ -566,8 +582,8 @@ export class DrapeRenderer {
     const gl = this.gl;
 
     if (!this.mesh || this.mesh.meshSize !== meshSize) {
-      if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh);
-      this.mesh = createTerrainMeshBuffers(gl, meshSize);
+      if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
+      this.mesh = createTerrainMeshBuffers(gl, meshSize, this.ledger);
       if (!this.mesh) {
         this.lastError = 'mesh-alloc-failed';
         return false;
@@ -576,13 +592,17 @@ export class DrapeRenderer {
 
     if (this.program && this.variantName === shaderData.variantName) return true;
 
-    if (this.program) gl.deleteProgram(this.program);
+    if (this.program) {
+      this.ledger.ledger.release(this.program);
+      gl.deleteProgram(this.program);
+    }
     try {
       this.program = createProgram(
         gl,
         VERTEX_SOURCE(shaderData.vertexShaderPrelude, shaderData.define),
         DRAPE_FRAGMENT_SOURCE,
       );
+      this.ledger.ledger.record(this.program, DRAPE_PART, 'program');
     } catch (error) {
       this.lastError = `shader: ${String(error)}`;
       this.program = null;
@@ -819,11 +839,12 @@ export class DrapeRenderer {
   dispose(): void {
     const gl = this.gl;
     if (this.program) {
+      this.ledger.ledger.release(this.program);
       gl.deleteProgram(this.program);
       this.program = null;
     }
     if (this.mesh) {
-      disposeTerrainMeshBuffers(gl, this.mesh);
+      disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
       this.mesh = null;
     }
     for (const texture of [
@@ -833,7 +854,7 @@ export class DrapeRenderer {
       this.cellTex,
       this.styleTex,
     ]) {
-      if (texture) gl.deleteTexture(texture);
+      this.deleteTexture(texture);
     }
     this.edgeTex = null;
     this.edgeStartTex = null;
@@ -858,6 +879,23 @@ export class DrapeRenderer {
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     if (location) gl.uniform1i(location, unit);
+  }
+
+  /**
+   * The rows of a data texture under the limit of the instance: a few extra (so that it is not made
+   * again on every increase) while there is room for them, or 0 when the rows needed do not fit.
+   * The frame is then drawn without the analytic drape, as with a table taller than the GPU allows
+   */
+  private rowsUnderLimit(
+    width: number,
+    channels: number,
+    neededRows: number,
+    maxRows: number,
+  ): number {
+    const { ledger } = this.ledger;
+    const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
+    if (ledger.fits(textureBytes(width, rows, channels * 4))) return rows;
+    return ledger.fits(textureBytes(width, neededRows, channels * 4)) ? neededRows : 0;
   }
 
   /** The tallest data texture this GPU allows (MAX_TEXTURE_SIZE, read once) */
@@ -893,7 +931,7 @@ export class DrapeRenderer {
 
     let target = texture;
     if (!target || size[0] !== width || size[1] < neededRows) {
-      if (target) gl.deleteTexture(target);
+      this.deleteTexture(target);
       this[sizeField] = [0, 0];
       this.uploaded[markField] = 0;
       // A table taller than the GPU allows cannot be allocated (texStorage2D would fail with
@@ -902,18 +940,26 @@ export class DrapeRenderer {
         this.lastError = `texture-limit: ${markField} needs ${neededRows} rows of ${maxRows}`;
         return null;
       }
+      // Allocate a few extra rows (so it is not recreated on every increase), under the limit of
+      // the instance
+      const rows = this.rowsUnderLimit(width, channels, neededRows, maxRows);
+      if (rows === 0) {
+        this.lastError = `gpu-limit: ${markField} needs ${neededRows} rows`;
+        return null;
+      }
       target = gl.createTexture();
       if (!target) return null;
-      // Allocate a few extra rows (so it is not recreated on every increase)
-      const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
+      const { ledger } = this.ledger;
+      ledger.record(target, DRAPE_PART, 'texture');
       gl.bindTexture(gl.TEXTURE_2D, target);
       gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows);
       // Only the allocation is checked (it is rare; getError is a synchronous round trip)
       if (gl.getError() !== gl.NO_ERROR) {
-        gl.deleteTexture(target);
+        this.deleteTexture(target);
         this.lastError = `texture-alloc-failed: ${markField}`;
         return null;
       }
+      ledger.record(target, DRAPE_PART, 'texture', textureBytes(width, rows, channels * 4));
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
