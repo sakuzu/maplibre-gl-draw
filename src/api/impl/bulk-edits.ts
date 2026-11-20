@@ -15,6 +15,12 @@
  *   included: the time the rows of a part took, with the listeners, gives the number of rows of
  *   the next part, and a part also ends once its writes alone have taken the budget. A part writes
  *   one row at least, however long it takes.
+ * - An edit that writes several features at a time is given them in batches, the locked ones and
+ *   the ones deleted meanwhile left out, and the clock is read after each batch. The first batch
+ *   is small (`BULK_FIRST_BATCH`); each next one is as many rows as the time a row of the batch
+ *   before took leaves in the budget of the part, at most twice the batch before and at most
+ *   `BULK_BATCH_MAX`. A write of a few features that touches a feature first gives it a batch of
+ *   its own.
  * - The target is read once, when the edit starts, as a copy of the references of its rows in
  *   typed arrays: no array of IDs, no feature per row. An ID that names nothing then is counted
  *   as missing; a row deleted afterwards leaves the target (the Store tells it), and is not
@@ -49,12 +55,18 @@ import { invalidInput, isRecord, locksIgnored, withLocksIgnored } from './shared
 /** The time of one part, the work of the listeners of its change included (ms) */
 export const BULK_PART_BUDGET_MS = 50;
 
+/** The features of the first batch of an edit that writes several features at a time */
+export const BULK_FIRST_BATCH = 16;
+
+/** The most features one batch of an edit that writes several features at a time is given */
+export const BULK_BATCH_MAX = 1024;
+
 /**
- * What one bulk edit does to each feature of its target
+ * What one bulk edit does to each feature of its target, one feature at a time
  *
  * @internal
  */
-export interface BulkEditWork {
+export interface BulkEditFeatureWork {
   /**
    * Writes the edit to one feature through the layer, in the transaction open (a part of the
    * edit, or the transaction of a write that touches the feature first)
@@ -63,6 +75,56 @@ export interface BulkEditWork {
    */
   writeFeature(id: string): boolean;
 }
+
+/**
+ * What one bulk edit does to the features of its target, several at a time
+ *
+ * @internal
+ */
+export interface BulkEditBatchWork {
+  /**
+   * Writes the edit to features through the layer, in the transaction open (a part of the edit,
+   * or the transaction of a write that touches one of them first)
+   *
+   * @param ids - The features, each once, none of them locked (unless the edit ignores the
+   *   locks) nor deleted when the batch was made
+   * @param changed - One entry per ID, 0 when given: set to 1 for each feature it changed
+   */
+  writeFeatures(ids: readonly string[], changed: Uint8Array): void;
+}
+
+/**
+ * What one bulk edit does to the features of its target
+ *
+ * @internal
+ */
+export type BulkEditWork = BulkEditFeatureWork | BulkEditBatchWork;
+
+/**
+ * What the work of an edit is made from, once the target is read and the number of the operation
+ * is taken
+ *
+ * @internal
+ */
+export interface BulkEditStart {
+  /** The number of the operation of the edit, the same in every part of it */
+  readonly operationId: number;
+  /**
+   * The features of the target when the edit starts: an ID given again and an ID that names
+   * nothing left out, a locked feature counted
+   */
+  readonly featureCount: number;
+  /** The ID of the feature, when the target has one feature only */
+  readonly onlyId: string | undefined;
+}
+
+/**
+ * Makes the work of an edit once it starts
+ *
+ * @throws What it throws is thrown by `BulkEdits.start`, and the edit does not start
+ * @internal
+ */
+export type BulkEditWorkFactory = (start: BulkEditStart) => BulkEditWork;
 
 /**
  * What the bulk edits are built with: the clock and the tasks, which a test replaces
@@ -89,14 +151,17 @@ export interface BulkEdits {
    *
    * @returns A promise of what the edit did, once its last change has arrived; null at once when
    *   the document is read-only or every feature of the target is locked
+   * @param work - The work, or the function that makes it once the target is read; it is not
+   *   called when the edit resolves with null at once
    * @throws `DrawError` with the code `invalidInput` for a target or options of the wrong shape,
    *   or `invalidState` for a second edit started in the same `draw.transact`, or a source other
-   *   than that of the `draw.transact` it is started in
+   *   than that of the `draw.transact` it is started in; what the function that makes the work
+   *   throws
    */
   start(
     target: FeatureTarget,
     options: EditOptions | undefined,
-    work: BulkEditWork,
+    work: BulkEditWork | BulkEditWorkFactory,
   ): Promise<EditCounts | null>;
   /**
    * Runs the outermost `draw.transact` of the instance: `run` opens its transaction, and calls
@@ -140,6 +205,10 @@ interface Edit {
   readonly gone: Set<number>;
   /** How many rows the next part writes at most */
   rowsPerPart: number;
+  /** How many rows the last batch had (a work that writes several features at a time) */
+  batchRows: number;
+  /** The time a row of the last batch took (ms); NaN before the first batch */
+  batchRowMs: number;
   readonly counts: Counts;
   /** Whether it waits for the transaction of `draw.transact` it was started in to end */
   inTransaction: boolean;
@@ -399,13 +468,73 @@ export function createBulkEdits(
     return any;
   };
 
+  /** Writes the edit to one feature, whatever the work writes at a time */
+  const writeOne = (work: BulkEditWork, id: string): boolean => {
+    if (!('writeFeatures' in work)) return work.writeFeature(id);
+    const changed = new Uint8Array(1);
+    countWork(counts, 'objectsCreated', 2);
+    work.writeFeatures([id], changed);
+    return changed[0] === 1;
+  };
+
   /** Applies the edit to one feature: a locked one stays as it is, and is counted */
   const visit = (edit: Edit, id: string): void => {
     if (!edit.ignoreLocks && isLocked(id)) {
       edit.counts.lockedCount += 1;
       return;
     }
-    if (edit.work.writeFeature(id)) edit.counts.changedCount += 1;
+    if (writeOne(edit.work, id)) edit.counts.changedCount += 1;
+  };
+
+  /**
+   * The rows of the next batch: as many as the time a row of the batch before took leaves in the
+   * budget of the part, at most twice the batch before and `BULK_BATCH_MAX`; one at least
+   */
+  const batchSizeOf = (edit: Edit, elapsed: number): number => {
+    if (Number.isNaN(edit.batchRowMs)) return BULK_FIRST_BATCH;
+    const growth = Math.min(BULK_BATCH_MAX, edit.batchRows * 2);
+    if (edit.batchRowMs <= 0) return growth;
+    return Math.max(1, Math.min(growth, Math.floor((budget - elapsed) / edit.batchRowMs)));
+  };
+
+  /**
+   * Gives the next rows of the order, at most `size` of them, to a work that writes several
+   * features at a time: the rows deleted or written first are passed over, and a locked one is
+   * counted and left out
+   *
+   * @returns The rows it went through, the locked ones included
+   */
+  const writeBatch = (edit: Edit, work: BulkEditBatchWork, size: number): number => {
+    const started = now();
+    const { order } = edit;
+    const ids: string[] = [];
+    let rows = 0;
+    while (edit.at < order.length && rows < size) {
+      const ref = order[edit.at];
+      edit.at += 1;
+      if (ref < 0 || edit.early.has(ref) || edit.gone.has(ref)) continue;
+      const id = tables.getRowId(ref);
+      if (id === undefined) continue;
+      rows += 1;
+      if (!edit.ignoreLocks && isLocked(id)) {
+        edit.counts.lockedCount += 1;
+        continue;
+      }
+      ids.push(id);
+    }
+    if (ids.length > 0) {
+      const changed = new Uint8Array(ids.length);
+      countWork(counts, 'objectsCreated', 2);
+      work.writeFeatures(ids, changed);
+      for (let i = 0; i < changed.length; i++) {
+        if (changed[i] === 1) edit.counts.changedCount += 1;
+      }
+    }
+    if (rows > 0) {
+      edit.batchRows = rows;
+      edit.batchRowMs = (now() - started) / rows;
+    }
+    return rows;
   };
 
   /** Runs `fn` with the locks ignored when the edit ignores them */
@@ -515,15 +644,20 @@ export function createBulkEdits(
       withLocksOf(edit, () =>
         layer.transact(
           () => {
-            const { order } = edit;
+            const { order, work } = edit;
             while (edit.at < order.length) {
-              const ref = order[edit.at];
-              edit.at += 1;
-              if (ref >= 0 && !edit.early.has(ref) && !edit.gone.has(ref)) {
-                const id = tables.getRowId(ref);
-                if (id !== undefined) {
-                  visit(edit, id);
-                  rows += 1;
+              if ('writeFeatures' in work) {
+                const size = Math.min(batchSizeOf(edit, now() - started), limit - rows);
+                rows += writeBatch(edit, work, Math.max(1, size));
+              } else {
+                const ref = order[edit.at];
+                edit.at += 1;
+                if (ref >= 0 && !edit.early.has(ref) && !edit.gone.has(ref)) {
+                  const id = tables.getRowId(ref);
+                  if (id !== undefined) {
+                    visit(edit, id);
+                    rows += 1;
+                  }
                 }
               }
               if (rows >= limit || now() - started >= budget) break;
@@ -648,7 +782,7 @@ export function createBulkEdits(
   const start = (
     target: FeatureTarget,
     given: EditOptions | undefined,
-    work: BulkEditWork,
+    makeWork: BulkEditWork | BulkEditWorkFactory,
   ): Promise<EditCounts | null> => {
     if (destroyed) throw destroyedError();
     const editOptions = checkOptions(given);
@@ -673,6 +807,14 @@ export function createBulkEdits(
     const ignoreLocks = editOptions.ignoreLocks ?? open?.ignoreLocks ?? locksIgnored(layer);
     if (!ignoreLocks && everyLocked(order)) return Promise.resolve(null);
     const operationId = (open ? layer.currentOperationId() : undefined) ?? store.newOperationId();
+    const work =
+      typeof makeWork === 'function'
+        ? makeWork({
+            operationId,
+            featureCount: sorted.length,
+            onlyId: sorted.length === 1 ? tables.getRowId(sorted[0]) : undefined,
+          })
+        : makeWork;
     let resolve: (counts: EditCounts | null) => void = () => {};
     let reject: (error: unknown) => void = () => {};
     const promise = new Promise<EditCounts | null>((res, rej) => {
@@ -695,6 +837,8 @@ export function createBulkEdits(
       early: new Set(),
       gone: new Set(),
       rowsPerPart: Number.POSITIVE_INFINITY,
+      batchRows: 0,
+      batchRowMs: Number.NaN,
       counts: { changedCount: 0, lockedCount: 0, missingCount: missing },
       inTransaction: open !== null,
       stopping: false,
