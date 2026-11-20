@@ -181,9 +181,6 @@
       "main:added:FeatureCandidate.style": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:FeatureCandidate.type": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "94": {
-      "main:doc:FeatureTypesCollection.override": "92e332bc2fd74d7fdbf78a6e9c0abb6f28e7f90cfae98147776463ac090a0844"
-    },
     "95": {
       "main:doc:ExtensionContext.drawing": "c03660d39649ddeba03d010593d07340fcc961f260379d05070f20559c7e15d8"
     },
