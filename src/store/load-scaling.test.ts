@@ -259,7 +259,7 @@ function minSpreadMs(layerCount: number, reps: number): number {
 }
 
 describe('scaling of the membership decision of layer.order (regression prevention)', () => {
-  it.skip('does not change the elapsed time much between 1 layer and many, for the same count', () => {
+  it('does not change the elapsed time much between 1 layer and many, for the same count', () => {
     // Warm-up (to exclude the outliers of JIT).
     measureSpreadMs(1);
     measureSpreadMs(ORDER_SCALING_LAYERS);
@@ -272,5 +272,5 @@ describe('scaling of the membership decision of layer.order (regression preventi
     // reallocation). If it goes back to scanning the order it becomes about 20x
     // (= the number of layers). The threshold is 4x, halfway between them.
     expect(ratio).toBeLessThan(4);
-  });
+  }, 60_000);
 });
