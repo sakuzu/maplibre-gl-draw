@@ -3,9 +3,9 @@
   "entries": [],
   "samples": {
     "sample-follow-drag.ts": 4,
-    "sample-main-usage.ts": 27,
+    "sample-main-usage.ts": 16,
     "sample-presence-events.ts": 20,
-    "sample-undo-plugin.ts": 18
+    "sample-undo-plugin.ts": 5
   },
   "declarations": {
     "1": {

@@ -795,6 +795,16 @@
       "path": "src/api/impl/create-draw.test.ts",
       "change": "CHANGES 9 (a nested transact of another source throws invalidState, writing nothing)",
       "unit": "the base of the bulk edits"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 92 (TransformFields joins the list of the public names)",
+      "unit": "the moves, rotations and scalings of the bulk edits"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "CHANGES 16 (the list of the scenes of the editing benchmark gains translateAll, rotateAll and scaleAll)",
+      "unit": "the moves, rotations and scalings of the bulk edits"
     }
   ]
 }
