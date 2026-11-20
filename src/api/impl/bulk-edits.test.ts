@@ -83,6 +83,59 @@ function shift(dx: number, target: Draw = draw) {
   };
 }
 
+/** An edit of the tests that moves each feature, of any shape, by `dx` degrees to the east */
+function shiftShape(dx: number) {
+  const moved = (value: unknown): unknown => {
+    const list = value as unknown[];
+    return typeof list[0] === 'number'
+      ? [(list[0] as number) + dx, ...list.slice(1)]
+      : list.map(moved);
+  };
+  return {
+    writeFeature(id: string): boolean {
+      clock += ROW_TIME;
+      const geometry = draw.features.get(id)?.geometry as { coordinates: unknown } | undefined;
+      if (!geometry) return false;
+      const next = { ...geometry, coordinates: moved(geometry.coordinates) } as never;
+      return draw.features.update(id, { geometry: next }) !== null;
+    },
+  };
+}
+
+/** The west and east ends of the positions of a geometry */
+function westEastOf(geometry: unknown): [number, number] {
+  let west = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  const visit = (value: unknown): void => {
+    const list = value as unknown[];
+    if (typeof list[0] === 'number') {
+      west = Math.min(west, list[0] as number);
+      east = Math.max(east, list[0] as number);
+    } else {
+      for (const item of list) visit(item);
+    }
+  };
+  visit((geometry as { coordinates: unknown }).coordinates);
+  return [west, east];
+}
+
+/** Creates a square area and returns its ID */
+function square(west: number, south: number, size: number): string {
+  const ring = [
+    [west, south],
+    [west + size, south],
+    [west + size, south + size],
+    [west, south + size],
+    [west, south],
+  ];
+  const feature = draw.features.create({
+    type: 'Polygon',
+    geometry: { type: 'Polygon', coordinates: [ring] },
+  });
+  if (!feature) throw new Error('not created');
+  return feature.id;
+}
+
 /** The position of a point */
 const xyOf = (id: string, target: Draw = draw): [number, number] => {
   const geometry = target.features.get(id)?.geometry;
@@ -358,6 +411,40 @@ describe('the order of the edits', () => {
     expect(run.value).toEqual(expect.objectContaining({ changedCount: 12, missingCount: 0 }));
   });
 
+  it('applies it to a feature buffer only reads, so the result is made where the edit put it', async () => {
+    const ids = points(12);
+    const run = settled(edits.start(ids, undefined, shift(1)));
+    await nextTask();
+    // The edit has not reached the last point: the buffer is made around it once it has moved
+    const results = draw.features.buffer([ids[11]], { distanceMeters: 1_000 });
+    expect(results).toHaveLength(1);
+    const [west, east] = westEastOf(results?.[0].geometry);
+    expect((west + east) / 2).toBeCloseTo(0.11 + 1, 6);
+    await allTasks();
+    // The later parts leave it out: the edit moved it once
+    expect(xyOf(ids[11])[0]).toBeCloseTo(0.11 + 1, 9);
+    expect((run.value as EditCounts).changedCount).toBe(12);
+  });
+
+  it('applies it to the area difference subtracts, which stays', async () => {
+    const ids = points(12);
+    const subject = square(0, 0, 2);
+    // Far to the east of the area subtracted from, until the edit moves it 10 degrees to the west
+    const cutter = square(9, 0, 2);
+    const run = settled(edits.start([...ids, cutter], undefined, shiftShape(-10)));
+    await nextTask();
+    const result = draw.features.difference(subject, [cutter]);
+    // Subtracted where the edit put it: the west half of the area goes
+    const [west, east] = westEastOf(result?.geometry);
+    expect(west).toBeCloseTo(1, 9);
+    expect(east).toBeCloseTo(2, 9);
+    expect(westEastOf(draw.features.get(cutter)?.geometry)).toEqual([-1, 1]);
+    await allTasks();
+    // The later parts leave it out: the edit moved it once
+    expect(westEastOf(draw.features.get(cutter)?.geometry)).toEqual([-1, 1]);
+    expect((run.value as EditCounts).changedCount).toBe(13);
+  });
+
   it('does not apply it before a write made to the Store directly', async () => {
     const ids = points(12);
     const run = settled(edits.start(ids, undefined, tag('A')));
@@ -626,6 +713,53 @@ describe('a bulk edit started in draw.transact', () => {
       undefined,
     ]);
     expect(readRowFeature(store, ids[0])?.properties.first).toBe(true);
+  });
+
+  it('ends the edit being written when fn destroys the instance, once the transaction has closed', async () => {
+    const ids = points(12);
+    const [elsewhere] = points(1);
+    const order: string[] = [];
+    const told: StoreChange[] = [];
+    store.subscribe((change) => {
+      told.push(change);
+      order.push(`change ${change.operationId} ${change.hasMoreParts} ${change.stopped}`);
+    });
+    const run = edits.start(ids, undefined, tag('A'));
+    run.catch((error: unknown) => order.push(`rejected ${codeOf(error)}`));
+    await nextTask();
+    const { operationId } = told[0];
+    draw.transact(() => {
+      draw.features.update(elsewhere, { properties: { first: true } });
+      draw.destroy();
+    });
+    // The stopped last part has come before draw.transact returned, after the transaction
+    const transaction = told[1].operationId;
+    expect(transaction).not.toBe(operationId);
+    expect(order).toEqual([
+      `change ${operationId} true false`,
+      `change ${transaction} false false`,
+      `change ${operationId} false true`,
+    ]);
+    await allTasks();
+    expect(order.slice(3)).toEqual(['rejected invalidState']);
+    expect(ids.map((id) => readRowFeature(store, id)?.properties.log)).toEqual([
+      ...Array.from({ length: PART_ROWS }, () => 'A;'),
+      ...Array.from({ length: ids.length - PART_ROWS }, () => undefined),
+    ]);
+  });
+
+  it('leaves the edit being written open when destroyed in a transaction of the Store', async () => {
+    const ids = points(12);
+    const told = storeChanges();
+    const run = settled(edits.start(ids, undefined, tag('A')));
+    await nextTask();
+    const { operationId } = told[0];
+    store.transact(() => draw.destroy(), 'remote');
+    await allTasks();
+    // No last part is written, then or in a later task; the promise rejects all the same
+    expect(codeOf(run.error)).toBe('invalidState');
+    expect(partsOf(told, operationId)).toEqual([[true, false]]);
+    expect(told).toHaveLength(1);
   });
 
   it('is stopped by the Store between a transaction of the Store and draw.transact', () => {

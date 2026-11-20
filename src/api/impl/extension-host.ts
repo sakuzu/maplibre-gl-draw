@@ -162,6 +162,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     anchors: (state) => terrainAnchorsOf(state, createTerrainAnchors),
     registerSnapProvider: (provider) => context.snapService.register(provider),
     applyPatch(featureId, patch, final) {
+      store.applyEditFirst?.(featureId);
       const feature = store.getFeature(featureId);
       if (!feature || store.isReadOnly()) return;
       store.updateFeature(featureId, preparePatch(feature, patch), { isIntermediate: !final });

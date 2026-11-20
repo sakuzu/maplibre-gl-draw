@@ -94,10 +94,10 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     if (!feature) throw notFound('feature', id);
     return feature;
   };
-  const requireAll = (ids: unknown): StoredFeature[] => requireIds(ids).map(require);
   /**
-   * A feature read to be written: the edit being written in parts is applied to it first, before
-   * it is read, so that the write starts from the values the edit gives it
+   * A feature read to be written, or to make the values a write writes: the edit being written in
+   * parts is applied to it first, before it is read, so that the write starts from the values the
+   * edit gives it
    */
   const requireToWrite = (id: unknown): StoredFeature => {
     if (typeof id === 'string') store.applyEditFirst?.(id);
@@ -270,14 +270,14 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
 
     union(ids) {
-      const inputs = requireAreas(ids, 2, true);
+      const inputs = requireAreas(ids, 2);
       if (refuseChange(inputs)) return null;
       return runAreaOperation(inputs, inputs[inputs.length - 1], inputs, unionAll);
     },
 
     difference(id, subtractIds) {
-      const [subject] = requireAreas([id], 1, true);
-      const others = requireAreas(subtractIds, 1, false);
+      const [subject] = requireAreas([id], 1);
+      const others = requireAreas(subtractIds, 1);
       if (others.some((other) => other.id === subject.id)) {
         throw invalidInput('An area cannot be subtracted from itself');
       }
@@ -292,7 +292,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
 
     intersection(ids) {
-      const inputs = requireAreas(ids, 2, true);
+      const inputs = requireAreas(ids, 2);
       if (refuseChange(inputs)) return null;
       return runAreaOperation(inputs, inputs[inputs.length - 1], inputs, intersectionAll);
     },
@@ -300,7 +300,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     split(id, lineId) {
       // The area is deleted, the line stays
       const area = requireToWrite(id);
-      const line = require(lineId);
+      const line = requireToWrite(lineId);
       if (!isAreaFeature(area)) throw invalidInput(`The feature ${area.id} is not an area`);
       if (!isSplitLineFeature(line)) throw invalidInput(`The feature ${line.id} is not a line`);
       if (refuseChange([area])) return null;
@@ -310,7 +310,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
 
     buffer(ids, options) {
-      const inputs = inStackingOrder(requireAll(ids));
+      const inputs = inStackingOrder(requireAllToWrite(ids));
       requireRecord(options, 'The options');
       const { distanceMeters, segments } = options;
       if (typeof distanceMeters !== 'number' || !Number.isFinite(distanceMeters)) {
@@ -344,11 +344,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   }
 
   /**
-   * The features as areas in stacking order, at least `min` of them; `written` when the operation
-   * writes them (it deletes them), which applies the edit being written to them first
+   * The features as areas in stacking order, at least `min` of them, with the edit being written
+   * applied to them first: those the operation deletes, and those it only reads to make its result
    */
-  function requireAreas(ids: unknown, min: number, written: boolean): StoredFeature[] {
-    const features = inStackingOrder(written ? requireAllToWrite(ids) : requireAll(ids));
+  function requireAreas(ids: unknown, min: number): StoredFeature[] {
+    const features = inStackingOrder(requireAllToWrite(ids));
     if (features.length < min) {
       throw invalidInput(`At least ${min} areas are needed`);
     }

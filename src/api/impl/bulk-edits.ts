@@ -20,15 +20,19 @@
  *   as missing; a row deleted afterwards leaves the target (the Store tells it), and is not
  *   counted; a locked feature stays as it is and is counted, when the edit starts or meanwhile.
  * - The edits of this client are written one at a time, in the order they were started. A write
- *   of a few features of this client does not wait: before it reads a feature to write it (and,
- *   as a net, the layer before it writes the row of a feature), the edit being written is first
- *   applied to that feature alone. Outside a transaction, that is a transaction of its own, a
+ *   of a few features of this client does not wait: before it reads a feature to write it, or to
+ *   make the values it writes (and, as a net, the layer before it writes the row of a feature),
+ *   the edit being written is first applied to that feature alone. Outside a transaction, that is a transaction of its own, a
  *   part of the operation of the edit; inside one (the fn of `draw.transact`, or the transaction
  *   a write opened before it writes the row), it is written in that transaction. A change written
  *   to the Store directly is not held up: a later part reads the values the features have then.
  * - Read-only stops the edits: each writes its last part, with nothing in it and
  *   `stopped: true`. `destroy` writes that part for the edit being written, and then rejects
- *   every edit with `invalidState`; the edits waiting write nothing.
+ *   every edit with `invalidState`; the edits waiting write nothing. In the fn of a
+ *   `draw.transact`, that part is written once the transaction has closed, before
+ *   `draw.transact` returns (a transaction of the Store has one number); in a transaction opened
+ *   on the Store directly, it folds into that transaction and closes nothing, so that the
+ *   operation stays open.
  *
  * The edits hold their state per instance; nothing is kept at the level of the module.
  */
@@ -223,6 +227,11 @@ export function createBulkEdits(
   let writing = false;
   let destroyed = false;
   let scope: TransactionScope | null = null;
+  /**
+   * The edit being written when the instance was destroyed in the fn of `draw.transact`: its last
+   * part is written once the transaction has closed
+   */
+  let closeAfterTransaction: Edit | null = null;
   let stopListening: (() => void) | null = null;
 
   // ==========================================================================
@@ -415,8 +424,8 @@ export function createBulkEdits(
   // ==========================================================================
 
   /**
-   * Called by the layer before a write of this client reads a feature to write it, and before it
-   * writes the row of a feature: the edit being written is applied to it first when it has not
+   * Called by the layer before a write of this client reads a feature to write it or to make the
+   * values it writes, and before it writes the row of a feature: the edit being written is applied to it first when it has not
    * reached it yet. Outside a transaction, in a transaction of its own with the number of the
    * edit, a part that more follow; inside one, in that transaction (a transaction of the Store
    * has one number)
@@ -733,6 +742,15 @@ export function createBulkEdits(
           next();
         }
       }
+      // `fn` destroyed the instance: the edit being written ends its operation now that the
+      // transaction has closed, and then rejects
+      const closing = closeAfterTransaction;
+      if (closing) {
+        closeAfterTransaction = null;
+        writeLastPartOnDestroy(closing);
+        closing.markEnded();
+        closing.reject(destroyedError());
+      }
     }
   };
 
@@ -751,22 +769,31 @@ export function createBulkEdits(
     next();
   };
 
+  /** Writes the last part of the edit being written when the instance is destroyed */
+  const writeLastPartOnDestroy = (edit: Edit): void => {
+    try {
+      withLocksOf(edit, () =>
+        layer.transact(nothing, edit.source, { operationId: edit.operationId, stopped: true }),
+      );
+    } catch (error) {
+      console.error('Error while the last part of a bulk edit was written:', error);
+    }
+  };
+
   const destroy = (): void => {
     if (destroyed) return;
     const edits = queue.splice(0);
     const head = edits[0];
-    // The edit being written ends its operation for the subscribers of the Store first
+    // The edit being written ends its operation for the subscribers of the Store first; in the fn
+    // of draw.transact, once its transaction has closed (it would fold into it, its number and
+    // `stopped` unused)
     if (head && !head.inTransaction) {
-      try {
-        withLocksOf(head, () =>
-          layer.transact(nothing, head.source, { operationId: head.operationId, stopped: true }),
-        );
-      } catch (error) {
-        console.error('Error while the last part of a bulk edit was written:', error);
-      }
+      if (scope) closeAfterTransaction = head;
+      else writeLastPartOnDestroy(head);
     }
     destroyed = true;
     for (const edit of edits) {
+      if (edit === closeAfterTransaction) continue;
       edit.markEnded();
       edit.reject(destroyedError());
     }
