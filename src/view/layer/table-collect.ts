@@ -96,6 +96,8 @@ export interface PolygonSlot {
   readonly lineStyle: 'solid' | 'dashed' | 'dotted';
   /** The color a dashed outline is drawn with, as the lines draw it */
   readonly dashedColor: Color;
+  /** The styles as the resolver gives them for the feature of the row */
+  readonly resolved: ReturnType<RetainedStyleResolver['getPolygonStyles']>;
 }
 
 /** What is resolved of one number of style, by type of feature and rule color */
@@ -183,9 +185,8 @@ export class RowStyleSlots {
     const key = slotKey(type, ruleColor);
     let slot = slots.get(key);
     if (!slot) {
-      const { fillColor, strokeStyle } = this.resolver.getPolygonStyles(
-        this.probe(style, type, ruleColor, 'fill'),
-      );
+      const resolved = this.resolver.getPolygonStyles(this.probe(style, type, ruleColor, 'fill'));
+      const { fillColor, strokeStyle } = resolved;
       const hasStroke = strokeStyle.opacity > 0 && strokeStyle.width > 0;
       slot = {
         fillColor: [fillColor[0], fillColor[1], fillColor[2], fillColor[3]],
@@ -200,6 +201,7 @@ export class RowStyleSlots {
         strokeWidth: strokeStyle.width,
         lineStyle: strokeStyle.lineStyle,
         dashedColor: toLineInstanceColor(strokeStyle.color, strokeStyle.opacity),
+        resolved,
       };
       slots.set(key, slot);
     }

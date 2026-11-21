@@ -695,14 +695,6 @@
       "lines": ["626"]
     },
     {
-      "where": "src/view/layer/store-retained.test.ts",
-      "term": "\\bowners?\\b(?! document)",
-      "reason": "the feature a companion belongs to",
-      "hits": 2,
-      "why": "the identifier ownerIds after a template literal the old reading lost",
-      "lines": ["1917", "1920"]
-    },
-    {
       "where": "src/view/terrain/drape/bin-store.ts",
       "term": "\\bsync(ed|ing|s)?\\b",
       "reason": "sync in the sense of bringing a state in line (the GL state, the drawn rows, the pixel ratio, the slots, the coverage of the terrain); not a sync of the document",

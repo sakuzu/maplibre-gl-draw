@@ -89,6 +89,8 @@ import {
   type RetainedChunkJob,
   type RetainedChunkState,
 } from '../retained/chunk-scheduler.js';
+import { getAnchorElevationGeneration } from '../terrain/anchor.js';
+import type { TerrainContext } from '../terrain/context.js';
 import {
   collectRow,
   ROWS_LAYOUT,
@@ -103,6 +105,7 @@ import {
 import { buildKindBatch, disposeKindBatch, drawKindBatch, type KindBatch } from './table-kinds.js';
 import {
   classifyRow,
+  customRendererOf,
   drawnRowBox,
   type OrderedChunkRange,
   partitionRowGroup,
@@ -248,6 +251,8 @@ export interface TableLayerRendererOptions {
   readonly timeSlicing?: () => boolean;
   /** Told when the rows are drawn by kind because the program of the drawing in one draw failed */
   readonly drawnByKind?: () => void;
+  /** The terrain state of the instance (its changes make the chunks drawn by kind again) */
+  readonly terrain?: TerrainContext;
 }
 
 /** A chunk of rows of every kind drawn in one draw */
@@ -270,8 +275,32 @@ interface AtOnceChunk {
 
 type TableChunk = RowsChunkState | KindChunkState | AtOnceChunk;
 
-/** The two ways the rows are drawn */
-type Drawing = 'one-draw' | 'by-kind';
+/**
+ * The ways the rows are drawn: in one draw, by kind, or draped (on the terrain, in the band of the
+ * analytic drape: the polygons and the lines are on the drape, the other rows drawn at once)
+ */
+type Drawing = 'one-draw' | 'by-kind' | 'draped';
+
+/** The types of the rows the analytic drape draws, and the pictures it pastes on the ground */
+const DRAPED_TYPES: ReadonlySet<string> = new Set([
+  'Polygon',
+  'MultiPolygon',
+  'LineString',
+  'MultiLineString',
+  'Freehand',
+  'Image',
+]);
+
+/**
+ * The surface the layers are drawn on in a frame: a flat map (pitched or not), the terrain or the
+ * globe, and whether the polygons and the lines are on the analytic drape
+ *
+ * @internal
+ */
+export interface TableLayerSurface {
+  readonly kind: 'flat' | 'terrain' | 'globe';
+  readonly draped: boolean;
+}
 
 /** What is kept for a row group (or a part of the delta) */
 interface GroupCache {
@@ -375,6 +404,10 @@ export class TableLayerRenderer {
   private prepared = false;
   /** Whether the rows are drawn by kind even where they can be drawn in one draw */
   private byKind = false;
+  /** The surface of the frame */
+  private surface: TableLayerSurface = { kind: 'flat', draped: false };
+  /** The generations of the terrain the chunks were built for (-1 before the first frame) */
+  private readonly terrainSeen = { render: -1, globe: -1, anchor: -1 };
   private renderers: RetainedRendererSet | null = null;
   private rows: RowsRenderer | null = null;
   private record: TableDrawRecord[] | null = null;
@@ -503,6 +536,11 @@ export class TableLayerRenderer {
     this.byKind = byKind;
   }
 
+  /** Sets the surface the layers are drawn on in this frame */
+  setSurface(surface: TableLayerSurface): void {
+    this.surface = surface;
+  }
+
   /**
    * Starts a frame: the budget of the builds, the work of the tables in it, and what this client
    * hides and selects read again
@@ -518,6 +556,7 @@ export class TableLayerRenderer {
         : (this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS),
     );
     if (this.reader.advance(this.budget)) this.pending = true;
+    this.followTerrain();
     this.readClientState();
     // What this client hides or selects now takes effect in this frame
     if (this.statesWritten) {
@@ -609,6 +648,25 @@ export class TableLayerRenderer {
       }
     }
     this.options.requestRepaint();
+  }
+
+  /**
+   * Makes the chunks built for the terrain or the globe again when what they were built for
+   * changed: the step of the terrain, the subdivision of the globe, the elevations of the anchors
+   */
+  private followTerrain(): void {
+    const terrain = this.options.terrain;
+    if (!terrain) return;
+    const seen = this.terrainSeen;
+    const render = terrain.renderState.generation;
+    const globe = terrain.globeGeneration;
+    const anchor = getAnchorElevationGeneration(terrain);
+    const first = seen.render === -1;
+    const changed = render !== seen.render || globe !== seen.globe || anchor !== seen.anchor;
+    seen.render = render;
+    seen.globe = globe;
+    seen.anchor = anchor;
+    if (changed && !first) this.reclassify();
   }
 
   // === What this client hides and selects ===
@@ -927,8 +985,9 @@ export class TableLayerRenderer {
     const table = this.reader.table(layerId);
     this.renderers = deps.renderers;
     this.rows = deps.rows;
-    const oneDraw = deps.rows.ready && !this.byKind;
-    const drawing: Drawing = oneDraw ? 'one-draw' : 'by-kind';
+    const surface = this.surface;
+    const oneDraw = deps.rows.ready && !this.byKind && surface.kind === 'flat';
+    const drawing: Drawing = surface.draped ? 'draped' : oneDraw ? 'one-draw' : 'by-kind';
     if (deps.rows.failed && !this.byKind) this.options.drawnByKind?.();
     const cache = this.layerCache(layerId, table, layer, deps, drawing);
     cache.bounds = frame.bounds ?? world();
@@ -1112,16 +1171,22 @@ export class TableLayerRenderer {
     const group = groupCache.group;
     const oneDraw = cache.drawing === 'one-draw';
     const deps = cache.deps as TableDrawDeps;
+    // Draped, every row is drawn at once (the ones the drape draws are passed over then)
+    const draped = cache.drawing === 'draped';
     const ranges = partitionRowGroup(this.reader, group, (row) =>
-      classifyRow(group, row, {
-        rows: this.reader,
-        slots: cache.slots as RowStyleSlots,
-        customTypes: deps.customRenderers,
-        companions: deps.companions,
-        featureOf: (g, r) => this.featureOfRow(g, r),
-        layer: cache.layer ?? undefined,
-        oneDraw,
-      }),
+      draped
+        ? this.reader.hasGeometry(group, row)
+          ? 'immediate'
+          : null
+        : classifyRow(group, row, {
+            rows: this.reader,
+            slots: cache.slots as RowStyleSlots,
+            customTypes: deps.customRenderers,
+            companions: deps.companions,
+            featureOf: (g, r) => this.featureOfRow(g, r),
+            layer: cache.layer ?? undefined,
+            oneDraw,
+          }),
     );
     const chunks = ranges.flatMap((range) => makeChunk(range));
     const drawn = groupCache.chunks;
@@ -1325,7 +1390,10 @@ export class TableLayerRenderer {
     const visible = frame.bounds !== undefined ? deps.getVisibleIds?.() : undefined;
     const { batchManager, customRenderers, customRendererContext } = deps;
     let begun = false;
+    // Draped, the rows the drape draws are passed over
+    const draped = cache.drawing === 'draped';
     for (let row = from; row < to; row++) {
+      if (draped && DRAPED_TYPES.has(this.reader.typeOf(groupCache.group, row))) continue;
       const fresh = byCopy || groupCache.stateVersion < 0;
       const hidden = fresh
         ? (this.byteOf(cache.layerId, groupCache, row) & ROW_STATE_HIDDEN) !== 0
@@ -1663,6 +1731,8 @@ export class TableLayerRenderer {
       this.ruleKeyWritten(cache, write.keys);
     const chunk = groupCache.chunks?.find((c) => row >= c.range.from && row < c.range.to);
     if (!chunk) return true;
+    // Draped, every row is drawn at once from its feature as it is now
+    if (groupCache.drawing === 'draped') return true;
     // The classification of the row may have changed (its type, its style, what an extension reads)
     if (drawn || this.extensionReads(cache, write)) {
       const deps = cache.deps;
@@ -1855,14 +1925,6 @@ function styleCreatedZoom(
 ): number | undefined {
   const kind = styles.layoutOf(style) & 7;
   return kind === ROWS_LAYOUT.point ? undefined : rowCreatedZoom(group, row);
-}
-
-/** The custom renderer that draws a feature, unless it refuses the feature */
-function customRendererOf<R>(customTypes: ReadonlyMap<string, R>, feature: Feature): R | undefined {
-  const renderer = customTypes.get(feature.type);
-  if (renderer === undefined) return undefined;
-  const { appliesTo } = renderer as Pick<FeatureTypeRenderer, 'appliesTo'>;
-  return appliesTo && !appliesTo.call(renderer, feature) ? undefined : renderer;
 }
 
 /** Whether two sets hold the same values */

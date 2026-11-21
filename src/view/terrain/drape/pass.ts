@@ -143,6 +143,38 @@ export interface DrapeDatasetSource {
 }
 
 /**
+ * A row of a layer of the Store as the drape takes it: what the drape reads of its feature, read
+ * from the row (no feature is made)
+ *
+ * @internal
+ */
+export interface DrapeStoreRow {
+  readonly id: string;
+  readonly type: string;
+  /** The object the box and the geometry of the row are kept by (another for another geometry) */
+  readonly key: object;
+  /** The coordinates of the row as its feature has them (`coordinatesOf`) */
+  readonly coordinates: unknown;
+  /** The created zoom of the row (undefined: its width is fixed on screen) */
+  readonly createdZoom: number | undefined;
+  /** The styles of a polygon row, as the resolver gives them for its feature and its layer */
+  polygonStyles(): ReturnType<RetainedStyleResolver['getPolygonStyles']>;
+  /** The stroke of a line row, as the resolver gives it for its feature and its layer */
+  lineStyle(): ReturnType<RetainedStyleResolver['getLineStringStrokeStyle']>;
+}
+
+/**
+ * The rows of the layers of the Store the drape is collected from, in their order: the rows that
+ * are drawn (the ones shown, on this client too), as `getDisplayFeatures` lists the features
+ *
+ * @internal
+ */
+export interface DrapeStoreRows {
+  /** Visits the rows of a layer shown, in their order */
+  forEachRow(layerId: string, visit: (row: DrapeStoreRow) => void): void;
+}
+
+/**
  * Collects the elements of the analytic drape from the Store and the datasets
  *
  * The draw order is datasets (belowLayers) -> the Store's stack (a mixture of
@@ -157,6 +189,8 @@ export interface DrapeDatasetSource {
  *   scale included; `resolvePixelRatio`)
  * @param contentPixelRatio The rendering pixel ratio for widths that follow the zoom (the
  *   rendering scale not applied; `resolveContentPixelRatio`)
+ * @param rows The rows of the layers of the Store, read without making their features (the
+ *   features shown are read when omitted)
  */
 export function collectDrapeElements(
   store: DocumentAccess,
@@ -164,14 +198,16 @@ export function collectDrapeElements(
   pixelRatio: number,
   contentPixelRatio: number,
   datasets: readonly DrapeDatasetSource[],
+  rows?: DrapeStoreRows,
 ): DrapeCollectResult {
-  const visible = getDisplayFeatures(store);
   const byLayer = new Map<string, Feature[]>();
-  for (const feature of visible) {
-    if (isLocallyHidden(feature, store)) continue;
-    const list = byLayer.get(feature.layerId);
-    if (list) list.push(feature);
-    else byLayer.set(feature.layerId, [feature]);
+  if (!rows) {
+    for (const feature of getDisplayFeatures(store)) {
+      if (isLocallyHidden(feature, store)) continue;
+      const list = byLayer.get(feature.layerId);
+      if (list) list.push(feature);
+      else byLayer.set(feature.layerId, [feature]);
+    }
   }
 
   const context: CollectContext = {
@@ -217,6 +253,10 @@ export function collectDrapeElements(
     if (layerSource > 0) context.layerSources.set(layerId, layerSource);
     // A layer without a source of its own has its opacity baked into its colors
     const bakedOpacity = layerSource > 0 ? 1 : layerDrawFactors(layer).opacity;
+    if (rows) {
+      rows.forEachRow(layerId, (row) => collectStoreRow(context, row, layerSource, bakedOpacity));
+      continue;
+    }
     for (const feature of byLayer.get(layerId) ?? []) {
       collectStoreFeature(context, feature, layer, layerSource, bakedOpacity);
     }
@@ -271,6 +311,34 @@ function collectStoreFeature(
   source: number,
   bakedOpacity: number,
 ): void {
+  collectStoreRow(
+    context,
+    {
+      id: feature.id,
+      type: feature.type,
+      key: feature,
+      coordinates: coordinatesOf(feature),
+      createdZoom: getCreatedZoom(feature),
+      polygonStyles: () => context.styles.getPolygonStyles(feature, layer),
+      lineStyle: () => context.styles.getLineStringStrokeStyle(feature, layer),
+    },
+    source,
+    bakedOpacity,
+  );
+}
+
+/**
+ * Puts a single row of a layer of the Store on (what cannot be put on goes into excluded)
+ *
+ * @param source The factor source of its layer (0 = none of its own)
+ * @param bakedOpacity The opacity of its layer when it has no source of its own (1 otherwise)
+ */
+function collectStoreRow(
+  context: CollectContext,
+  feature: DrapeStoreRow,
+  source: number,
+  bakedOpacity: number,
+): void {
   if (!DRAPEABLE_TYPES.has(feature.type)) {
     context.excluded.add(feature.id);
     // An image is remembered as a break in the stacking order. It is drawn by the quad drape,
@@ -282,14 +350,14 @@ function collectStoreFeature(
   }
 
   if (feature.type === 'Polygon' || feature.type === 'MultiPolygon') {
-    const { fillColor, strokeStyle } = context.styles.getPolygonStyles(feature, layer);
+    const { fillColor, strokeStyle } = feature.polygonStyles();
     const hasStroke = strokeStyle.opacity > 0 && strokeStyle.width > 0;
-    const rings = polygonRings(feature);
+    const rings = polygonRingsOf(feature.type, feature.coordinates);
     if (rings.length === 0) return;
     if (fillColor[3] <= 0 && !hasStroke) return;
 
-    const polygonWidth = widthOf(feature, strokeStyle.width, context);
-    pushElement(context, feature, 0, rings, {
+    const polygonWidth = widthOf(feature.createdZoom, strokeStyle.width, context);
+    pushElement(context, feature.key, 0, rings, {
       fill: [fillColor[0], fillColor[1], fillColor[2], fillColor[3] * bakedOpacity],
       stroke: [
         strokeStyle.color[0],
@@ -308,13 +376,13 @@ function collectStoreFeature(
     return;
   }
 
-  const strokeStyle = context.styles.getLineStringStrokeStyle(feature, layer);
+  const strokeStyle = feature.lineStyle();
   if (strokeStyle.opacity <= 0 || strokeStyle.width <= 0) return;
-  const paths = linePaths(feature);
+  const paths = linePathsOf(feature.type, feature.coordinates);
   if (paths.length === 0) return;
 
-  const lineWidth = widthOf(feature, strokeStyle.width, context);
-  pushElement(context, feature, 1, paths, {
+  const lineWidth = widthOf(feature.createdZoom, strokeStyle.width, context);
+  pushElement(context, feature.key, 1, paths, {
     fill: [0, 0, 0, 0],
     stroke: [
       strokeStyle.color[0],
@@ -356,7 +424,7 @@ function collectDataset(
       const rings = polygonRings(feature);
       if (rings.length === 0) continue;
 
-      const width = widthOf(feature, strokeStyle.width, context);
+      const width = widthOf(getCreatedZoom(feature), strokeStyle.width, context);
       pushElement(context, coordinatesOf(feature) as object, 0, rings, {
         fill: fillColor,
         stroke: [
@@ -387,7 +455,7 @@ function collectDataset(
     const paths = linePaths(feature);
     if (paths.length === 0) continue;
 
-    const width = widthOf(feature, strokeStyle.width, context);
+    const width = widthOf(getCreatedZoom(feature), strokeStyle.width, context);
     pushElement(context, coordinatesOf(feature) as object, 1, paths, {
       fill: [0, 0, 0, 0],
       stroke: [
@@ -414,11 +482,10 @@ function collectDataset(
  * terrain, the drape follows the same convention.
  */
 function widthOf(
-  feature: Feature,
+  createdZoom: number | undefined,
   width: number,
   ratios: Pick<CollectContext, 'pixelRatio' | 'contentPixelRatio'>,
 ): ResolvedWidth {
-  const createdZoom = getCreatedZoom(feature);
   if (createdZoom !== undefined && Number.isFinite(createdZoom)) {
     const ratio = ratios.contentPixelRatio;
     return { px: width * ratio, zoom: createdZoom, ratio };
@@ -452,17 +519,27 @@ function dashOf(lineStyle: 'solid' | 'dashed' | 'dotted', width: ResolvedWidth):
 
 /** The rings of a polygon (with the closing point dropped) */
 function polygonRings(feature: Feature): Coordinate[][] {
-  return feature.type === 'Polygon'
-    ? openRings(coordinatesOf(feature) as Coordinate[][])
-    : (coordinatesOf(feature) as Coordinate[][][]).flatMap((part) => openRings(part));
+  return polygonRingsOf(feature.type, coordinatesOf(feature));
+}
+
+/** The rings of the coordinates of a polygon of a type (with the closing point dropped) */
+function polygonRingsOf(type: string, coordinates: unknown): Coordinate[][] {
+  return type === 'Polygon'
+    ? openRings(coordinates as Coordinate[][])
+    : (coordinates as Coordinate[][][]).flatMap((part) => openRings(part));
 }
 
 /** The paths of a line */
 function linePaths(feature: Feature): Coordinate[][] {
+  return linePathsOf(feature.type, coordinatesOf(feature));
+}
+
+/** The paths of the coordinates of a line of a type */
+function linePathsOf(type: string, coordinates: unknown): Coordinate[][] {
   const paths: Coordinate[][] =
-    feature.type === 'LineString' || feature.type === 'Freehand'
-      ? [coordinatesOf(feature) as Coordinate[]]
-      : (coordinatesOf(feature) as Coordinate[][]);
+    type === 'LineString' || type === 'Freehand'
+      ? [coordinates as Coordinate[]]
+      : (coordinates as Coordinate[][]);
   return paths.filter((path) => path.length >= 2);
 }
 

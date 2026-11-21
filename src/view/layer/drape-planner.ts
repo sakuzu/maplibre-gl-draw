@@ -26,7 +26,7 @@
 import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type { DocumentAccess } from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
-import type { Feature } from '../../store/types.js';
+import type { Feature, Layer, StoreChange } from '../../store/types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
@@ -47,6 +47,7 @@ import {
   type DrapeCollectResult,
   type DrapeDatasetSource,
   type DrapeQuadBreak,
+  type DrapeStoreRows,
   drapeLayerSource,
 } from '../terrain/drape/pass.js';
 import { QuadDrapeRenderer } from '../terrain/drape/quad.js';
@@ -58,6 +59,39 @@ import {
   setDrapePaintedDatasets,
   setTerrainDrapeDebug,
 } from '../terrain/state.js';
+
+/**
+ * Whether an update of a layer changed only its opacity
+ *
+ * The opacity is applied at draw time (a uniform of the drawing, a factor of the drape source),
+ * so such an update needs no rebuild. Any other field that differs, including one this function
+ * does not know, counts as a change (the safe side).
+ *
+ * @internal
+ */
+export function isOpacityOnlyLayerChange(previous: Layer, layer: Layer): boolean {
+  if (previous.opacity === layer.opacity) return false;
+  const keys = new Set([...Object.keys(previous), ...Object.keys(layer)]);
+  for (const key of keys) {
+    if (key === 'opacity') continue;
+    if (previous[key as keyof Layer] !== layer[key as keyof Layer]) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether a change of the layers consists only of opacity updates (nothing created, deleted or
+ * reordered, and every update is {@link isOpacityOnlyLayerChange}): the elements of the drape are
+ * kept
+ *
+ * @internal
+ */
+export function isOpacityOnlyLayersChange(layers: NonNullable<StoreChange['layers']>): boolean {
+  if (layers.created?.length || layers.deleted?.length || layers.orderChanged) return false;
+  const updated = layers.updated ?? [];
+  if (updated.length === 0) return false;
+  return updated.every(({ layer, previous }) => isOpacityOnlyLayerChange(previous, layer));
+}
 
 /** The terrain of the map as maplibre exposes it (null when there is none) */
 export type MapTerrain = ReturnType<typeof getMapTerrain>;
@@ -200,6 +234,16 @@ export interface DrapePlannerDeps {
    * ledger of its own when omitted)
    */
   gpu?: GpuLedger;
+  /**
+   * The rows of the layers of the Store, read without making their features, with a resolution
+   * of the styles (null, or omitted: the features shown are read)
+   */
+  rows?: (styles: RetainedStyleResolver) => DrapeStoreRows | null;
+  /**
+   * Changes with every change of the rows of the layers drawn (rows taken into their groups,
+   * parts of the deltas): the elements collected from the rows are collected again
+   */
+  rowsRevision?: () => number;
 }
 
 /** The inputs of one frame */
@@ -617,6 +661,7 @@ export class DrapePlanner {
     const datasets = manager?.listInternal() ?? [];
     const key = [
       this.revision,
+      this.deps.rowsRevision?.() ?? 0,
       dpr,
       contentDpr,
       marginZoom(zoom),
@@ -627,7 +672,15 @@ export class DrapePlanner {
 
     let collected = this.collected;
     if (key !== this.collectKey || !collected) {
-      collected = collectDrapeElements(store, resolveStyles(), dpr, contentDpr, datasets);
+      const styles = resolveStyles();
+      collected = collectDrapeElements(
+        store,
+        styles,
+        dpr,
+        contentDpr,
+        datasets,
+        this.deps.rows?.(styles) ?? undefined,
+      );
       this.collectKey = key;
       this.collected = collected;
       this.lightEnough = collected.edgeCount <= DRAPE_WIDE_EDGE_BUDGET;

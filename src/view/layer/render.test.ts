@@ -31,7 +31,7 @@ import { toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { type RenderLayersRange, renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
-import type { StoreRetainedCache, StoreRetainedDrawDeps } from './store-retained.js';
+import type { TableDrawDeps, TableLayerRenderer } from './table-retained.js';
 
 function makeFeature(id: string, type: Feature['type'], layerId: string): Feature {
   return {
@@ -473,23 +473,24 @@ describe('viewport of renderLayers', () => {
   });
 });
 
-describe('renderLayers and the retained mode of the Store', () => {
-  /** Stub of the cache that records the calls of retained mode */
-  function createStoreRetained(log: string[]): StoreRetainedCache {
+describe('renderLayers and the drawing of the layers from their rows', () => {
+  /** Stub of the drawing of the rows that records its calls */
+  function createTableLayers(log: string[]): TableLayerRenderer {
     return {
       beginFrame: (): void => {
         log.push('beginFrame');
       },
-      drawLayer: (layerId: string): void => {
+      drawLayer: (layerId: string): boolean => {
         log.push(`drawLayer:${layerId}`);
+        return true;
       },
-    } as unknown as StoreRetainedCache;
+    } as unknown as TableLayerRenderer;
   }
 
   /**
    * Stub of a batchManager that supports retained mode
    *
-   * The retained path is taken only when getRetainedRenderers returns a value.
+   * The layers are drawn from their rows only when getRetainedRenderers returns a value.
    */
   function createRenderers(
     log: string[],
@@ -527,7 +528,7 @@ describe('renderLayers and the retained mode of the Store', () => {
     renderLayers(
       r,
       store,
-      // Not used in retained mode (the caller passes an empty array)
+      // Not used when the layers are drawn from their rows (the caller passes an empty array)
       [makeFeature('poly-1', 'Polygon', 'layer-1')],
       new Set<string>(),
       {} as unknown as ProjectionData,
@@ -537,25 +538,30 @@ describe('renderLayers and the retained mode of the Store', () => {
       createFeatureCompanionRegistry(),
       [] as LayeredOverlayRenderer[],
       undefined,
-      createStoreRetained(log),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      createTableLayers(log),
     );
 
     return log;
   }
 
-  it('calls drawLayer in layer order and calls beginFrame at the start of the frame', () => {
+  it('calls drawLayer in layer order, and leaves the start of the frame to the frame (once, not per slot)', () => {
+    // The frame of the drawing of the rows is started once by the frame of the layer, before its
+    // slots are drawn; the drawing of the slots only draws the layers
     expect(run(true, ['layer-bottom', 'layer-top'])).toEqual([
-      'beginFrame',
       'drawLayer:layer-bottom',
       'drawLayer:layer-top',
     ]);
   });
 
-  it('the features argument is not walked in retained mode', () => {
+  it('the features argument is not walked when the layers are drawn from their rows', () => {
     expect(run(true, ['layer-1'])).not.toContain('immediate:poly-1');
   });
 
-  it('falls back to the path used before when the renderers lack retained mode', () => {
+  it('falls back to the immediate mode when the renderers lack retained mode', () => {
     // getRetainedRenderers returning undefined = a stub renderer
     expect(run(false, ['layer-1'])).toEqual(['immediate:poly-1']);
   });
@@ -563,27 +569,23 @@ describe('renderLayers and the retained mode of the Store', () => {
 
 describe('renderLayers and the visible id set of immediate chunks', () => {
   /**
-   * Stub of the cache that can specify how many times drawLayer calls deps.getVisibleIds
+   * Stub of the drawing of the rows that can specify how many times drawLayer calls
+   * deps.getVisibleIds
    *
-   * The real one calls it once per immediate chunk. We want to confirm that however many times
-   * it is called within a frame, the spatial index is queried only once.
+   * The real one calls it once per run of rows drawn at once. We want to confirm that however
+   * many times it is called within a frame, the spatial index is queried only once.
    */
-  function createStoreRetained(
+  function createTableLayers(
     seen: Array<ReadonlySet<string> | undefined>,
     callsPerLayer: number,
-  ): StoreRetainedCache {
+  ): TableLayerRenderer {
     return {
       beginFrame: (): void => {},
-      drawLayer: (
-        _layerId: string,
-        _layer: unknown,
-        _projectionData: unknown,
-        _zoom: number,
-        deps: StoreRetainedDrawDeps,
-      ): void => {
+      drawLayer: (_layerId: string, _layer: unknown, _frame: unknown, deps: TableDrawDeps) => {
         for (let i = 0; i < callsPerLayer; i++) seen.push(deps.getVisibleIds?.());
+        return true;
       },
-    } as unknown as StoreRetainedCache;
+    } as unknown as TableLayerRenderer;
   }
 
   function run(
@@ -631,7 +633,11 @@ describe('renderLayers and the visible id set of immediate chunks', () => {
       createFeatureCompanionRegistry(),
       [] as LayeredOverlayRenderer[],
       undefined,
-      createStoreRetained(seen, callsPerLayer),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      createTableLayers(seen, callsPerLayer),
     );
 
     return { seen, queries };
@@ -752,7 +758,7 @@ describe('renderLayers and the opacity of the layers', () => {
     expect(seen).toEqual(['m1:0.3', 'overlay:layer-faint:1', 'm2:1', 'overlay:layer-solid:1']);
   });
 
-  it('passes the context with the opacity of the layer to the retained drawing', () => {
+  it('passes the context with the opacity of the layer to the drawing of the rows', () => {
     const seen: number[] = [];
     const r = {
       batchManager: {
@@ -763,18 +769,13 @@ describe('renderLayers and the opacity of the layers', () => {
       },
       tentativeRenderer: { drawGeometry: (): void => {} },
     } as unknown as Renderers;
-    const storeRetained = {
+    const tableLayers = {
       beginFrame: (): void => {},
-      drawLayer: (
-        _id: string,
-        _layer: Layer,
-        _p: unknown,
-        _z: number,
-        deps: StoreRetainedDrawDeps,
-      ) => {
+      drawLayer: (_id: string, _layer: Layer, _frame: unknown, deps: TableDrawDeps) => {
         seen.push(deps.customRendererContext.opacity);
+        return true;
       },
-    } as unknown as StoreRetainedCache;
+    } as unknown as TableLayerRenderer;
 
     renderLayers(
       r,
@@ -788,7 +789,11 @@ describe('renderLayers and the opacity of the layers', () => {
       createFeatureCompanionRegistry(),
       [],
       undefined,
-      storeRetained,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      tableLayers,
     );
 
     expect(seen).toEqual([0.3, 1]);

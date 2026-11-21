@@ -52,6 +52,7 @@ import {
 import type { RenderLayersView } from './render.js';
 import type { Renderers } from './renderers.js';
 import type { RenderSegment } from './slots.js';
+import type { TableLayerSurface } from './table-retained.js';
 
 /**
  * One copy of the world drawn in this frame
@@ -102,12 +103,13 @@ export interface FrameState {
   readonly mainMatrixArray: number[];
   readonly drapeUsable: boolean;
   readonly wideFallback: boolean;
-  readonly useRetained: boolean;
   /**
-   * Whether the layers are drawn from their rows (a flat map, pitched or not; the terrain and the
-   * globe draw the retained batches of the features)
+   * Whether the layers are drawn from their rows (else in immediate mode, from the features in
+   * view)
    */
   readonly useRows: boolean;
+  /** The surface the layers drawn from their rows are drawn on in this frame */
+  readonly tableSurface: TableLayerSurface;
   readonly features: Feature[];
   readonly selectedIdSet: Set<string>;
   readonly selectedFeatures: Feature[];
@@ -266,8 +268,6 @@ export interface FrameBuildInput {
   contentDpr: number;
   /** The terrain state of the frame (already set on the terrain context) */
   terrainState: TerrainRenderState;
-  /** Whether the retained batches of the Store rendering exist */
-  retainedAvailable: boolean;
   /** Whether the drawing of the layers from their rows exists */
   rowsAvailable?: boolean;
   overlayRenderers: readonly EngineOverlayRenderer[];
@@ -344,14 +344,18 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     rawZoom,
   });
 
-  const useRetained =
-    !drapeUsable && input.retainedAvailable && r.batchManager.getRetainedRenderers() !== undefined;
-  // A flat map (pitched or not) draws the layers from their rows
+  // The layers are drawn from their rows, on every surface: in the band of the analytic drape,
+  // their polygons and lines are on the drape and their other rows drawn in their order
   const useRows =
-    useRetained &&
-    input.rowsAvailable === true &&
-    !terrainState.active &&
-    (defaultProjectionData.projectionTransition ?? 0) === 0;
+    input.rowsAvailable === true && r.batchManager.getRetainedRenderers() !== undefined;
+  const tableSurface: TableLayerSurface = {
+    kind: terrainState.active
+      ? 'terrain'
+      : (defaultProjectionData.projectionTransition ?? 0) > 0
+        ? 'globe'
+        : 'flat',
+    draped: drapeUsable,
+  };
 
   // Viewport filtering. The display list is "the list that should be shown", which
   // excludes the local visibility of this client in addition to the shared visible flag.
@@ -363,7 +367,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   for (const brk of drawnQuadBreaks) interleavedQuadIds.add(brk.featureId);
   // The features in view come from the spatial index and are put in draw order by the kept
   // display list (display-list.ts), so the cost follows what is on screen
-  const features = useRetained
+  const features = useRows
     ? []
     : input.displayList
         .inOrder(r.viewportFilter.getVisibleIds())
@@ -474,7 +478,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     displayList: input.displayList,
     center: centerLngLat,
     mainMatrixArray,
-    useRetained,
+    useRows,
     excluded,
     interleavedQuadIds,
     transition: defaultProjectionData.projectionTransition ?? 0,
@@ -496,8 +500,8 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     mainMatrixArray,
     drapeUsable,
     wideFallback,
-    useRetained,
     useRows,
+    tableSurface,
     features,
     selectedIdSet,
     selectedFeatures,
@@ -596,7 +600,7 @@ export function planCopies(
     displayList: DisplayListCache;
     center: [number, number];
     mainMatrixArray: number[];
-    useRetained: boolean;
+    useRows: boolean;
     excluded: Set<string> | null;
     interleavedQuadIds: Set<string>;
     transition: number;
@@ -616,7 +620,7 @@ export function planCopies(
       return visibleIds;
     };
     const view: RenderLayersView = { bounds: viewCopy.bounds, getVisibleIds };
-    const features = options.useRetained
+    const features = options.useRows
       ? []
       : options.displayList
           .inOrder(getVisibleIds())

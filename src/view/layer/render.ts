@@ -20,8 +20,7 @@ import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { drawFeatureCompanionsInFrame } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { Renderers } from './renderers.js';
-import type { StoreRetainedCache } from './store-retained.js';
-import { customRendererOf } from './store-retained-classify.js';
+import { customRendererOf } from './table-partition.js';
 import type { TableLayerRenderer } from './table-retained.js';
 
 /**
@@ -30,7 +29,7 @@ import type { TableLayerRenderer } from './table-retained.js';
  * The loop walks the stacking order of the Store (`store.getLayerOrder()`). Its entries are a
  * mix of layer ids and dataset ids, and for each entry it does the following.
  *
- * - A layer exists: draw it in retained / immediate mode as before
+ * - A layer exists: draw it from its rows, or in immediate mode
  * - A dataset whose order is 'layerOrder' exists: draw that dataset
  * - Neither of them (an unknown id): skip it (not an error)
  *
@@ -43,12 +42,12 @@ import type { TableLayerRenderer } from './table-retained.js';
  *
  * There are two paths for the features of the Store.
  *
- * - Retained mode (storeRetained is present and the renderers support it): draws the retained
- *   batches prepared per layer. The features argument is not used. Thinning of a retained batch
- *   is done per chunk, so the bbox of the expanded viewport is computed once per frame and passed
- *   in. Immediate chunks, which draw one feature at a time, are thinned per feature as well, so
- *   the set of visible ids is passed too (only once it becomes necessary).
- * - Immediate mode (the path used before): walks features every frame and draws them.
+ * - From the rows (tableLayers is present and the renderers support the retained batches): draws
+ *   each layer from its rows (`table-retained.ts`). The features argument is not used. The
+ *   chunks are thinned per chunk, so the bbox of the expanded viewport is computed once per
+ *   frame and passed in. The rows drawn one feature at a time are thinned per feature as well,
+ *   so the set of visible ids is passed too (only once it becomes necessary).
+ * - Immediate mode: walks features every frame and draws them.
  *
  * The rendering result (including the z-order) is the same either way.
  *
@@ -59,16 +58,17 @@ import type { TableLayerRenderer } from './table-retained.js';
  * re-establish the contract of the frame.
  *
  * @param companions Providers of companion drawing (those of this draw instance)
- * @param features Features to draw in immediate mode (not used in retained mode)
+ * @param features Features to draw in immediate mode (not used when drawn from the rows)
  * @param datasets Datasets (not drawn when omitted)
- * @param storeRetained Retained batch cache for drawing the Store (immediate mode when omitted)
+ * @param _retained Not read (the place of an argument no longer given, so the ones after it keep
+ *   theirs)
  * @param restoreBlendState Re-establishes our own blend state (not re-established when omitted)
  * @param range The segment (slot) to draw (every entry when omitted)
  * @param view The part of the view to draw, on one copy of the world (the expanded viewport
  *   of the ViewportFilter when omitted). A view across the antimeridian is drawn once per
  *   copy, each with its own range
  * @param tableLayers The drawing of the layers from their rows: when given, the layers are drawn
- *   from their rows rather than from the retained batches of the features
+ *   from their rows (immediate mode when omitted)
  */
 export function renderLayers(
   r: Renderers,
@@ -82,7 +82,7 @@ export function renderLayers(
   companions: FeatureCompanionRegistry,
   layerAwareRenderers: LayeredOverlayRenderer[],
   datasets?: DatasetManager,
-  storeRetained?: StoreRetainedCache,
+  _retained?: undefined,
   restoreBlendState?: () => void,
   range?: RenderLayersRange,
   view?: RenderLayersView,
@@ -98,15 +98,12 @@ export function renderLayers(
   const tentative = store.getTentative();
 
   // Implementations without the renderers of retained mode (a test stub, for example) fall back
-  // to the immediate mode used before
+  // to the immediate mode
   const retainedRenderers =
-    storeRetained !== undefined && typeof r.batchManager.getRetainedRenderers === 'function'
+    tableLayers !== undefined && typeof r.batchManager.getRetainedRenderers === 'function'
       ? r.batchManager.getRetainedRenderers()
       : undefined;
   const useRows = tableLayers !== undefined && retainedRenderers !== undefined;
-  const useRetained = !useRows && storeRetained !== undefined && retainedRenderers !== undefined;
-
-  if (useRetained) storeRetained.beginFrame(companions);
 
   // The range used to thin the retained chunks and the chunks of the datasets.
   // It does not depend on the number of features, so once per frame is enough (it is computed
@@ -142,7 +139,7 @@ export function renderLayers(
 
   // Group the features by layer id (immediate mode only)
   const featuresByLayer = new Map<string, Feature[]>();
-  if (!useRetained && !useRows) {
+  if (!useRows) {
     for (const feature of features) {
       const layerFeatures = featuresByLayer.get(feature.layerId) ?? [];
       layerFeatures.push(feature);
@@ -190,23 +187,6 @@ export function renderLayers(
           getVisibleIds,
           restoreBlendState,
         },
-      );
-    } else if (useRetained && retainedRenderers) {
-      storeRetained.drawLayer(
-        layerId,
-        layer,
-        defaultProjectionData,
-        zoom,
-        {
-          renderers: retainedRenderers,
-          batchManager: r.batchManager,
-          customRenderers,
-          customRendererContext: layerContext,
-          companions,
-          getVisibleIds,
-          restoreBlendState,
-        },
-        viewportBounds,
       );
     } else {
       const layerFeatures = featuresByLayer.get(layerId) ?? [];

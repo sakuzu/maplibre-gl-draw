@@ -126,7 +126,6 @@ function setup(drapeUsable: boolean, wideFallback = false) {
     },
     customRenderers: new Map(),
     featureCompanions: {},
-    storeRetainedCache: null,
     selectionScope: {},
   } as unknown as FrameRenderDeps;
   return { gl, frame, deps, atDrape };

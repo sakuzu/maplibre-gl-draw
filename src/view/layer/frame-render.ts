@@ -42,7 +42,6 @@ import {
 } from './gl-state.js';
 import { renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
-import type { StoreRetainedCache } from './store-retained.js';
 import type { TableLayerRenderer } from './table-retained.js';
 
 /**
@@ -62,7 +61,6 @@ export interface FrameRenderDeps {
   customRenderers: Map<string, FeatureTypeHandler['renderer']>;
   featureCompanions: FeatureCompanionRegistry;
   datasets?: RenderedDatasets;
-  storeRetainedCache: StoreRetainedCache | null;
   /** The drawing of the layers from their rows (null when the Store does not hand out its rows) */
   tableRetained?: TableLayerRenderer | null;
   selectionScope: SelectionScope;
@@ -221,6 +219,7 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
   drawDrapeSegment(deps, f, index);
 
   // Per-layer rendering (only the segment of this slot), once per copy of the world in view
+  if (f.useRows) deps.tableRetained?.setSurface(f.tableSurface);
   for (const copy of f.copies) {
     applyCopy(deps, copy);
     renderLayers(
@@ -235,7 +234,7 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
       deps.featureCompanions,
       f.layerAwareRenderers,
       deps.datasets,
-      f.useRetained ? (deps.storeRetainedCache ?? undefined) : undefined,
+      undefined,
       f.restoreBlendState,
       { from: segment.from, to: segment.to, first, last },
       copy.view,

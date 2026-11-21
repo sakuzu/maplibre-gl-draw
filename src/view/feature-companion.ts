@@ -177,8 +177,8 @@ export interface FeatureCompanionRegistry {
   /**
    * The generation number (for deciding cache invalidation)
    *
-   * It increases on every registration and cancellation. The cache of retained mode
-   * (view/layer/store-retained) caches the classification that "cuts features having
+   * It increases on every registration and cancellation. The drawing of the layers from their
+   * rows (view/layer/table-retained) caches the classification that "cuts features having
    * companions out into the immediate rendering run", and that classification can change
    * as registrations come and go. Watch the generation number change and discard the cache.
    */

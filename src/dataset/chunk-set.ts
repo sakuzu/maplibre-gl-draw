@@ -605,8 +605,9 @@ export class DisplayChunkSet {
    * at sea level and stay buried in the terrain.
    *
    * core advances the generation by one whenever the coverage of the DEM changes
-   * (getAnchorElevationGeneration). The retained cache on the store side (syncTerrainGeneration
-   * of store-retained) and the retained batches of custom renderers look at the same
+   * (getAnchorElevationGeneration). The drawing of the layers of the Store from their rows
+   * (followTerrain of view/layer/table-retained, as syncTerrainGeneration of the retained cache
+   * of the features did before it) and the retained batches of custom renderers look at the same
    * generation; only the datasets did not.
    *
    * The first time (= nothing has been baked yet) nothing is rebuilt. It is about to be baked, so

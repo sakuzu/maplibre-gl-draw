@@ -68,15 +68,14 @@ import {
 } from '../terrain/state.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 import { DisplayListCache } from './display-list.js';
-import { DrapePlanner } from './drape-planner.js';
+import { DrapePlanner, isOpacityOnlyLayersChange } from './drape-planner.js';
 import { type FrameRenderDeps, renderForeground, renderSegment } from './frame-render.js';
 import { buildFrameState, type FrameState, StyleZoom } from './frame-state.js';
 import { createRenderScope } from './render-scope.js';
 import { disposeRenderers, initRenderers, type Renderers } from './renderers.js';
 import { SlotManager } from './slot-manager.js';
 import { type StackSlot, slotLayerId } from './slots.js';
-import { StoreRetainedCache } from './store-retained.js';
-import { isOpacityOnlyLayersChange } from './store-retained-invalidation.js';
+import { drapeRowsOf } from './table-drape-rows.js';
 import { TableLayerRenderer } from './table-retained.js';
 import { TerrainResolver } from './terrain-resolver.js';
 
@@ -224,13 +223,9 @@ interface EngineState {
   /** The renderers (null while the GPU side is not built) */
   renderers: Renderers | null;
   /**
-   * Retained batch cache of the Store rendering
-   *
-   * While it is disabled by the configuration it stays null and the previous immediate mode is
-   * used.
+   * The drawing of the layers from their rows (null while not built, and while it is disabled by
+   * the configuration: the immediate mode is used then)
    */
-  storeRetainedCache: StoreRetainedCache | null;
-  /** The drawing of the layers from their rows (null while not built) */
   tableRetained: TableLayerRenderer | null;
   /**
    * The rendering pixel ratio baked into the retained batches (null when not built yet)
@@ -286,7 +281,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     gl: null,
     mapInstance: null,
     renderers: null,
-    storeRetainedCache: null,
     tableRetained: null,
     builtPixelRatio: null,
     unsubscribeStore: null,
@@ -332,6 +326,16 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     get timeSlicing() {
       return renderingConfig.timeSlicing;
     },
+    // The layers drawn from their rows put their rows on the drape, without their features
+    rows: (styles) => {
+      if (renderingConfig.storeRetained === false) return null;
+      const reader = drawnRowsOf(store.getTables?.());
+      return reader ? drapeRowsOf(reader, store, styles) : null;
+    },
+    rowsRevision: () =>
+      renderingConfig.storeRetained === false
+        ? 0
+        : (drawnRowsOf(store.getTables?.())?.revision ?? 0),
   });
   const styleZoom = new StyleZoom();
   const slots = new SlotManager({
@@ -369,9 +373,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         renderScope.earcut.clear();
         renderScope.styleRules.clear();
         terrainContext.fillCache.clear();
-        engine.storeRetainedCache?.invalidateAll();
       }
-      engine.storeRetainedCache?.applyChanges(changes);
       displayList.applyChanges(changes);
       // The binning of the analytic drape is rebuilt only on a change of the geometry, the style,
       // the membership or the order. Rebuilding it indiscriminately on changes such as
@@ -493,11 +495,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     );
 
     if (renderingConfig.storeRetained !== false) {
-      engine.storeRetainedCache = new StoreRetainedCache(store, {
-        terrain: terrainContext,
-        extensions: renderScope.selection.extensions,
-      });
-      // The layers of a flat map are drawn from the rows of the built-in Store
+      // The layers are drawn from the rows of the built-in Store
       const reader = drawnRowsOf(store.getTables?.());
       if (reader) {
         engine.tableRetained = new TableLayerRenderer({
@@ -505,6 +503,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
           reader,
           store,
           ledger: renderScope.gpu,
+          terrain: terrainContext,
           pixelRatio,
           requestRepaint: () => engine.mapInstance?.triggerRepaint(),
           timeSlicing: () => renderingConfig.timeSlicing !== false,
@@ -546,9 +545,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // datasets themselves are kept and built again once the layer is recreated)
     datasets?.disposeRetained();
 
-    // Release the retained batches of the Store rendering too (before disposing the renderers)
-    engine.storeRetainedCache?.dispose(r.batchManager.getRetainedRenderers());
-    engine.storeRetainedCache = null;
+    // Release the drawing of the rows too (before disposing the renderers)
     engine.tableRetained?.dispose();
     engine.tableRetained = null;
     engine.builtPixelRatio = null;
@@ -667,7 +664,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     const dpr = resolvePixelRatio(pixelRatio);
     if (engine.builtPixelRatio !== dpr) {
       if (engine.builtPixelRatio !== null) {
-        engine.storeRetainedCache?.invalidateAll();
         engine.tableRetained?.reclassify();
       }
       engine.builtPixelRatio = dpr;
@@ -689,7 +685,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       dpr,
       contentDpr: resolveContentPixelRatio(pixelRatio),
       terrainState,
-      retainedAvailable: engine.storeRetainedCache !== null,
       rowsAvailable: engine.tableRetained !== null,
       overlayRenderers: dynamicOverlayRenderers,
       segments: slots.segments,
@@ -726,7 +721,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       customRenderers,
       featureCompanions,
       datasets,
-      storeRetainedCache: engine.storeRetainedCache,
       tableRetained: engine.tableRetained,
       selectionScope: renderScope.selection,
     };
@@ -804,7 +798,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       dynamicOverlayRenderers.push(renderer);
       // An element involved in the rendering was added, so the prepared retained batches are
       // rebuilt
-      engine.storeRetainedCache?.invalidateAll();
       engine.tableRetained?.reclassify();
       // Only while the GPU side exists (otherwise buildGpuResources calls onAdd)
       if (engine.renderers && engine.gl && engine.mapInstance) {
@@ -817,7 +810,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       const index = dynamicOverlayRenderers.indexOf(renderer);
       if (index === -1) return;
       dynamicOverlayRenderers.splice(index, 1);
-      engine.storeRetainedCache?.invalidateAll();
       engine.tableRetained?.reclassify();
       // Its GPU resources exist only while the engine does
       if (engine.renderers && engine.gl) renderer.onRemove();
@@ -829,7 +821,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       customRenderers.set(type, renderer);
       // Adding a custom type changes the classification of the features (whether they can be
       // retained)
-      engine.storeRetainedCache?.invalidateAll();
       engine.tableRetained?.reclassify();
       // Only while the GPU side exists (otherwise buildGpuResources calls onAdd)
       if (engine.renderers && engine.gl && engine.mapInstance) {
@@ -840,7 +831,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       return () => {
         if (customRenderers.get(type) !== renderer) return;
         customRenderers.delete(type);
-        engine.storeRetainedCache?.invalidateAll();
         engine.tableRetained?.reclassify();
         if (engine.renderers && engine.gl && !isRegisteredRenderer(renderer)) renderer.onRemove();
         engine.mapInstance?.triggerRepaint();

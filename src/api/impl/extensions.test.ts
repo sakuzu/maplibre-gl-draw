@@ -11,7 +11,7 @@ import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import { createStore } from '../../store/built-in/create-store.js';
 import type { Store } from '../../store/built-in/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
-import { customRendererOf } from '../../view/layer/store-retained-classify.js';
+import { customRendererOf } from '../../view/layer/table-partition.js';
 import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';

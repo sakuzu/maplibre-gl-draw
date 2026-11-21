@@ -231,3 +231,19 @@ function rowVertexCount(rows: DrawnRows, group: RowGroup, row: number): number {
   if (reader.depth === 0) return 1;
   return reader.vertexStart(at + 1) - reader.vertexStart(at);
 }
+
+/**
+ * The custom renderer that draws a feature: the one registered for its type, unless it refuses
+ * the feature, which the built-in drawing of the type then draws
+ *
+ * @internal
+ */
+export function customRendererOf<R>(
+  customTypes: ReadonlyMap<string, R>,
+  feature: Feature,
+): R | undefined {
+  const renderer = customTypes.get(feature.type);
+  if (renderer === undefined) return undefined;
+  const { appliesTo } = renderer as Pick<FeatureTypeRenderer, 'appliesTo'>;
+  return appliesTo && !appliesTo.call(renderer, feature) ? undefined : renderer;
+}

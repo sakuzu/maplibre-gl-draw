@@ -12,8 +12,7 @@
  * How it actually broke: when a page has several maps (the main one, a thumbnail, a print
  * preview and so on) each has its own Map and CustomLayer. The subdivision generation counter
  * counts from 0 per CustomLayer, yet the place that value was written to was a single global.
- * Retained batches (`layer/store-retained.ts`) decide whether to re-bake by "the global
- * generation vs their own record", so whenever the counters of two instances happened to
+ * Retained batches decided whether to re-bake by "the global generation vs their own record", so whenever the counters of two instances happened to
  * coincide the change was invisible and flat geometry baked before the terrain came alive was
  * never rebuilt. The subdivision cache (`cache/terrain-fill.ts`) was shared by feature id as
  * well, so when the generations coincided by chance it returned triangles subdivided with
