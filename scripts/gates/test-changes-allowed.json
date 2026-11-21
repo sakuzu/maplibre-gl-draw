@@ -810,6 +810,11 @@
       "path": "bench/edit-document.test.ts",
       "change": "CHANGES 16 (the list of the scenes of the editing benchmark gains translateLayer, a move of every feature of the layer with nothing selected)",
       "unit": "the baseline of the pictures, and the stop of the bulk edits of the editing benchmark"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "the list of the scenes of the editing benchmark gains gpuMemory, the GPU memory of the drawing per part",
+      "unit": "the ledger of the GPU memory and its limit"
     }
   ]
 }
