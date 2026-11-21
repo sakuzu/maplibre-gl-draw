@@ -115,6 +115,10 @@ flat out vec3 v_dash_range;
 // corner (far away for none)
 flat out vec4 v_dash_prev;
 flat out vec4 v_dash_next;
+// A dashed segment: its start and its end on the screen (device px), and the w of their clip
+// positions, from which a fragment finds its position on the line where it is
+flat out vec4 v_dash_ends;
+flat out vec2 v_dash_w;
 // A point: the offset in device pixels. A segment: the signed distance from its center line, the
 // position along it, and for a dashed one its position on the line (CSS px). An edge of an
 // outline: the signed distance
@@ -321,6 +325,8 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         float cssPerPx = lengthCss / screenSegmentLength;
         v_dash = vec3(dash, dash + gap, cssPerPx);
         v_dash_range = vec3(startCss, startCss + lengthCss, nextIdx < 0 ? 1.0 : 0.0);
+        v_dash_ends = vec4(startScreen, endScreen);
+        v_dash_w = vec2(startClip.w, endClip.w);
         // The dashes of the segments before and after it whose round ends reach over its corners
         if (prevIdx >= 0) {
             vec2 prevOffset = rowsCoord(a_head.x);
@@ -407,6 +413,8 @@ void main() {
     v_params = vec4(0.0);
     v_dash = vec3(0.0);
     v_dash_range = vec3(0.0);
+    v_dash_ends = vec4(0.0);
+    v_dash_w = vec2(1.0);
     v_dash_prev = vec4(1.0, 0.0, -2.0 * ${glslFloat(FAR)}, -${glslFloat(FAR)});
     v_dash_next = vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
     v_geom = vec4(0.0);
@@ -457,6 +465,8 @@ flat in vec3 v_dash;
 flat in vec3 v_dash_range;
 flat in vec4 v_dash_prev;
 flat in vec4 v_dash_next;
+flat in vec4 v_dash_ends;
+flat in vec2 v_dash_w;
 in vec4 v_geom;
 
 // The opacity factor of the drawing (the opacity of the layer)
@@ -465,6 +475,34 @@ uniform float u_opacity;
 out vec4 fragColor;
 
 const float AA = 0.5;
+
+// Where a fragment of a dashed segment is, from where it falls on the segment on the screen: x its
+// position on the line (CSS px), through the perspective of the ends of the segment; y the length
+// on the line per device pixel along the segment there; z its signed distance from the center line
+// on the screen (device px). The dashes cut on the CPU lie on the ground and each is a short line
+// of its own, its round ends and its width on the screen where it is: on a pitched map the ratio
+// changes along a segment, and a value interpolated over a long segment is not one on the screen
+vec3 dashPlace() {
+    vec2 from = v_dash_ends.xy;
+    vec2 along = v_dash_ends.zw - from;
+    float screenLength2 = dot(along, along);
+    float first = v_dash_range.x;
+    float whole = v_dash_range.y - first;
+    if (screenLength2 <= 0.0) return vec3(v_geom.z, v_dash.z, v_geom.x);
+    float screenLength = sqrt(screenLength2);
+    vec2 dir = along / screenLength;
+    vec2 at = gl_FragCoord.xy - from;
+    float d = dot(at, vec2(-dir.y, dir.x));
+    // The share of the segment on the screen, and on the ground
+    float u = dot(at, dir) / screenLength;
+    float w0 = v_dash_w.x;
+    float w1 = v_dash_w.y;
+    float den = (1.0 - u) * w1 + u * w0;
+    if (den <= 0.0) return vec3(v_geom.z, v_dash.z, d);
+    float g = u * w0 / den;
+    float perPx = whole * w0 * w1 / (den * den) / screenLength;
+    return vec3(first + g * whole, perPx > 0.0 ? perPx : v_dash.z, d);
+}
 ${POINT_SDF_GLSL}
 ${TERRAIN_SHADE_FRAGMENT_GLSL}
 
@@ -513,14 +551,16 @@ vec4 drawnOver(vec4 under, vec4 over) {
 // The color of a dashed segment: the dashes the CPU draws on it, cut at its ends (where a dash
 // goes on over a corner, up to the miter), and those of the segments next to it that reach over
 // the corners, each drawn over the ones before it as the CPU draws them
-vec4 dashedColor(float d, float w) {
+vec4 dashedColor(float w) {
     float dash = v_dash.x;
     float period = v_dash.y;
-    float perPx = v_dash.z;
+    vec3 place = dashPlace();
+    float perPx = place.y;
+    float d = place.z;
     float first = v_dash_range.x;
     float last = v_dash_range.y;
     bool lineEnd = v_dash_range.z > 0.5;
-    float pos = v_geom.z;
+    float pos = place.x;
     float at = clamp(pos, first, last);
     float m = mod(at, period);
     // The dash of the segment before it, drawn before this one
@@ -571,7 +611,7 @@ vec4 shadePoint() {
 vec4 shadeSegment() {
     float d = v_geom.x;
     float w = v_params.x;
-    if (v_dash.y > 0.0) return dashedColor(d, w);
+    if (v_dash.y > 0.0) return dashedColor(w);
     float linePos = v_geom.y;
     float startDist = -linePos;
     float endDist = linePos - v_params.y;

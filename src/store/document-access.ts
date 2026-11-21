@@ -15,7 +15,12 @@
  * only for what it needs.
  */
 
-import type { FeatureRowField, RowValues, StoreTransactOptions } from './built-in/types.js';
+import type {
+  FeatureRowField,
+  FeatureTables,
+  RowValues,
+  StoreTransactOptions,
+} from './built-in/types.js';
 import type { ClientState } from './memory/ui-state.js';
 import type {
   BoundingBox,
@@ -36,6 +41,12 @@ import type {
   UpdateSource,
   VertexSelection,
 } from './types.js';
+
+/**
+ * The number of features the layer keeps made, one by one: a feature read again within the last
+ * this many reads is not made again
+ */
+export const FEATURES_KEPT = 1_024;
 
 /** The reads of the document */
 export interface DocumentReads {
@@ -364,6 +375,15 @@ export interface DocumentBoxes {
   setFeatureBoxes(boxes: FeatureBoxes | null): void;
 }
 
+/** The rows of the document as the Store holds them */
+export interface DocumentTables {
+  /**
+   * The tables of the Store (its `tables`): what reads the rows without making a feature per row
+   * (the drawing) reads them from here
+   */
+  getTables(): FeatureTables;
+}
+
 /** What the operations written in parts read of the layer, and the call before a write */
 export interface DocumentOperations {
   /**
@@ -393,11 +413,12 @@ export interface DocumentOperations {
 
 /**
  * The layer over the Store an instance makes: the four parts, the reads by position, the moves,
- * the reads by box and what the operations written in parts read of it
+ * the reads by box, the tables and what the operations written in parts read of it
  */
 export interface InstanceDocument
   extends DocumentAccess,
     DocumentPlaces,
     DocumentMoves,
     DocumentBoxes,
+    DocumentTables,
     DocumentOperations {}

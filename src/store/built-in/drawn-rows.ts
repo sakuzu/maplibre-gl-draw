@@ -18,7 +18,9 @@
  *
  * The drawing also takes the work of the tables into its frames through the reader: the new rows
  * gathered into row groups of their own, the next versions of the row groups (`rebuild`), the row
- * groups taken in (`advanceQueuedBlocks`) and the versions swapped in (`swap`).
+ * groups taken in (`advanceQueuedBlocks`) and the versions swapped in (`swap`), a step of each per
+ * frame. The new rows gathered are not drawn until they are taken in as row groups of their own:
+ * the tables do not hand them out.
  *
  * @internal
  */
@@ -87,12 +89,6 @@ const STYLE_AT = rowColumnLayoutOf(ROW_COLUMNS).wholes.indexOf('style');
 const GEOMETRY_AT = rowColumnLayoutOf(ROW_COLUMNS).shapes.indexOf('geometry');
 
 /**
- * The rebuilds a frame gives the tables: the new rows gathered wait two rebuilds without a new row
- * before they are built into groups of their own, and the third builds them
- */
-const CREATION_REBUILDS = 3;
-
-/**
  * The bits of the copy of the state of a row that leave it out of the rows drawn: hidden by its own
  * flag or by the flag of its group (the bits `document.ts` declares), deleted, or read elsewhere
  * (from the delta of its table, or from the row group it moved into)
@@ -103,7 +99,6 @@ const NOT_DRAWN = (1 << 7) | (1 << 8) | STATE_DELETED | STATE_DELTA | STATE_WAIT
  * Rows of a layer read outside its row groups, drawn at one place among the rows of its row
  * groups: before the row `at` of the row group at the place `group` of the order of the layer (-1:
  * a layer without row groups), the rows `[from, to)` of `rows`, a part of the delta of the layer
- * or a group of its new rows not taken in yet
  *
  * @internal
  */
@@ -151,19 +146,19 @@ export interface DrawnRows {
   placeOf(ref: number): { readonly group: RowGroup; readonly row: number } | undefined;
   /** The row group of a handle (undefined for none) */
   groupOf(handle: RowGroupHandle): RowGroup | undefined;
+  /** The parts of the delta of a layer, the oldest first */
+  deltaParts(table: RowTable): readonly DeltaPart[];
+  /** The part of the delta of a layer of a handle (undefined for none) */
+  deltaPart(table: RowTable, handle: RowGroupHandle): DeltaPart | undefined;
   /**
-   * The groups of the rows of a layer read outside its row groups: the parts of its delta, and
-   * its new rows not taken in yet into row groups of their own (drawn until they are)
-   */
-  extraGroups(table: RowTable): RowGroup[];
-  /**
-   * The rows of a layer read outside its row groups (`extraGroups`) at their places among its row
-   * groups, in the order they are drawn
+   * The rows of the parts of the delta of a layer at their places among its row groups, in the
+   * order they are drawn
    */
   deltaInserts(table: RowTable): DeltaInsert[];
   /**
-   * Gives the work of the tables a frame: the new rows gathered into groups of their own, the next
-   * versions of the row groups, the row groups taken in
+   * Gives the work of the tables a frame, a step of each within the budget: the next versions of
+   * the row groups and the new rows gathered into groups of their own (`rebuild`), the versions
+   * swapped in, the row groups built taken in
    *
    * @returns Whether work is left for later frames
    */
@@ -231,17 +226,17 @@ function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
       return place ? { group: place.group, row: place.row } : undefined;
     },
     groupOf: (handle) => pages.rowGroup(handle)?.group,
-    extraGroups: (table) => [...pendingGroupsOf(table), ...table.delta.parts.map((p) => p.group)],
+    deltaParts: (table) => table.delta.parts,
+    deltaPart: (table, handle) => table.delta.part(handle),
     deltaInserts: (table) => deltaInsertsOf(table, pages),
     advance: (budget) => {
       // The new rows gathered wait a few rebuilds for more rows to come before they are built into
-      // groups of their own, and the new rows of a layer wait for the order of its groups to be
-      // swapped in: a frame of the drawing gives them those rebuilds and swaps, so the rows written
-      // before a frame are built in it (in the Worker of the Store when it has one)
-      for (let i = 0; i < CREATION_REBUILDS && pages.hasPendingWork; i++) {
-        pages.rebuild(budget);
-        pages.swap();
-      }
+      // groups of their own (in the Worker of the Store when it has one), and are drawn from the
+      // frame their groups are taken in; a frame gives the tables one rebuild, one swap and one
+      // take-in, and asks for the next frame while work is left
+      if (!pages.hasPendingWork) return false;
+      pages.rebuild(budget);
+      pages.swap();
       if (pages.hasQueuedBlocks) pages.advanceQueuedBlocks(budget);
       return pages.hasPendingWork;
     },
@@ -259,46 +254,18 @@ function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
 }
 
 /**
- * The groups of the new rows of a table not taken in yet into row groups of their own, built to be
- * read: the tables keep them for a few frames while rows keep coming, and draw them meanwhile from
- * here (each is a run of keys between two row groups)
- *
- * The tables hand them to their order and their searches only (`RowTable.setPendingSource`); the
- * drawing reads them from there, the one place that names it.
- */
-function pendingGroupsOf(table: RowTable): readonly RowGroup[] {
-  const source = (table as unknown as { pendingSource?: (() => readonly RowGroup[]) | null })
-    .pendingSource;
-  return source ? source().filter((group) => group.data.length > 0) : [];
-}
-
-/**
- * The rows of a table read outside its row groups at their places among its row groups: the rows
- * of its new rows not taken in yet, then of every part of its delta, the oldest first, merged in
- * the order of their keys (each holds its rows in that order), the rows gone of a part left out,
- * the rows that follow each other at one place of one source in one insert
+ * The rows of the parts of the delta of a table at their places among its row groups: the rows of
+ * every part, the oldest first, merged in the order of their keys (each holds its rows in that
+ * order), the rows gone of a part left out, the rows that follow each other at one place of one
+ * part in one insert
  */
 function deltaInsertsOf(table: RowTable, pages: Pages<FeatureStyle>): DeltaInsert[] {
-  const pending = pendingGroupsOf(table);
   const parts = table.delta.parts;
   const out: DeltaInsert[] = [];
-  if (parts.length === 0 && pending.length === 0) return out;
-  const groups: RowGroup[] = [...pending, ...parts.map((part) => part.group)];
-  const gone: Array<Uint8Array | null> = [...pending.map(() => null), ...parts.map((p) => p.gone)];
-  // A run of new rows is between two row groups: the place of its first row is the place of all
-  const places = [
-    ...pending.map((group) => {
-      const place = table.positionOfKey(group.data, 0);
-      const n = group.data.length;
-      return place
-        ? {
-            groups: new Int32Array(n).fill(table.orderOf(place.group)),
-            cuts: new Int32Array(n).fill((place.slot + 1) >> 1),
-          }
-        : { groups: new Int32Array(n).fill(-1), cuts: new Int32Array(n) };
-    }),
-    ...parts.map((part) => table.partPlaces(part)),
-  ];
+  if (parts.length === 0) return out;
+  const groups: RowGroup[] = parts.map((part) => part.group);
+  const gone: Array<Uint8Array | null> = parts.map((p) => p.gone);
+  const places = parts.map((part) => table.partPlaces(part));
   const at = new Int32Array(groups.length);
   /** Passes the rows gone of a part */
   const pass = (s: number): void => {

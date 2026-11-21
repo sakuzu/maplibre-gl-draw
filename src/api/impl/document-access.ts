@@ -38,13 +38,14 @@ import type {
   StoreGroup,
   StoreTransactOptions,
 } from '../../store/built-in/types.js';
-import type {
-  FeatureBoxes,
-  FeatureMatch,
-  FeaturePlace,
-  FeatureValuesRead,
-  InstanceDocument,
-  MoveDestination,
+import {
+  FEATURES_KEPT,
+  type FeatureBoxes,
+  type FeatureMatch,
+  type FeaturePlace,
+  type FeatureValuesRead,
+  type InstanceDocument,
+  type MoveDestination,
 } from '../../store/document-access.js';
 import { ClientState } from '../../store/memory/ui-state.js';
 import type {
@@ -315,7 +316,7 @@ export function watchChanges(
 }
 
 /** The number of features the layer keeps made */
-const FEATURE_CACHE_LIMIT = 1_024;
+const FEATURE_CACHE_LIMIT = FEATURES_KEPT;
 
 /** The prefix of the fields of the keys of the style of a row */
 const STYLE_FIELD = 'style:';
@@ -3915,6 +3916,9 @@ export function createDocumentAccess(
     // The reads by box
     findFeatureIdsInBox,
     setFeatureBoxes,
+
+    // The rows as the Store holds them
+    getTables: () => tables,
 
     // The moves and the replacements
     moveFeatures,

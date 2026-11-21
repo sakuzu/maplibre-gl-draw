@@ -48,7 +48,7 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import { drawnRowsOf } from '../../store/built-in/drawn-rows.js';
-import type { DocumentAccess } from '../../store/document-access.js';
+import type { DocumentAccess, DocumentTables } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
@@ -87,12 +87,11 @@ import { TerrainResolver } from './terrain-resolver.js';
  */
 export interface CustomLayerDeps {
   map: MapLibreMap;
-  store: DocumentAccess;
   /**
-   * The tables of the Store (`Store.tables`): the layers are drawn from their rows when they are
-   * those of a built-in Store
+   * The layer over the Store; the layers are drawn from the rows of its tables (`getTables`) when
+   * they are those of a built-in Store
    */
-  tables?: unknown;
+  store: DocumentAccess & Partial<DocumentTables>;
   spatialIndex: SpatialIndex;
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;
@@ -297,6 +296,17 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   };
   /** The ordered list of the features to display (the immediate path; follows the Store) */
   const displayList = new DisplayListCache(store);
+  // The drawing of the rows by kind is told once per instance (the renderer of the rows is made
+  // again with the GL context)
+  let toldByKind = false;
+  const tellDrawnByKind = (): void => {
+    if (toldByKind) return;
+    toldByKind = true;
+    console.warn(
+      'The rows cannot be drawn in one draw on this GL: they are drawn by kind, a draw per run ' +
+        'of one kind',
+    );
+  };
   const dynamicOverlayRenderers: EngineOverlayRenderer[] = [];
 
   /**
@@ -488,7 +498,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         extensions: renderScope.selection.extensions,
       });
       // The layers of a flat map are drawn from the rows of the built-in Store
-      const reader = drawnRowsOf(deps.tables);
+      const reader = drawnRowsOf(store.getTables?.());
       if (reader) {
         engine.tableRetained = new TableLayerRenderer({
           gl,
@@ -498,6 +508,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
           pixelRatio,
           requestRepaint: () => engine.mapInstance?.triggerRepaint(),
           timeSlicing: () => renderingConfig.timeSlicing !== false,
+          drawnByKind: tellDrawnByKind,
         });
       }
     }

@@ -759,6 +759,7 @@ export const WORK_SCENES = {
   writeBack: 'write back',
   deleteLayer: 'delete a layer',
   interleavedLayers: 'draw interleaved layers',
+  firstPointerAfterChange: 'the first pointer event after a change of the document',
 } as const;
 
 /** The two numbers of features a scene is compared at */

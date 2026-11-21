@@ -49,6 +49,15 @@ function writeChanged(store: Store, id: string): void {
   });
 }
 
+/** Draws frames until the drawing has no work left */
+function settle(instance: ReturnType<typeof instanceOf>): void {
+  for (let frame = 0; frame < 20; frame++) {
+    if (!instance.draw.hasPendingWork()) return;
+    instance.map.render();
+  }
+  throw new Error('the drawing still has work after 20 frames');
+}
+
 /** The draw calls of one frame */
 function frameDraws(instance: ReturnType<typeof instanceOf>): number {
   instance.gl.reset();
@@ -80,6 +89,11 @@ type SceneWork = WorkCounts & { addedDraws: number };
 describe(WORK_SCENES.select, () => {
   const scene = measured((size): SceneWork => {
     const instance = instanceOf(size);
+    // The rows written are drawn from the frame they are taken into row groups; the pointer comes
+    // to the place before it clicks there, as it does on a page (the first event after a change
+    // of the document tests what is under the pointer from every feature: its own scene)
+    settle(instance);
+    instance.input.move(pointOf(instance));
     const before = frameDraws(instance);
     const work = workDuring(instance.counts, () => instance.input.click(pointOf(instance)));
     if (instance.draw.selection.get().ids.length !== 1) throw new Error('nothing selected');

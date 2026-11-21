@@ -4,6 +4,7 @@
     "selectAll": "the work that keeps the selected ids in a set read without an array, and selects every feature of a layer or of a box",
     "releasePart": "the work that shows a drag without writing the document and writes it in parts when the pointer is released",
     "writeBack": "the work that writes the values kept from before a change back into the document",
-    "interleavedLayers": "the work that draws the features of a layer from their rows, in the order of the layer, with points, lines and polygons interleaved"
+    "interleavedLayers": "the work that draws the features of a layer from their rows, in the order of the layer, with points, lines and polygons interleaved",
+    "firstPointerAfterChange": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
   }
 }

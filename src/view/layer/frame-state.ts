@@ -17,7 +17,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
-import type { DocumentAccess } from '../../store/document-access.js';
+import { type DocumentAccess, FEATURES_KEPT } from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Feature } from '../../store/types.js';
 import {
@@ -384,8 +384,13 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   // a selected feature off the screen got no selection UI. Now it does (it is drawn correctly
   // when part of the selection box reaches into the screen).
   const selectedFeatures: Feature[] = [];
+  // More ids selected than the layer keeps features made of one by one are read from the features
+  // of the whole document in stacking order, which the layer keeps while the document does not
+  // change: read one by one, each would be made again in every frame. This read goes when the
+  // selection is drawn from the rows
+  const kept = selectedIds.length > FEATURES_KEPT ? selectedOfEvery(store, selectedIdSet) : null;
   for (const id of selectedIds) {
-    const feature = store.getFeature(id);
+    const feature = kept?.get(id) ?? store.getFeature(id);
     if (!feature?.visible || isLocallyHidden(feature, store)) continue;
     selectedFeatures.push(feature);
   }
@@ -665,4 +670,13 @@ export function planCopies(
       terrainState,
     };
   });
+}
+
+/** The features of the ids selected, read from the features of the whole document in order */
+function selectedOfEvery(store: DocumentAccess, ids: ReadonlySet<string>): Map<string, Feature> {
+  const out = new Map<string, Feature>();
+  for (const feature of store.listFeaturesInOrder()) {
+    if (ids.has(feature.id)) out.set(feature.id, feature);
+  }
+  return out;
 }

@@ -604,6 +604,18 @@ function tracked(options?: { terrain?: boolean }): LedgerInstance {
   return instance;
 }
 
+/**
+ * Draws frames until the drawing has no work left: the rows written in one write of 64 or more
+ * are drawn from the frame they are taken into row groups of their own
+ */
+function renderSettled(instance: Pick<LedgerInstance, 'map' | 'draw'>): void {
+  for (let frame = 0; frame < 20; frame++) {
+    instance.map.render();
+    if (!instance.draw.hasPendingWork()) return;
+  }
+  throw new Error('the drawing still has work after 20 frames');
+}
+
 /** Features of every kind the drawing draws, spread over the area the map stub shows */
 function fillDocument(instance: LedgerInstance): string[] {
   const { draw, store } = instance;
@@ -893,14 +905,14 @@ describe('the GPU side of an instance gives everything back', () => {
     const kept = draw.layers.create({ name: 'kept' }) as unknown as { id: string } | string;
     const keptId = typeof kept === 'string' ? kept : kept.id;
     draw.features.createMany(gridPoints(50).map((each) => ({ ...each, layerId: keptId })) as never);
-    map.render();
+    renderSettled({ map, draw });
     const before = ledger.snapshot();
     const gone = draw.layers.create({ name: 'gone' }) as unknown as { id: string } | string;
     const goneId = typeof gone === 'string' ? gone : gone.id;
     draw.features.createMany(
       gridPoints(200).map((each) => ({ ...each, layerId: goneId })) as never,
     );
-    map.render();
+    renderSettled({ map, draw });
     expect(ledger.snapshot().rowBytes).toBeGreaterThan(before.rowBytes);
     draw.layers.delete(goneId);
     map.render();
@@ -944,8 +956,8 @@ describe('the GPU side of an instance gives everything back', () => {
     const other = tracked();
     one.draw.features.createMany(gridPoints(100) as never);
     other.draw.features.createMany(gridPoints(300) as never);
-    one.map.render();
-    other.map.render();
+    renderSettled(one);
+    renderSettled(other);
     const held = other.ledger.snapshot();
     expect(one.ledger.snapshot().rowBytes).toBeLessThan(held.rowBytes);
     one.draw.destroy();
@@ -1190,8 +1202,8 @@ describe('the limit of what is held outside the rows', () => {
     const { map, ledger, draw } = tracked();
     ledger.limitBytes = GPU_FLOOR_BYTES + 1;
     draw.features.createMany(gridPoints(500) as never);
-    map.render();
-    expect(ledger.snapshot().byPart.points ?? 0).toBeGreaterThan(500 * 40);
+    renderSettled({ map, draw });
+    expect(ledger.snapshot().byPart.rows ?? 0).toBeGreaterThan(500 * 40);
   });
 
   it('keeps an image waiting past it, and the frames still draw', async () => {

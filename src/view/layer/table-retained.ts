@@ -45,6 +45,7 @@ import type { BBox } from '../../geometry/types.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import type {
   DeltaInsert,
+  DeltaPart,
   DrawnRows,
   GroupVersion,
   GroupVersionReceiver,
@@ -59,7 +60,7 @@ import {
   ROW_WRITE_STYLE,
 } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
-import type { Feature, Layer } from '../../store/types.js';
+import type { Feature, Layer, StoreChange } from '../../store/types.js';
 import {
   drawFeatureCompanionsInFrame,
   type FeatureCompanionRegistry,
@@ -114,6 +115,14 @@ import {
  * The same as the budget of the chunks of a dataset.
  */
 const TABLE_BUILD_BUDGET_MS = 12;
+
+/**
+ * The number of features made from rows that are kept for the rows drawn at once
+ *
+ * A feature is kept while its row does not change; above this number, the features of the rows
+ * not drawn in the frame are let go. A first estimate, to be set from measured data.
+ */
+export const IMMEDIATE_CACHE_LIMIT = 50_000;
 
 /** The rows packed between two looks at the clock */
 const SLICE_ROWS = 512;
@@ -237,6 +246,8 @@ export interface TableLayerRendererOptions {
    * it; read at each frame)
    */
   readonly timeSlicing?: () => boolean;
+  /** Told when the rows are drawn by kind because the program of the drawing in one draw failed */
+  readonly drawnByKind?: () => void;
 }
 
 /** A chunk of rows of every kind drawn in one draw */
@@ -289,16 +300,17 @@ interface GroupCache {
    * whatever the budget, so that rows the frame before drew are drawn in it too
    */
   shown: boolean;
+  /** The part of the delta it holds the rows of (null for a row group) */
+  readonly part: DeltaPart | null;
+  /** The rows of its part marked gone when its bytes were made */
+  marks: number;
 }
 
 /** What is kept for a layer */
 interface LayerCache {
   readonly layerId: string;
   readonly groups: Map<RowGroupHandle, GroupCache>;
-  /**
-   * The groups of the rows of the layer read outside its row groups (the parts of its delta, its
-   * new rows not taken in yet), by their groups
-   */
+  /** The parts of the delta of the layer, by their groups */
   readonly extras: Map<RowGroup, GroupCache>;
   slots: RowStyleSlots | null;
   resolver: RetainedRendererSet['styles'] | null;
@@ -374,6 +386,19 @@ export class TableLayerRenderer {
   private readonly written = new Map<string, Map<RowGroupHandle, Map<number, PendingWrite>>>();
   /** What is kept for the groups of the next versions built, until they are swapped in */
   private readonly pendingCaches = new Map<GroupVersion, GroupCache[]>();
+  /**
+   * The features of the rows drawn at once, by their ids, with the frame each was drawn in last
+   * (up to {@link IMMEDIATE_CACHE_LIMIT}): a feature goes when its row changes, and when the
+   * number is reached, the ones not drawn in the frame go
+   */
+  private readonly atOnce = new Map<string, { feature: Feature; frame: number }>();
+  /** The frame the features not drawn in it were let go in last */
+  private atOnceTrimmed = -1;
+  /**
+   * The layers whose parts of the delta are to be packed or released: a part came or left, or the
+   * rows are to be packed again (a new classification, new styles, a row written that did not fit)
+   */
+  private readonly deltaStale = new Set<string>();
   private readonly detach: Array<() => void> = [];
   /** The work counted for the tests */
   readonly stats: TableWorkStats = {
@@ -423,7 +448,17 @@ export class TableLayerRenderer {
     this.detach.push(reader.attachReceiver(this.receiver));
     this.detach.push(reader.onPendingWork(() => options.requestRepaint()));
     this.detach.push(reader.onRowsWritten((layerId, writes) => this.rowsWritten(layerId, writes)));
-    this.detach.push(reader.onDeltaChanged(() => options.requestRepaint()));
+    this.detach.push(options.store.subscribe((change) => this.forgetAtOnce(change)));
+    this.detach.push(
+      reader.onDeltaChanged((layerId, change) => {
+        // A part that came in is packed once, a part that left is released; a part whose rows
+        // are marked gone writes the bytes of their state only (`uploadState`)
+        if (change.addedParts.length > 0 || change.removedParts.length > 0) {
+          this.deltaStale.add(layerId);
+        }
+        options.requestRepaint();
+      }),
+    );
     const pass = this.pass;
     this.rowsHost = {
       isStale: () => false,
@@ -629,12 +664,14 @@ export class TableLayerRenderer {
   }
 
   /** The byte of the state of a row, from the state of its copy and from this client */
-  private byteOf(layerId: string, group: RowGroup, row: number): number {
+  private byteOf(layerId: string, groupCache: GroupCache, row: number): number {
     const reader = this.reader;
     const client = this.client;
+    const group = groupCache.group;
     this.stats.stateRowsRead++;
     let byte = 0;
-    let hidden = reader.notDrawn(group, row);
+    // A row of a part of the delta marked gone is read elsewhere now
+    let hidden = reader.notDrawn(group, row) || groupCache.part?.gone[row] === 1;
     let selected = client.selectedLayers.has(layerId);
     const needsId =
       client.hiddenFeatures.size > 0 ||
@@ -666,7 +703,7 @@ export class TableLayerRenderer {
   private writeByte(groupCache: GroupCache, row: number): void {
     const layerId = this.layerOf(groupCache);
     if (layerId === undefined || row >= groupCache.bytes.length) return;
-    const byte = this.byteOf(layerId, groupCache.group, row);
+    const byte = this.byteOf(layerId, groupCache, row);
     if (groupCache.bytes[row] === byte) return;
     groupCache.bytes[row] = byte;
     groupCache.dirty = true;
@@ -705,7 +742,7 @@ export class TableLayerRenderer {
     const n = groupCache.bytes.length;
     let changed = false;
     for (let row = 0; row < n; row++) {
-      const byte = this.byteOf(layerId, group, row);
+      const byte = this.byteOf(layerId, groupCache, row);
       if (groupCache.bytes[row] === byte) continue;
       groupCache.bytes[row] = byte;
       this.stats.stateRowsWritten++;
@@ -714,6 +751,7 @@ export class TableLayerRenderer {
     }
     groupCache.stateVersion = group.stateVersion;
     groupCache.clientGeneration = this.clientGeneration;
+    groupCache.marks = groupCache.part?.goneCount ?? 0;
     if (changed) groupCache.dirty = true;
   }
 
@@ -738,7 +776,8 @@ export class TableLayerRenderer {
     const group = groupCache.group;
     if (
       groupCache.stateVersion !== group.stateVersion ||
-      groupCache.clientGeneration !== this.clientGeneration
+      groupCache.clientGeneration !== this.clientGeneration ||
+      (groupCache.part !== null && groupCache.marks !== groupCache.part.goneCount)
     ) {
       const first = groupCache.stateVersion < 0;
       this.remakeBytes(layerId, groupCache);
@@ -854,6 +893,7 @@ export class TableLayerRenderer {
     for (const detach of this.detach) detach();
     this.detach.length = 0;
     this.written.clear();
+    this.atOnce.clear();
     this.renderers = null;
     this.rows = null;
   }
@@ -880,9 +920,12 @@ export class TableLayerRenderer {
     this.rows = deps.rows;
     const oneDraw = deps.rows.ready && !this.byKind;
     const drawing: Drawing = oneDraw ? 'one-draw' : 'by-kind';
+    if (deps.rows.failed && !this.byKind) this.options.drawnByKind?.();
     const cache = this.layerCache(layerId, table, layer, deps, drawing);
     cache.bounds = frame.bounds ?? world();
     cache.drawnFrame = this.frameCount;
+    // The parts of a layer seen for the first time, or to be packed again, are packed now
+    if (this.deltaStale.has(layerId)) this.packDelta(layerId, cache);
     if (!table) return true;
     // A layer hidden, or hidden on this client, draws nothing
     if (layer.visible === false || this.client.hiddenLayers.has(layerId)) return true;
@@ -962,6 +1005,7 @@ export class TableLayerRenderer {
         drawnFrame: -1,
       };
       this.layers.set(layerId, cache);
+      this.deltaStale.add(layerId);
     }
     cache.layer = layer;
     cache.deps = deps;
@@ -980,10 +1024,12 @@ export class TableLayerRenderer {
       cache.companionsGeneration = deps.companions.generation();
       cache.generation++;
       cache.styleGeneration++;
+      this.deltaStale.add(layerId);
     }
     if (cache.drawing !== drawing) {
       cache.drawing = drawing;
       cache.generation++;
+      this.deltaStale.add(layerId);
     }
     // The styles of the drawing in one draw: made again with a new resolution of the styles
     const rowsStyles = cache.rowsStyles;
@@ -1273,14 +1319,13 @@ export class TableLayerRenderer {
     for (let row = from; row < to; row++) {
       const fresh = byCopy || groupCache.stateVersion < 0;
       const hidden = fresh
-        ? (this.byteOf(cache.layerId, groupCache.group, row) & ROW_STATE_HIDDEN) !== 0
+        ? (this.byteOf(cache.layerId, groupCache, row) & ROW_STATE_HIDDEN) !== 0
         : (groupCache.bytes[row] & ROW_STATE_HIDDEN) !== 0;
       if (hidden) continue;
       if (!this.reader.hasGeometry(groupCache.group, row)) continue;
       const id = this.reader.idOf(this.reader.refOf(groupCache.group, row));
       if (id === undefined || (visible && !visible.has(id))) continue;
-      const feature = this.store.getFeature(id);
-      this.stats.featuresMade++;
+      const feature = this.atOnceFeature(id);
       if (!feature) continue;
       if (!begun) {
         batchManager.beginFrame(frame.projectionData, frame.zoom, layer);
@@ -1307,6 +1352,45 @@ export class TableLayerRenderer {
       }
     }
     if (begun) batchManager.endFrame();
+  }
+
+  /**
+   * The feature of a row drawn at once: the one kept while its row has not changed, else made
+   * (and kept while there is room)
+   */
+  private atOnceFeature(id: string): Feature | undefined {
+    const frame = this.frameCount;
+    const kept = this.atOnce.get(id);
+    if (kept) {
+      kept.frame = frame;
+      return kept.feature;
+    }
+    const feature = this.store.getFeature(id);
+    this.stats.featuresMade++;
+    if (!feature) return undefined;
+    if (this.atOnce.size >= IMMEDIATE_CACHE_LIMIT && this.atOnceTrimmed !== frame) {
+      // Full: the features not drawn in this frame go, once a frame
+      this.atOnceTrimmed = frame;
+      for (const [keptId, entry] of this.atOnce) {
+        if (entry.frame !== frame) this.atOnce.delete(keptId);
+      }
+    }
+    if (this.atOnce.size < IMMEDIATE_CACHE_LIMIT) this.atOnce.set(id, { feature, frame });
+    return feature;
+  }
+
+  /** Lets go of the features kept of the rows a change of the document changed */
+  private forgetAtOnce(change: StoreChange): void {
+    if (this.atOnce.size === 0) return;
+    if (change.reset) {
+      this.atOnce.clear();
+      return;
+    }
+    const features = change.features;
+    if (!features) return;
+    for (const feature of features.created ?? []) this.atOnce.delete(feature.id);
+    for (const { id } of features.updated ?? []) this.atOnce.delete(id);
+    for (const feature of features.deleted ?? []) this.atOnce.delete(feature.id);
   }
 
   /** Records a range drawn */
@@ -1435,38 +1519,54 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Packs the parts of the delta of every layer drawn that came in (whole: a part is small),
-   * before the main pass, so they are on the GPU in the frame the copies in their groups are
-   * hidden; releases the parts that left
+   * Packs the parts of the delta that came in since the last pass, of every layer drawn (whole: a
+   * part is small), before the main pass, so they are on the GPU in the frame the copies in their
+   * groups are hidden; releases the parts that left. A part is packed once, when it comes in, and
+   * again only when the rows of its layer are to be packed again
    */
   private packDeltas(): void {
-    for (const [layerId, cache] of this.layers) {
-      const table = this.reader.table(layerId);
-      const extras = table ? this.reader.extraGroups(table) : [];
-      const alive = new Set<RowGroup>();
-      for (const group of extras) {
-        alive.add(group);
-        const held = cache.extras.get(group);
-        if (
-          held &&
-          held.generation === cache.generation &&
-          held.drawing === cache.drawing &&
-          held.styleGeneration === cache.styleGeneration
-        ) {
-          continue;
-        }
-        if (held) this.disposeGroup(held);
-        const partCache = newGroupCache(group, cache.styleGeneration);
-        cache.extras.set(group, partCache);
-        if (!cache.deps || !cache.slots || !cache.rowsStyles) continue;
-        this.packPart(cache, partCache);
+    if (this.deltaStale.size === 0) return;
+    for (const layerId of [...this.deltaStale]) {
+      const cache = this.layers.get(layerId);
+      if (!cache) {
+        this.deltaStale.delete(layerId);
+        continue;
       }
-      for (const [group, partCache] of cache.extras) {
-        if (alive.has(group)) continue;
-        this.disposeGroup(partCache);
-        cache.extras.delete(group);
-      }
+      this.packDelta(layerId, cache);
     }
+  }
+
+  /** Packs the parts of the delta of a layer that are not packed as its rows are now */
+  private packDelta(layerId: string, cache: LayerCache): void {
+    // What the rows are packed with is there once the layer has been drawn
+    const packable = cache.deps !== null && cache.slots !== null && cache.rowsStyles !== null;
+    const table = this.reader.table(layerId);
+    const parts = table ? this.reader.deltaParts(table) : [];
+    const alive = new Set<RowGroup>();
+    for (const part of parts) {
+      const group = part.group;
+      alive.add(group);
+      const held = cache.extras.get(group);
+      if (
+        held?.chunks &&
+        held.generation === cache.generation &&
+        held.drawing === cache.drawing &&
+        held.styleGeneration === cache.styleGeneration
+      ) {
+        continue;
+      }
+      if (!packable) continue;
+      if (held) this.disposeGroup(held);
+      const partCache = newGroupCache(group, cache.styleGeneration, part);
+      cache.extras.set(group, partCache);
+      this.packPart(cache, partCache);
+    }
+    for (const [group, partCache] of cache.extras) {
+      if (alive.has(group)) continue;
+      this.disposeGroup(partCache);
+      cache.extras.delete(group);
+    }
+    if (packable) this.deltaStale.delete(layerId);
   }
 
   /** Packs every chunk of a part of the delta at once */
@@ -1525,6 +1625,7 @@ export class TableLayerRenderer {
             // Packed again before the next frame
             cache.extras.delete(part.group);
             this.disposeGroup(part);
+            this.deltaStale.add(layerId);
             break;
           }
           away.push(this.reader.refOf(groupCache.group, row));
@@ -1692,7 +1793,11 @@ function makeChunk(range: OrderedChunkRange): TableChunk[] {
   ];
 }
 
-function newGroupCache(group: RowGroup, styleGeneration: number): GroupCache {
+function newGroupCache(
+  group: RowGroup,
+  styleGeneration: number,
+  part: DeltaPart | null = null,
+): GroupCache {
   return {
     group,
     chunks: null,
@@ -1706,6 +1811,8 @@ function newGroupCache(group: RowGroup, styleGeneration: number): GroupCache {
     dirty: true,
     texture: null,
     shown: false,
+    part,
+    marks: 0,
   };
 }
 
