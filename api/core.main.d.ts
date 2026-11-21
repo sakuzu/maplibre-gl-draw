@@ -1379,8 +1379,10 @@ export interface FeaturesCollection {
      *   another edit moved since, stay as they are. The vertices are followed from the change to
      *   now as {@link VertexRef} says; one that cannot be followed is left as it is and counted
      *   (`EditCounts.skippedVertexCount`). A change that changed the whole geometry (a move, a
-     *   rotation, a scaling, a geometry given whole, an edit that changed the number of
-     *   rings) takes the whole geometry back.
+     *   rotation, a scaling, an edit that changed the type of the geometry, the number of its
+     *   parts or the number of the rings of a part) takes the whole geometry back. A geometry
+     *   given whole (`features.update`) with the same type, parts and rings is compared with
+     *   the one before vertex by vertex, as any other edit.
      * - Any other value (an attribute, a key of the look, a flag, the place) is written back key
      *   by key: a key the change did not write keeps what it has now.
      * - A feature the change deleted comes back where it was, in its layer and its group, while
@@ -2386,9 +2388,11 @@ declare const featureValuesBrand: unique symbol;
  * For the geometry of a feature, it keeps what the change did to it: the vertices it moved and
  * where they were, the vertices it added, the vertices it deleted and where they were, or the
  * whole geometry before, for a change that changed the whole geometry (a move, a rotation, a
- * scaling, a geometry given whole, an edit that changed the number of rings). The
+ * scaling, an edit that changed the type of the geometry, the number of its parts or the number
+ * of the rings of a part). The
  * instance has the geometry before and after every change, and tells the vertices changed by
- * comparing them as {@link VertexRef} says. The values of a move of 100,000 features are kept
+ * comparing them as {@link VertexRef} says, a geometry given whole (`features.update`) with the
+ * same type, parts and rings included. The values of a move of 100,000 features are kept
  * as arrays of the geometries before, with no record per feature. For any other value (an
  * attribute, a key of the look, a flag, the place), it keeps the value before of every key the
  * change wrote.
