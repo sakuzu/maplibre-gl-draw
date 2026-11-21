@@ -2436,6 +2436,10 @@ export interface SelectionResource {
      * {@link FeatureTarget} names them): for the type `feature` only (the type `layer` selects
      * the layers themselves, and what acts on the selection then acts on the layers).
      *
+     * The selection holds only what is shown: an item that is hidden (by its own `visible`, by
+     * that of its group or its layer, or by this client) is not selected, by its ID or with
+     * `{ layerIds }`, and an item selected leaves the selection when it is hidden.
+     *
      * @param type - The type of the items
      * @param ids - The IDs, or for features the layers whose features are selected
      * @returns False when none of the items can be selected
@@ -4154,7 +4158,7 @@ export interface Plugin<Api = unknown> {
     /** The hooks of the select mode, and an exclusive interaction of the plugin */
     readonly interaction?: {
         /**
-         * Narrows the candidates of a selection (a click, a box, `selection.set`) to the IDs it
+         * Narrows the candidates of a selection made on the map (a click, a box) to the IDs it
          * returns, a set of them ({@link createIdSet}, or the candidates as they are); a box over
          * many features gives many candidates, read without an array of them
          */
