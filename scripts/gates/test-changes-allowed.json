@@ -995,6 +995,161 @@
       "path": "src/view/layer/store-retained-invalidation.test.ts",
       "change": "deleted with the module of the same name",
       "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/api/impl/adapters.test.ts",
+      "change": "CHANGES 45 and 90 (the selection read as a set, and the hook that narrows a selection given and giving back sets)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/client-state.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/companion-hit.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/document-replacement.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/events.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/extensions.test.ts",
+      "change": "CHANGES 45 and 90 (the selection read as a set, and the hook that narrows a selection given and giving back sets)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/line-click.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/prepopulated-store.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/selection.test.ts",
+      "change": "CHANGES 42 and 45 (the selection read as a set, and the limit of the list of the selected features)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/store-contract.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/store-index.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/store-refused-writes.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/api/impl/work-scenes.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/e2e/examples.e2e.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/e2e/harness.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/e2e/playground.e2e.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/modes/select/click-handler.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/modes/select/mode.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/modes/select/shortcut-handler.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/operations/bulk-deletion.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/operations/bulk-duplicate.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/parity/records/reads.jsonl",
+      "change": "CHANGES 42 (selection.features of 10,001 features throws tooManyItems; the one row of it only)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/store/memory/ui-state-forget.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/store/read-only-and-visibility.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/test-utils.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/view/ui/helper.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "ui/e2e/ui.e2e.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "ui/test/basemaps.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "ui/test/fake-draw.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "ui/test/layer-panel.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "ui/test/layers.test.ts",
+      "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
+      "unit": "the selection held as a set of IDs, and the features of layers selected"
     }
   ]
 }
