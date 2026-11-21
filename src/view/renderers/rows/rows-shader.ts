@@ -119,6 +119,10 @@ flat out vec4 v_dash_next;
 // positions, from which a fragment finds its position on the line where it is
 flat out vec4 v_dash_ends;
 flat out vec2 v_dash_w;
+// A dashed segment: the miters of its start and of its end (the normal and the scale; the normal
+// of the segment and 1 where it meets no segment, or past the limit of the miter)
+flat out vec3 v_dash_miter0;
+flat out vec3 v_dash_miter1;
 // A point: the offset in device pixels. A segment: the signed distance from its center line, the
 // position along it, and for a dashed one its position on the line (CSS px). An edge of an
 // outline: the signed distance
@@ -163,37 +167,51 @@ float dashLength0(vec2 a, vec2 b) {
     return length(vec2((b.x - a.x) * perDegree, (b.y - a.y) * perDegree / cosLatitude));
 }
 
+// The device px from the corner along a segment next to a dashed one of a position on the line
+// (CSS px), the segment from \`base\` on the line \`lengthCss\` long and \`px\` long on the screen,
+// through the perspective of its ends (\`cornerAt\`: 1 when the corner is its end, 0 its start)
+float neighborPx(float base, float lengthCss, float wFrom, float wTo, float cornerAt, float px, float c) {
+    float g = (c - base) / lengthCss;
+    float den = (1.0 - g) * wFrom + g * wTo;
+    float u = den > 0.0 ? g * wTo / den : g;
+    return (u - cornerAt) * px;
+}
+
 // The dash of the segment from \`from\` to \`to\` (on screen, \`lengthCss\` long on the line) next to
 // a dashed segment going along \`dir\` whose round end is at the corner they share (at \`corner\` on
 // the line, CSS px), as \`v_dash_prev\` and \`v_dash_next\` hold it. A dash that goes on over the
 // corner is drawn on both sides of it up to the miter, so nothing of it reaches over; one cut at
 // the corner or near it has a round end that does. \`before\`: the segment is the one before the
 // corner (its last dash), else the one after it (its first dash)
-vec4 dashNeighbor(vec2 from, vec2 to, float lengthCss, vec2 dir, float corner, vec2 pattern, bool before) {
+// \`wFrom\` and \`wTo\` are the w of the clip positions of the ends of that segment: a position on it
+// is put on the screen through their perspective, where its dash ends are drawn
+vec4 dashNeighbor(vec2 from, vec2 to, float wFrom, float wTo, float lengthCss, vec2 dir, float corner, vec2 pattern, bool before) {
     vec4 none = before ? vec4(1.0, 0.0, -2.0 * ${glslFloat(FAR)}, -${glslFloat(FAR)})
         : vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
     vec2 along = to - from;
     float px = length(along);
     if (px <= 0.0) return none;
     vec2 other = along / px;
-    float perPx = lengthCss / px;
     float dash = pattern.x;
     float period = pattern.x + pattern.y;
     float m = mod(corner, period);
     if (m > 0.0 && m < dash) return none;
     vec2 turn = vec2(dot(dir, other), dot(dir, vec2(-other.y, other.x)));
+    // The device px from the corner on the screen of a position on the line (CSS px)
+    float base = before ? corner - lengthCss : corner;
+    float cornerAt = before ? 1.0 : 0.0;
     if (before) {
         // The last dash that ends at the corner or before it, on the segment
         float end = m >= dash ? corner - m + dash : corner - pattern.y;
         float first = corner - lengthCss;
         if (end <= first) return none;
-        return vec4(turn, (max(end - dash, first) - corner) / perPx, (end - corner) / perPx);
+        return vec4(turn, neighborPx(base, lengthCss, wFrom, wTo, cornerAt, px, max(end - dash, first)), neighborPx(base, lengthCss, wFrom, wTo, cornerAt, px, end));
     }
     // The first dash that starts at the corner or after it, on the segment
     float start = m > 0.0 ? corner - m + period : corner;
     float last = corner + lengthCss;
     if (start >= last) return none;
-    return vec4(turn, (start - corner) / perPx, (min(start + dash, last) - corner) / perPx);
+    return vec4(turn, neighborPx(base, lengthCss, wFrom, wTo, cornerAt, px, start), neighborPx(base, lengthCss, wFrom, wTo, cornerAt, px, min(start + dash, last)));
 }
 
 void drawPoint(int style) {
@@ -259,18 +277,19 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     vec2 segmentDir = segmentVec / screenSegmentLength;
     vec2 normal = vec2(-segmentDir.y, segmentDir.x);
 
-    vec3 miter = vec3(normal, 1.0);
-    if (atStart) {
-        if (prevIdx >= 0) {
-            vec2 prevScreen = clipToScreen(rowsProject(rowsCoord(a_head.x)));
-            vec2 prevDir = normalize(startScreen - prevScreen);
-            miter = segmentMiter(normal, vec2(-prevDir.y, prevDir.x));
-        }
-    } else if (nextIdx >= 0) {
+    vec3 miter0 = vec3(normal, 1.0);
+    vec3 miter1 = vec3(normal, 1.0);
+    if (prevIdx >= 0) {
+        vec2 prevScreen = clipToScreen(rowsProject(rowsCoord(a_head.x)));
+        vec2 prevDir = normalize(startScreen - prevScreen);
+        miter0 = segmentMiter(normal, vec2(-prevDir.y, prevDir.x));
+    }
+    if (nextIdx >= 0) {
         vec2 nextScreen = clipToScreen(rowsProject(rowsCoord(a_tail.x)));
         vec2 nextDir = normalize(nextScreen - endScreen);
-        miter = segmentMiter(normal, vec2(-nextDir.y, nextDir.x));
+        miter1 = segmentMiter(normal, vec2(-nextDir.y, nextDir.x));
     }
+    vec3 miter = atStart ? miter0 : miter1;
     vec2 miterNormal = miter.xy;
     float miterScale = miter.z;
 
@@ -327,19 +346,23 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         v_dash_range = vec3(startCss, startCss + lengthCss, nextIdx < 0 ? 1.0 : 0.0);
         v_dash_ends = vec4(startScreen, endScreen);
         v_dash_w = vec2(startClip.w, endClip.w);
+        v_dash_miter0 = miter0;
+        v_dash_miter1 = miter1;
         // The dashes of the segments before and after it whose round ends reach over its corners
         if (prevIdx >= 0) {
             vec2 prevOffset = rowsCoord(a_head.x);
+            vec4 prevClip = rowsProject(prevOffset);
             v_dash_prev = dashNeighbor(
-                clipToScreen(rowsProject(prevOffset)), startScreen,
+                clipToScreen(prevClip), startScreen, prevClip.w, startClip.w,
                 dashLength0(prevOffset, startOffset) * scale, segmentDir, startCss,
                 vec2(dash, gap), true
             );
         }
         if (nextIdx >= 0) {
             vec2 nextOffset = rowsCoord(a_tail.x);
+            vec4 nextClip = rowsProject(nextOffset);
             v_dash_next = dashNeighbor(
-                endScreen, clipToScreen(rowsProject(nextOffset)),
+                endScreen, clipToScreen(nextClip), endClip.w, nextClip.w,
                 dashLength0(endOffset, nextOffset) * scale, segmentDir, startCss + lengthCss,
                 vec2(dash, gap), false
             );
@@ -415,6 +438,8 @@ void main() {
     v_dash_range = vec3(0.0);
     v_dash_ends = vec4(0.0);
     v_dash_w = vec2(1.0);
+    v_dash_miter0 = vec3(0.0, 1.0, 1.0);
+    v_dash_miter1 = vec3(0.0, 1.0, 1.0);
     v_dash_prev = vec4(1.0, 0.0, -2.0 * ${glslFloat(FAR)}, -${glslFloat(FAR)});
     v_dash_next = vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
     v_geom = vec4(0.0);
@@ -467,6 +492,8 @@ flat in vec4 v_dash_prev;
 flat in vec4 v_dash_next;
 flat in vec4 v_dash_ends;
 flat in vec2 v_dash_w;
+flat in vec3 v_dash_miter0;
+flat in vec3 v_dash_miter1;
 in vec4 v_geom;
 
 // The opacity factor of the drawing (the opacity of the layer)
@@ -548,6 +575,97 @@ vec4 drawnOver(vec4 under, vec4 over) {
     return vec4(rgb, alpha);
 }
 
+// Where a position on the line of a dashed segment (CSS px) is on the screen (xy, device px) and
+// the w of its clip position (z), through the perspective of the ends of the segment
+vec3 dashScreenAt(float p) {
+    float first = v_dash_range.x;
+    float whole = v_dash_range.y - first;
+    float g = whole > 0.0 ? (p - first) / whole : 0.0;
+    float w0 = v_dash_w.x;
+    float w1 = v_dash_w.y;
+    float den = (1.0 - g) * w0 + g * w1;
+    float u = den > 0.0 ? g * w1 / den : g;
+    return vec3(mix(v_dash_ends.xy, v_dash_ends.zw, u), mix(w0, w1, g));
+}
+
+// The barycentric coordinates of a point in a triangle (negative ones: outside)
+vec3 barycentric(vec2 p, vec2 a, vec2 b, vec2 c) {
+    vec2 v0 = b - a;
+    vec2 v1 = c - a;
+    vec2 v2 = p - a;
+    float den = v0.x * v1.y - v1.x * v0.y;
+    if (abs(den) < 1e-12) return vec3(-1.0);
+    float y = (v2.x * v1.y - v1.x * v2.y) / den;
+    float z = (v0.x * v2.y - v2.x * v0.y) / den;
+    return vec3(1.0 - y - z, y, z);
+}
+
+// The coverage at the fragment of the part on this segment, from p0 to p1 on the line (CSS px),
+// of a dash the CPU cuts and draws as a line of its own: a strip of 4 vertices, a round end where
+// the dash starts or ends on the segment, the miter of the corner where it goes on over one
+// (\`join0\` at the start of the segment, \`join1\` at its end), and the distance across and the
+// position along it interpolated over the two triangles of the strip as the lines interpolate
+// them, so a short part next to a corner takes the shape the line of the dash has there
+float dashPartCoverage(float p0, float p1, bool join0, bool join1, float w) {
+    vec3 s0 = dashScreenAt(p0);
+    vec3 s1 = dashScreenAt(p1);
+    vec2 along = v_dash_ends.zw - v_dash_ends.xy;
+    float segment = length(along);
+    if (segment <= 0.0) return 0.0;
+    vec2 dir = along / segment;
+    vec2 normal = vec2(-dir.y, dir.x);
+    float reach = w + 1.0;
+    float length1 = length(s1.xy - s0.xy);
+    // The vertices: left and right of the start, left and right of the end
+    vec2 l0;
+    vec2 r0;
+    vec2 l1;
+    vec2 r1;
+    float at0 = join0 ? 0.0 : -reach;
+    float at1 = join1 ? length1 : length1 + reach;
+    if (join0) {
+        vec2 offset = v_dash_miter0.xy * reach * v_dash_miter0.z;
+        l0 = s0.xy + offset;
+        r0 = s0.xy - offset;
+    } else {
+        l0 = s0.xy + normal * reach - dir * reach;
+        r0 = s0.xy - normal * reach - dir * reach;
+    }
+    if (join1) {
+        vec2 offset = v_dash_miter1.xy * reach * v_dash_miter1.z;
+        l1 = s1.xy + offset;
+        r1 = s1.xy - offset;
+    } else {
+        l1 = s1.xy + normal * reach + dir * reach;
+        r1 = s1.xy - normal * reach + dir * reach;
+    }
+    // The triangles of the strip, (l0, r0, l1) and (r0, l1, r1), interpolated with the
+    // perspective of the clip positions of the two ends
+    vec2 p = gl_FragCoord.xy;
+    const float EDGE = -1e-4;
+    float d;
+    float along1;
+    vec3 b = barycentric(p, l0, r0, l1);
+    if (b.x >= EDGE && b.y >= EDGE && b.z >= EDGE) {
+        vec3 k = vec3(b.x / s0.z, b.y / s0.z, b.z / s1.z);
+        float sum = k.x + k.y + k.z;
+        d = (k.x * reach - k.y * reach + k.z * reach) / sum;
+        along1 = (k.x * at0 + k.y * at0 + k.z * at1) / sum;
+    } else {
+        b = barycentric(p, r0, l1, r1);
+        if (b.x < EDGE || b.y < EDGE || b.z < EDGE) return 0.0;
+        vec3 k = vec3(b.x / s0.z, b.y / s1.z, b.z / s1.z);
+        float sum = k.x + k.y + k.z;
+        d = (-k.x * reach + k.y * reach - k.z * reach) / sum;
+        along1 = (k.x * at0 + k.y * at1 + k.z * at1) / sum;
+    }
+    float startDist = -along1;
+    float endDist = along1 - length1;
+    if (startDist > 0.0) return capCoverage(d, startDist, w);
+    if (endDist > 0.0) return capCoverage(d, endDist, w);
+    return bodyCoverage(d, w);
+}
+
 // The color of a dashed segment: the dashes the CPU draws on it, cut at its ends (where a dash
 // goes on over a corner, up to the miter), and those of the segments next to it that reach over
 // the corners, each drawn over the ones before it as the CPU draws them
@@ -566,28 +684,27 @@ vec4 dashedColor(float w) {
     // The dash of the segment before it, drawn before this one
     float fromStart = (pos - first) / perPx;
     vec4 color = lineColor(neighborCoverage(v_dash_prev, fromStart, d, w));
+    // A dash that goes on over a corner joins the segment there with the miter (the line of the
+    // dash goes on, past the end of the line it stops)
     if (m < dash) {
-        // In a dash: its ends on the segment, round where it starts or ends on it
+        // In a dash: its part on the segment
         float start = at - m;
         float end = start + dash;
-        float a = start >= first ? (start - pos) / perPx : -${glslFloat(FAR)};
-        float b = end <= last || lineEnd ? (min(end, last) - pos) / perPx : ${glslFloat(FAR)};
-        color = drawnOver(color, lineColor(dashCoverage(d, 0.0, a, b, w)));
+        color = drawnOver(color, lineColor(dashPartCoverage(
+            max(start, first), min(end, last), start < first, end > last && !lineEnd, w)));
     } else {
         // In a gap: the dash before it and the one after it, when they are on the segment
         float end = at - m + dash;
         if (end > first) {
             float start = end - dash;
-            float a = start >= first ? (start - pos) / perPx : -${glslFloat(FAR)};
-            color = drawnOver(color, lineColor(dashCoverage(d, 0.0, a, (end - pos) / perPx, w)));
+            color = drawnOver(color, lineColor(dashPartCoverage(
+                max(start, first), min(end, last), start < first, false, w)));
         }
         float next = at - m + period;
         if (next < last) {
             float nextEnd = next + dash;
-            float b = nextEnd <= last || lineEnd
-                ? (min(nextEnd, last) - pos) / perPx
-                : ${glslFloat(FAR)};
-            color = drawnOver(color, lineColor(dashCoverage(d, 0.0, (next - pos) / perPx, b, w)));
+            color = drawnOver(color, lineColor(dashPartCoverage(
+                next, min(nextEnd, last), false, nextEnd > last && !lineEnd, w)));
         }
     }
     // The dash of the segment after it, drawn after this one
