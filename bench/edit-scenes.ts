@@ -31,6 +31,8 @@ import type { StorePageAnswer, StorePageAsk, StorePageRequest } from './store-pa
 /** What a scene is given */
 export interface SceneContext {
   readonly map: maplibregl.Map;
+  /** The ids of the custom layers added to the map since the page made it (`recordCustomLayers`) */
+  readonly customLayerIds: ReadonlySet<string>;
   readonly draw: Draw;
   /** The number of features of the page */
   readonly n: number;
@@ -275,12 +277,34 @@ interface GpuMemoryRead {
 }
 
 /**
- * What the drawing of the page holds on the GPU, read from the ledger of its instance: the
- * custom layer of the drawing on the map holds it. Not part of the interface of the library
- * (the page reads it from the layer, as a measuring tool does), so null when it is not there
+ * Keeps the ids of the custom layers added to a map from now on, as they are added
+ *
+ * maplibre does not list the custom layers in `getStyle()`, so the page keeps their ids itself:
+ * it watches `addLayer` before the drawing is made on the map.
  */
-function gpuMemoryOf(map: maplibregl.Map): GpuMemoryRead | null {
-  for (const { id } of map.getStyle()?.layers ?? []) {
+export function recordCustomLayers(map: Pick<maplibregl.Map, 'addLayer'>): ReadonlySet<string> {
+  const ids = new Set<string>();
+  const addLayer = map.addLayer.bind(map);
+  map.addLayer = ((layer, beforeId) => {
+    if (layer.type === 'custom') ids.add(layer.id);
+    return addLayer(layer, beforeId);
+  }) as typeof map.addLayer;
+  return ids;
+}
+
+/**
+ * What the drawing of the page holds on the GPU, read from the ledger of its instance: a custom
+ * layer of the drawing on the map holds it. Not part of the interface of the library (the page
+ * reads it from the layer, as a measuring tool does), so null when it is not there
+ *
+ * @param customLayerIds - The ids of the custom layers added to the map (`recordCustomLayers`):
+ *   `getStyle()` does not list them
+ */
+export function gpuMemoryOf(
+  map: Pick<maplibregl.Map, 'getLayer'>,
+  customLayerIds: Iterable<string>,
+): GpuMemoryRead | null {
+  for (const id of customLayerIds) {
     const layer = map.getLayer(id) as
       | { implementation?: { getGpuLedger?: () => { snapshot(): GpuMemoryRead } } }
       | undefined;
@@ -950,7 +974,7 @@ export const SCENES: readonly Scene[] = [
       await rest(ctx);
     },
     async run(ctx) {
-      const held = ctx.input(() => gpuMemoryOf(ctx.map));
+      const held = ctx.input(() => gpuMemoryOf(ctx.map, ctx.customLayerIds));
       if (!held) throw new Error('the drawing of the page has no ledger of its GPU memory');
       ctx.note('bytes', held.bytes);
       ctx.note('rowBytes', held.rowBytes);

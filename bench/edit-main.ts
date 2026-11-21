@@ -44,7 +44,7 @@ import {
   spreadOf,
   startRecording,
 } from './edit-measure';
-import { SCENES, type Scene, type SceneContext } from './edit-scenes';
+import { recordCustomLayers, SCENES, type Scene, type SceneContext } from './edit-scenes';
 
 // Worker URL setup for v6 (side effect). Required before the Map is created.
 import './maplibre-setup';
@@ -133,6 +133,9 @@ const map = new maplibregl.Map({
   fadeDuration: 0,
 });
 
+// maplibre does not list the custom layers in getStyle(): the page keeps the ids of those the
+// drawing adds, for the scene that reads what the drawing holds on the GPU
+const customLayerIds = recordCustomLayers(map);
 const draw = createDraw(map, { defaultMode: 'select' });
 
 const grid = gridOf(Math.max(1, n));
@@ -216,6 +219,7 @@ async function runScene(scene: Scene): Promise<SceneResult> {
 
   const ctx: SceneContext = {
     map,
+    customLayerIds,
     draw,
     n,
     featureIds,
