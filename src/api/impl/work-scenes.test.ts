@@ -10,9 +10,12 @@
  * them gets its test with the work that makes it not grow.
  */
 
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { EngineModeContext } from '../../modes/handler.js';
+import { selectFeaturesInBox } from '../../modes/select/box-selection.js';
 import type { WorkCounts } from '../../shared/work-counts.js';
 import type { FeatureRowField, Store } from '../../store/built-in/types.js';
+import type { BoxSelection } from '../../store/types.js';
 import {
   createCountedInstance,
   createSyntheticDrag,
@@ -23,6 +26,7 @@ import {
   WORK_SIZES,
   workDuring,
 } from '../../test-utils.js';
+import type { IdSet } from '../model.js';
 
 const instances: ReturnType<typeof createCountedInstance>[] = [];
 
@@ -114,6 +118,124 @@ describe(WORK_SCENES.select, () => {
 
   it('adds as many draw calls to the frame', () => {
     expectNotProportional((size) => scene(size).addedDraws, 'the added draw calls');
+  });
+});
+
+describe(WORK_SCENES.selectAll, () => {
+  /** The calls of a method of the tables of the Store the instance was given, while `fn` runs */
+  const callsDuring = (instance: ReturnType<typeof instanceOf>, name: string, fn: () => void) => {
+    const before = instance.storeWork.calls.get(name) ?? 0;
+    fn();
+    return (instance.storeWork.calls.get(name) ?? 0) - before;
+  };
+
+  /**
+   * Every feature of the layer selected with `{ layerIds }`, with a listener of
+   * `selection.changed`, then the set counted, asked and read one at a time
+   */
+  const scene = measured((size) => {
+    const instance = instanceOf(size);
+    const layerId = instance.draw.layers.list()[0].id;
+    let told: IdSet | null = null;
+    instance.draw.on('selection.changed', ({ selection }) => {
+      told = selection.ids;
+    });
+    let idsRead = 0;
+    const work = workDuring(instance.counts, () => {
+      idsRead = callsDuring(instance, 'getRowId', () => {
+        instance.draw.selection.set('feature', { layerIds: [layerId] });
+      });
+    });
+    const { ids } = instance.draw.selection.get();
+    if (ids.count() !== size) throw new Error(`${ids.count()} selected of ${size}`);
+    const asked = workDuring(instance.counts, () => {
+      idsRead += callsDuring(instance, 'getRowId', () => {
+        ids.count();
+        ids.has('nothing');
+      });
+    });
+    let iterated = 0;
+    const read = workDuring(instance.counts, () => {
+      for (const _ of ids.iterate()) iterated += 1;
+    });
+    return { work, idsRead, asked, read, iterated, told: told === ids };
+  });
+
+  it('makes as many arrays and features to select every feature of a layer of 10,000 as of 1,000', () => {
+    expectNotProportional((size) => scene(size).work.objectsCreated, 'the objects made');
+  });
+
+  it('reads no ID of a row to select them, to count them or to ask for one', () => {
+    expectNotProportional((size) => scene(size).idsRead, 'the IDs read from the rows', {
+      zero: true,
+    });
+    expectNotProportional((size) => scene(size).asked.objectsCreated, 'the objects made', {
+      zero: true,
+    });
+  });
+
+  it('reads the IDs one at a time without making an array or a feature', () => {
+    expect(scene(WORK_SIZES.large).iterated).toBe(WORK_SIZES.large);
+    expectNotProportional((size) => scene(size).read.objectsCreated, 'the objects made', {
+      zero: true,
+    });
+  });
+
+  it('tells selection.changed with the set of the selection itself, not a copy of it', () => {
+    expect(scene(WORK_SIZES.small).told).toBe(true);
+    expect(scene(WORK_SIZES.large).told).toBe(true);
+  });
+
+  /** A box over the whole grid: every point lies wholly inside it */
+  const box = measured((size) => {
+    const instance = instanceOf(size);
+    const selection = {
+      startPoint: [-1.5, -1.5],
+      endPoint: [1.5, 1.5],
+      previousSelection: [],
+    } as unknown as BoxSelection;
+    let selected = 0;
+    const work = workDuring(instance.counts, () => {
+      selected = selectFeaturesInBox(
+        selection,
+        instance.engine.context as unknown as EngineModeContext,
+      ).count();
+    });
+    return { work, selected };
+  });
+
+  it('makes as many arrays and features to select every feature with a box', () => {
+    expect(box(WORK_SIZES.small).selected).toBe(WORK_SIZES.small);
+    expect(box(WORK_SIZES.large).selected).toBe(WORK_SIZES.large);
+    expectNotProportional((size) => box(size).work.objectsCreated, 'the objects made');
+  });
+
+  /** Every feature selected, then the layer renamed, then the layer hidden */
+  const followed = measured((size) => {
+    const instance = instanceOf(size);
+    const layerId = instance.draw.layers.list()[0].id;
+    instance.draw.selection.set('feature', { layerIds: [layerId] });
+    const before = instance.draw.selection.get().ids;
+    const renamed = workDuring(instance.counts, () => {
+      instance.draw.layers.update(layerId, { name: 'renamed' });
+    });
+    const kept = instance.draw.selection.get().ids === before;
+    const hidden = workDuring(instance.counts, () => {
+      instance.draw.layers.update(layerId, { visible: false });
+    });
+    return { renamed, kept, hidden, left: instance.draw.selection.get().ids.count() };
+  });
+
+  it('keeps the selection when the layer is renamed, and makes no feature for it', () => {
+    expect(followed(WORK_SIZES.large).kept).toBe(true);
+    expectNotProportional((size) => followed(size).renamed.objectsCreated, 'the objects made', {
+      zero: true,
+    });
+  });
+
+  it('empties the selection when the layer is hidden, without a feature for each', () => {
+    expect(followed(WORK_SIZES.large).left).toBe(0);
+    expectNotProportional((size) => followed(size).hidden.objectsCreated, 'the objects made');
   });
 });
 

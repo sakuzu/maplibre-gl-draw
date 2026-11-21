@@ -38,20 +38,6 @@
     "39": {
       "main:doc:FeatureValues": "d0fd8ec02ca04dc76197d8e332777db9f31da9e68a2813648860985fc6ffedb1"
     },
-    "40": {
-      "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
-    },
-    "41": {
-      "main:sig:SelectionResource.add": "dbab4cbd4cd2f03045639835b77033d8c13cb7d1eccad4af3c39c81735c13b7b",
-      "main:sig:SelectionResource.remove": "10f6e51e2aefb4404569788f630ef3ae41a0739ff71afbba1dda959bc708d387",
-      "main:sig:SelectionResource.set": "d0766bc440d88c5935bd9ea744e3e515ec2cb87e14e9c8fd38a234bb19faf541"
-    },
-    "42": {
-      "main:doc:SelectionResource.features": "82a883a363b740238c7618842518d0241fd0e8693b70f838e7b837cbc8566721"
-    },
-    "45": {
-      "main:sig:Selection.ids": "c0a5450b3c7a652735df67132a69ff11b49753fb85d21c801450fa3fd9d3904c"
-    },
     "46": {
       "main:added:Sketch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Sketch.edit": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -148,9 +134,6 @@
     },
     "89": {
       "main:doc:RenderContext.terrain": "e498e4d1428c5164730eb260c2d36162f32c4f80f49b6ba4afe845d085f7d354"
-    },
-    "90": {
-      "main:sig:Plugin.interaction.filterSelection": "8abbaaa06dff0216dc297e28a54b96303c78e867da499928ef9fd1f30132d236"
     },
     "91": {
       "main:sig:FeatureTypeDefinition.appliesTo": "c41cbb00276f90b9d43ff4b9fc614e3898f026f0381f70b28bfe1eb584bc2308"

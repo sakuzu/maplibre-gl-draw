@@ -357,6 +357,20 @@
       "from": "src/operations/bulk-selection.ts",
       "to": "src/operations/bulk-deletion.ts",
       "note": "only the scenes of the deletion of the selection (the locked ones kept, the selection cleared once something is deleted); the deletion in one write of the Store is not brought: the features are deleted in the parts of a bulk edit"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/feature-table/selection.ts",
+      "to": "src/api/impl/row-id-set.ts",
+      "note": "only the bit per reference of a row, made when a row is first looked for; the references stay in the order of the set, and the rows are read through the layer over the Store, not through the types of Kasane"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/feature-table/selection.test.ts",
+      "to": "src/api/impl/row-id-set.test.ts",
+      "note": "only the bound of a set of 100,000 rows held in less than 500,000 bytes"
     }
   ]
 }

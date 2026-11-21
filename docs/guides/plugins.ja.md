@@ -285,7 +285,7 @@ draw.extensions.plugins.add(createShortcuts());
 一部の地物を選択から外す絞り込みです。
 
 ```ts
-import type { Plugin, PluginContext } from '@sakuzu/maplibre-gl-draw';
+import { createIdSet, type Plugin, type PluginContext } from '@sakuzu/maplibre-gl-draw';
 
 function createBackgroundFilter(): Plugin {
   let ctx: PluginContext | null = null;
@@ -296,8 +296,10 @@ function createBackgroundFilter(): Plugin {
     },
     interaction: {
       filterSelection(candidateIds) {
-        return candidateIds.filter(
-          (id) => ctx?.draw.features.get(id)?.properties.background !== true,
+        return createIdSet(
+          [...candidateIds.iterate()].filter(
+            (id) => ctx?.draw.features.get(id)?.properties.background !== true,
+          ),
         );
       },
     },

@@ -180,7 +180,7 @@ const stops = [
     featureCount = draw.features.count();
   }),
   draw.on('selection.changed', ({ selection }) => {
-    selectedIds = selection.ids;
+    selectedIds = [...selection.ids.iterate()];
   }),
 ];
 
