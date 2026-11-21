@@ -264,7 +264,10 @@ describe('a write the Store refuses', () => {
       }).not.toThrow();
       expect(result).toBe(refused);
       expect(told).toEqual([]);
-      expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['p'] });
+      expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+        type: 'feature',
+        ids: ['p'],
+      });
       expectSameAsStore(draw, base);
       // Read-only refuses the same write with the same value
       rules.clear();

@@ -20,7 +20,7 @@ import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawEvents } from '../events.js';
-import type { Feature } from '../model.js';
+import type { Feature, IdSet } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -281,7 +281,7 @@ describe('document.changed', () => {
     expect(received[0].features.created.count()).toBe(1);
     // The selection arrives in selection.changed, before the change, with its operation
     const selections = payloadsOf(events, 'selection.changed');
-    expect(selections[selections.length - 1].selection.ids).toHaveLength(1);
+    expect(selections[selections.length - 1].selection.ids.count()).toBe(1);
     expect(selections[selections.length - 1].operationId).toBe(received[0].operationId);
     expect(received[0]).not.toHaveProperty('tentative');
     expect(received[0]).not.toHaveProperty('uiStateChanged');
@@ -317,7 +317,17 @@ describe('the events of the state of this client', () => {
     const a = draw.features.create(pointInput()) as Feature;
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
-    expect(payloadsOf(events, 'selection.changed')).toEqual([
+    const read = (selection: { type: unknown; ids: IdSet }) => ({
+      type: selection.type,
+      ids: selection.ids.toArray(),
+    });
+    expect(
+      payloadsOf(events, 'selection.changed').map((payload) => ({
+        ...payload,
+        selection: read(payload.selection),
+        previous: read(payload.previous),
+      })),
+    ).toEqual([
       {
         selection: { type: 'feature', ids: [a.id] },
         previous: { type: null, ids: [] },

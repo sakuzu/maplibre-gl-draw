@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { createIdSet } from '../../api/model.js';
 import type { DocumentAccess as Store } from '../../store/document-access.js';
 import { getSelectedFeatureIds } from './helper.js';
 
@@ -15,7 +16,7 @@ function makeStore(opts: {
   features?: string[];
 }): Store {
   return {
-    getSelection: () => opts.selection,
+    getSelection: () => ({ type: opts.selection.type, ids: createIdSet(opts.selection.ids) }),
     getGroup: (id: string) => (opts.groups?.[id] ? { id, ...opts.groups[id] } : undefined),
     getLayer: (id: string) => (opts.layers?.[id] ? { id, ...opts.layers[id] } : undefined),
     getFeature: (id: string) => (opts.features?.includes(id) ? { id } : undefined),

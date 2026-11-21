@@ -5,8 +5,8 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
-import type { EditCounts } from './features.js';
-import type { Feature, Group, MoveTarget } from './model.js';
+import type { EditCounts, FeatureTarget } from './features.js';
+import type { Feature, Group, IdSet, MoveTarget } from './model.js';
 import type { Selection, SelectionType, VertexRef, VertexSelection } from './state.js';
 
 /**
@@ -14,17 +14,31 @@ import type { Selection, SelectionType, VertexRef, VertexSelection } from './sta
  * verbs that act on what is selected.
  */
 export interface SelectionResource {
-  /** The type and the IDs of what is selected. */
+  /**
+   * The type and the IDs of what is selected. The IDs are a set that reads any number of them
+   * without an array of every ID ({@link IdSet}).
+   */
   get(): Selection;
   /**
-   * Selects these items instead of the current selection.
+   * Selects these items instead of the current selection. `{ layerIds }` selects every feature
+   * of the layers, those of their groups included, without an array of their IDs (as
+   * {@link FeatureTarget} names them): for the type `feature` only (the type `layer` selects
+   * the layers themselves, and what acts on the selection then acts on the layers).
+   *
+   * The selection holds only what is shown: an item that is hidden (by its own `visible`, by
+   * that of its group or its layer, or by this client) is not selected, by its ID or with
+   * `{ layerIds }`, and an item selected leaves the selection when it is hidden.
    *
    * @param type - The type of the items
+   * @param ids - The IDs, or for features the layers whose features are selected
    * @returns False when none of the items can be selected
    * @throws `DrawError` with the code `notFound` when one of the IDs is not an item of this
-   *   type
+   *   type, or `invalidInput` when `{ layerIds }` is given with another type than `feature`
    */
-  set(type: SelectionType, ids: readonly string[]): boolean;
+  set(
+    type: SelectionType,
+    ids: readonly string[] | IdSet | { readonly layerIds: readonly string[] },
+  ): boolean;
   /**
    * Adds items of the selected type to the selection.
    *
@@ -32,16 +46,22 @@ export interface SelectionResource {
    * @throws `DrawError` with the code `notFound` when one of the IDs is not an item of the
    *   selected type
    */
-  add(ids: readonly string[]): boolean;
+  add(ids: readonly string[] | IdSet): boolean;
   /**
    * Removes items from the selection.
    *
    * @returns False when none of them was selected
    */
-  remove(ids: readonly string[]): boolean;
+  remove(ids: readonly string[] | IdSet): boolean;
   /** Clears the selection. */
   clear(): void;
-  /** The selected features; for a group or a layer, the features in it. */
+  /**
+   * The selected features; for a group or a layer, the features in it.
+   *
+   * @throws `DrawError` with the code `tooManyItems` when there are more than 10,000 of them;
+   *   the list is never cut short. `features.iterate` with the `layerId` or `groupId` filter,
+   *   or `get().ids.iterate()`, reads any number of them
+   */
   features(): Feature[];
   /**
    * Deletes what is selected: the selected features, or the selected groups with their

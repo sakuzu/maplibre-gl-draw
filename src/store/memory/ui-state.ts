@@ -12,6 +12,8 @@
  * operation, to its own subscribers.
  */
 
+import type { IdSet } from '../../api/model.js';
+import { DrawError } from '../../shared/errors.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type {
   Feature,
@@ -37,6 +39,19 @@ export interface ClientDocument {
   getLayer(id: string): Layer | undefined;
   /** Every layer */
   listLayers(): Layer[];
+  /**
+   * The set of the items of a type named, in the order given, each once: for features, a set of
+   * their rows (an ID that names no feature is left out, and a set of rows made by the same layer
+   * is given back as it is)
+   */
+  idSetOf(type: SelectionType, ids: Iterable<string> | IdSet): IdSet;
+  /** The set without the IDs `leaves` says leave it (the set itself when none does) */
+  idSetWithout(type: SelectionType, ids: IdSet, leaves: (id: string) => boolean): IdSet;
+  /**
+   * The set of features without those that cannot be seen (see `pruneInvisible`), read from the
+   * rows without the features being made (the set itself when every one is seen)
+   */
+  shownFeatureSetOf(ids: IdSet): IdSet;
 }
 
 /**
@@ -70,7 +85,7 @@ export interface ClientNotification {
  * @internal
  */
 export class ClientState {
-  #selection: Selection = { type: null, ids: [] };
+  #selection: Selection = { type: null, ids: new OwnIdSet([]) };
   #editingIds: string[] = [];
   #selectedVertices: VertexSelection | null = null;
   #mode: Mode = 'select';
@@ -131,12 +146,14 @@ export class ClientState {
 
   // Selection
 
+  /** The selection: its IDs are a set that never changes, the same one until the selection does */
   getSelection(): Selection {
-    return { type: this.#selection.type, ids: [...this.#selection.ids] };
+    return { type: this.#selection.type, ids: this.#selection.ids };
   }
 
-  setSelection(type: SelectionType | null, ids: string[]): void {
-    this.#write(() => this.#select(type, ids));
+  /** Replaces the selection (`null`, or no ID, clears it) */
+  setSelection(type: SelectionType | null, ids: readonly string[] | IdSet): void {
+    this.#write(() => this.#select(type, this.#setOf(type, ids)));
   }
 
   // Editing
@@ -262,9 +279,10 @@ export class ClientState {
     if (!document) return;
     if (document.getFeature(id) || document.getGroup(id) || document.getLayer(id)) return;
     this.#write(() => {
-      if (this.#selection.ids.includes(id)) {
-        const ids = this.#selection.ids.filter((selected) => selected !== id);
-        this.#select(ids.length === 0 ? null : this.#selection.type, ids);
+      const { type, ids: selected } = this.#selection;
+      if (type !== null && selected.has(id)) {
+        const ids = document.idSetWithout(type, selected, (other) => other === id);
+        this.#select(ids.count() === 0 ? null : type, ids);
       }
       if (this.#editingIds.includes(id)) this.endEditing([id]);
       if (this.#locallyHidden.delete(id)) this.#changed({ uiStateChanged: true });
@@ -282,12 +300,10 @@ export class ClientState {
     const gone = (id: string): boolean =>
       ids.has(id) && !document.getFeature(id) && !document.getGroup(id) && !document.getLayer(id);
     this.#write(() => {
-      const selected = this.#selection.ids;
-      if (selected.length > 0) {
-        const kept = selected.filter((id) => !gone(id));
-        if (kept.length !== selected.length) {
-          this.#select(kept.length === 0 ? null : this.#selection.type, kept);
-        }
+      const { type, ids: selected } = this.#selection;
+      if (type !== null && selected.count() > 0) {
+        const kept = document.idSetWithout(type, selected, gone);
+        if (kept !== selected) this.#select(kept.count() === 0 ? null : type, kept);
       }
       if (this.#editingIds.length > 0) {
         const ended = this.#editingIds.filter(gone);
@@ -311,12 +327,18 @@ export class ClientState {
    */
   pruneInvisible(): void {
     const document = this.#notification?.document;
-    const type = this.#selection.type;
-    if (!document || type === null || this.#selection.ids.length === 0) return;
-    const shown = createShownLookup(document, this.#locallyHidden);
-    const kept = this.#selection.ids.filter((id) => shown(type, id));
-    if (kept.length !== this.#selection.ids.length) {
-      this.#write(() => this.#select(kept.length > 0 ? type : null, kept));
+    const { type, ids } = this.#selection;
+    if (!document || type === null || ids.count() === 0) return;
+    let kept: IdSet;
+    if (type === 'feature') {
+      // Read from the rows, without the features being made
+      kept = document.shownFeatureSetOf(ids);
+    } else {
+      const shown = createShownLookup(document, this.#locallyHidden);
+      kept = document.idSetWithout(type, ids, (id) => !shown(type, id));
+    }
+    if (kept !== ids) {
+      this.#write(() => this.#select(kept.count() > 0 ? type : null, kept));
     }
   }
 
@@ -333,10 +355,17 @@ export class ClientState {
       if (changes.reset === true) {
         // What the replacement took out is not listed whole: each ID the state holds is asked
         this.#forgetGone();
-      } else {
-        for (const feature of changes.features?.deleted ?? []) this.forget(feature.id);
-        for (const group of changes.groups?.deleted ?? []) this.forget(group.id);
-        for (const layer of changes.layers?.deleted ?? []) this.forget(layer.id);
+      } else if (
+        changes.features?.deleted?.length ||
+        changes.groups?.deleted?.length ||
+        changes.layers?.deleted?.length
+      ) {
+        // What the change deleted leaves the state in one write, the selection read once
+        const deleted = new Set<string>();
+        for (const feature of changes.features?.deleted ?? []) deleted.add(feature.id);
+        for (const group of changes.groups?.deleted ?? []) deleted.add(group.id);
+        for (const layer of changes.layers?.deleted ?? []) deleted.add(layer.id);
+        this.forgetAll(deleted);
       }
       if (mayHide(changes)) this.pruneInvisible();
       this.#pruneVertices(changes, dragging);
@@ -352,14 +381,18 @@ export class ClientState {
    */
   #forgetGone(): void {
     if (
-      this.#selection.ids.length === 0 &&
+      this.#selection.ids.count() === 0 &&
       this.#editingIds.length === 0 &&
       this.#locallyHidden.size === 0
     ) {
       return;
     }
-    const ids = new Set([...this.#selection.ids, ...this.#editingIds, ...this.#locallyHidden]);
-    for (const id of ids) this.forget(id);
+    const ids = new Set([
+      ...this.#selection.ids.iterate(),
+      ...this.#editingIds,
+      ...this.#locallyHidden,
+    ]);
+    this.forgetAll(ids);
   }
 
   /** Runs a write of the state as one operation of the Store it is attached to */
@@ -371,12 +404,26 @@ export class ClientState {
     });
   }
 
-  /** Replaces the selection */
-  #select(type: SelectionType | null, ids: string[]): void {
+  /** Replaces the selection: the sets never change, so the change holds them as they are */
+  #select(type: SelectionType | null, ids: IdSet): void {
     const previousType = this.#selection.type;
-    const previousIds = [...this.#selection.ids];
-    this.#selection = { type, ids: [...ids] };
-    this.#changed({ selection: { type, ids: [...ids], previousType, previousIds } });
+    const previousIds = this.#selection.ids;
+    const selected = type === null ? this.#setOf(null, []) : ids;
+    this.#selection = { type: selected.count() === 0 ? null : type, ids: selected };
+    this.#changed({
+      selection: { type: this.#selection.type, ids: selected, previousType, previousIds },
+    });
+  }
+
+  /**
+   * The set of a selection: made by the layer the state is attached to (the features as their
+   * rows), or a copy of the IDs before it is attached
+   */
+  #setOf(type: SelectionType | null, ids: readonly string[] | IdSet): IdSet {
+    const document = this.#notification?.document;
+    if (type === null) return document ? document.idSetOf('feature', []) : new OwnIdSet([]);
+    if (document) return document.idSetOf(type, ids);
+    return new OwnIdSet(Array.isArray(ids) ? ids : [...(ids as IdSet).iterate()]);
   }
 
   /** Tells a change to the notification of the Store, and keeps it for the subscribers */
@@ -443,11 +490,18 @@ function appendClientChange(target: ClientChange, change: ClientChange): void {
 
 /**
  * Whether a notification can hide something that was visible: a change of the visible flag
- * of a feature, or of its place (a feature moved into a hidden layer or group), and any
- * update of a group or a layer
+ * of a feature, or of its place (a feature moved into a hidden layer or group), a group or a
+ * layer whose visible flag turned off, and a group moved to another layer. A change of only the
+ * name or the order of a group or a layer hides nothing
  */
 function mayHide(changes: StoreChange): boolean {
-  if (changes.layers?.updated?.length || changes.groups?.updated?.length) return true;
+  for (const { layer, previous } of changes.layers?.updated ?? []) {
+    if (previous.visible && !layer.visible) return true;
+  }
+  for (const { group, previous } of changes.groups?.updated ?? []) {
+    if (previous.visible && !group.visible) return true;
+    if (group.layerId !== previous.layerId) return true;
+  }
   for (const { feature, previous } of changes.features?.updated ?? []) {
     if (feature.visible !== previous.visible) return true;
     if (feature.layerId !== previous.layerId || feature.groupId !== previous.groupId) return true;
@@ -519,4 +573,43 @@ function sameCoordinates(a: unknown, b: unknown): boolean {
     if (!sameCoordinates(a[i], b[i])) return false;
   }
   return true;
+}
+
+/** The most IDs `toArray` gives in one array */
+const ARRAY_LIMIT = 10_000;
+
+/**
+ * A set of IDs the state holds before it is attached to a layer: a copy of them, in order, each
+ * once (once attached, the layer makes the sets)
+ */
+class OwnIdSet implements IdSet {
+  readonly #ids: readonly string[];
+  #lookup: Set<string> | null = null;
+
+  constructor(ids: readonly string[]) {
+    this.#ids = [...new Set(ids)];
+  }
+
+  count(): number {
+    return this.#ids.length;
+  }
+
+  has(id: string): boolean {
+    this.#lookup ??= new Set(this.#ids);
+    return this.#lookup.has(id);
+  }
+
+  iterate(): IterableIterator<string> {
+    return this.#ids[Symbol.iterator]();
+  }
+
+  toArray(): string[] {
+    if (this.#ids.length > ARRAY_LIMIT) {
+      throw new DrawError(
+        'tooManyItems',
+        `The set holds ${this.#ids.length} IDs, more than ${ARRAY_LIMIT} for one array; read them with iterate`,
+      );
+    }
+    return [...this.#ids];
+  }
 }

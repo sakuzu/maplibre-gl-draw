@@ -410,7 +410,7 @@ function selectionReveal(draw: Draw, root: HTMLElement): SelectionReveal {
       if (!container.isConnected) return;
       const selection = draw.selection.get();
       if (selection.type !== 'feature') return;
-      const geometries = selection.ids.flatMap((id) => {
+      const geometries = [...selection.ids.iterate()].flatMap((id) => {
         const feature = draw.features.get(id);
         return feature ? [feature.geometry] : [];
       });
@@ -426,7 +426,7 @@ function selectionReveal(draw: Draw, root: HTMLElement): SelectionReveal {
   }
   const off = draw.on('selection.changed', ({ selection }) => {
     cancel();
-    pending = selection.type === 'feature' && selection.ids.length > 0;
+    pending = selection.type === 'feature' && selection.ids.count() > 0;
     if (!pending) return;
     frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {

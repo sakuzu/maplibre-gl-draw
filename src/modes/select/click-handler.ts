@@ -23,6 +23,7 @@
  * Double click: selects the feature and notifies plugins.handleFeatureDoubleClick
  */
 
+import type { IdSet } from '../../api/model.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
@@ -50,7 +51,7 @@ export function handleSelectClick(
 
   const { store } = context;
   const selection = store.getSelection();
-  const selectedIds = selection.type === 'feature' ? selection.ids : [];
+  const selectedIds = selection.type === 'feature' ? selection.ids : null;
 
   if (handleVertexClick(event, selectedIds, context, config)) {
     return;
@@ -80,8 +81,9 @@ export function handleSelectDoubleClick(
   if (top?.kind !== 'store') return;
   event.originalEvent.preventDefault();
 
-  const filtered = context.plugins?.filterSelectionCandidates([top.feature.id]) ?? [top.feature.id];
-  if (filtered.length > 0) {
+  const candidates = store.featureSetOf([top.feature.id]);
+  const filtered = context.plugins?.filterSelectionCandidates(candidates) ?? candidates;
+  if (filtered.count() > 0) {
     store.setSelection('feature', filtered);
   }
   context.plugins?.handleFeatureDoubleClick(top.feature.id, event);
@@ -126,11 +128,11 @@ function handlePluginInteractionClick(
  */
 function handleVertexClick(
   event: MouseNormalizedEvent,
-  selectedIds: readonly string[],
+  selectedIds: SelectedIds | null,
   context: EngineModeContext,
   config: SelectionUIConfig,
 ): boolean {
-  if (selectedIds.length !== 1) return false;
+  if (selectedIds?.count() !== 1) return false;
 
   const { store, map } = context;
   const selectedFeatures = getSelectedFeatures(store);
@@ -183,7 +185,7 @@ function handleVertexClick(
 function handleFeatureClick(
   event: MouseNormalizedEvent,
   selection: Selection,
-  selectedIds: readonly string[],
+  selectedIds: SelectedIds | null,
   context: EngineModeContext,
   finishedInteraction: boolean,
 ): void {
@@ -218,8 +220,8 @@ function handleFeatureClick(
   if (
     !finishedInteraction &&
     !event.modifiers.shift &&
-    selectedIds.length === 1 &&
-    selectedIds.includes(feature.id)
+    selectedIds?.count() === 1 &&
+    selectedIds.has(feature.id)
   ) {
     if (context.plugins?.handleFeatureClick(feature.id, event)) {
       return;
@@ -228,11 +230,11 @@ function handleFeatureClick(
 
   // Update the selection
   const candidateIds = event.modifiers.shift
-    ? toggleSelection(selection, feature.id)
-    : [feature.id];
+    ? toggleSelection(store, selection, feature.id)
+    : store.featureSetOf([feature.id]);
 
   const filtered = context.plugins?.filterSelectionCandidates(candidateIds) ?? candidateIds;
-  if (filtered.length === 0) {
+  if (filtered.count() === 0) {
     store.setSelection(null, []);
   } else {
     store.setSelection('feature', filtered);
@@ -240,15 +242,25 @@ function handleFeatureClick(
 }
 
 /**
- * Toggling the selection with Shift+click
+ * Toggling the selection with Shift+click: the features selected with the feature added at the
+ * end, or without it when it is selected, read from the set without an array of its IDs
  */
-function toggleSelection(selection: Selection, featureId: string): string[] {
-  const current = selection.type === 'feature' ? [...selection.ids] : [];
-  const index = current.indexOf(featureId);
-  if (index === -1) {
-    current.push(featureId);
-  } else {
-    current.splice(index, 1);
-  }
-  return current;
+function toggleSelection(
+  store: EngineModeContext['store'],
+  selection: Selection,
+  featureId: string,
+): IdSet {
+  const current = selection.type === 'feature' ? selection.ids : null;
+  const selected = current?.has(featureId) === true;
+  return store.featureSetOf(
+    (function* () {
+      if (current) {
+        for (const id of current.iterate()) if (id !== featureId) yield id;
+      }
+      if (!selected) yield featureId;
+    })(),
+  );
 }
+
+/** The features selected, read without an array of their IDs */
+type SelectedIds = Pick<IdSet, 'count' | 'has'>;

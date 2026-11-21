@@ -5,7 +5,7 @@
  * Plugins: bundles of other extensions and state
  */
 
-import type { Feature } from '../model.js';
+import type { Feature, IdSet } from '../model.js';
 import type { PluginContext } from './context.js';
 import type { DrawPointerEvent, InputHandlers } from './mode.js';
 
@@ -32,8 +32,12 @@ export interface Plugin<Api = unknown> {
   readonly input?: Partial<InputHandlers>;
   /** The hooks of the select mode, and an exclusive interaction of the plugin */
   readonly interaction?: {
-    /** Narrows the candidates of a selection to the IDs it returns */
-    filterSelection?(candidateIds: readonly string[]): string[];
+    /**
+     * Narrows the candidates of a selection made on the map (a click, a box) to the IDs it
+     * returns, a set of them ({@link createIdSet}, or the candidates as they are); a box over
+     * many features gives many candidates, read without an array of them
+     */
+    filterSelection?(candidateIds: IdSet): IdSet;
     /** A selected feature was clicked again; returning true means the plugin handled it */
     onFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
     /** A feature was double-clicked; returning true means the plugin handled it */

@@ -7,6 +7,7 @@
  * Helper functions for obtaining the selected features and computing the bounding box.
  */
 
+import type { IdSet } from '../../api/model.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import type { Feature } from '../../store/types.js';
 import type { BoundingBoxCoords, SelectionExtensionRegistry } from './selection-ui/index.js';
@@ -15,6 +16,12 @@ import {
   computeCombinedBoundingBox,
   hasZeroArea,
 } from './selection-ui/index.js';
+
+/**
+ * The features the current selection covers, read without an array of their IDs: the selection
+ * itself for a feature selection, the members of the groups or the layers selected otherwise
+ */
+export type SelectedFeatureIds = Pick<IdSet, 'count' | 'has' | 'iterate'>;
 
 /**
  * Returns the ids of the features the current selection covers, resolving a group or layer
@@ -29,17 +36,42 @@ import {
  * @returns The feature ids. An empty array when nothing is selected
  */
 export function getSelectedFeatureIds(store: DocumentAccess): readonly string[] {
+  return [...getSelectedFeatureIdSet(store).iterate()];
+}
+
+/**
+ * The features the current selection covers, as `getSelectedFeatureIds` resolves them, read
+ * without an array of their IDs for a feature selection (the set of the selection itself)
+ *
+ * @internal
+ */
+export function getSelectedFeatureIdSet(store: DocumentAccess): SelectedFeatureIds {
   const selection = store.getSelection();
   switch (selection.type) {
     case 'feature':
       return selection.ids;
     case 'group':
-      return selection.ids.flatMap((id) => store.getGroup(id)?.featureIds ?? []);
+      return setOf(
+        [...selection.ids.iterate()].flatMap((id) => store.getGroup(id)?.featureIds ?? []),
+      );
     case 'layer':
-      return selection.ids.flatMap((id) => featureIdsInLayer(store, id));
+      return setOf([...selection.ids.iterate()].flatMap((id) => featureIdsInLayer(store, id)));
     default:
-      return [];
+      return setOf([]);
   }
+}
+
+/** The IDs of the members of groups or layers, read as a set */
+function setOf(ids: readonly string[]): SelectedFeatureIds {
+  let lookup: Set<string> | null = null;
+  return {
+    count: () => ids.length,
+    has: (id) => {
+      lookup ??= new Set(ids);
+      return lookup.has(id);
+    },
+    iterate: () => ids[Symbol.iterator](),
+  };
 }
 
 // All feature IDs under a layer (the features in order + the members of the groups).
@@ -64,9 +96,12 @@ function featureIdsInLayer(store: DocumentAccess, layerId: string): string[] {
  * @internal
  */
 export function getSelectedFeatures(store: DocumentAccess): Feature[] {
-  return getSelectedFeatureIds(store)
-    .map((id) => store.getFeature(id))
-    .filter((f): f is Feature => f !== undefined);
+  const features: Feature[] = [];
+  for (const id of getSelectedFeatureIdSet(store).iterate()) {
+    const feature = store.getFeature(id);
+    if (feature !== undefined) features.push(feature);
+  }
+  return features;
 }
 
 /**

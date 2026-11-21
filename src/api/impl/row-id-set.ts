@@ -20,6 +20,9 @@ import type { IdSet } from '../model.js';
 /** The most IDs `toArray` gives in one array */
 const ARRAY_LIMIT = 10_000;
 
+/** The most rows a set looks through one by one to find a row, without its bits */
+const LOOKED_THROUGH = 16;
+
 /** What a set reads the IDs of its rows from */
 export interface RowIds {
   /** The ID of the row of a reference (undefined for none) */
@@ -37,8 +40,13 @@ export class RowIdSet implements IdSet {
   readonly #rows: RowIds;
   /** The references, in the order of the set; never changed */
   readonly #refs: Int32Array;
-  /** The same references in rising order, to find a row */
-  readonly #sorted: Int32Array;
+  /**
+   * One bit per reference from the least one of the set, to find a row: made at the first time
+   * it is asked for, for a set of more rows than are looked through one by one
+   */
+  #bits: Uint32Array | null = null;
+  /** The least reference of the set (the first bit) */
+  #least = 0;
   /** The IDs of the rows deleted since the set was given, by their references */
   readonly #copied = new Map<number, string>();
   /** The same IDs, for `has` */
@@ -48,7 +56,6 @@ export class RowIdSet implements IdSet {
   constructor(rows: RowIds, refs: Int32Array) {
     this.#rows = rows;
     this.#refs = refs;
-    this.#sorted = refs.slice().sort();
   }
 
   count(): number {
@@ -134,14 +141,62 @@ export class RowIdSet implements IdSet {
 
   /** Whether the set holds a reference */
   #holds(ref: number): boolean {
-    const sorted = this.#sorted;
-    let lo = 0;
-    let hi = sorted.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (sorted[mid] < ref) lo = mid + 1;
-      else hi = mid;
+    const refs = this.#refs;
+    if (refs.length <= LOOKED_THROUGH) {
+      for (let i = 0; i < refs.length; i++) if (refs[i] === ref) return true;
+      return false;
     }
-    return lo < sorted.length && sorted[lo] === ref;
+    const bits = this.#bits ?? this.#makeBits();
+    const at = ref - this.#least;
+    if (at < 0 || at >>> 5 >= bits.length) return false;
+    return (bits[at >>> 5] & (1 << (at & 31))) !== 0;
+  }
+
+  /** Makes the bits of the references (see `#bits`) */
+  #makeBits(): Uint32Array {
+    const refs = this.#refs;
+    let least = refs[0];
+    let most = refs[0];
+    for (let i = 1; i < refs.length; i++) {
+      if (refs[i] < least) least = refs[i];
+      else if (refs[i] > most) most = refs[i];
+    }
+    const bits = new Uint32Array(((most - least) >>> 5) + 1);
+    for (let i = 0; i < refs.length; i++) {
+      const at = refs[i] - least;
+      bits[at >>> 5] |= 1 << (at & 31);
+    }
+    this.#least = least;
+    this.#bits = bits;
+    return bits;
+  }
+
+  /** The memory the set takes, in bytes: its references, its bits and the IDs it copied */
+  get byteLength(): number {
+    let bytes = this.#refs.byteLength + (this.#bits?.byteLength ?? 0);
+    for (const id of this.#copiedIds) bytes += 2 * id.length;
+    return bytes;
+  }
+
+  /** Whether the set reads the IDs of its rows from these (it was made by their layer) */
+  readsFrom(rows: RowIds): boolean {
+    return this.#rows === rows;
+  }
+
+  /**
+   * The references of the rows of the set that are still there, in the order of the set: a row
+   * deleted since the set was given is left out (its reference may be another row's now)
+   *
+   * @returns The references the set holds, as they are when none is deleted (not to be written)
+   */
+  rowRefs(): Int32Array {
+    if (this.#copied.size === 0) return this.#refs;
+    const refs = this.#refs;
+    const out = new Int32Array(refs.length - this.#copied.size);
+    let at = 0;
+    for (let i = 0; i < refs.length; i++) {
+      if (!this.#copied.has(refs[i]) && at < out.length) out[at++] = refs[i];
+    }
+    return at === out.length ? out : out.subarray(0, at);
   }
 }

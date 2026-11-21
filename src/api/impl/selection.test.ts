@@ -82,20 +82,29 @@ beforeEach(() => {
 describe('draw.selection', () => {
   it('sets, adds, removes and clears', () => {
     expect(selection.set('feature', ['a'])).toBe(true);
-    expect(selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+    expect({ type: selection.get().type, ids: selection.get().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['a'],
+    });
     expect(selection.add(['line', 'a'])).toBe(true);
-    expect(selection.get().ids).toEqual(['a', 'line']);
+    expect(selection.get().ids.toArray()).toEqual(['a', 'line']);
     expect(selection.add(['a'])).toBe(false);
     expect(selection.remove(['a', 'x'])).toBe(true);
     expect(selection.remove(['a'])).toBe(false);
-    expect(selection.get().ids).toEqual(['line']);
+    expect(selection.get().ids.toArray()).toEqual(['line']);
     selection.clear();
-    expect(selection.get()).toEqual({ type: null, ids: [] });
+    expect({ type: selection.get().type, ids: selection.get().ids.toArray() }).toEqual({
+      type: null,
+      ids: [],
+    });
   });
 
   it('takes the type of the first ID when adding to nothing', () => {
     expect(selection.add(['g'])).toBe(true);
-    expect(selection.get()).toEqual({ type: 'group', ids: ['g'] });
+    expect({ type: selection.get().type, ids: selection.get().ids.toArray() }).toEqual({
+      type: 'group',
+      ids: ['g'],
+    });
   });
 
   it('throws notFound for an ID of another type and invalidInput for a wrong type', () => {
@@ -103,13 +112,13 @@ describe('draw.selection', () => {
     expect(codeOf(() => selection.set('thing' as never, ['a']))).toBe('invalidInput');
     selection.set('feature', ['a']);
     expect(codeOf(() => selection.add(['l1']))).toBe('notFound');
-    expect(selection.get().ids).toEqual(['a']);
+    expect(selection.get().ids.toArray()).toEqual(['a']);
   });
 
   it('returns false when nothing given can be selected, and changes nothing', () => {
     selection.set('feature', ['a']);
     expect(selection.set('feature', ['hidden'])).toBe(false);
-    expect(selection.get().ids).toEqual(['a']);
+    expect(selection.get().ids.toArray()).toEqual(['a']);
   });
 
   it('lists the selected features, and the features of a selected group or layer', () => {

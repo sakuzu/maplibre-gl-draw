@@ -16,7 +16,7 @@ import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { GroupsCollection } from '../groups.js';
-import type { Feature } from '../model.js';
+import type { Feature, IdSet } from '../model.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
 import type { SelectionType } from '../state.js';
 import type { ResourceDeps } from './shared.js';
@@ -31,6 +31,46 @@ import {
 } from './shared.js';
 
 const SELECTION_TYPES: readonly SelectionType[] = ['feature', 'group', 'layer'];
+
+/** The most features `features()` returns in one array */
+const LIST_LIMIT = 10_000;
+
+/** IDs given to the selection, read once each: an array of them, or a set (kept to be reused) */
+interface IdsGiven {
+  iterate(): IterableIterator<string>;
+  /** The set given, when one was */
+  readonly set?: IdSet;
+}
+
+/** Reads IDs given as an array of strings or as a set (throws `invalidInput` for anything else) */
+function readIds(ids: unknown): IdsGiven {
+  if (isRecord(ids) && !Array.isArray(ids) && typeof ids.iterate === 'function') {
+    const set = ids as unknown as IdSet;
+    return { iterate: () => set.iterate(), set };
+  }
+  const list = requireIds(ids);
+  return { iterate: () => list[Symbol.iterator]() };
+}
+
+/** The layers named by `{ layerIds }`, or undefined for IDs given otherwise */
+function layerIdsOf(ids: unknown): readonly string[] | undefined {
+  if (!isRecord(ids) || Array.isArray(ids) || typeof ids.iterate === 'function') return undefined;
+  const keys = Object.keys(ids);
+  if (keys.length !== 1 || keys[0] !== 'layerIds') {
+    throw invalidInput('The IDs must be an array of IDs, an IdSet or { layerIds }');
+  }
+  return requireIds(ids.layerIds, 'layerIds');
+}
+
+/** The number of IDs of a set or an array */
+function countOf(ids: IdSet | readonly string[]): number {
+  return Array.isArray(ids) ? ids.length : (ids as IdSet).count();
+}
+
+/** The IDs of a set or an array, one at a time */
+function iterateOf(ids: IdSet | readonly string[]): Iterable<string> {
+  return Array.isArray(ids) ? ids : (ids as IdSet).iterate();
+}
 
 /**
  * Creates `draw.selection`
@@ -54,13 +94,19 @@ export function createSelection(
   const { client } = store;
 
   /** Throws unless every ID names an item of the type */
-  const requireItems = (type: SelectionType, ids: unknown): string[] => {
-    const list = requireIds(ids);
-    for (const id of list) {
+  const requireItems = (type: SelectionType, ids: IdsGiven): void => {
+    for (const id of ids.iterate()) {
       const there = type === 'feature' ? store.hasFeature(id) : getItem(store, type, id);
       if (!there) throw notFound(type, id);
     }
-    return list;
+  };
+
+  /** The items of a type that can be seen, as a set (the features as their rows) */
+  const shownOf = (type: SelectionType, ids: IdsGiven): IdSet | readonly string[] => {
+    if (type === 'feature') {
+      return store.shownFeatureSetOf(store.featureSetOf(ids.set ?? ids.iterate()));
+    }
+    return [...ids.iterate()].filter((id) => isShown(store, type, id));
   };
 
   return {
@@ -70,35 +116,66 @@ export function createSelection(
       if (!SELECTION_TYPES.includes(type)) {
         throw invalidInput('type must be feature, group or layer');
       }
-      const selectable = requireItems(type, ids).filter((id) => isShown(store, type, id));
-      if (selectable.length === 0) return false;
+      const layerIds = layerIdsOf(ids);
+      if (layerIds) {
+        // Every feature of the layers that can be seen, as a copy of their rows
+        if (type !== 'feature') {
+          throw invalidInput('{ layerIds } selects features: the type must be feature');
+        }
+        for (const layerId of layerIds) {
+          if (!store.getLayer(layerId)) throw notFound('layer', layerId);
+        }
+        const selected = store.shownFeatureSetOfLayers(layerIds);
+        if (selected.count() === 0) return false;
+        client.setSelection('feature', selected);
+        return true;
+      }
+      const given = readIds(ids);
+      requireItems(type, given);
+      const selectable = shownOf(type, given);
+      if (countOf(selectable) === 0) return false;
       client.setSelection(type, selectable);
       return true;
     },
 
     add(ids) {
       const current = client.getSelection();
-      const list = requireIds(ids);
+      const given = readIds(ids);
+      const first = given.iterate().next();
       // With nothing selected, the type is the one of the first ID
-      const type = current.type ?? SELECTION_TYPES.find((t) => getItem(store, t, list[0] ?? ''));
+      const type =
+        current.type ??
+        (first.done === true
+          ? undefined
+          : SELECTION_TYPES.find((t) => getItem(store, t, first.value)));
       if (type === undefined) {
-        if (list.length === 0) return false;
-        throw notFound('feature, group or layer', list[0]);
+        if (first.done === true) return false;
+        throw notFound('feature, group or layer', first.value);
       }
-      const added = requireItems(type, list).filter(
-        (id) => !current.ids.includes(id) && isShown(store, type, id),
-      );
+      requireItems(type, given);
+      const shown = shownOf(type, given);
+      const added: string[] = [];
+      for (const id of iterateOf(shown)) if (!current.ids.has(id)) added.push(id);
       if (added.length === 0) return false;
-      client.setSelection(type, [...current.ids, ...added]);
+      const all = (function* () {
+        yield* current.ids.iterate();
+        yield* added;
+      })();
+      client.setSelection(type, type === 'feature' ? store.featureSetOf(all) : [...all]);
       return true;
     },
 
     remove(ids) {
       const current = client.getSelection();
-      const removed = new Set(requireIds(ids).filter((id) => current.ids.includes(id)));
+      const given = readIds(ids);
+      const removed = new Set<string>();
+      for (const id of given.iterate()) if (current.ids.has(id)) removed.add(id);
       if (removed.size === 0) return false;
-      const kept = current.ids.filter((id) => !removed.has(id));
-      client.setSelection(kept.length > 0 ? current.type : null, kept);
+      const kept = (function* () {
+        for (const id of current.ids.iterate()) if (!removed.has(id)) yield id;
+      })();
+      const left = current.type === 'feature' ? store.featureSetOf(kept) : [...kept];
+      client.setSelection(countOf(left) > 0 ? current.type : null, left);
       return true;
     },
 
@@ -108,13 +185,31 @@ export function createSelection(
 
     features() {
       const { type, ids } = client.getSelection();
-      if (type === 'feature') {
-        return ids
-          .map((id) => store.getFeature(id))
-          .filter((feature): feature is StoredFeature => feature !== undefined);
-      }
       if (type === null) return [];
-      const wanted = new Set(ids);
+      // The features are counted before they are made: a list is never cut short
+      let count = 0;
+      if (type === 'feature') count = ids.count();
+      else {
+        for (const id of ids.iterate()) {
+          count += store.countFeatures(type === 'group' ? { groupId: id } : { layerId: id });
+        }
+      }
+      if (count > LIST_LIMIT) {
+        throw new DrawError(
+          'tooManyItems',
+          `${count} features are selected, more than the ${LIST_LIMIT} a list returns; read them with features.iterate or get().ids.iterate`,
+          { count },
+        );
+      }
+      if (type === 'feature') {
+        const out: StoredFeature[] = [];
+        for (const id of ids.iterate()) {
+          const feature = store.getFeature(id);
+          if (feature !== undefined) out.push(feature);
+        }
+        return out as Feature[];
+      }
+      const wanted = new Set(ids.iterate());
       const inside = (feature: StoredFeature): boolean =>
         type === 'group'
           ? feature.groupId !== undefined && wanted.has(feature.groupId)
@@ -144,8 +239,9 @@ export function createSelection(
 
     move(to) {
       const { type, ids } = client.getSelection();
-      if (type === 'feature' && ids.length > 0) return collections.features.moveMany(ids, to);
-      if (type === 'group' && ids.length > 0) return collections.groups.moveMany(ids, to);
+      if (ids.count() === 0) return false;
+      if (type === 'feature') return collections.features.moveMany([...ids.iterate()], to);
+      if (type === 'group') return collections.groups.moveMany([...ids.iterate()], to);
       return false;
     },
   };

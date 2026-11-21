@@ -7,9 +7,9 @@
  * Responsible for handling box selection in select mode
  */
 
+import type { IdSet } from '../../api/model.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
-import type { DocumentAccess, DocumentPlaces } from '../../store/document-access.js';
-import { isLocallyHidden } from '../../store/local-visibility.js';
+import type { DocumentAccess, DocumentBoxes, DocumentTables } from '../../store/document-access.js';
 import type { BoxSelection, Coordinate, Feature } from '../../store/types.js';
 import type { EngineModeContext } from '../handler.js';
 
@@ -24,48 +24,63 @@ export function queryFeaturesInBox(
   boxSelection: BoxSelection,
   context: EngineModeContext,
 ): string[] {
-  const { store, spatialIndex, boxSelectionRegistry } = context;
+  return [...selectFeaturesInBox(boxSelection, context).iterate()];
+}
+
+/**
+ * The features inside the box, as a set of their rows, in stacking order from the back: what
+ * the box selects, read without an array of their IDs
+ *
+ * The candidates come from the spatial index of the Store (the boxes of its rows). As with the
+ * click hit test (HitTestService.hitTestAll), hidden or locked features, those of a hidden or
+ * locked layer or group, and what this client hides are not taken: the layer reads that from the
+ * rows, without the features being made. A row whose box lies wholly inside the box is taken
+ * without its feature being made, when its type is tested by a built-in test (whose answer is
+ * then yes: it meets the box, or its center is in it); a row on the edge of the box, and a row of
+ * a type whose test is an extension's (its `boxSelect`), is tested on its feature.
+ */
+export function selectFeaturesInBox(boxSelection: BoxSelection, context: EngineModeContext): IdSet {
+  const { spatialIndex, boxSelectionRegistry } = context;
+  const store = context.store as DocumentAccess &
+    Pick<DocumentBoxes, 'listSelectableRows'> &
+    Pick<DocumentTables, 'getTables'>;
   const rects = boxRects(boxSelection.startPoint, boxSelection.endPoint);
 
-  // First obtain the candidates quickly with the spatial index (from each part of a box that
-  // crosses the antimeridian)
-  const candidateIds = new Set<string>();
-  for (const rect of rects) {
-    for (const id of spatialIndex.findInBounds(rect)) candidateIds.add(id);
-  }
+  // The candidates of the spatial index, from each part of a box that crosses the antimeridian
+  // (the layer takes each once)
+  const candidateIds = (function* () {
+    for (const rect of rects) yield* spatialIndex.findInBounds(rect);
+  })();
+  const rows = store.listSelectableRows(candidateIds, rects, (type) =>
+    isBuiltInTest(boxSelectionRegistry.get(type)),
+  );
 
-  // Perform the precise inside-the-box test on the candidates.
-  // As with the click hit test (HitTestService.hitTestAll), hidden or locked features / their
-  // layer / their group are excluded from the selection targets (this prevents the
-  // inconsistency where box selection alone could select while ignoring locks and hiding).
-  const hitIds: string[] = [];
-  for (const id of candidateIds) {
-    const feature = store.getFeature(id);
+  const tables = store.getTables();
+  const taken = new Int32Array(rows.refs.length);
+  let count = 0;
+  for (let i = 0; i < rows.refs.length; i++) {
+    const ref = rows.refs[i];
+    if (rows.inside[i] === 1) {
+      taken[count++] = ref;
+      continue;
+    }
+    const id = tables.getRowId(ref);
+    const feature = id === undefined ? undefined : store.getFeature(id);
     if (!feature) continue;
-    if (!feature.visible || feature.locked) continue;
-    // What this client has hidden locally is excluded from the box selection targets too
-    // (this prevents the inconsistency of being hit by the box while invisible).
-    if (isLocallyHidden(feature, store)) continue;
-
-    const layer = store.getLayer(feature.layerId);
-    if (layer && (!layer.visible || layer.locked)) continue;
-
-    if (feature.groupId) {
-      const group = store.getGroup(feature.groupId);
-      if (group && (!group.visible || group.locked)) continue;
-    }
-
     if (rects.some((rect) => isFeatureInBox(feature, rect, boxSelectionRegistry))) {
-      hitIds.push(feature.id);
+      taken[count++] = ref;
     }
   }
+  return store.featureSetOfRows(taken.subarray(0, count));
+}
 
-  // The features taken in stacking order, from the back: only their places are read (the
-  // instance hands its modes the layer over the Store, which reads them)
-  if (hitIds.length < 2) return hitIds;
-  return (
-    store as DocumentAccess & Pick<DocumentPlaces, 'sortInStackingOrder'>
-  ).sortInStackingOrder(hitIds);
+/**
+ * Whether the box test of a type is a built-in one: the tests of the built-in types are made by
+ * classes, and what an extension registers for a type (its `boxSelect`, or the test of its
+ * geometry wrapped for it) is a plain object
+ */
+function isBuiltInTest(strategy: object | undefined): boolean {
+  return strategy !== undefined && Object.getPrototypeOf(strategy) !== Object.prototype;
 }
 
 type Rect = { minX: number; minY: number; maxX: number; maxY: number };

@@ -240,7 +240,7 @@ export async function mode(page: Page): Promise<Mode> {
 
 /** The ids of the selected features */
 export async function selectedIds(page: Page): Promise<string[]> {
-  return page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]);
+  return page.evaluate(() => (window as unknown as E2EWindow).draw.selection.get().ids.toArray());
 }
 
 /** A press, a move in steps and a release of the left mouse button */

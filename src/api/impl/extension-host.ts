@@ -29,7 +29,7 @@ import type { PluginContext } from '../extension/context.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { Hit } from '../extension/provider.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature } from '../model.js';
+import type { Feature, IdSet } from '../model.js';
 import type { AdapterDeps } from './adapters.js';
 import {
   adaptCompanionProvider,
@@ -393,7 +393,11 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       let filtered = candidateIds;
       eachPlugin('filterSelection', (plugin) => {
         const filter = plugin.interaction?.filterSelection;
-        if (filter) filtered = filter.call(plugin.interaction, filtered);
+        if (!filter) return false;
+        const narrowed: unknown = filter.call(plugin.interaction, filtered);
+        // What is not a set is reported as a hook that throws, and the plugin is skipped
+        if (!isIdSetLike(narrowed)) throw new TypeError('filterSelection must return an IdSet');
+        filtered = narrowed;
         return false;
       });
       return filtered;
@@ -500,4 +504,15 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       destroyed = true;
     },
   };
+}
+
+/** Whether a value is a set of IDs read through its methods */
+function isIdSetLike(value: unknown): value is IdSet {
+  if (typeof value !== 'object' || value === null) return false;
+  const set = value as Record<string, unknown>;
+  return (
+    typeof set.count === 'function' &&
+    typeof set.has === 'function' &&
+    typeof set.iterate === 'function'
+  );
 }

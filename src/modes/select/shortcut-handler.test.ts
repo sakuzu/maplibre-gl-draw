@@ -323,7 +323,7 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
         .listFeatures()
         .map((f) => f.id)
         .sort(),
-      selection: s.getSelection().ids,
+      selection: s.getSelection().ids.toArray(),
     };
   }
 

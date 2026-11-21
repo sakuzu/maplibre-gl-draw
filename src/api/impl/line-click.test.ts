@@ -236,11 +236,14 @@ describe.each(CASES)('a line and a polygon %s', (_name, setup) => {
       for (const [at, expected] of clicks) {
         instance.selection.clear();
         pointerClick(target, at);
-        expect({ at, ids: instance.selection.get().ids }).toEqual({ at, ids: [expected] });
+        expect({ at, ids: instance.selection.get().ids.toArray() }).toEqual({
+          at,
+          ids: [expected],
+        });
       }
       // Beyond the tolerance of the line (6 px), nothing is selected
       pointerClick(target, [-1, -1.08]);
-      expect(instance.selection.get().ids).toEqual([]);
+      expect(instance.selection.get().ids.toArray()).toEqual([]);
     });
   });
 
@@ -250,6 +253,6 @@ describe.each(CASES)('a line and a polygon %s', (_name, setup) => {
     const { engine: target, draw: instance, lineId } = setup(14, path);
     register(instance, ['companion', 'handles']);
     pointerClick(target, [-0.5, -1]);
-    expect(instance.selection.get().ids).toEqual([lineId]);
+    expect(instance.selection.get().ids.toArray()).toEqual([lineId]);
   });
 });

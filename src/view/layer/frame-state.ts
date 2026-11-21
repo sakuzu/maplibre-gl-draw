@@ -39,7 +39,7 @@ import {
 import type { QuadDrapeFrame } from '../terrain/drape/quad.js';
 import { type DrapeLight, resolveDrapeLight } from '../terrain/drape/renderer.js';
 import { setQuadDrapeFrame, setTerrainSurfacesFlattened } from '../terrain/state.js';
-import { getSelectedFeatureIds } from '../ui/helper.js';
+import { getSelectedFeatureIdSet } from '../ui/helper.js';
 import { applyDrawBlendState } from './blend.js';
 import type { DisplayListCache } from './display-list.js';
 import {
@@ -377,10 +377,10 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
         );
 
   // The single source of truth of the selection carries a kind. A group / layer selection is
-  // resolved to its members and reflected on the map (getSelectedFeatureIds absorbs
+  // resolved to its members and reflected on the map (getSelectedFeatureIdSet absorbs
   // feature / group / layer).
-  const selectedIds = getSelectedFeatureIds(store);
-  const selectedIdSet = new Set(selectedIds);
+  const selectedIds = getSelectedFeatureIdSet(store);
+  const selectedIdSet = new Set(selectedIds.iterate());
 
   // The features for the selection UI are resolved directly from the selected ids. This keeps
   // them independent of the rendering path (retained / immediate mode), so the selection UI is
@@ -392,8 +392,8 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   // of the whole document in stacking order, which the layer keeps while the document does not
   // change: read one by one, each would be made again in every frame. This read goes when the
   // selection is drawn from the rows
-  const kept = selectedIds.length > FEATURES_KEPT ? selectedOfEvery(store, selectedIdSet) : null;
-  for (const id of selectedIds) {
+  const kept = selectedIds.count() > FEATURES_KEPT ? selectedOfEvery(store, selectedIdSet) : null;
+  for (const id of selectedIds.iterate()) {
     const feature = kept?.get(id) ?? store.getFeature(id);
     if (!feature?.visible || isLocallyHidden(feature, store)) continue;
     selectedFeatures.push(feature);

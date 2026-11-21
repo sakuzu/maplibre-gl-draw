@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { TreeNode } from '@sakuzu/kata/svelte';
-import type { DocumentLayer, StyleRule } from '@sakuzu/maplibre-gl-draw';
+import { createIdSet, type DocumentLayer, type StyleRule } from '@sakuzu/maplibre-gl-draw';
 import { describe, expect, it } from 'vitest';
 import { datasetShape, legendBlocks, legendShape } from '../src/layers/legend.js';
 import { coreIndex, planMove } from '../src/layers/move.js';
@@ -283,9 +283,9 @@ describe('the selection of the tree', () => {
   const kindOf = (id: string) => kinds[id];
 
   it('mirrors what draw has selected', () => {
-    expect(selectedIds({ type: 'feature', ids: ['a', 'b'] })).toEqual(['a', 'b']);
-    expect(selectedIds({ type: 'layer', ids: ['l1'] })).toEqual(['l1']);
-    expect(selectedIds({ type: null, ids: [] })).toEqual([]);
+    expect(selectedIds({ type: 'feature', ids: createIdSet(['a', 'b']) })).toEqual(['a', 'b']);
+    expect(selectedIds({ type: 'layer', ids: createIdSet(['l1']) })).toEqual(['l1']);
+    expect(selectedIds({ type: null, ids: createIdSet([]) })).toEqual([]);
   });
 
   it('keeps the kind of the row pressed last', () => {
@@ -302,10 +302,10 @@ describe('the selection of the tree', () => {
   it('can group two features or more of one layer', () => {
     const fake = sample();
     const get = (id: string) => fake.draw.features.get(id);
-    expect(canGroup({ type: 'feature', ids: ['a', 'b'] }, get)).toBe(true);
-    expect(canGroup({ type: 'feature', ids: ['a'] }, get)).toBe(false);
-    expect(canGroup({ type: 'feature', ids: ['a', 'e'] }, get)).toBe(false);
-    expect(canGroup({ type: 'layer', ids: ['l1', 'l2'] }, get)).toBe(false);
+    expect(canGroup({ type: 'feature', ids: createIdSet(['a', 'b']) }, get)).toBe(true);
+    expect(canGroup({ type: 'feature', ids: createIdSet(['a']) }, get)).toBe(false);
+    expect(canGroup({ type: 'feature', ids: createIdSet(['a', 'e']) }, get)).toBe(false);
+    expect(canGroup({ type: 'layer', ids: createIdSet(['l1', 'l2']) }, get)).toBe(false);
   });
 });
 

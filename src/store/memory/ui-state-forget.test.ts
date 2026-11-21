@@ -9,9 +9,22 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { IdSet } from '../../api/model.js';
 import { WORK_SIZES } from '../../test-utils.js';
 import type { Feature, Group, Layer } from '../types.js';
 import { type ClientChange, ClientState } from './ui-state.js';
+
+/** A set of IDs, in order, each once, as the layer the state is attached to makes them */
+function setOf(ids: Iterable<string>): IdSet {
+  const list = [...new Set(ids)];
+  const lookup = new Set(list);
+  return {
+    count: () => list.length,
+    has: (id) => lookup.has(id),
+    iterate: () => list[Symbol.iterator](),
+    toArray: () => [...list],
+  };
+}
 
 /** A state of this client over a document of the IDs given, which counts what it is asked */
 function stateOver(ids: Set<string>) {
@@ -26,6 +39,11 @@ function stateOver(ids: Set<string>) {
     getLayer: (id: string) =>
       id === 'l' ? ({ id: 'l', visible: true, locked: false } as unknown as Layer) : undefined,
     listLayers: () => [{ id: 'l', visible: true, locked: false } as unknown as Layer],
+    idSetOf: (_type: string, given: Iterable<string> | IdSet) =>
+      setOf(Symbol.iterator in given ? given : given.iterate()),
+    idSetWithout: (_type: string, set: IdSet, leaves: (id: string) => boolean) =>
+      setOf([...set.iterate()].filter((id) => !leaves(id))),
+    shownFeatureSetOf: (set: IdSet) => set,
   };
   const told: ClientChange[] = [];
   state.attach({
@@ -49,11 +67,14 @@ describe('ClientState.forgetAll', () => {
     alive.delete('d');
     // `b` is given but still there: it stays
     state.forgetAll(new Set(['a', 'b', 'd']));
-    expect(state.getSelection()).toEqual({ type: 'feature', ids: ['b', 'c'] });
+    expect({ type: state.getSelection().type, ids: state.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['b', 'c'],
+    });
     expect(state.getEditingIds()).toEqual(['c']);
     expect(state.isHidden('d')).toBe(false);
     expect(told).toHaveLength(1);
-    expect(told[0].selection?.ids).toEqual(['b', 'c']);
+    expect(told[0].selection?.ids.toArray()).toEqual(['b', 'c']);
   });
 
   it('asks of the document as many IDs as it holds and is given, for 10,000 selected and deleted as for 1,000', () => {
@@ -67,7 +88,7 @@ describe('ClientState.forgetAll', () => {
       alive.clear();
       count.count = 0;
       state.forgetAll(new Set(ids));
-      expect(state.getSelection().ids).toEqual([]);
+      expect(state.getSelection().ids.toArray()).toEqual([]);
       expect(told).toHaveLength(1);
       asked.push(count.count);
     }

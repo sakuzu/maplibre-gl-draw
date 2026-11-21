@@ -258,10 +258,10 @@ export function fakeDraw(
     listeners.get(event)?.delete(listener);
   };
   const setSelection = (type: SelectionType | null, next: string[]) => {
-    const previous = { type: selType, ids };
+    const previous = { type: selType, ids: createIdSet(ids) };
     ids = next;
     selType = next.length ? type : null;
-    emit('selection.changed', { selection: { type: selType, ids }, previous });
+    emit('selection.changed', { selection: { type: selType, ids: createIdSet(ids) }, previous });
   };
   const select = (next: string[]) => setSelection('feature', next);
   const changed = () => emit('document.changed', {});
@@ -324,7 +324,7 @@ export function fakeDraw(
     }),
     off: vi.fn(off),
     selection: {
-      get: () => ({ type: selType, ids }),
+      get: () => ({ type: selType, ids: createIdSet(ids) }),
       set: vi.fn((type: SelectionType, next: readonly string[]) => {
         setSelection(type, [...next]);
         return true;
@@ -616,9 +616,12 @@ export function fakeDocument(
 
   const changed = () => fake.emit('document.changed', {});
   const setSelection = (type: SelectionType | null, ids: string[]) => {
-    const previous = selection;
+    const previous = { type: selection.type, ids: createIdSet(selection.ids) };
     selection = { type: ids.length ? type : null, ids };
-    fake.emit('selection.changed', { selection, previous });
+    fake.emit('selection.changed', {
+      selection: { type: selection.type, ids: createIdSet(selection.ids) },
+      previous,
+    });
   };
   const editable = (f: Feature) =>
     !readOnly &&
@@ -665,7 +668,7 @@ export function fakeDocument(
     transact: vi.fn(<T>(fn: () => T) => fn()),
   });
   Object.assign(fake.draw.selection, {
-    get: () => selection,
+    get: () => ({ type: selection.type, ids: createIdSet(selection.ids) }),
     set: vi.fn((type: SelectionType, ids: readonly string[]) => {
       setSelection(type, [...ids]);
       return true;

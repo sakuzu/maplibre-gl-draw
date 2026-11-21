@@ -156,7 +156,7 @@ describe('the basemaps to choose from', () => {
       ui.element.querySelector('[data-region="right"] [data-role="inspector"]'),
     ).not.toBeNull();
     const items = open(ui.element);
-    expect(fake.draw.selection.get().ids).toEqual([]);
+    expect(fake.draw.selection.get().ids.toArray()).toEqual([]);
     const right = ui.element.querySelector('[data-region="right"]');
     expect(chooser(ui.element)?.closest('[data-region="right"]')).toBe(right);
     expect(right?.querySelector('[data-role="inspector"]')).toBeNull();
@@ -248,7 +248,7 @@ describe('the basemaps to choose from', () => {
       ?.click();
     flushSync();
     expect(chooser(ui.element)).toBeNull();
-    expect(fake.draw.selection.get().ids).toEqual(['a']);
+    expect(fake.draw.selection.get().ids.toArray()).toEqual(['a']);
   });
 
   it('open without the inspector too', () => {

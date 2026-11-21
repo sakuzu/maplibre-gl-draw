@@ -41,7 +41,7 @@ export function addEditButtons(draw: Draw, container: HTMLElement, ja: boolean):
     element.dataset.edit = id;
     element.textContent = label;
     element.addEventListener('click', () => {
-      if (draw.selection.get().ids.length === 0) {
+      if (draw.selection.get().ids.count() === 0) {
         console.info('Select features first');
         return;
       }

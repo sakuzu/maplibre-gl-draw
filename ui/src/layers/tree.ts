@@ -401,7 +401,7 @@ export function indexNodes(
 
 /** The rows the tree shows as selected: what draw has selected, of any of the three types */
 export function selectedIds(selection: Selection): string[] {
-  return selection.type ? [...selection.ids] : [];
+  return selection.type ? [...selection.ids.iterate()] : [];
 }
 
 /**
@@ -442,9 +442,9 @@ export function canGroup(
   selection: Selection,
   getFeature: (id: string) => Feature | undefined,
 ): boolean {
-  if (selection.type !== 'feature' || selection.ids.length < 2) return false;
+  if (selection.type !== 'feature' || selection.ids.count() < 2) return false;
   let layerId: string | undefined;
-  for (const id of selection.ids) {
+  for (const id of selection.ids.iterate()) {
     const feature = getFeature(id);
     if (!feature) return false;
     if (layerId === undefined) layerId = feature.layerId;

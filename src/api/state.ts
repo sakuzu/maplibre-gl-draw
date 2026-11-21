@@ -7,6 +7,7 @@
  */
 
 import type { Position } from 'geojson';
+import type { IdSet } from './model.js';
 
 /** The names of the built-in modes. */
 export const MODES = [
@@ -32,8 +33,11 @@ export type SelectionType = 'feature' | 'group' | 'layer';
 export interface Selection {
   /** The type of the selected items, or `null` when nothing is selected */
   type: SelectionType | null;
-  /** The IDs of the selected items */
-  ids: readonly string[];
+  /**
+   * The IDs of the selected items. A box selection lists the features it takes in stacking
+   * order, from the back.
+   */
+  ids: IdSet;
 }
 
 /**

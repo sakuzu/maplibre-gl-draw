@@ -748,7 +748,9 @@ describe('the examples', () => {
     expect(vertices['Two vertices']).toBe(2);
     expect(vertices['Tokyo to London']).toBeGreaterThan(30);
     expect(
-      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.selection.get().ids.toArray(),
+      ),
     ).toEqual([]);
 
     await page.locator('.maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled').click();
@@ -795,7 +797,7 @@ describe('the examples', () => {
 
     // The park in front is selected at open, with a white handle on its first vertex
     const selected = () =>
-      page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]);
+      page.evaluate(() => (window as unknown as E2EWindow).draw.selection.get().ids.toArray());
     expect(await selected()).toEqual(['park-selected']);
     const parkVertex = await page.evaluate(() => {
       const park = (window as unknown as E2EWindow).draw.features.get('park-selected');
@@ -1423,7 +1425,9 @@ describe('the examples', () => {
     const [h0, h1] = (hill.geometry as GeoJSON.LineString).coordinates;
     await click(page, await pageOf(page, [(h0[0] + h1[0]) / 2, (h0[1] + h1[1]) / 2]));
     expect(
-      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.selection.get().ids.toArray(),
+      ),
     ).toEqual([hill.id]);
     await close();
   });
@@ -1453,7 +1457,7 @@ describe('the examples', () => {
         return {
           registered: draw.extensions.featureTypes.has('Route'),
           count: draw.features.count(),
-          selected: [...draw.selection.get().ids],
+          selected: draw.selection.get().ids.toArray(),
         };
       });
     expect(await blue()).toBe(true);
@@ -1715,7 +1719,9 @@ describe('the examples', () => {
     // Halfway between the west edges of the outer ring and of the hole
     await click(page, await pageOf(page, [(outer[0][0] + hole[0][0]) / 2, hole[0][1]]));
     expect(
-      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.selection.get().ids.toArray(),
+      ),
     ).toEqual([courtyard.id]);
     expect(courtyard.rings).toHaveLength(2);
     expect((await colorsAround(page, hole[1])).some(isWhite)).toBe(true);

@@ -74,7 +74,10 @@ describe('read-only', () => {
     store.createFeature(makeFeature('f1', 'l1'));
     store.setReadOnly(true);
     store.setSelection('feature', ['f1']);
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f1'],
+    });
     store.setMode('drawPoint');
     expect(store.getMode()).toBe('drawPoint');
     store.setLocallyHidden('f1', true);
@@ -174,7 +177,10 @@ describe('local visibility', () => {
     store.createFeature(makeFeature('f2', 'l1'));
     store.setSelection('feature', ['f1', 'f2']);
     store.setLocallyHidden('f1', true);
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f2'],
+    });
   });
 
   it('removes it from the local hidden set too when the feature is deleted', () => {

@@ -109,7 +109,10 @@ describe('the playground', () => {
     );
     const drawing = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
-      const selected = draw.selection.get().ids.map((id) => draw.features.get(id));
+      const selected = draw.selection
+        .get()
+        .ids.toArray()
+        .map((id) => draw.features.get(id));
       return {
         layers: draw.layers
           .list()
@@ -354,8 +357,8 @@ describe('the playground', () => {
         undefined,
         { timeout: browserTimeout(10_000) },
       );
-      const selected = await page.evaluate(
-        () => (window as unknown as E2EWindow).draw.selection.get().ids,
+      const selected = await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.selection.get().ids.toArray(),
       );
       expect(selected).toEqual(ids);
       // The same look on every feature selected
@@ -371,6 +374,44 @@ describe('the playground', () => {
       await context.close();
       expect(errors).toEqual([]);
     }
+  });
+
+  it('selects every feature of the layers with its button, and shows how many are selected', {
+    timeout: 60_000,
+  }, async () => {
+    const { page, context, errors } = await open('&plain');
+    await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
+    const made = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const { lng, lat } = map.getCenter();
+      const first = draw.layers.getActive()?.id;
+      const second = draw.layers.create({ name: 'second' });
+      const ids: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        const feature = draw.features.create({
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [lng + i * 0.001, lat] },
+          layerId: i >= 4 && second ? second.id : first,
+        });
+        if (feature) ids.push(feature.id);
+      }
+      // Two of them in a group, whose features are selected with those of their layer
+      draw.groups.create({ name: 'pair', featureIds: ids.slice(0, 2) });
+      draw.selection.clear();
+      return ids.length;
+    });
+    await settle(page);
+    const count = page.locator('.pg-select output[data-select="count"]');
+    expect(await count.textContent()).toBe('0 selected');
+    await page.locator('.pg-select button[data-select="layers"]').click();
+    await page.waitForFunction(
+      (wanted) => (window as unknown as E2EWindow).draw.selection.get().ids.count() === wanted,
+      made,
+      { timeout: browserTimeout(10_000) },
+    );
+    expect(await count.textContent()).toBe(`${made} selected`);
+    await context.close();
+    expect(errors).toEqual([]);
   });
 
   it('has its switches in the card of actions, which a press and Shift with a letter run, and which show changes made by code', {

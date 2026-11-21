@@ -194,10 +194,10 @@ describe('a custom feature type', () => {
       expect.objectContaining({ id: 'p1' }),
       expect.objectContaining({ point: [510, 200], tolerancePx: expect.any(Number) }),
     );
-    expect(engine.context.store.getSelection().ids).toEqual(['p1']);
+    expect(engine.context.store.getSelection().ids.toArray()).toEqual(['p1']);
 
     createSyntheticInput(engine).click([3, 3]);
-    expect(engine.context.store.getSelection().ids).toEqual([]);
+    expect(engine.context.store.getSelection().ids.toArray()).toEqual([]);
   });
 
   it('shows its handles, and a drag of one applies the patch of onHandleDrag', () => {
@@ -247,7 +247,7 @@ describe('a custom feature type', () => {
     engine.extensions.collections.featureTypes.remove('pin');
     expect(engine.context.selectionScope.auxiliaryHandles.list()).toEqual([]);
     createSyntheticInput(engine).click([1.1, 1]);
-    expect(engine.context.store.getSelection().ids).toEqual([]);
+    expect(engine.context.store.getSelection().ids.toArray()).toEqual([]);
   });
 });
 

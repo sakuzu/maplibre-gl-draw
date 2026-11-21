@@ -112,7 +112,7 @@ function instanceOf(store: Store | undefined): { draw: Draw; map: ParityMap; sto
 function clicked(draw: Draw, map: ParityMap, at: [number, number]): readonly string[] {
   draw.selection.clear();
   map.click(at);
-  return draw.selection.get().ids;
+  return draw.selection.get().ids.toArray();
 }
 
 /** What a box from one corner to the other selects */
@@ -124,7 +124,7 @@ function boxed(
 ): readonly string[] {
   draw.selection.clear();
   map.drag(from, to, { modifiers: { shift: true } });
-  return [...draw.selection.get().ids].sort();
+  return draw.selection.get().ids.toArray().sort();
 }
 
 /** The features a line being drawn snaps to when its pointer moves to a place */
@@ -190,7 +190,7 @@ describe.each(STORES)('on %s', (_name, make) => {
     const order = stacked();
     expect(order).not.toEqual(['k3', 'k1', 'k2', 'k4', 'k5']);
     map.drag([2.9, -2.8], [4, -2.4], { modifiers: { shift: true } });
-    expect(draw.selection.get().ids).toEqual(order);
+    expect(draw.selection.get().ids.toArray()).toEqual(order);
 
     // The layers the other way round
     draw.layers.reorder([...draw.layers.getOrder()].reverse());
@@ -198,7 +198,7 @@ describe.each(STORES)('on %s', (_name, make) => {
     expect(reordered).not.toEqual(order);
     draw.selection.clear();
     map.drag([2.9, -2.8], [4, -2.4], { modifiers: { shift: true } });
-    expect(draw.selection.get().ids).toEqual(reordered);
+    expect(draw.selection.get().ids.toArray()).toEqual(reordered);
   });
 
   it('snaps to a vertex, and to a candidate of a type with an extent of its own away from its position', () => {

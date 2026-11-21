@@ -97,7 +97,7 @@ describe(WORK_SCENES.select, () => {
     instance.input.move(pointOf(instance));
     const before = frameDraws(instance);
     const work = workDuring(instance.counts, () => instance.input.click(pointOf(instance)));
-    if (instance.draw.selection.get().ids.length !== 1) throw new Error('nothing selected');
+    if (instance.draw.selection.get().ids.count() !== 1) throw new Error('nothing selected');
     return { ...work, addedDraws: frameDraws(instance) - before };
   });
 

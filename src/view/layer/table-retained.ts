@@ -74,7 +74,7 @@ import {
   ROW_WRITE_STYLE,
 } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
-import type { Feature, Layer, StoreChange } from '../../store/types.js';
+import type { Feature, Layer, SelectionType, StoreChange } from '../../store/types.js';
 import {
   drawFeatureCompanionsInFrame,
   type FeatureCompanionRegistry,
@@ -427,25 +427,64 @@ interface PendingWrite {
   keys: Set<string> | null;
 }
 
-/** What this client hides and selects, as ids of features, groups and layers */
+/**
+ * What this client hides and selects: the ids of the features, groups and layers it hides, the
+ * rows of the features it selects, and the ids of the groups and layers it selects
+ */
 interface ClientState {
   readonly hiddenFeatures: Set<string>;
   readonly hiddenGroups: Set<string>;
   readonly hiddenLayers: Set<string>;
-  readonly selectedFeatures: Set<string>;
+  readonly selectedRows: SelectedRows;
   readonly selectedGroups: Set<string>;
   readonly selectedLayers: Set<string>;
 }
 
-function emptyClientState(): ClientState {
+function emptyClientState(selectedRows = new SelectedRows(new Int32Array(0))): ClientState {
   return {
     hiddenFeatures: new Set(),
     hiddenGroups: new Set(),
     hiddenLayers: new Set(),
-    selectedFeatures: new Set(),
+    selectedRows,
     selectedGroups: new Set(),
     selectedLayers: new Set(),
   };
+}
+
+/** The rows of the features selected, by their references, with one bit per reference */
+class SelectedRows {
+  /** The references, as the layer over the Store gave them (not written) */
+  readonly refs: Int32Array;
+  readonly #bits: Uint32Array;
+  readonly #least: number;
+
+  constructor(refs: Int32Array) {
+    this.refs = refs;
+    let least = refs.length > 0 ? refs[0] : 0;
+    let most = least;
+    for (let i = 1; i < refs.length; i++) {
+      if (refs[i] < least) least = refs[i];
+      else if (refs[i] > most) most = refs[i];
+    }
+    this.#least = least;
+    this.#bits = new Uint32Array(refs.length > 0 ? ((most - least) >>> 5) + 1 : 0);
+    for (let i = 0; i < refs.length; i++) {
+      const at = refs[i] - least;
+      this.#bits[at >>> 5] |= 1 << (at & 31);
+    }
+  }
+
+  /** The number of rows */
+  get count(): number {
+    return this.refs.length;
+  }
+
+  /** Whether the row of a reference is selected */
+  has(ref: number): boolean {
+    const at = ref - this.#least;
+    if (at < 0 || at >>> 5 >= this.#bits.length) return false;
+    return (this.#bits[at >>> 5] & (1 << (at & 31))) !== 0;
+  }
 }
 
 /**
@@ -477,6 +516,12 @@ export class TableLayerRenderer {
   private record: TableDrawRecord[] | null = null;
   /** What this client hides and selects, as last read */
   private client: ClientState = emptyClientState();
+  /** The selection as last read, and the rows of its features then (null for none) */
+  private selectionRead: {
+    readonly type: SelectionType | null;
+    readonly ids: unknown;
+    readonly rows: Int32Array | null;
+  } | null = null;
   /** Advances whenever what this client hides or selects of a group or a layer changes */
   private clientGeneration = 0;
   /** Whether bytes of the state of rows were written since their textures were */
@@ -757,21 +802,41 @@ export class TableLayerRenderer {
    */
   private readClientState(): void {
     const store = this.store;
-    const next = emptyClientState();
+    let next = emptyClientState();
     for (const id of store.listHidden()) {
       if (store.getLayer(id)) next.hiddenLayers.add(id);
       else if (store.getGroup(id)) next.hiddenGroups.add(id);
       else next.hiddenFeatures.add(id);
     }
-    const selection = store.getSelection();
-    const target =
-      selection.type === 'group'
-        ? next.selectedGroups
-        : selection.type === 'layer'
-          ? next.selectedLayers
-          : next.selectedFeatures;
-    if (selection.type) for (const id of selection.ids) target.add(id);
     const before = this.client;
+    // The selection is read again only when it changed: the same set, whose rows are the same
+    // array, selects the same rows (the rows of a feature selection are read without its IDs)
+    const selection = store.getSelection();
+    const rows = selection.type === 'feature' ? store.rowsOfFeatureSet(selection.ids) : null;
+    const read = this.selectionRead;
+    if (
+      read !== null &&
+      read.type === selection.type &&
+      read.ids === selection.ids &&
+      read.rows === rows
+    ) {
+      next = {
+        ...next,
+        selectedRows: before.selectedRows,
+        selectedGroups: before.selectedGroups,
+        selectedLayers: before.selectedLayers,
+      };
+    } else {
+      this.selectionRead = { type: selection.type, ids: selection.ids, rows };
+      if (rows) next = { ...next, selectedRows: new SelectedRows(rows) };
+      const target =
+        selection.type === 'group'
+          ? next.selectedGroups
+          : selection.type === 'layer'
+            ? next.selectedLayers
+            : null;
+      if (target) for (const id of selection.ids.iterate()) target.add(id);
+    }
     this.client = next;
     if (
       !sameSet(before.hiddenGroups, next.hiddenGroups) ||
@@ -784,8 +849,15 @@ export class TableLayerRenderer {
       this.statesWritten = true;
     }
     for (const id of changedIds(before.hiddenFeatures, next.hiddenFeatures)) this.writeRowOf(id);
-    for (const id of changedIds(before.selectedFeatures, next.selectedFeatures)) {
-      this.writeRowOf(id);
+    if (next.selectedRows !== before.selectedRows) {
+      const { selectedRows: was } = before;
+      const { selectedRows: now } = next;
+      for (let i = 0; i < was.refs.length; i++) {
+        if (!now.has(was.refs[i])) this.writeRowOfRef(was.refs[i]);
+      }
+      for (let i = 0; i < now.refs.length; i++) {
+        if (!was.has(now.refs[i])) this.writeRowOfRef(now.refs[i]);
+      }
     }
   }
 
@@ -793,6 +865,11 @@ export class TableLayerRenderer {
   private writeRowOf(id: string): void {
     const ref = this.reader.refOfId(id);
     if (ref === undefined) return;
+    this.writeRowOfRef(ref);
+  }
+
+  /** Writes the byte of the row of a reference (in the group it is read from) */
+  private writeRowOfRef(ref: number): void {
     const place = this.reader.placeOf(ref);
     if (!place) return;
     const groupCache = this.cacheOfGroup(place.group);
@@ -821,15 +898,16 @@ export class TableLayerRenderer {
     let selected = client.selectedLayers.has(layerId);
     const needsId =
       client.hiddenFeatures.size > 0 ||
-      client.selectedFeatures.size > 0 ||
+      client.selectedRows.count > 0 ||
       client.hiddenGroups.size > 0 ||
       client.selectedGroups.size > 0;
     if (needsId && (!hidden || !selected)) {
-      if (client.hiddenFeatures.size > 0 || client.selectedFeatures.size > 0) {
-        const id = reader.idOf(reader.refOf(group, row));
-        if (id !== undefined) {
-          if (client.hiddenFeatures.has(id)) hidden = true;
-          if (client.selectedFeatures.has(id)) selected = true;
+      if (client.hiddenFeatures.size > 0 || client.selectedRows.count > 0) {
+        const ref = reader.refOf(group, row);
+        if (client.selectedRows.has(ref)) selected = true;
+        if (client.hiddenFeatures.size > 0) {
+          const id = reader.idOf(ref);
+          if (id !== undefined && client.hiddenFeatures.has(id)) hidden = true;
         }
       }
       if (client.hiddenGroups.size > 0 || client.selectedGroups.size > 0) {

@@ -12,11 +12,12 @@
  *   - click / dblclick      -> click-handler.ts
  *   - cursor control        -> cursor-handler.ts
  *   - drag operations       -> drag-handler.ts (SelectModeDragHandler)
- *   - box selection         -> box-selection.ts (queryFeaturesInBox)
+ *   - box selection         -> box-selection.ts (selectFeaturesInBox)
  *   - keyboard              -> shortcut-handler.ts
  *   - hit testing helpers   -> hit-helpers.ts
  */
 
+import type { IdSet } from '../../api/model.js';
 import type {
   DragNormalizedEvent,
   KeyNormalizedEvent,
@@ -31,11 +32,11 @@ import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { hitTestGlobalAuxiliaryHandles, hitTestHandles } from '../../view/ui/handle-test.js';
 import {
   computeSelectionBoundingBox,
-  getSelectedFeatureIds,
+  getSelectedFeatureIdSet,
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
 import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../handler.js';
-import { queryFeaturesInBox } from './box-selection.js';
+import { selectFeaturesInBox } from './box-selection.js';
 import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
 import { SelectModeDragHandler } from './drag-handler.js';
@@ -55,13 +56,13 @@ import {
 /**
  * Whether the selection is a feature selection of exactly these IDs, in this order
  */
-function selectsExactly(selection: Selection, ids: readonly string[]): boolean {
-  if (ids.length === 0) return selection.type === null && selection.ids.length === 0;
-  return (
-    selection.type === 'feature' &&
-    selection.ids.length === ids.length &&
-    selection.ids.every((id, i) => id === ids[i])
-  );
+function selectsExactly(selection: Selection, ids: IdSet): boolean {
+  if (ids.count() === 0) return selection.type === null && selection.ids.count() === 0;
+  if (selection.type !== 'feature' || selection.ids.count() !== ids.count()) return false;
+  if (selection.ids === ids) return true;
+  const selected = selection.ids.iterate();
+  for (const id of ids.iterate()) if (selected.next().value !== id) return false;
+  return true;
 }
 
 /** @internal */
@@ -278,8 +279,8 @@ export class SelectMode implements EngineModeHandler {
 
     const { store, map } = this.#context;
     // Group / layer selections are also resolved to their members (so dragging the selection box
-    // moves a group as one).
-    const selectedIds = getSelectedFeatureIds(store);
+    // moves a group as one). A feature selection is read as its set, without an array of its IDs
+    const selectedIds = getSelectedFeatureIdSet(store);
     const transform = createCoordinateTransform(map);
     const dragStartPoint = event.dragStartPoint ?? event.point;
 
@@ -290,7 +291,7 @@ export class SelectMode implements EngineModeHandler {
       store.setBoxSelection({
         startPoint,
         endPoint: startPoint,
-        previousSelection: [...selectedIds],
+        previousSelection: [...selectedIds.iterate()],
       });
       map.dragPan.disable();
       map.triggerRepaint();
@@ -304,7 +305,7 @@ export class SelectMode implements EngineModeHandler {
     if (store.isInteractionLocked()) return;
 
     // A handle hit on the selected features -> start the corresponding drag operation
-    if (selectedIds.length > 0) {
+    if (selectedIds.count() > 0) {
       const selectedFeatures = getSelectedFeatures(store);
       if (selectedFeatures.length > 0) {
         const bbox = computeSelectionBoundingBox(
@@ -362,11 +363,10 @@ export class SelectMode implements EngineModeHandler {
     if (top?.kind !== 'store') return;
     const hitFeatureId = top.feature.id;
 
-    if (!selectedIds.includes(hitFeatureId)) {
-      const filtered = this.#context.plugins?.filterSelectionCandidates([hitFeatureId]) ?? [
-        hitFeatureId,
-      ];
-      if (filtered.length === 0) return;
+    if (!selectedIds.has(hitFeatureId)) {
+      const candidates = store.featureSetOf([hitFeatureId]);
+      const filtered = this.#context.plugins?.filterSelectionCandidates(candidates) ?? candidates;
+      if (filtered.count() === 0) return;
       store.setSelection('feature', filtered);
     }
 
@@ -391,11 +391,11 @@ export class SelectMode implements EngineModeHandler {
       store.setBoxSelection(updatedBoxSelection);
 
       // Live selection preview (a frame that selects the same features changes nothing)
-      const hitIds = queryFeaturesInBox(updatedBoxSelection, this.#context);
+      const hitIds = selectFeaturesInBox(updatedBoxSelection, this.#context);
       const filtered =
-        hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
+        hitIds.count() > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
       if (!selectsExactly(store.getSelection(), filtered)) {
-        if (filtered.length === 0) {
+        if (filtered.count() === 0) {
           store.setSelection(null, []);
         } else {
           store.setSelection('feature', filtered);
@@ -415,10 +415,10 @@ export class SelectMode implements EngineModeHandler {
 
     // Commit the box selection
     if (boxSelection) {
-      const hitIds = queryFeaturesInBox(boxSelection, this.#context);
+      const hitIds = selectFeaturesInBox(boxSelection, this.#context);
       const filtered =
-        hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
-      if (filtered.length === 0) {
+        hitIds.count() > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
+      if (filtered.count() === 0) {
         store.setSelection(null, []);
       } else {
         store.setSelection('feature', filtered);

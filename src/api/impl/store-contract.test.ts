@@ -160,7 +160,10 @@ describe('a Store of the application', () => {
     expect(draw.isReadOnly()).toBe(true);
     expect(draw.isInteractionLocked()).toBe(true);
     // Hiding the selected feature took it out of the selection, in the instance
-    expect(draw.selection.get()).toEqual({ type: null, ids: [] });
+    expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+      type: null,
+      ids: [],
+    });
   });
 });
 

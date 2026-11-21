@@ -9,13 +9,27 @@
 import type { Draw, EditCounts, Position } from '@sakuzu/maplibre-gl-draw';
 import { bbox, destination } from '@sakuzu/maplibre-gl-draw/geometry';
 
-/** The center of the box of the features selected, or null when none is */
+/**
+ * The center of the box of the features selected, or null when none is: read one at a time from
+ * the set of the selection, for a selection of any size (the features of a group or a layer
+ * selected are read from `selection.features`)
+ */
 export function selectionCenter(draw: Draw): Position | null {
   let west = Number.POSITIVE_INFINITY;
   let south = Number.POSITIVE_INFINITY;
   let east = Number.NEGATIVE_INFINITY;
   let north = Number.NEGATIVE_INFINITY;
-  for (const feature of draw.selection.features()) {
+  const { type, ids } = draw.selection.get();
+  const features =
+    type === 'feature'
+      ? (function* () {
+          for (const id of ids.iterate()) {
+            const feature = draw.features.get(id);
+            if (feature) yield feature;
+          }
+        })()
+      : draw.selection.features();
+  for (const feature of features) {
     const [w, s, e, n] = bbox(feature);
     west = Math.min(west, w);
     south = Math.min(south, s);

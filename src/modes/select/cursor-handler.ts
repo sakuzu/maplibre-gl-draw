@@ -25,7 +25,7 @@ import {
 } from '../../view/ui/handle-test.js';
 import {
   computeSelectionBoundingBox,
-  getSelectedFeatureIds,
+  getSelectedFeatureIdSet,
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
@@ -42,8 +42,8 @@ export function updateCursorForSelection(
 ): void {
   const { store, map } = context;
   // Group / layer selections are also resolved to their members (so the operation cursor is
-  // shown over a group).
-  const selectedIds = getSelectedFeatureIds(store);
+  // shown over a group). A feature selection is read as its set, without an array of its IDs
+  const selectedIds = getSelectedFeatureIdSet(store);
   const canvas = map.getCanvas();
   const transform = createCoordinateTransform(map);
 
@@ -53,7 +53,7 @@ export function updateCursorForSelection(
   // startDrag with the same predicate, so the cursor alone would be a lie suggesting it is
   // possible. It falls through to the feature hit test below (pointer), matching the operation
   // that is actually possible: "it can be selected by clicking".
-  if (selectedIds.length > 0) {
+  if (selectedIds.count() > 0) {
     const selectedFeatures = getSelectedFeatures(store);
     const blocked = selectedFeatures.some((f) => isInteractionBlocked(f, store));
     const bbox = blocked

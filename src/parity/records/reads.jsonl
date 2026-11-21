@@ -264,6 +264,6 @@
 {"scene":"features.list of 10,001 features","uses":["FeaturesCollection.createMany","FeaturesCollection.list"]}
 {"row":"features.list of 10,001 features | value","value":{"$throws":"DrawError","code":"tooManyItems"}}
 {"scene":"selection.features of 10,001 features","uses":["FeaturesCollection.createMany","SelectionResource.features","SelectionResource.set"]}
-{"row":"selection.features of 10,001 features | value","value":{"first":"m0","last":"m10000","length":10001}}
+{"row":"selection.features of 10,001 features | value","value":{"$throws":"DrawError","code":"tooManyItems"}}
 {"scene":"groups.list of 10,001 groups","uses":["DocumentResource.load","GroupsCollection.list"]}
 {"row":"groups.list of 10,001 groups | value","value":{"$throws":"DrawError","code":"tooManyItems"}}

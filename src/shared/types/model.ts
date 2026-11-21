@@ -9,6 +9,7 @@
  */
 
 import type { Geometry, Position } from 'geojson';
+import type { IdSet } from '../../api/model.js';
 
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON
@@ -83,8 +84,8 @@ export type SelectionType = 'feature' | 'group' | 'layer';
 export interface Selection {
   /** Selection type (null means nothing is selected) */
   type: SelectionType | null;
-  /** IDs of the selected items */
-  ids: readonly string[];
+  /** IDs of the selected items, a set read without an array of every ID */
+  ids: IdSet;
 }
 
 /**
@@ -694,9 +695,9 @@ export interface StoreChange {
   /** The new selection and the one before it */
   selection?: {
     type: SelectionType | null;
-    ids: string[];
+    ids: IdSet;
     previousType: SelectionType | null;
-    previousIds: string[];
+    previousIds: IdSet;
   };
   /** The IDs of the features whose editing started and ended */
   editing?: {

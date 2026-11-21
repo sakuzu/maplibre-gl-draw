@@ -120,7 +120,10 @@ describe('features.duplicate', () => {
     point('a', 0);
     draw.selection.set('feature', ['a']);
     await finish(draw.features.duplicate({ selection: true }));
-    expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+    expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['a'],
+    });
     expect(draw.features.count()).toBe(2);
   });
 

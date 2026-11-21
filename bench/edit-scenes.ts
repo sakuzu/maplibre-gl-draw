@@ -537,16 +537,17 @@ export const SCENES: readonly Scene[] = [
   }),
   scene({
     name: 'selectAll',
-    label: 'Select every feature (draw.selection.set)',
+    label: 'Select every feature of the layers (draw.selection.set with { layerIds })',
     async prepare(ctx) {
       await ctx.openDocument();
       ctx.draw.selection.clear();
       await rest(ctx);
     },
     async run(ctx) {
-      const { draw, featureIds } = ctx;
-      ctx.input(() => draw.selection.set('feature', featureIds));
-      ctx.note('selected', draw.selection.get().ids.length);
+      const { draw } = ctx;
+      const layerIds = draw.layers.getOrder();
+      ctx.input(() => draw.selection.set('feature', { layerIds }));
+      ctx.note('selected', draw.selection.get().ids.count());
       await ctx.settle();
     },
   }),
@@ -562,7 +563,7 @@ export const SCENES: readonly Scene[] = [
     async run(ctx, id) {
       const { draw } = ctx;
       ctx.input(() => draw.selection.set('feature', [id]));
-      ctx.note('selected', draw.selection.get().ids.length);
+      ctx.note('selected', draw.selection.get().ids.count());
       await ctx.settle();
     },
   }),
@@ -609,7 +610,7 @@ export const SCENES: readonly Scene[] = [
         mouse(map, 'mouseup', x, y, { pressed: false });
         mouse(map, 'click', x, y, { pressed: false });
       });
-      ctx.note('selected', ctx.draw.selection.get().ids.length);
+      ctx.note('selected', ctx.draw.selection.get().ids.count());
       await ctx.settle();
     },
   }),
@@ -631,7 +632,7 @@ export const SCENES: readonly Scene[] = [
         BOX_MARGIN_PX + ((height - 2 * BOX_MARGIN_PX) * step) / DRAG_MOVES,
       ];
       ctx.note('moves', await pressAndMove(ctx, from, to, true));
-      ctx.note('selected', ctx.draw.selection.get().ids.length);
+      ctx.note('selected', ctx.draw.selection.get().ids.count());
       await ctx.settle();
     },
   }),
@@ -691,7 +692,7 @@ export const SCENES: readonly Scene[] = [
       const cy = canvas.clientHeight / 2;
       const to = (step: number): [number, number] => [cx + DRAG_STEP_PX * step, cy];
       ctx.markChanged();
-      ctx.note('selected', ctx.draw.selection.get().ids.length);
+      ctx.note('selected', ctx.draw.selection.get().ids.count());
       ctx.note('moves', await pressAndMove(ctx, [cx, cy], to, false));
       await ctx.settle();
     },

@@ -120,7 +120,7 @@
   // The inspector is open while something is selected; closing it clears the selection
   const inspectorSettings = $derived(inspector.get());
   const selected = $derived(
-    follow(draw, ['selection.changed'], () => draw.selection.get().ids.length > 0),
+    follow(draw, ['selection.changed'], () => draw.selection.get().ids.count() > 0),
   );
 
   // The basemaps to choose from, on the right in the place of the inspector
@@ -132,7 +132,7 @@
   }
   $effect(() =>
     draw.on('selection.changed', ({ selection }) => {
-      if (selection.ids.length > 0) basemapOpen = false;
+      if (selection.ids.count() > 0) basemapOpen = false;
     }),
   );
   const rightShown = $derived(
@@ -214,7 +214,7 @@
       basemapOpen = false;
       return fromMapCanvas(draw, e) ? false : undefined;
     }
-    if (fromMapCanvas(draw, e) || draw.selection.get().ids.length === 0) return false;
+    if (fromMapCanvas(draw, e) || draw.selection.get().ids.count() === 0) return false;
     draw.selection.clear();
   }
 </script>

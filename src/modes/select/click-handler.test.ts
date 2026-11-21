@@ -14,6 +14,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IdSet } from '../../api/model.js';
 import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
@@ -151,7 +152,10 @@ describe('consumption of a companion click', () => {
 
     click();
 
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f2'],
+    });
   });
 
   it('it does not clear the selection either (it is not treated as an empty click)', () => {
@@ -176,7 +180,10 @@ describe('controls (the conventional path)', () => {
 
     click();
 
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f1'],
+    });
   });
 
   it('when nothing is hit the selection is cleared', () => {
@@ -210,7 +217,7 @@ describe('a click while a plugin is busy', () => {
         isPluginInteracting: () => busy,
         getPluginInteractionContainer: () => container,
         finishPluginInteraction: finish,
-        filterSelectionCandidates: (ids: string[]) => ids,
+        filterSelectionCandidates: (ids: IdSet) => ids,
         handleFeatureClick: onFeatureClick,
       },
     } as unknown as EngineModeContext;
@@ -229,7 +236,10 @@ describe('a click while a plugin is busy', () => {
     clickOn({});
 
     expect(finish).toHaveBeenCalledTimes(1);
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f2'],
+    });
   });
 
   it('finishes the interaction and clears the selection on the empty map outside', () => {
@@ -262,6 +272,9 @@ describe('a click while a plugin is busy', () => {
 
     expect(finish).toHaveBeenCalledTimes(1);
     expect(onFeatureClick).not.toHaveBeenCalled();
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f1'],
+    });
   });
 });

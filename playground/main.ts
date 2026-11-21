@@ -6,8 +6,9 @@
 // a section of the inspector, an action in the card at the bottom left, switches.ts): the stamps
 // of the plugin of the plugins example, the routes of the custom-feature-types example, terrain,
 // a dataset, read-only, the interaction lock, saving and opening in this browser, 200,000
-// features, buttons that move, turn and scale the selection (transforms.ts), and buttons that
-// copy it and write the same look to it (edits.ts).
+// features, buttons that move, turn and scale the selection (transforms.ts), buttons that
+// copy it and write the same look to it (edits.ts), and a button that selects every feature of
+// the layers (select.ts).
 // The globe is the globe button of the map's controls.
 //
 // The page opens on the overview scene (showcase/overview.ts): a drawing of every kind of
@@ -32,6 +33,7 @@ import {
 import { getShowcaseScene, runShowcase } from './showcase/showcase.ts';
 import './showcase/showcase.css';
 import { addEditButtons } from './edits.ts';
+import { addSelectAllButton } from './select.ts';
 import { addSwitches } from './switches.ts';
 import { addTransformButtons } from './transforms.ts';
 import './style.css';
@@ -214,11 +216,13 @@ container.addEventListener('drop', async (e) => {
 // interface, so no switches
 if (ui) addSwitches(ui, draw, map, ja);
 
-// 8. Buttons that move, turn and scale the features selected, with the bulk edits. The pictures
-// of the showcase (`?showcase=<scene>`) are taken without them
+// 8. Buttons that move, turn and scale the features selected, with the bulk edits, and a button
+// that selects every feature of the layers at once (select.ts). The pictures of the showcase
+// (`?showcase=<scene>`) are taken without them
 if (ui && !new URLSearchParams(location.search).has('showcase')) {
   addTransformButtons(draw, container, ja);
   addEditButtons(draw, container, ja);
+  addSelectAllButton(draw, container, ja);
 }
 
 // A scene of the showcase loads its drawing once the style is in

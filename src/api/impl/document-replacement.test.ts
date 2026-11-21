@@ -163,7 +163,10 @@ describe('a change that replaces the whole document', () => {
       draw.hidden.add(ids[1]);
       draw.hidden.add(ids[size - 2]);
       replace(store);
-      expect(draw.selection.get()).toEqual({ type: null, ids: [] });
+      expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+        type: null,
+        ids: [],
+      });
       expect([...draw.hidden.list().iterate()]).toEqual([]);
     },
   );
@@ -175,7 +178,8 @@ describe('a change that replaces the whole document', () => {
     draw.hidden.add(ids[0]);
     draw.hidden.add(ids[1]);
     replace(store, [ids[size - 1], ids[0]]);
-    expect(draw.selection.get()).toEqual({ type: 'feature', ids: [ids[size - 1]] });
+    expect(draw.selection.get().type).toBe('feature');
+    expect(draw.selection.get().ids.toArray()).toEqual([ids[size - 1]]);
     expect([...draw.hidden.list().iterate()]).toEqual([ids[0]]);
   });
 

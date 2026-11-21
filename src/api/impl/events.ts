@@ -477,8 +477,9 @@ function emitResourceEvents(
   if (changes.selection) {
     // The operation of the change of the document it came with, or null for the selection alone
     hub.emit('selection.changed', {
-      selection: { type: changes.selection.type, ids: [...changes.selection.ids] },
-      previous: { type: changes.selection.previousType, ids: [...changes.selection.previousIds] },
+      // The sets never change: they are given as they are, without a copy
+      selection: { type: changes.selection.type, ids: changes.selection.ids },
+      previous: { type: changes.selection.previousType, ids: changes.selection.previousIds },
       operationId: summary ? summary.operationId : null,
     });
   }

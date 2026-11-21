@@ -11,6 +11,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
+import type { IdSet } from '../api/model.js';
 import type {
   DragNormalizedEvent,
   KeyNormalizedEvent,
@@ -36,8 +37,11 @@ export type SnapInputKind = 'click' | 'mousemove' | 'dragstart' | 'dragmove' | '
  * @internal
  */
 export interface PluginInteractions {
-  /** Narrows the features a click or a box would select */
-  filterSelectionCandidates(candidateIds: string[]): string[];
+  /**
+   * Narrows the features a click or a box would select: a set of them, read without an array of
+   * them (the candidates themselves when no plugin narrows them)
+   */
+  filterSelectionCandidates(candidateIds: IdSet): IdSet;
   /** Offers a click on a feature to the plugins; true when one consumed it */
   handleFeatureClick(featureId: string, event?: MouseNormalizedEvent): boolean;
   /** Offers a double click on a feature to the plugins; true when one consumed it */

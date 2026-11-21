@@ -2011,7 +2011,7 @@ const readGroup = (g: Group, draw?: Draw) => ({
   visible: g.visible,
   locked: g.locked,
 });
-const readSelection = (s: Selection) => ({ type: s.type, ids: [...s.ids] });
+const readSelection = (s: Selection) => ({ type: s.type, ids: s.ids.toArray() });
 const maybe =
   <T, R>(read: (v: T) => R) =>
   (v: T | undefined | null) =>

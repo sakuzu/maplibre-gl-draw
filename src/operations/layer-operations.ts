@@ -88,7 +88,7 @@ export function groupSelection(
   // Do nothing when it is not a feature selection
   if (selection.type !== 'feature') return null;
 
-  const selectedIds = selection.ids;
+  const selectedIds = [...selection.ids.iterate()];
 
   // The group writes the features read: the edit being written in parts is applied to them first
   for (const id of selectedIds) store.applyEditFirst?.(id);
@@ -220,11 +220,11 @@ function dissolveGroup(store: DocumentAccess, groupId: string): void {
  */
 export function ungroupSelection(store: DocumentAccess): boolean {
   const selection = store.getSelection();
-  if (selection.ids.length === 0) return false;
+  if (selection.ids.count() === 0) return false;
 
   // A group selection -> dissolve
   if (selection.type === 'group') {
-    const groupIds = selection.ids.filter((id) => store.getGroup(id) !== undefined);
+    const groupIds = [...selection.ids.iterate()].filter((id) => store.getGroup(id) !== undefined);
     if (groupIds.length === 0) return false;
     store.transact(() => {
       for (const groupId of groupIds) {
@@ -238,8 +238,9 @@ export function ungroupSelection(store: DocumentAccess): boolean {
   if (selection.type === 'feature') {
     // Before the transaction opens, the edit being written in parts is applied first to the
     // features read to be taken out of their group
-    for (const id of selection.ids) store.applyEditFirst?.(id);
-    const memberIds = selection.ids.filter((id) => store.getFeature(id)?.groupId !== undefined);
+    const selectedIds = [...selection.ids.iterate()];
+    for (const id of selectedIds) store.applyEditFirst?.(id);
+    const memberIds = selectedIds.filter((id) => store.getFeature(id)?.groupId !== undefined);
     if (memberIds.length === 0) return false;
 
     store.transact(() => {

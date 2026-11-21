@@ -24,7 +24,8 @@ import type { Plugin } from '../extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from '../extension/provider.js';
 import type { OverlayRenderer } from '../extension/render.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Layer } from '../model.js';
+import type { IdSet, Layer } from '../model.js';
+import { createIdSet } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -236,7 +237,7 @@ describe('extensions.featureTypes.override', () => {
     });
     const feature = instance.features.create(square);
     if (!feature) throw new Error('not created');
-    const selected = () => engine.context.store.getSelection().ids;
+    const selected = () => engine.context.store.getSelection().ids.toArray();
     return { engine, instance, registered, removed, selected, input: createSyntheticInput(engine) };
   }
 
@@ -628,15 +629,17 @@ describe('the input of the plugins and the modes', () => {
       type: 'Point',
       geometry: { type: 'Point', coordinates: [-1, -1] },
     });
-    const filterSelection = vi.fn((ids: readonly string[]) => ids.filter((id) => id !== 'refused'));
+    const filterSelection = vi.fn((ids: IdSet) =>
+      createIdSet([...ids.iterate()].filter((id) => id !== 'refused')),
+    );
     engine.extensions.collections.plugins.add(plugin('p', { interaction: { filterSelection } }));
 
     createSyntheticInput(engine).click([1, 1]);
-    expect(store.getSelection().ids).toEqual(['kept']);
+    expect(store.getSelection().ids.toArray()).toEqual(['kept']);
 
     createSyntheticInput(engine).click([-1, -1]);
-    expect(filterSelection).toHaveBeenLastCalledWith(['refused']);
-    expect(store.getSelection().ids).toEqual([]);
+    expect(filterSelection.mock.lastCall?.[0].toArray()).toEqual(['refused']);
+    expect(store.getSelection().ids.toArray()).toEqual([]);
   });
 
   it('tells the plugins about a feature clicked again, with the feature and the click', () => {
@@ -844,11 +847,11 @@ describe('the providers and the cursor of a mode', () => {
     engine.modeManager.setMode('select');
     createSyntheticInput(engine).click([0, 0]);
     expect(clicked).toEqual(['far']);
-    expect(store.getSelection().ids).toEqual([]);
+    expect(store.getSelection().ids.toArray()).toEqual([]);
     consume = false;
     createSyntheticInput(engine).click([0, 0]);
     expect(clicked).toEqual(['far', 'far']);
-    expect(store.getSelection().ids).toEqual(['far']);
+    expect(store.getSelection().ids.toArray()).toEqual(['far']);
   });
 });
 
@@ -924,7 +927,7 @@ describe('the built-in modes written to the contract', () => {
     createSyntheticInput(engine).click([1, 1]);
     const [feature] = engine.context.store.listFeatures();
     expect(feature.geometry).toEqual({ type: 'Point', coordinates: [1, 1] });
-    expect(engine.context.store.getSelection().ids).toEqual([feature.id]);
+    expect(engine.context.store.getSelection().ids.toArray()).toEqual([feature.id]);
     expect(engine.modeManager.getMode()).toBe('select');
   });
 

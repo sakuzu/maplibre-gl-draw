@@ -47,6 +47,7 @@ import {
   type FeatureValuesRead,
   type InstanceDocument,
   type MoveDestination,
+  type SelectableRows,
 } from '../../store/document-access.js';
 import { ClientState } from '../../store/memory/ui-state.js';
 import type {
@@ -641,6 +642,59 @@ interface WeakReferences {
   readonly WeakRef: new <T extends object>(target: T) => WeakReference<T>;
 }
 
+/** Whether a value is a set of IDs read through its methods (not an array or another iterable) */
+function isIdSet(value: Iterable<string> | IdSet): value is IdSet {
+  return typeof (value as Partial<IdSet>).iterate === 'function' && !Array.isArray(value);
+}
+
+/** A set of IDs (a copy of them) without those `leaves` says leave it; the set itself for none */
+function idSetWithout(ids: IdSet, leaves: (id: string) => boolean): IdSet {
+  const kept: string[] = [];
+  for (const id of ids.iterate()) if (!leaves(id)) kept.push(id);
+  return kept.length === ids.count() ? ids : makeIdSet(kept);
+}
+
+/** References, each once, in the order they come first (the array itself when none repeats) */
+function uniqueRefs(refs: Int32Array): Int32Array {
+  if (refs.length < 2) return refs;
+  let least = refs[0];
+  let most = refs[0];
+  for (let i = 1; i < refs.length; i++) {
+    if (refs[i] < least) least = refs[i];
+    else if (refs[i] > most) most = refs[i];
+  }
+  const seen = new Uint32Array(((most - least) >>> 5) + 1);
+  const out = new Int32Array(refs.length);
+  let count = 0;
+  for (let i = 0; i < refs.length; i++) {
+    const at = refs[i] - least;
+    const bit = 1 << (at & 31);
+    if ((seen[at >>> 5] & bit) !== 0) continue;
+    seen[at >>> 5] |= bit;
+    out[count++] = refs[i];
+  }
+  return count === refs.length ? refs : out.slice(0, count);
+}
+
+/** Whether a box `[west, south, east, north]` lies wholly inside one of the boxes */
+function insideOne(
+  box: readonly [number, number, number, number] | null,
+  boxes: readonly BoundingBox[],
+): boolean {
+  if (!box) return false;
+  for (const outer of boxes) {
+    if (
+      box[0] >= outer.minX &&
+      box[1] >= outer.minY &&
+      box[2] <= outer.maxX &&
+      box[3] <= outer.maxY
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Makes the layer over a Store of rows. The instance makes one and hands it to its parts.
  *
@@ -748,6 +802,329 @@ export function createDocumentAccess(
       }
       countWork(counts, 'objectsCreated', set.rowsDeleted(lists, count));
     }
+  };
+
+  // ==========================================================================
+  // The sets of the features this client selects, held as their rows
+  // ==========================================================================
+
+  /**
+   * A set of the rows of features, held weakly as the sets of a change are: told the rows each
+   * change deletes, so that it keeps the IDs it was given
+   *
+   * @param refs - The references of the rows, each once (the set keeps them as they are)
+   */
+  const featureSetOfRows = (refs: Int32Array): IdSet => {
+    const set = new RowIdSet(rowIds, refs);
+    countWork(counts, 'objectsCreated');
+    if (refs.length > 0) {
+      setsMade += 1;
+      if (setsMade % 256 === 0) forgetGoneSets();
+      liveSets.add(new (globalThis as unknown as WeakReferences).WeakRef(set));
+    }
+    return set;
+  };
+
+  /** The references of the rows of the features of IDs, in the order given, each once */
+  const featureRowsOf = (ids: Iterable<string>): Int32Array => {
+    let refs = new Int32Array(16);
+    let count = 0;
+    for (const id of ids) {
+      const ref = typeof id === 'string' ? tables.getRowRef(id) : undefined;
+      if (ref === undefined) continue;
+      if (count === refs.length) {
+        const grown = new Int32Array(refs.length * 2);
+        grown.set(refs);
+        refs = grown;
+      }
+      refs[count++] = ref;
+    }
+    countWork(counts, 'objectsCreated');
+    return uniqueRefs(count === refs.length ? refs : refs.slice(0, count));
+  };
+
+  /**
+   * The references of the rows the features of a set are now, in the order of the set: those of a
+   * set of rows this layer made as it holds them, the others read by their IDs
+   */
+  const rowsOfFeatureSet = (ids: IdSet): Int32Array =>
+    ids instanceof RowIdSet && ids.readsFrom(rowIds) ? ids.rowRefs() : featureRowsOf(ids.iterate());
+
+  /**
+   * The features of IDs as a set of their rows, in the order given, each once (an ID that names no
+   * feature is left out); a set of rows this layer made whose rows are all there is given back
+   */
+  const featureSetOf = (ids: Iterable<string> | IdSet): IdSet => {
+    if (ids instanceof RowIdSet && ids.readsFrom(rowIds)) {
+      const refs = ids.rowRefs();
+      return refs.length === ids.count() ? ids : featureSetOfRows(refs.slice());
+    }
+    return featureSetOfRows(featureRowsOf(isIdSet(ids) ? ids.iterate() : ids));
+  };
+
+  /**
+   * The set of features without the IDs `leaves` says leave it, in its order, read from its rows
+   * (the set itself when none leaves it and its rows are all there)
+   */
+  const featureSetWithout = (ids: IdSet, leaves: (id: string) => boolean): IdSet => {
+    const refs = rowsOfFeatureSet(ids);
+    const kept = new Int32Array(refs.length);
+    let count = 0;
+    for (let i = 0; i < refs.length; i++) {
+      const id = tables.getRowId(refs[i]);
+      if (id !== undefined && !leaves(id)) kept[count++] = refs[i];
+    }
+    const ours = ids instanceof RowIdSet && ids.readsFrom(rowIds);
+    if (ours && count === refs.length && count === ids.count()) return ids;
+    return featureSetOfRows(kept.slice(0, count));
+  };
+
+  /** What this client hides, as IDs and as the rows of the features it hides */
+  const hiddenNow = (): { ids: ReadonlySet<string>; rows: ReadonlySet<number> | null } => {
+    const ids = client.listHidden();
+    let rows: Set<number> | null = null;
+    for (const id of ids) {
+      const ref = tables.getRowRef(id);
+      if (ref === undefined) continue;
+      rows ??= new Set();
+      rows.add(ref);
+    }
+    return { ids, rows };
+  };
+
+  /**
+   * Marks the rows of one layer that can be seen, and that can be selected when `selectable`:
+   * the visible flag of the row and that of its group, and what this client hides, read from the
+   * columns of the rows without the features being made (the layer itself is not looked at)
+   *
+   * @returns One entry per row: 1 for a row seen, 0 for one that is not
+   */
+  const markShownRows = (
+    layerId: string,
+    refs: Int32Array,
+    hidden: { ids: ReadonlySet<string>; rows: ReadonlySet<number> | null },
+    selectable: boolean,
+  ): { marks: Uint8Array; fields: ReadonlyMap<FeatureRowField, readonly unknown[]> } => {
+    const fields = tables.readValues(
+      refs,
+      selectable ? ['visible', 'locked', 'parent', 'orderKey', 'type'] : ['visible', 'parent'],
+    ).fields;
+    countWork(counts, 'objectsCreated');
+    const visible = fields.get('visible') ?? [];
+    const locked = fields.get('locked') ?? [];
+    const parents = fields.get('parent') ?? [];
+    const groups = new Map<string, boolean>();
+    /** Whether the members of a group can be seen (and selected) as far as the group says */
+    const groupLets = (groupId: string): boolean => {
+      let lets = groups.get(groupId);
+      if (lets === undefined) {
+        const group = store.getGroup(groupId);
+        lets =
+          group === undefined ||
+          (group.visible !== false &&
+            !hidden.ids.has(groupId) &&
+            (!selectable || group.locked !== true));
+        groups.set(groupId, lets);
+      }
+      return lets;
+    };
+    const marks = new Uint8Array(refs.length);
+    for (let i = 0; i < refs.length; i++) {
+      if (visible[i] === false || hidden.rows?.has(refs[i])) continue;
+      if (selectable && locked[i] === true) continue;
+      const parent = parents[i] as string;
+      if (parent !== layerId && !groupLets(parent)) continue;
+      marks[i] = 1;
+    }
+    return { marks, fields };
+  };
+
+  /**
+   * The rows of the features given, by the layers they are in, in the order of the layers: the
+   * positions of each in the references given, and their references
+   */
+  const rowsByLayer = (
+    refs: Int32Array,
+  ): Array<{ layerId: string; at: Int32Array; refs: Int32Array }> => {
+    const out: Array<{ layerId: string; at: Int32Array; refs: Int32Array }> = [];
+    if (refs.length === 0) return out;
+    const placed = new Uint8Array(refs.length);
+    let left = refs.length;
+    for (const layerId of layerIdsInOrder(true)) {
+      if (left === 0) break;
+      const view = tables.get(layerId);
+      if (!view || view.rowCount === 0) continue;
+      const at = new Int32Array(left);
+      let count = 0;
+      for (let i = 0; i < refs.length; i++) {
+        if (placed[i] === 1 || view.getRowType(refs[i]) === null) continue;
+        placed[i] = 1;
+        at[count++] = i;
+      }
+      if (count === 0) continue;
+      left -= count;
+      const own = new Int32Array(count);
+      for (let k = 0; k < count; k++) own[k] = refs[at[k]];
+      out.push({ layerId, at: at.subarray(0, count), refs: own });
+    }
+    countWork(counts, 'objectsCreated', out.length);
+    return out;
+  };
+
+  /** Whether the features of a layer can be seen, and selected when `selectable`, as far as it says */
+  const layerLets = (layerId: string, hiddenIds: ReadonlySet<string>, selectable: boolean) => {
+    const base = store.getLayer(layerId);
+    return (
+      base !== undefined &&
+      base.visible !== false &&
+      !hiddenIds.has(layerId) &&
+      (!selectable || base.locked !== true)
+    );
+  };
+
+  /**
+   * The set of features without those that cannot be seen (their own visible flag, that of their
+   * group or their layer, or this client hiding one of them), read from the rows without the
+   * features being made: the set itself when every one is seen
+   */
+  const shownFeatureSetOf = (ids: IdSet): IdSet => {
+    if (ids.count() === 0) return ids;
+    writePendingPlaces();
+    const refs = rowsOfFeatureSet(ids);
+    const hidden = hiddenNow();
+    const keep = new Uint8Array(refs.length);
+    let kept = 0;
+    for (const part of rowsByLayer(refs)) {
+      if (!layerLets(part.layerId, hidden.ids, false)) continue;
+      const { marks } = markShownRows(part.layerId, part.refs, hidden, false);
+      for (let k = 0; k < marks.length; k++) {
+        if (marks[k] === 0) continue;
+        keep[part.at[k]] = 1;
+        kept += 1;
+      }
+    }
+    const ours = ids instanceof RowIdSet && ids.readsFrom(rowIds);
+    if (ours && kept === refs.length && refs.length === ids.count()) return ids;
+    const out = new Int32Array(kept);
+    let at = 0;
+    for (let i = 0; i < refs.length; i++) if (keep[i] === 1) out[at++] = refs[i];
+    return featureSetOfRows(out);
+  };
+
+  /**
+   * The features of layers that can be seen, as a set of their rows: in the order of the layers
+   * given, each layer in its order (the features of its groups at their place). The set is a copy
+   * of the rows the layers hold now, which later changes of the layers do not change
+   */
+  const shownFeatureSetOfLayers = (layerIds: readonly string[]): IdSet => {
+    writePendingPlaces();
+    const hidden = hiddenNow();
+    const parts: Int32Array[] = [];
+    let total = 0;
+    for (const layerId of new Set(layerIds)) {
+      if (!layerLets(layerId, hidden.ids, false)) continue;
+      const rows = rowsOfLayer(layerId);
+      if (rows.length === 0) continue;
+      const { marks } = markShownRows(layerId, rows, hidden, false);
+      let count = 0;
+      for (let i = 0; i < marks.length; i++) count += marks[i];
+      const own = new Int32Array(count);
+      let at = 0;
+      for (let i = 0; i < rows.length; i++) if (marks[i] === 1) own[at++] = rows[i];
+      parts.push(own);
+      total += count;
+    }
+    const out = parts.length === 1 ? parts[0] : new Int32Array(total);
+    if (parts.length > 1) {
+      let at = 0;
+      for (const part of parts) {
+        out.set(part, at);
+        at += part.length;
+      }
+    }
+    countWork(counts, 'objectsCreated', parts.length);
+    return featureSetOfRows(out);
+  };
+
+  /**
+   * The rows of the candidates of a box that can be selected, in stacking order from the back:
+   * shown (as `shownFeatureSetOf` reads it) and not locked (the row, its group and its layer),
+   * read from the rows without the features being made. Each is marked with whether the box of
+   * its positions lies wholly inside one of the boxes
+   */
+  const listSelectableRows = (
+    candidateIds: Iterable<string>,
+    boxes: readonly BoundingBox[],
+    decided: (type: string) => boolean,
+  ): SelectableRows => {
+    writePendingPlaces();
+    const refs = featureRowsOf(candidateIds);
+    const hidden = hiddenNow();
+    const outRefs = new Int32Array(refs.length);
+    const outInside = new Uint8Array(refs.length);
+    let taken = 0;
+    for (const part of rowsByLayer(refs)) {
+      if (!layerLets(part.layerId, hidden.ids, true)) continue;
+      const view = tables.get(part.layerId);
+      if (!view) continue;
+      const { marks, fields } = markShownRows(part.layerId, part.refs, hidden, true);
+      const parents = fields.get('parent') ?? [];
+      const keys = fields.get('orderKey') ?? [];
+      const types = fields.get('type') ?? [];
+      const decidedTypes = new Map<string, boolean>();
+      const decides = (type: string): boolean => {
+        let answer = decidedTypes.get(type);
+        if (answer === undefined) {
+          answer = decided(type);
+          decidedTypes.set(type, answer);
+        }
+        return answer;
+      };
+      let count = 0;
+      for (let k = 0; k < marks.length; k++) count += marks[k];
+      const order = new Int32Array(count);
+      let at = 0;
+      for (let k = 0; k < marks.length; k++) if (marks[k] === 1) order[at++] = k;
+      // The stacking order within the layer: the items by their keys (a group at its place),
+      // then the features of a group by theirs; the IDs are read only for keys that are equal
+      const own = part.refs;
+      const layerId = part.layerId;
+      const groupKeys = new Map<string, string>();
+      const itemKeyOf = (k: number): string => {
+        const parent = parents[k] as string;
+        if (parent === layerId) return String(keys[k] ?? '');
+        let key = groupKeys.get(parent);
+        if (key === undefined) {
+          key = store.getGroup(parent)?.orderKey ?? '';
+          groupKeys.set(parent, key);
+        }
+        return key;
+      };
+      const itemIdOf = (k: number): string => {
+        const parent = parents[k] as string;
+        return parent === layerId ? (tables.getRowId(own[k]) ?? '') : parent;
+      };
+      order.sort((a, b) => {
+        const keyA = itemKeyOf(a);
+        const keyB = itemKeyOf(b);
+        if (keyA !== keyB) return compareKeys(keyA, keyB);
+        const byItem = compareKeys(itemIdOf(a), itemIdOf(b));
+        if (byItem !== 0 || parents[a] === layerId) return byItem;
+        const memberA = String(keys[a] ?? '');
+        const memberB = String(keys[b] ?? '');
+        if (memberA !== memberB) return compareKeys(memberA, memberB);
+        return compareKeys(tables.getRowId(own[a]) ?? '', tables.getRowId(own[b]) ?? '');
+      });
+      for (let i = 0; i < order.length; i++) {
+        const ref = own[order[i]];
+        const wholly = decides(String(types[order[i]])) && insideOne(view.getRowBBox(ref), boxes);
+        outRefs[taken] = ref;
+        outInside[taken] = wholly ? 1 : 0;
+        taken += 1;
+      }
+    }
+    countWork(counts, 'objectsCreated', 2);
+    return { refs: outRefs.subarray(0, taken), inside: outInside.subarray(0, taken) };
   };
 
   /** Notes the features a change of the instance wrote (`features` of the change) */
@@ -4096,6 +4473,7 @@ export function createDocumentAccess(
     // The reads by box
     findFeatureIdsInBox,
     setFeatureBoxes,
+    listSelectableRows,
 
     // The rows as the Store holds them
     getTables: () => tables,
@@ -4115,7 +4493,13 @@ export function createDocumentAccess(
       return client;
     },
     getSelection: () => client.getSelection(),
-    setSelection: (type: SelectionType | null, ids: string[]) => client.setSelection(type, ids),
+    setSelection: (type: SelectionType | null, ids: readonly string[] | IdSet) =>
+      client.setSelection(type, ids),
+    featureSetOf,
+    featureSetOfRows: (refs: Int32Array) => featureSetOfRows(uniqueRefs(refs).slice()),
+    shownFeatureSetOf,
+    shownFeatureSetOfLayers,
+    rowsOfFeatureSet,
     getEditingIds: () => client.getEditingIds(),
     startEditing: (ids: string[]) => client.startEditing(ids),
     endEditing: (ids: string[]) => client.endEditing(ids),
@@ -4283,6 +4667,11 @@ export function createDocumentAccess(
       getGroup,
       getLayer,
       listLayers: layer.listLayers,
+      idSetOf: (type: SelectionType, ids: Iterable<string> | IdSet) =>
+        type === 'feature' ? featureSetOf(ids) : makeIdSet(isIdSet(ids) ? ids.iterate() : ids),
+      idSetWithout: (type: SelectionType, ids: IdSet, leaves: (id: string) => boolean) =>
+        type === 'feature' ? featureSetWithout(ids, leaves) : idSetWithout(ids, leaves),
+      shownFeatureSetOf,
     },
     merge: (change) => merge(change),
     transact: (fn) => busTransact(fn, 'local'),

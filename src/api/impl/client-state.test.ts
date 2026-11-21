@@ -93,20 +93,32 @@ describe('the state of this client with a Store of the application', () => {
 
     // A click of the user selects through the select mode
     createSyntheticInput(engine).click([1, 1]);
-    expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['b'] });
+    expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['b'],
+    });
     draw.selection.set('feature', ['a', 'b']);
-    expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['a', 'b'] });
+    expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['a', 'b'],
+    });
     draw.vertexSelection.clear();
     expect(draw.setMode('drawPoint')).toBe(true);
     expect(draw.getMode()).toBe('drawPoint');
     draw.setMode('select');
     // A drawing mode clears the selection as it is entered
-    expect(draw.selection.get()).toEqual({ type: null, ids: [] });
+    expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+      type: null,
+      ids: [],
+    });
     draw.selection.set('feature', ['a', 'b']);
     draw.hidden.add('b');
     expect(draw.hidden.has('b')).toBe(true);
     // Hiding a selected feature takes it out of the selection
-    expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+    expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['a'],
+    });
     draw.editingFeatures.add(['a']);
     expect(draw.editingFeatures.get().toArray()).toEqual(['a']);
     draw.setInteractionLocked(true);
@@ -144,7 +156,10 @@ describe('the state of this client with a Store of the application', () => {
       rows.deleteFeature('c');
     }, 'remote');
 
-    expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['b'] });
+    expect({ type: draw.selection.get().type, ids: draw.selection.get().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['b'],
+    });
     expect(draw.editingFeatures.get().toArray()).toEqual([]);
     expect(draw.hidden.list().toArray()).toEqual([]);
     expect(hidden).toEqual([[]]);
@@ -348,7 +363,7 @@ describe('the work of the state of this client, for 1,000 and 10,000 features', 
       [
         WORK_SCENES.select,
         (draw, id) => draw.selection.set('feature', [id]),
-        (draw, id) => draw.selection.get().ids.includes(id),
+        (draw, id) => draw.selection.get().ids.has(id),
       ],
       ['hide one feature', (draw, id) => draw.hidden.add(id), (draw, id) => draw.hidden.has(id)],
       [

@@ -362,7 +362,10 @@ describe('the datasets of the layer panel', () => {
     row(fake.container, 'buildings').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     flushSync();
     expect(fake.draw.selection.set).not.toHaveBeenCalled();
-    expect(fake.draw.selection.get()).toEqual({ type: 'layer', ids: ['l1'] });
+    expect({
+      type: fake.draw.selection.get().type,
+      ids: fake.draw.selection.get().ids.toArray(),
+    }).toEqual({ type: 'layer', ids: ['l1'] });
     expect(row(fake.container, 'buildings').querySelector('input')).toBeNull();
   });
 

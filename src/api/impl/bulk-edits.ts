@@ -398,9 +398,10 @@ export function createBulkEdits(
   /** The references of the rows of the features selected in this client */
   const refsOfSelection = (): { refs: Int32Array; missing: number } => {
     const selection = layer.getSelection();
-    if (selection.type === 'layer') return refsOfLayers(selection.ids);
-    if (selection.type === 'group') return refsOfGroups(selection.ids);
-    return refsOfIds(selection.ids, selection.ids.length);
+    if (selection.type === 'layer') return refsOfLayers([...selection.ids.iterate()]);
+    if (selection.type === 'group') return refsOfGroups([...selection.ids.iterate()]);
+    // The rows of the features selected, read from the set without their IDs
+    return { refs: layer.rowsOfFeatureSet(selection.ids).slice(), missing: 0 };
   };
 
   /** Reads a target once (throws `invalidInput` for one of the wrong shape) */

@@ -183,7 +183,10 @@ describe('SelectMode.onDragStart interaction lock', () => {
   it('unlocked: a feature hit selects it and starts a move drag (control)', () => {
     hit = { feature: store.getFeature('f1')!, distance: 0 };
     mode.onDragStart(dragEvent());
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f1'],
+    });
     // Starting a move drag disables dragPan.
     expect(map.dragPan.disable).toHaveBeenCalled();
   });
@@ -192,7 +195,10 @@ describe('SelectMode.onDragStart interaction lock', () => {
     store.setInteractionLock(true);
     hit = { feature: store.getFeature('f1')!, distance: 0 };
     mode.onDragStart(dragEvent());
-    expect(store.getSelection()).toEqual({ type: null, ids: [] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: null,
+      ids: [],
+    });
     expect(map.dragPan.disable).not.toHaveBeenCalled();
     expect(map.dragPan.isEnabled()).toBe(true);
   });
@@ -203,7 +209,10 @@ describe('clearing the selection in SelectMode.onStop', () => {
     store.setSelection('feature', ['f1']);
     store.setMode('drawLine');
     mode.onStop();
-    expect(store.getSelection()).toEqual({ type: null, ids: [] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: null,
+      ids: [],
+    });
   });
 });
 
@@ -343,12 +352,18 @@ describe('SelectMode.onDragCancel (a second finger ends the press)', () => {
       modifiers: { ...NO_MODIFIERS, shift: true },
     });
     mode.onDragMove(dragAt('dragmove', 30, 30));
-    expect(store.getSelection()).toEqual({ type: null, ids: [] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: null,
+      ids: [],
+    });
 
     mode.onDragCancel();
 
     expect(store.getBoxSelection()).toBeNull();
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f1'],
+    });
     expect(map.dragPan.isEnabled()).toBe(true);
   });
 });
@@ -390,7 +405,10 @@ describe('SelectMode: cancelling a drag', () => {
     mode.onKeyDown(key('Escape'));
 
     expect(coordinatesOf(store.getFeature('f1')!)).toEqual(before);
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f1'],
+    });
     expect(store.getDragState()).toBeNull();
     // The release that follows commits nothing
     mode.onDragEnd(dragAt('dragend', 9, 9));
@@ -423,7 +441,10 @@ describe('SelectMode: box selection frames', () => {
     mode.onDragMove(shiftDrag('dragmove', 14, 14));
 
     expect(changes).toHaveLength(1);
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect({ type: store.getSelection().type, ids: store.getSelection().ids.toArray() }).toEqual({
+      type: 'feature',
+      ids: ['f1'],
+    });
   });
 });
 

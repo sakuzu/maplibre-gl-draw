@@ -65,7 +65,8 @@ export type InspectorView =
 
 /** Reads what the inspector shows */
 export function readView(draw: InspectorDraw): InspectorView {
-  const { type, ids } = draw.selection.get();
+  const { type, ids: selected } = draw.selection.get();
+  const ids = [...selected.iterate()];
   const readOnly = draw.isReadOnly();
   if (type === 'feature') {
     const features = draw.features.getMany(ids).filter((f): f is Feature => f !== undefined);

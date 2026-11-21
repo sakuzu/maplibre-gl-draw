@@ -99,7 +99,7 @@ function selected(): Feature | undefined {
 function showSelection(): void {
   const feature = selected();
   panel.hidden = feature === undefined;
-  remove.disabled = draw.selection.get().ids.length === 0;
+  remove.disabled = draw.selection.get().ids.count() === 0;
   if (!feature) return;
   const name = feature.properties.name;
   if (document.activeElement !== nameInput) nameInput.value = typeof name === 'string' ? name : '';

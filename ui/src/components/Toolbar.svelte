@@ -47,7 +47,7 @@
 
   const mode = $derived(follow(draw, ['mode.changed'], () => draw.getMode()));
   const selected = $derived(
-    follow(draw, ['selection.changed'], () => draw.selection.get().ids.length),
+    follow(draw, ['selection.changed'], () => draw.selection.get().ids.count()),
   );
   const readOnly = $derived(follow(draw, ['readOnly.changed'], () => draw.isReadOnly()));
   const snapOn = $derived(

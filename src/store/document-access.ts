@@ -15,6 +15,7 @@
  * only for what it needs.
  */
 
+import type { IdSet } from '../api/model.js';
 import type {
   FeatureRowField,
   FeatureTables,
@@ -147,10 +148,35 @@ export interface DocumentWrites {
 export interface ClientStateAccess {
   /** The state of this client the instance holds */
   readonly client: ClientState;
-  /** Returns the current selection */
+  /** Returns the current selection: its IDs are the same set until the selection changes */
   getSelection(): Selection;
-  /** Replaces the selection (`null` and an empty array clear it) */
-  setSelection(type: SelectionType | null, ids: string[]): void;
+  /** Replaces the selection (`null` and no ID clear it) */
+  setSelection(type: SelectionType | null, ids: readonly string[] | IdSet): void;
+  /**
+   * The features of IDs as a set of their rows, in the order given, each once: an ID that names
+   * no feature is left out, and a set of rows this layer made whose rows are all there is given
+   * back as it is. The set keeps the IDs it was given whatever is deleted afterwards
+   */
+  featureSetOf(ids: Iterable<string> | IdSet): IdSet;
+  /** The features of rows as a set of them, in the order given, each once */
+  featureSetOfRows(refs: Int32Array): IdSet;
+  /**
+   * The set of features without those that cannot be seen (their own visible flag, that of their
+   * group or their layer, or this client hiding one of them), read from the rows without the
+   * features being made: the set itself when every one is seen
+   */
+  shownFeatureSetOf(ids: IdSet): IdSet;
+  /**
+   * The features of layers that can be seen, as a set of their rows: in the order of the layers
+   * given, each in its order (the features of its groups at their place), read without the
+   * features being made. The set is a copy of the rows the layers hold now
+   */
+  shownFeatureSetOfLayers(layerIds: readonly string[]): IdSet;
+  /**
+   * The references of the rows the features of a set are now, in the order of the set (a feature
+   * deleted since the set was made is left out); not to be written
+   */
+  rowsOfFeatureSet(ids: IdSet): Int32Array;
   /** The IDs of the features being edited */
   getEditingIds(): readonly string[];
   /** Marks features as being edited */
@@ -392,6 +418,33 @@ export interface DocumentBoxes {
    * the box of its positions
    */
   setFeatureBoxes(boxes: FeatureBoxes | null): void;
+  /**
+   * The rows of the candidates of a box that can be selected, in stacking order from the back:
+   * the features seen (as `shownFeatureSetOf` reads them) that are not locked (themselves, their
+   * group or their layer), read without the features being made, each marked with whether the box
+   * of its positions lies wholly inside one of the boxes
+   *
+   * @param candidateIds - The features the spatial index found (an ID that names none is left out)
+   * @param boxes - The boxes of the selection (two for a box across the antimeridian)
+   * @param decided - Whether a row of a type wholly inside a box is taken without its test: only
+   *   such a row is marked
+   */
+  listSelectableRows(
+    candidateIds: Iterable<string>,
+    boxes: readonly BoundingBox[],
+    decided: (type: string) => boolean,
+  ): SelectableRows;
+}
+
+/** The rows a box can select (see `listSelectableRows`) */
+export interface SelectableRows {
+  /** The references of the rows, in stacking order from the back */
+  readonly refs: Int32Array;
+  /**
+   * One entry per row: 1 when the box of its positions lies wholly inside a box and its type is
+   * decided so, 0 otherwise
+   */
+  readonly inside: Uint8Array;
 }
 
 /** The rows of the document as the Store holds them */

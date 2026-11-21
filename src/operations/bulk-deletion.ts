@@ -160,7 +160,7 @@ export function startSelectionDeletion(edits: BulkEditStarter): Promise<EditCoun
   const { layer } = edits;
   if (layer.isReadOnly() || layer.isInteractionLocked()) return Promise.resolve(null);
   const selection = layer.getSelection();
-  if (selection.type === null || selection.ids.length === 0) return Promise.resolve(null);
+  if (selection.type === null || selection.ids.count() === 0) return Promise.resolve(null);
   // The locks are looked at, whatever the transaction it is started in ignores
   const options: EditOptions = { ignoreLocks: false };
   /** Once something is deleted, nothing is selected */
@@ -183,7 +183,7 @@ export function startSelectionDeletion(edits: BulkEditStarter): Promise<EditCoun
   }
 
   if (selection.type === 'group') {
-    const groupIds = [...new Set(selection.ids)];
+    const groupIds = [...selection.ids.iterate()];
     const groupLocked = (groupId: string): boolean => {
       const group = layer.getGroup(groupId);
       return group === undefined || group.locked || layer.getLayer(group.layerId)?.locked === true;
@@ -212,7 +212,7 @@ export function startSelectionDeletion(edits: BulkEditStarter): Promise<EditCoun
   }
 
   // Layers: those that hold a lock are left out, and the document keeps one layer
-  const layerIds = [...new Set(selection.ids)].filter((id) => layer.getLayer(id) !== undefined);
+  const layerIds = [...selection.ids.iterate()].filter((id) => layer.getLayer(id) !== undefined);
   const withLock = layerIds.filter((layerId) => layerHoldsLock(layer, layerId));
   const unlocked = layerIds.filter((layerId) => !withLock.includes(layerId));
   const deletable = unlocked.slice(0, Math.max(0, layer.listLayers().length - 1));

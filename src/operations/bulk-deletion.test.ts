@@ -177,7 +177,7 @@ describe('features.deleteMany', () => {
     draw.editingFeatures.add([ids[0]]);
     draw.hidden.add(ids[1]);
     const selections: number[] = [];
-    draw.on('selection.changed', (event) => selections.push(event.selection.ids.length));
+    draw.on('selection.changed', (event) => selections.push(event.selection.ids.count()));
     const parts = changes();
     // Each row takes a millisecond: the edit is written in many parts
     const original = store.writeRows.bind(store);
@@ -189,7 +189,7 @@ describe('features.deleteMany', () => {
     await vi.advanceTimersByTimeAsync(0);
     // A part has deleted some features: the selection holds them still
     expect(parts.length).toBeGreaterThan(0);
-    expect(draw.selection.get().ids.length).toBe(2999);
+    expect(draw.selection.get().ids.count()).toBe(2999);
     await allTasks();
     expect(run.done).toBe(true);
     expect(parts.length).toBeGreaterThan(2);
