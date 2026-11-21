@@ -1227,7 +1227,8 @@ export interface FeaturesCollection {
     /**
      * Writes the same patch to all the features of the target, as `update` writes it to one: a
      * bulk edit, in parts (see {@link FeaturesCollection}). A feature for which the patch changes
-     * nothing is not counted as changed.
+     * nothing is not counted as changed. As with `update`, a patch of `locked` and `visible`
+     * alone is written to the locked features too.
      *
      * @param target - The features
      * @param patch - The keys to change, the same for every feature
@@ -1346,12 +1347,15 @@ export interface FeaturesCollection {
      */
     scale(target: FeatureTarget, scaling: Scaling, options?: EditOptions): Promise<EditCounts | null>;
     /**
-     * Copies every feature of the target, as a paste of copied features does: a bulk edit, in
-     * parts (see {@link FeaturesCollection}). Each copy gets a new ID (`generateId`) and an
-     * automatic name when the original has one, and goes just in front of the original, in its
-     * layer and its group; a copy of a group of the target is a new group of the copies. With
-     * `offset`, the copies are moved as `translate` moves features. The copies can be read by
-     * their IDs in `EditCounts.createdIds`, and are not selected.
+     * Copies every feature of the target: a bulk edit, in parts (see
+     * {@link FeaturesCollection}). Each copy gets a new ID (`generateId`) and the values of its
+     * original as they are, its name included, and goes just in front of the original, in its
+     * layer and its group. When the target holds every feature of a group, the copies of those
+     * features make a new group instead, just in front of that group, with the values of the
+     * group (its name, its lock); when the target holds only some features of a group, their
+     * copies go into the group itself. With `offset`, the copies are moved as `translate` moves
+     * features. The copies can be read by their IDs in `EditCounts.createdIds`, and are not
+     * selected.
      *
      * A locked feature is copied too: the copy is a new feature, and has the lock of its
      * original.
@@ -1620,9 +1624,11 @@ export interface LayersCollection {
     /**
      * Deletes a layer with its features and groups: a bulk edit, in parts (see
      * {@link FeaturesCollection}), however many features it holds. Its features and groups are
-     * deleted in parts, and the layer itself in the last part. While it is being deleted, the
-     * layer takes no other write of this client, as if it were locked: such a write returns
-     * `null` or `false`. The selection of the layer (`selection.delete`) deletes it the same way.
+     * deleted in parts, and the layer itself in the last part. From its first part on, the
+     * layer takes no other write of this client, as if it were locked, also from a write that
+     * ignores the locks: such a write returns `null` or `false`. A feature that comes into the
+     * layer meanwhile (from another client) is deleted in the last part too. The selection of
+     * the layer (`selection.delete`) deletes it the same way.
      *
      * Its changes list the features in `features.deleted` and the layer in `layers.deleted`, and
      * the values before (for a subscriber that asks) keep the features, so that
@@ -1631,14 +1637,17 @@ export interface LayersCollection {
      *
      * @param options - Where the writes come from, and whether they ignore the locks
      * @returns The counts of the edit (`changedCount` is the number of features deleted), or
-     *   `null` when the deletion is refused (read-only, a lock)
+     *   `null` when the deletion is refused: read-only, or the layer, one of its groups or one
+     *   of its features is locked when the edit starts (nothing is deleted then; a feature
+     *   locked while the edit writes stays, and the layer stays with it)
      */
     delete(id: string, options?: EditOptions): Promise<EditCounts | null>;
     /**
      * Deletes several layers as one bulk edit, each as `delete` deletes one.
      *
      * @param options - Where the writes come from, and whether they ignore the locks
-     * @returns The counts of the edit, or `null` when the deletion is refused
+     * @returns The counts of the edit, or `null` when the deletion is refused: none is deleted
+     *   when one of them is refused
      * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the IDs are
      *   not an array of strings; nothing is deleted then
      */
@@ -2461,10 +2470,14 @@ export interface SelectionResource {
      * features, or the selected layers with their features and groups. Features and groups are
      * deleted as `features.deleteMany({ selection: true })` deletes them, and layers as
      * `layers.deleteMany` deletes them (the layers in the last part): a bulk edit in parts, as
-     * the Delete key does.
+     * the Delete key does. What is locked stays, and the rest is deleted: a selected layer that
+     * holds a lock is left out, and its features are counted (`EditCounts.lockedCount`). The
+     * document keeps one layer: when every layer is selected, the last of the selection stays.
+     * Once the edit has deleted something, nothing is selected. The selected vertices are not
+     * deleted (see {@link VertexSelectionResource.delete}).
      *
      * @returns The counts of the edit, or `null` when nothing is selected or the deletion is
-     *   refused (read-only, or everything selected is locked)
+     *   refused (read-only, the interaction lock, or everything selected is locked)
      */
     delete(): Promise<EditCounts | null>;
     /**
