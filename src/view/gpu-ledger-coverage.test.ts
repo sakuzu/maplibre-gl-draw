@@ -967,6 +967,137 @@ describe('the GPU side of an instance gives everything back', () => {
   });
 });
 
+describe('the drawing of the rows', () => {
+  /** A layer of points, lines and polygons interleaved, parts of its delta, and a client state */
+  function fillRows(instance: LedgerInstance): string[] {
+    const { draw } = instance;
+    const made = draw.features.createMany(
+      gridPoints(6_000).map(({ geometry }, i) => {
+        const [x, y] = geometry.coordinates;
+        if (i % 3 === 0) return { type: 'Point', geometry };
+        if (i % 3 === 1) {
+          return {
+            type: 'LineString',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [x, y],
+                [x + 0.005, y + 0.005],
+              ],
+            },
+            style: i % 2 === 0 ? { lineStyle: 'dashed' } : {},
+          };
+        }
+        return { type: 'Polygon', geometry: { type: 'Polygon', coordinates: [ring(x, y, 0.005)] } };
+      }) as never,
+    ) as unknown as Array<{ id: string }>;
+    renderSettled(instance);
+    // Rows that go to the delta of the layer, one write each
+    for (let i = 0; i < 5; i++) {
+      draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [0.9 - i * 0.01, 0.9] },
+      } as never);
+    }
+    const ids = made.map((feature) => feature.id);
+    draw.hidden.add(ids[3]);
+    draw.selection.set('feature', [ids[4], ids[5]]);
+    renderSettled(instance);
+    return ids;
+  }
+
+  it('holds what it allocates in the ledger, the rows and their state as parts of the rows', () => {
+    const instance = tracked();
+    const { mock, ledger } = instance;
+    const watch = watchLimits(mock, ledger);
+    fillRows(instance);
+    const snapshot = ledger.snapshot();
+    expect(snapshot.byPart.rows ?? 0).toBeGreaterThan(0);
+    expect(snapshot.byPart.rowState ?? 0).toBeGreaterThan(0);
+    expect(watch.broken).toEqual([]);
+    expectLedgerMatches(mock, ledger);
+  });
+
+  it('gives everything back when the instance is destroyed', () => {
+    const instance = tracked();
+    const { mock, draw, ledger } = instance;
+    fillRows(instance);
+    draw.destroy();
+    expectNothingHeld(mock, ledger);
+  });
+
+  it('gives everything back when the context is lost, and builds again when it comes back', () => {
+    const instance = tracked();
+    const { mock, map, fire, ledger } = instance;
+    fillRows(instance);
+    mock.state.lost = true;
+    fire('webglcontextlost');
+    expectNothingHeld(mock, ledger);
+    map.render();
+    expectNothingHeld(mock, ledger);
+    mock.state.lost = false;
+    fire('webglcontextrestored');
+    renderSettled(instance);
+    expect(ledger.snapshot().byPart.rows ?? 0).toBeGreaterThan(0);
+    expectLedgerMatches(mock, ledger);
+  });
+
+  it('gives everything back when the style is swapped, and builds again', () => {
+    const instance = tracked();
+    const { mock, map, engine, ledger } = instance;
+    fillRows(instance);
+    const layers = engine.customLayer.getSlotLayers();
+    const stub = map.map as unknown as {
+      removeLayer: (id: string) => void;
+      addLayer: (layer: unknown) => void;
+    };
+    for (const layer of layers) stub.removeLayer(layer.id);
+    expectNothingHeld(mock, ledger);
+    for (const layer of layers) stub.addLayer(layer);
+    renderSettled(instance);
+    expect(ledger.snapshot().byPart.rows ?? 0).toBeGreaterThan(0);
+    expectLedgerMatches(mock, ledger);
+  });
+
+  it('gives back what a layer deleted held', () => {
+    const instance = tracked();
+    const { mock, draw, ledger } = instance;
+    renderSettled(instance);
+    const before = ledger.snapshot();
+    const gone = draw.layers.create({ name: 'gone' }) as unknown as { id: string } | string;
+    const goneId = typeof gone === 'string' ? gone : gone.id;
+    draw.features.createMany(
+      gridPoints(3_000).map((each) => ({ ...each, layerId: goneId })) as never,
+    );
+    draw.hidden.add(goneId);
+    draw.hidden.remove(goneId);
+    renderSettled(instance);
+    expect(ledger.snapshot().rowBytes).toBeGreaterThan(before.rowBytes);
+    draw.layers.delete(goneId);
+    renderSettled(instance);
+    expect(ledger.snapshot().rowBytes).toBe(before.rowBytes);
+    expectLedgerMatches(mock, ledger);
+  });
+
+  it('draws its rows when what is held outside the rows is at the limit, and the frames go on', async () => {
+    const instance = tracked();
+    const { mock, map, ledger } = instance;
+    ledger.limitBytes = GPU_FLOOR_BYTES + 1;
+    const watch = watchLimits(mock, ledger);
+    fillDocument(instance);
+    fillRows(instance);
+    await decodeImages();
+    expect(() => renderSettled(instance)).not.toThrow();
+    expect(() => map.render()).not.toThrow();
+    const snapshot = ledger.snapshot();
+    // The image is refused, the rows are drawn
+    expect(snapshot.byPart.images ?? 0).toBe(0);
+    expect(snapshot.byPart.rows ?? 0).toBeGreaterThan(0);
+    expect(watch.broken).toEqual([]);
+    expectLedgerMatches(mock, ledger);
+  });
+});
+
 describe('the parts of the terrain', () => {
   it('the atlas of the elevations, baked, again at another size, and disposed', () => {
     const mock = storageGL();

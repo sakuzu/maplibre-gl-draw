@@ -382,6 +382,8 @@ export class TableLayerRenderer {
   private client: ClientState = emptyClientState();
   /** Advances whenever what this client hides or selects of a group or a layer changes */
   private clientGeneration = 0;
+  /** Whether bytes of the state of rows were written since their textures were */
+  private statesWritten = false;
   /** The rows written in place since the last pass before the main one, by layer and group */
   private readonly written = new Map<string, Map<RowGroupHandle, Map<number, PendingWrite>>>();
   /** What is kept for the groups of the next versions built, until they are swapped in */
@@ -517,6 +519,11 @@ export class TableLayerRenderer {
     );
     if (this.reader.advance(this.budget)) this.pending = true;
     this.readClientState();
+    // What this client hides or selects now takes effect in this frame
+    if (this.statesWritten) {
+      this.statesWritten = false;
+      this.uploadStates();
+    }
   }
 
   /**
@@ -636,6 +643,7 @@ export class TableLayerRenderer {
     ) {
       // Every group's bytes are made again with the next upload
       this.clientGeneration++;
+      this.statesWritten = true;
     }
     for (const id of changedIds(before.hiddenFeatures, next.hiddenFeatures)) this.writeRowOf(id);
     for (const id of changedIds(before.selectedFeatures, next.selectedFeatures)) {
@@ -707,6 +715,7 @@ export class TableLayerRenderer {
     if (groupCache.bytes[row] === byte) return;
     groupCache.bytes[row] = byte;
     groupCache.dirty = true;
+    this.statesWritten = true;
     this.stats.stateRowsWritten++;
     this.stateChanged(groupCache, row);
     this.options.requestRepaint();
