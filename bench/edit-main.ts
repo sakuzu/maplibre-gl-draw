@@ -248,6 +248,7 @@ async function runScene(scene: Scene): Promise<SceneResult> {
       opened = false;
     },
     makeDocument: () => makeDocument(n),
+    makeInterleavedDocument: () => makeDocument(n, true),
     makeGeoJsonText: () => JSON.stringify(makeFeatureCollection(n)),
     home() {
       map.fitBounds(

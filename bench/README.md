@@ -90,6 +90,7 @@ first part and is stopped at the next.
 | --- | --- |
 | `open` | `draw.document.load` of a document of the library |
 | `pan` | Pans the map 6 px a frame, 90 frames right and 90 back |
+| `panInterleaved` | The same, over the features with their polygons, lines and points one kind after another |
 | `selectAll` | Selects every feature with `draw.selection.set` |
 | `boxSelect` | Draws a box over the view with Shift, a move a frame |
 | `drag` | Drags every feature selected, a move a frame |

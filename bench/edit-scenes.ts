@@ -48,6 +48,8 @@ export interface SceneContext {
   markChanged(): void;
   /** Makes a document of `n` features, anew */
   makeDocument(): DrawDocument;
+  /** Makes the document of `n` features with its polygons, lines and points one after another */
+  makeInterleavedDocument(): DrawDocument;
   /** Makes the `n` features as the text of a GeoJSON file */
   makeGeoJsonText(): string;
   /** Puts the camera back where every scene starts: the whole grid in view */
@@ -434,6 +436,29 @@ export const SCENES: readonly Scene[] = [
     label: 'Pan the map right and back, a step per frame',
     async prepare(ctx) {
       await ctx.openDocument();
+      ctx.draw.selection.clear();
+      await rest(ctx);
+    },
+    async run(ctx) {
+      const { map } = ctx;
+      for (let i = 0; i < PAN_FRAMES * 2; i++) {
+        if (ctx.expired()) break;
+        const dx = i < PAN_FRAMES ? PAN_STEP_PX : -PAN_STEP_PX;
+        map.panBy([dx, 0], { animate: false });
+        await ctx.frame();
+      }
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'panInterleaved',
+    label:
+      'Pan the map right and back, a step per frame, over a layer of polygons, lines and ' +
+      'points one after another',
+    async prepare(ctx) {
+      // The interleaved document is not the one the other scenes open
+      ctx.markChanged();
+      await ctx.draw.document.load(ctx.makeInterleavedDocument());
       ctx.draw.selection.clear();
       await rest(ctx);
     },

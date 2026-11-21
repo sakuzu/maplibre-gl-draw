@@ -137,8 +137,17 @@ function zigzagLine(x: number, y: number): Position[] {
   ];
 }
 
-/** The shapes of `n` features, in the order of the cells */
-function makeShapes(n: number): Shape[] {
+/**
+ * The kinds of ten cells in turn of the interleaved document: as many polygons, lines and points
+ * as the others hold (5, 3 and 2 in 10), one kind after another
+ */
+const INTERLEAVED_KINDS = ['p', 'l', 'pt', 'p', 'l', 'p', 'l', 'p', 'pt', 'p'] as const;
+
+/**
+ * The shapes of `n` features, in the order of the cells: the polygons first, then the lines, then
+ * the points, or with `interleaved` one kind after another along the cells
+ */
+function makeShapes(n: number, interleaved = false): Shape[] {
   const grid = gridOf(n);
   const polygons = Math.floor(n * 0.5);
   const lines = Math.floor(n * 0.3);
@@ -146,14 +155,21 @@ function makeShapes(n: number): Shape[] {
   for (let i = 0; i < n; i++) {
     const x = grid.west + (i % grid.columns) * CELL_DEG;
     const y = grid.south + Math.floor(i / grid.columns) * CELL_DEG;
-    if (i < polygons) {
+    const kind = interleaved
+      ? INTERLEAVED_KINDS[i % INTERLEAVED_KINDS.length]
+      : i < polygons
+        ? 'p'
+        : i < polygons + lines
+          ? 'l'
+          : 'pt';
+    if (kind === 'p') {
       const ring = i % 5 === 4 ? polygon24Ring(x, y) : squareRing(x, y);
       shapes.push({
         id: `p-${i}`,
         type: 'Polygon',
         geometry: { type: 'Polygon', coordinates: [ring] },
       });
-    } else if (i < polygons + lines) {
+    } else if (kind === 'l') {
       shapes.push({
         id: `l-${i}`,
         type: 'LineString',
@@ -183,9 +199,12 @@ function layerOf(items: readonly string[]): DocumentLayer {
   };
 }
 
-/** A document of the library with `n` features in one layer */
-export function makeDocument(n: number): DrawDocument {
-  const features: DrawFeature[] = makeShapes(n).map((shape) => ({
+/**
+ * A document of the library with `n` features in one layer (with `interleaved`, its polygons,
+ * lines and points one kind after another)
+ */
+export function makeDocument(n: number, interleaved = false): DrawDocument {
+  const features: DrawFeature[] = makeShapes(n, interleaved).map((shape) => ({
     id: shape.id,
     type: shape.type,
     geometry: shape.geometry,
