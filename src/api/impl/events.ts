@@ -38,6 +38,7 @@ import { type ChangeSummary, summaryOfChange, watchChanges } from './document-ac
 import { SharedValues } from './feature-values.js';
 import { makeIdSet } from './id-set.js';
 import { toDatasetRow } from './rows.js';
+import { createValuesKeeper, type ValuesKeeper } from './values-keeper.js';
 
 /**
  * The emitter of `DrawEvents` of one instance
@@ -68,6 +69,8 @@ export interface EventHub {
   ): () => void;
   /** The subscribers of the changes of the document, in the order they subscribed */
   subscribers(): readonly DocumentSubscriber[];
+  /** What the values before the changes given to the subscribers keep, until they let go */
+  readonly values: ValuesKeeper;
   /** Drops every listener */
   clear(): void;
 }
@@ -133,6 +136,7 @@ interface Entry {
  */
 export function createEventHub(): EventHub {
   const listeners = new Map<keyof DrawEvents, Entry[]>();
+  const values = createValuesKeeper();
   let subscribers: readonly DocumentSubscriber[] = [];
 
   const add = <K extends keyof DrawEvents>(
@@ -196,6 +200,7 @@ export function createEventHub(): EventHub {
       };
     },
     subscribers: () => subscribers,
+    values,
     clear() {
       listeners.clear();
       subscribers = [];
@@ -296,6 +301,10 @@ function tellSubscribers(hub: EventHub, change: DocumentChange, summary: ChangeS
     asked.length > 0 && before && [...before.values()].some((values) => values.rows.length > 0)
       ? new SharedValues(before)
       : null;
+  // The rows the change deleted stay while the values given to the subscribers keep them (the
+  // layer lets go of them once the change is told, when they were not taken)
+  const release = shared ? summary.claimDeletedRows() : undefined;
+  if (shared && release) hub.values.keep(shared, release);
   for (const subscriber of subscribers) {
     const own: DocumentChange =
       shared && asked.includes(subscriber) ? { ...change, previousValues: shared.hold() } : change;
@@ -305,6 +314,8 @@ function tellSubscribers(hub: EventHub, change: DocumentChange, summary: ChangeS
       console.error('Error in a subscriber of the document:', error);
     }
   }
+  // Values no subscriber holds, or that every subscriber let go of while it was told, keep nothing
+  if (shared && release) hub.values.settle(shared);
 }
 
 /**

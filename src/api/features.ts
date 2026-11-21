@@ -13,6 +13,7 @@ import type {
   FeatureInput,
   FeaturePatch,
   FeatureStyleResolved,
+  FeatureValues,
   IdSet,
   MoveTarget,
 } from './model.js';
@@ -396,6 +397,20 @@ export interface FeaturesCollection {
    *   the wrong shape; nothing is copied then
    */
   duplicate(target: FeatureTarget, options?: DuplicateOptions): Promise<EditCounts | null>;
+  /**
+   * Lets go of what values of features keep: the features and groups a change deleted,
+   * kept so that `restore` can bring them back. Every subscriber that asks for the values
+   * before gets values of its own for each change, and a deleted feature is kept until all the
+   * values that keep it are let go of; it then goes for good, and its ID may be used again.
+   *
+   * A subscriber that asks for the values before calls it for every value it no longer needs,
+   * also when it unsubscribes: unsubscribing lets go of nothing. Values let go of are no longer
+   * written back: given to `restore`, they make it reject with `invalidInput`. Letting go of
+   * values that a stopped `restore` left lets go of the rest it did not write too. Values let
+   * go of while a `restore` writes them are let go of once that `restore` has ended. Values let go of
+   * twice, or that keep nothing, are left as they are.
+   */
+  releaseValues(values: readonly FeatureValues[]): void;
 }
 
 /**

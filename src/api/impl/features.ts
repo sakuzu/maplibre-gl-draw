@@ -81,6 +81,7 @@ import {
   requireIds,
   requireRecord,
 } from './shared.js';
+import type { ValuesKeeper } from './values-keeper.js';
 
 const INPUT_KEYS = [
   'type',
@@ -111,6 +112,8 @@ export interface FeatureBulkDeps {
   readonly extensions: Pick<ExtensionsCollections, 'getTransformProvider' | 'featureTypes'>;
   /** The amounts of work of the Store of the instance, to which the moves, rotations and scalings add */
   readonly counts: WorkCounts | undefined;
+  /** What the values before the changes keep, until the subscribers let go of them */
+  readonly values?: ValuesKeeper;
 }
 
 /**
@@ -380,6 +383,11 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
           { writesLocked: onlyLockOrVisibility(patch) },
         );
       });
+    },
+
+    releaseValues(values) {
+      if (!Array.isArray(values)) throw invalidInput('The values must be an array');
+      bulk?.values?.release(values);
     },
 
     duplicate(target, options) {

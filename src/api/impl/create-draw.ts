@@ -73,6 +73,8 @@ export function createDrawOnEngine(
     edits,
     extensions: engine.extensions.collections,
     counts: workCountsOf(exposedStore),
+    // What the values before the changes keep, which features.releaseValues lets go of
+    values: engine.events.values,
   });
   const groups = createGroups(deps);
   // Set once destroy has run to the end, so that the extensions removed by it can still read
