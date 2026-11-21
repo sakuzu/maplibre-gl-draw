@@ -177,7 +177,7 @@ describe('followVertex', () => {
     ]);
   });
 
-  it('cannot follow a vertex whose ring is not there after the change', () => {
+  it('cannot follow a vertex of a part whose number of rings changed', () => {
     const outer = [a, b, c, d];
     const hole = [x, y, e];
     const spans = compareRings(
@@ -185,7 +185,7 @@ describe('followVertex', () => {
       make([[outer]], { closed: true }),
     );
     expect(followVertex(spans, { ring: 1, index: 0 })).toBeNull();
-    expect(followVertex(spans, { ring: 0, index: 2 })).toEqual({ ring: 0, index: 2 });
+    expect(followVertex(spans, { ring: 0, index: 2 })).toBeNull();
     expect(spans.sameStructure).toBe(false);
   });
 
@@ -211,15 +211,10 @@ describe('followVertex', () => {
     // part left out is part 0
     expect(followVertex(spans, { ring: 0, index: 1 })).toEqual({ ring: 0, index: 1 });
 
-    // The first part deleted: the parts are matched by their numbers, so part 1 is gone, and
-    // part 0 is compared with what was part 1
+    // The first part deleted: the number of parts changed, so no vertex can be followed
     const shifted = compareRings(make([[p0], [p1]]), make([[p1]]));
     expect(followVertex(shifted, { part: 1, ring: 0, index: 0 })).toBeNull();
-    expect(followVertex(shifted, { part: 0, ring: 0, index: 0 })).toEqual({
-      part: 0,
-      ring: 0,
-      index: 0,
-    });
+    expect(followVertex(shifted, { part: 0, ring: 0, index: 0 })).toBeNull();
     expect(shifted.sameStructure).toBe(false);
   });
 
@@ -368,14 +363,12 @@ describe('diffVertices', () => {
     });
   });
 
-  it('reads only the rings matched when the number of rings changes', () => {
+  it('reads no vertex when the number of parts changes', () => {
     const before = make([[[a, b, c]], [[x, y, d]]]);
     const after = make([[[a, x, c]]]);
     const spans = compareRings(before, after);
     expect(spans.sameStructure).toBe(false);
-    expect(entries(diffVertices(before, after, spans)).moved).toEqual([
-      { part: 0, ring: 0, index: 1, position: b },
-    ]);
+    expect(entries(diffVertices(before, after, spans)).moved).toEqual([]);
   });
 
   it('reads one of two equal vertices side by side deleted, either way the same geometry', () => {
@@ -699,5 +692,82 @@ describe('properties', () => {
       expect(diff.deleted.indices.length).toBe(1);
       expect(read(revertVertexDiff(after, diff).geometry)).toEqual(read(before));
     }
+  });
+});
+
+describe('the rule of a change of rings, of parts and of the vertices of a span', () => {
+  const a = [0, 0];
+  const b = [1, 0];
+  const c = [2, 0];
+  const d = [3, 0];
+  const e = [4, 0];
+  const x = [9, 9];
+
+  it('cannot follow any vertex of the holes once a hole is deleted', () => {
+    const outer = [a, b, c, d];
+    const one = [
+      [0.1, 0.1],
+      [0.2, 0.1],
+      [0.2, 0.2],
+    ];
+    const two = [
+      [0.5, 0.5],
+      [0.6, 0.5],
+      [0.6, 0.6],
+    ];
+    const spans = compareRings(
+      make([[outer, one, two]], { closed: true }),
+      make([[outer, two]], { closed: true }),
+    );
+    for (const ring of [0, 1, 2]) {
+      for (const index of [0, 1, 2]) expect(followVertex(spans, { ring, index })).toBeNull();
+    }
+  });
+
+  it('cannot follow any vertex once part 0 of a Multi geometry is deleted', () => {
+    const spans = compareRings(make([[[a, b]], [[c, d]], [[e, x]]]), make([[[c, d]], [[e, x]]]));
+    for (const part of [0, 1, 2]) {
+      for (const index of [0, 1]) {
+        expect(followVertex(spans, { part, ring: 0, index })).toBeNull();
+      }
+    }
+  });
+
+  it('cannot follow any vertex of a geometry of another type', () => {
+    const before = { ...make(line([a, b, c])), type: 'LineString' };
+    const after = { ...make(line([a, b, c])), type: 'MultiPoint' };
+    expect(followVertexIndex(compareRings(before, after), 0, 0, 1)).toBe(-1);
+    expect(followVertexIndex(compareRings(before, { ...after, type: 'LineString' }), 0, 0, 1)).toBe(
+      1,
+    );
+  });
+
+  it('follows the vertices between a vertex deleted and one added elsewhere to the index one off', () => {
+    // Vertex 1 (b) deleted and a vertex (x) added before e: c and d go one index back
+    const spans = compareRings(make(line([a, b, c, d, e])), make(line([a, c, d, x, e])));
+    expect([0, 1, 2, 3, 4].map((index) => followVertexIndex(spans, 0, 0, index))).toEqual([
+      0, 1, 1, 2, 4,
+    ]);
+  });
+
+  it('follows the vertices of a ring turned around to the indices the other way', () => {
+    const spans = compareRings(make(line([a, b, c, d, e])), make(line([e, d, c, b, a])));
+    expect([0, 1, 2, 3, 4].map((index) => followVertexIndex(spans, 0, 0, index))).toEqual([
+      4, 3, 2, 1, 0,
+    ]);
+  });
+
+  it('keeps the indices when two vertices only were moved', () => {
+    const spans = compareRings(make(line([a, b, c, d, e])), make(line([a, x, c, [8, 8], e])));
+    expect([0, 1, 2, 3, 4].map((index) => followVertexIndex(spans, 0, 0, index))).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+  });
+
+  it('does not read as moved a vertex of the span whose position is the one it had', () => {
+    const before = make(line([a, b, c, d, e]));
+    const after = make(line([a, x, c, [8, 8], e]));
+    const moved = entries(diffVertices(before, after)).moved;
+    expect(moved.map((entry) => entry.index)).toEqual([1, 3]);
   });
 });

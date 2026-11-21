@@ -42,6 +42,30 @@ export interface Selection {
 
 /**
  * A vertex of a feature, as the part, the ring and the index within the ring.
+ *
+ * How a vertex is followed while its feature changes: this rule is the one the instance uses
+ * wherever it keeps a vertex across changes (the vertices of a drag, the vertex selection, the
+ * vertices `features.restore` takes back). A vertex is kept by its index. Every time the geometry
+ * of its feature changes, each ring is compared before and after (the rings matched by their
+ * part and ring numbers): the vertices equal from the start of the ring, and those equal from
+ * its end, are found, and what lies between them is the span that changed.
+ *
+ * - A vertex before the span keeps its index.
+ * - A vertex after the span moves its index by the difference of the lengths of the ring.
+ * - A vertex inside the span cannot be followed when the length of the ring changed. When the
+ *   ring keeps its length, it goes to the index where its position is now, when the span holds
+ *   that position at one other index only (vertices were taken out and put in at once, or the
+ *   ring was turned around); otherwise it keeps its index (the vertex was moved).
+ *
+ * The rings are matched by their numbers only while there are as many of them as before: when
+ * the geometry has another type or another number of parts, no vertex of the feature can be
+ * followed, and when a part has another number of rings, no vertex of that part can be (a ring
+ * taken out would give its number to the next one). A vertex that a
+ * drag of vertices cannot follow leaves the drag, as do the vertices of a feature that is
+ * deleted or locked, and the drag goes on with the others (the other features of a drag of
+ * shared vertices, say); it ends as cancelled (`drag.ended` with `cancelled: true`) only when
+ * nothing is left in it, or when the document turns read-only. The vertex selection lets go of
+ * the vertices it cannot follow; `features.restore` leaves them and counts them.
  */
 export interface VertexRef {
   /** The part of a Multi geometry; 0 when it is left out */

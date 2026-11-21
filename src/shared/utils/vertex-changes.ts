@@ -12,16 +12,21 @@
  *
  * - A vertex before the span keeps its index.
  * - A vertex after the span moves its index by the difference of the lengths of the ring.
- * - A vertex inside the span keeps its index when the ring keeps its length (the vertex was
- *   moved), and cannot be followed when the length changed.
- * - A vertex whose ring is not there after the change cannot be followed.
+ * - A vertex inside the span cannot be followed when the length changed. When the ring keeps its
+ *   length, it goes to the index where its position is now, when the span holds that position at
+ *   one other index only (vertices taken out and put in at once, a ring turned around);
+ *   otherwise it keeps its index (the vertex was moved).
+ * - The rings are matched only while there are as many as before: when the geometry has another
+ *   type or another number of parts, no vertex can be followed, and when a part has another
+ *   number of rings, no vertex of that part can be.
  *
  * Two vertices are equal when every value of their positions is equal (the height and the
  * measure included). The closing position of a ring of a polygon (the last one, equal to the
  * first) counts as the first vertex, so moving the first vertex is one vertex moved.
  *
  * The same comparison reads what a change did, vertex by vertex: in a span that kept its length,
- * the vertices were moved (with their positions before); in a span whose length changed, the
+ * the vertices whose positions changed were moved (with their positions before); a vertex of the
+ * span whose position is the one it had is not moved. In a span whose length changed, the
  * vertices before were deleted (with their positions) and those after were added. Of two equal
  * vertices side by side, deleting one is read as deleting the second: the geometry is the same
  * either way.
@@ -61,6 +66,11 @@ export interface VertexGeometry {
    * is closed, and its last position counts as the first vertex
    */
   readonly closedRings: boolean;
+  /**
+   * The type of the geometry, when it is known: two geometries of different types have no ring
+   * matched (left out, the types are not compared)
+   */
+  readonly type?: string | number;
 }
 
 /**
@@ -86,9 +96,15 @@ export interface RingSpans {
   /**
    * {@link SPAN_FIELDS} numbers per matched ring: the number of vertices before and after (the
    * closing position not counted), where the span starts, where it ends before and where it ends
-   * after (the ends not included), and the flags ({@link CLOSED_BEFORE}, {@link CLOSED_AFTER})
+   * after (the ends not included), the flags ({@link CLOSED_BEFORE}, {@link CLOSED_AFTER}), and
+   * where its entries start in {@link RingSpans.remap} (-1 for none)
    */
   readonly spans: Int32Array;
+  /**
+   * For a span that kept its length, the index each of its vertices goes to, one entry per
+   * vertex of the span from its start
+   */
+  readonly remap: Int32Array;
   /**
    * Whether the two have the same number of parts, the same number of rings in each part and the
    * same number of values per position. When they do not, the spans are those of the matched
@@ -98,7 +114,7 @@ export interface RingSpans {
 }
 
 /** The numbers of a matched ring in {@link RingSpans.spans}. */
-export const SPAN_FIELDS = 6;
+export const SPAN_FIELDS = 7;
 /** The flag of a ring closed before the change. */
 export const CLOSED_BEFORE = 1;
 /** The flag of a ring closed after the change. */
@@ -197,17 +213,22 @@ export function compareRings(before: VertexGeometry, after: VertexGeometry): Rin
   for (let p = 0; p < partCountBefore; p++) ringCountsBefore[p] = ringCountOf(before, p);
   for (let p = 0; p < partCountAfter; p++) ringCountsAfter[p] = ringCountOf(after, p);
 
-  const matchedParts = Math.min(partCountBefore, partCountAfter);
+  const sameType =
+    before.type === undefined || after.type === undefined || before.type === after.type;
+  // Another type or another number of parts: no ring is matched
+  const sameParts = sameType && partCountBefore === partCountAfter;
+  const matchedParts = sameParts ? partCountBefore : 0;
   const matchedRingStarts = new Int32Array(matchedParts + 1);
-  let sameStructure =
-    partCountBefore === partCountAfter && before.valuesPerPosition === after.valuesPerPosition;
+  let sameStructure = sameParts && before.valuesPerPosition === after.valuesPerPosition;
   for (let p = 0; p < matchedParts; p++) {
-    if (ringCountsBefore[p] !== ringCountsAfter[p]) sameStructure = false;
-    matchedRingStarts[p + 1] =
-      matchedRingStarts[p] + Math.min(ringCountsBefore[p], ringCountsAfter[p]);
+    // A part with another number of rings: none of its rings is matched
+    const sameRings = ringCountsBefore[p] === ringCountsAfter[p];
+    if (!sameRings) sameStructure = false;
+    matchedRingStarts[p + 1] = matchedRingStarts[p] + (sameRings ? ringCountsBefore[p] : 0);
   }
 
   const spans = new Int32Array(matchedRingStarts[matchedParts] * SPAN_FIELDS);
+  const remap: number[] = [];
   for (let p = 0; p < matchedParts; p++) {
     const count = matchedRingStarts[p + 1] - matchedRingStarts[p];
     for (let r = 0; r < count; r++) {
@@ -242,6 +263,10 @@ export function compareRings(before: VertexGeometry, after: VertexGeometry): Rin
       spans[o + 3] = lengthB - tail;
       spans[o + 4] = lengthA - tail;
       spans[o + 5] = (closedB ? CLOSED_BEFORE : 0) | (closedA ? CLOSED_AFTER : 0);
+      spans[o + 6] =
+        lengthB === lengthA
+          ? remapSpan(before, firstB, after, firstA, start, lengthB - tail, remap)
+          : -1;
     }
   }
 
@@ -252,8 +277,58 @@ export function compareRings(before: VertexGeometry, after: VertexGeometry): Rin
     ringCountsAfter,
     matchedRingStarts,
     spans,
+    remap: Int32Array.from(remap),
     sameStructure,
   };
+}
+
+/** The key of a position, every value of it */
+function keyOf(g: VertexGeometry, at: number): string {
+  const n = g.valuesPerPosition;
+  let key = '';
+  for (let k = 0; k < n; k++) key += `${g.coordinates[at * n + k]},`;
+  return key;
+}
+
+/**
+ * Where the vertices of a span that kept its length go: a vertex whose position changed goes to
+ * the index of the span where its position is now, when the span holds it at one other index
+ * only; any other keeps its index
+ *
+ * @returns Where the entries of the span start in `remap`, or -1 when every vertex keeps its index
+ */
+function remapSpan(
+  before: VertexGeometry,
+  firstB: number,
+  after: VertexGeometry,
+  firstA: number,
+  start: number,
+  end: number,
+  remap: number[],
+): number {
+  if (end - start < 2) return -1;
+  // The indices of the span after the change, by position (-1 for a position held twice or more)
+  const where = new Map<string, number>();
+  for (let i = start; i < end; i++) {
+    const key = keyOf(after, firstA + i);
+    where.set(key, where.has(key) ? -1 : i);
+  }
+  const at = remap.length;
+  let changed = false;
+  for (let i = start; i < end; i++) {
+    let to = i;
+    if (!samePosition(before, firstB + i, after, firstA + i)) {
+      const j = where.get(keyOf(before, firstB + i));
+      if (j !== undefined && j >= 0 && j !== i) to = j;
+    }
+    if (to !== i) changed = true;
+    remap.push(to);
+  }
+  if (!changed) {
+    remap.length = at;
+    return -1;
+  }
+  return at;
 }
 
 /** Where the numbers of a matched ring start in `spans`, or -1 when the ring is not matched */
@@ -265,14 +340,17 @@ function spanOffset(spans: RingSpans, part: number, ring: number): number {
 }
 
 /** Follows an index of a vertex in the matched ring at `o` of `spans`; -1 when it cannot be */
-function followAt(s: Int32Array, o: number, index: number): number {
+function followAt(spans: RingSpans, o: number, index: number): number {
+  const s = spans.spans;
   const lengthB = s[o];
   const lengthA = s[o + 1];
   const start = s[o + 2];
   const endB = s[o + 3];
   if (index < start) return index;
   if (index >= endB) return index + (lengthA - lengthB);
-  return lengthA === lengthB ? index : -1;
+  if (lengthA !== lengthB) return -1;
+  const remapAt = s[o + 6];
+  return remapAt < 0 ? index : spans.remap[remapAt + index - start];
 }
 
 /**
@@ -298,7 +376,7 @@ export function followVertexIndex(
   let i = index;
   if (i === s[o] && (s[o + 5] & CLOSED_BEFORE) !== 0) i = 0;
   if (i < 0 || i >= s[o]) return -1;
-  return followAt(s, o, i);
+  return followAt(spans, o, i);
 }
 
 /**
@@ -318,10 +396,11 @@ export function followVertex(spans: RingSpans, ref: VertexRef): VertexRef | null
 }
 
 /** Follows where deleted vertices go: before a vertex, or at the end of the ring */
-function followPlace(s: Int32Array, o: number, place: number): number {
+function followPlace(spans: RingSpans, o: number, place: number): number {
+  const s = spans.spans;
   if (place === s[o]) return s[o + 1];
   if (place < 0 || place > s[o]) return -1;
-  return followAt(s, o, place);
+  return followAt(spans, o, place);
 }
 
 /** Entries being made, grown as needed */
@@ -409,11 +488,14 @@ export function diffVertices(
     for (let r = 0; r < count; r++) {
       const o = (spans.matchedRingStarts[p] + r) * SPAN_FIELDS;
       const first = before.positionStarts[before.ringStarts[p] + r];
+      const firstA = after.positionStarts[after.ringStarts[p] + r];
       const start = s[o + 2];
       const endB = s[o + 3];
       const endA = s[o + 4];
       if (s[o] === s[o + 1]) {
         for (let i = start; i < endB; i++) {
+          // A vertex whose position is the one it had is not moved
+          if (samePosition(before, first + i, after, firstA + i)) continue;
           moved.push(p, r, i, before.coordinates, first + i);
         }
       } else {
@@ -446,6 +528,7 @@ function followEntries(
   const out = new EntryBuilder(valuesPerPosition, keepsPositions);
   const s = spans.spans;
   let skipped = 0;
+  let sorted = true;
   for (let e = 0; e < entries.indices.length; e++) {
     const part = entries.parts[e];
     const ring = entries.rings[e];
@@ -454,17 +537,28 @@ function followEntries(
       o < 0
         ? -1
         : places
-          ? followPlace(s, o, entries.indices[e])
+          ? followPlace(spans, o, entries.indices[e])
           : entries.indices[e] >= 0 && entries.indices[e] < s[o]
-            ? followAt(s, o, entries.indices[e])
+            ? followAt(spans, o, entries.indices[e])
             : -1;
     if (index < 0) {
       skipped++;
       continue;
     }
+    const c = out.count;
+    if (
+      c > 0 &&
+      out.parts[c - 1] === part &&
+      out.rings[c - 1] === ring &&
+      out.indices[c - 1] > index
+    ) {
+      sorted = false;
+    }
     out.push(part, ring, index, entries.positions, e);
   }
-  return { entries: out.build(), skipped };
+  const built = out.build();
+  // Vertices that went to other indices of their ring are put back in the order of their indices
+  return { entries: sorted ? built : sortEntries(built, valuesPerPosition), skipped };
 }
 
 /**
@@ -486,6 +580,32 @@ export function followVertexDiff(diff: VertexDiff, spans: RingSpans): VertexDiff
     deleted: deleted.entries,
     added: added.entries,
     skippedVertexCount: diff.skippedVertexCount + moved.skipped + deleted.skipped + added.skipped,
+  };
+}
+
+/** Entries in the order of their parts, rings and indices */
+function sortEntries(entries: VertexEntries, valuesPerPosition: number): VertexEntries {
+  const count = entries.indices.length;
+  const order = Array.from({ length: count }, (_, i) => i);
+  order.sort(
+    (a, b) =>
+      entries.parts[a] - entries.parts[b] ||
+      entries.rings[a] - entries.rings[b] ||
+      entries.indices[a] - entries.indices[b],
+  );
+  const n = valuesPerPosition;
+  const keeps = entries.positions.length > 0;
+  const positions = new Float64Array(keeps ? count * n : 0);
+  if (keeps) {
+    order.forEach((from, to) => {
+      for (let k = 0; k < n; k++) positions[to * n + k] = entries.positions[from * n + k];
+    });
+  }
+  return {
+    parts: Int32Array.from(order, (i) => entries.parts[i]),
+    rings: Int32Array.from(order, (i) => entries.rings[i]),
+    indices: Int32Array.from(order, (i) => entries.indices[i]),
+    positions,
   };
 }
 
