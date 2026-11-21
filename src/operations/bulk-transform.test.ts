@@ -797,6 +797,26 @@ describe('a rotation of a single feature of a Point geometry', () => {
     expect(xyOf(id)).toEqual([3, 4]);
     expect(attributeOf(id, 'angle')).toBe(45);
   });
+
+  it('rejects the rotation of a point whose center the computation does not take, and lets a write that touches the point first go on as if it had not been started', async () => {
+    const one = image(3, 4);
+    const builtIn = createBuiltInTransform();
+    draw.extensions.setTransformProvider({
+      name: 'about the origin only',
+      accepts: (operation) => operation.kind !== 'rotate' || operation.center[0] === 0,
+      apply: builtIn.apply,
+    });
+    const turn = settled(
+      draw.features.rotate([one], { center: [0, 0], counterclockwiseDegrees: 45 }),
+    );
+    // Before the first part of the rotation, a write of this client touches the point
+    expect(draw.features.update(one, { properties: { touched: true } })).not.toBeNull();
+    await allTasks();
+    expect((turn.error as DrawError).code).toBe('invalidInput');
+    expect(attributeOf(one, 'touched')).toBe(true);
+    expect(attributeOf(one, 'maplibre-gl-draw:rotation')).toBeUndefined();
+    expect(xyOf(one)).toEqual([3, 4]);
+  });
 });
 
 // ----------------------------------------------------------------------------

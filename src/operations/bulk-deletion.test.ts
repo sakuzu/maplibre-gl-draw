@@ -36,9 +36,11 @@ import type { Store } from '../store/built-in/types.js';
 import {
   countsOf,
   createMapStub,
+  expectNotProportional,
   expectPartsWithin,
   runInParts,
   WORK_SIZES,
+  workDuring,
 } from '../test-utils.js';
 
 let clock = 0;
@@ -582,4 +584,51 @@ describe('the work of a deletion of a layer', () => {
     // The parts are as many as the features call for
     expect(partCounts[1]).toBeGreaterThan(partCounts[0] * 5);
   });
+});
+
+describe('the start of the edits', () => {
+  /** A new instance with a layer of `size` points; the instance before is destroyed */
+  function sized(size: number): string[] {
+    draw.destroy();
+    store = createStore();
+    engine = createEngine(
+      createMapStub().map as unknown as Parameters<typeof createEngine>[0],
+      toEngineOptions({ store, initDefaultLayer: false }, () => false),
+      { deferDefaultMode: true },
+    );
+    draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
+    engine.enterDefaultMode();
+    draw.layers.create({ id: 'keep', name: 'keep' });
+    return layerOfPoints('many', size);
+  }
+
+  /** The objects the start of an edit makes, the parts left unwritten */
+  const atStart = (start: () => Promise<unknown>): number =>
+    workDuring(countsOf(store), () => {
+      start().catch(() => {});
+    }).objectsCreated;
+
+  const starts: Record<string, () => Promise<unknown>> = {
+    'features.deleteMany of { layerIds }': () => draw.features.deleteMany({ layerIds: ['many'] }),
+    'features.deleteMany of { selection: true }': () =>
+      draw.features.deleteMany({ selection: true }),
+    'features.updateAll of { layerIds }': () =>
+      draw.features.updateAll({ layerIds: ['many'] }, { visible: false }),
+    'features.updateAll of { selection: true }': () =>
+      draw.features.updateAll({ selection: true }, { visible: false }),
+    'features.duplicate of { layerIds }': () => draw.features.duplicate({ layerIds: ['many'] }),
+    'features.duplicate of { selection: true }': () => draw.features.duplicate({ selection: true }),
+    'layers.delete': () => draw.layers.delete('many'),
+    'selection.delete of the features': () => draw.selection.delete(),
+  };
+
+  for (const [name, start] of Object.entries(starts)) {
+    it(`makes as many objects for 10,000 features as for 1,000: ${name}`, () => {
+      expectNotProportional((size) => {
+        const ids = sized(size);
+        draw.selection.set('feature', ids);
+        return atStart(start);
+      }, 'the objects made at the start');
+    });
+  }
 });
