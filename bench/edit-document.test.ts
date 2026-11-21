@@ -38,6 +38,7 @@ describe('the scenes', () => {
     expect(SCENES.map((scene) => scene.name)).toEqual([
       'open',
       'pan',
+      'panInterleaved',
       'selectAll',
       'selectOne',
       'hideOne',
