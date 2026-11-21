@@ -1060,7 +1060,7 @@ describe('the drawing of the rows', () => {
     expectLedgerMatches(mock, ledger);
   });
 
-  it('gives back what a layer deleted held', () => {
+  it('gives back what a layer deleted held', async () => {
     const instance = tracked();
     const { mock, draw, ledger } = instance;
     renderSettled(instance);
@@ -1074,7 +1074,8 @@ describe('the drawing of the rows', () => {
     draw.hidden.remove(goneId);
     renderSettled(instance);
     expect(ledger.snapshot().rowBytes).toBeGreaterThan(before.rowBytes);
-    draw.layers.delete(goneId);
+    // The deletion of a layer is written in parts
+    await draw.layers.delete(goneId);
     renderSettled(instance);
     expect(ledger.snapshot().rowBytes).toBe(before.rowBytes);
     expectLedgerMatches(mock, ledger);
