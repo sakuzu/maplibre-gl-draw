@@ -343,6 +343,20 @@
       "from": "src/view/layer/table-retained.ts",
       "to": "src/view/layer/table-retained.ts",
       "note": "the drawing of the layers from their row groups and the parts of their deltas, the next versions, the state of the rows and the writes in place, written again over the reader of the built-in Store; the drape, the surfaces, the extensions and the moving sets are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/feature-table/bulk-plan.ts",
+      "to": "src/operations/bulk-update.ts",
+      "note": "only the change of the style made once per kind of row (its type and its style), not once per row; the plan the Store applied and the rows read from inside the tables are not brought: the instance writes through its layer"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/operations/bulk-selection.ts",
+      "to": "src/operations/bulk-deletion.ts",
+      "note": "only the scenes of the deletion of the selection (the locked ones kept, the selection cleared once something is deleted); the deletion in one write of the Store is not brought: the features are deleted in the parts of a bulk edit"
     }
   ]
 }

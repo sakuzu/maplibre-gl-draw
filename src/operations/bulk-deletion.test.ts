@@ -14,7 +14,7 @@
  * - A layer is deleted in the last part, after its features; it takes no other write of this
  *   client from the first part on (the writes that ignore the locks too); it is refused at the
  *   start when it, a group or a feature of it is locked; a feature locked meanwhile stays, and
- *   the layer with it; a feature another client puts in it meanwhile goes with it; its changes
+ *   the layer with it; a feature written into it from outside the instance goes with it; its changes
  *   carry the change of the stacking order, and the values before keep the features
  * - The deletion of what is selected leaves what is locked, keeps one layer, clears the
  *   selection once it deleted something, and is what the Delete key does
@@ -262,7 +262,7 @@ describe('layers.delete', () => {
     };
     const run = settled(draw.layers.delete('a'));
     await vi.advanceTimersByTimeAsync(0);
-    // Another client locks the last feature meanwhile
+    // A change written to the Store directly locks the last feature meanwhile
     const ref = store.tables.getRowRef(ids[599]) as number;
     store.transact(() => {
       original({ rows: Int32Array.of(ref), fields: new Map([['locked', [true]]]) });
@@ -273,7 +273,7 @@ describe('layers.delete', () => {
     expect(draw.features.list().map((f) => f.id)).toEqual([ids[599]]);
   });
 
-  it('deletes with the layer a feature another client put in it meanwhile', async () => {
+  it('deletes with the layer a feature written into it from outside the instance meanwhile', async () => {
     layerOfPoints('a', 600);
     const original = store.writeRows.bind(store);
     store.writeRows = (values) => {

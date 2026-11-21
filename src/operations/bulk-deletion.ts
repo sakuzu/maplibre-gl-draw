@@ -14,7 +14,7 @@
  *   no other write of this client (the layer refuses them). A deletion of layers is refused at
  *   its start when one of them, one of their groups or one of their features is locked (unless
  *   it ignores the locks); a feature locked while it writes stays, and its layer stays with it.
- *   A feature another client put in the layer meanwhile is deleted with the layer.
+ *   A feature written to the Store directly into the layer meanwhile is deleted with the layer.
  * - The deletion of what is selected looks at the locks whatever the transaction it is started
  *   in says: what is locked stays, a selected layer that holds a lock is left out (its features
  *   counted as locked), the document keeps one layer, and once something is deleted nothing is
@@ -73,7 +73,8 @@ export function startFeatureDeletion(
 
 /**
  * The work of the deletion of layers: their features in the parts, and in the last part each
- * layer that holds no lock (unless the locks are ignored), with what another client put in it
+ * layer that holds no lock (unless the locks are ignored), with what was written into it from
+ * outside the instance meanwhile
  *
  * @param after - Called in the last part once the layers are deleted (stopped false), or in the
  *   part that stops the edit (stopped true), with whether anything was deleted

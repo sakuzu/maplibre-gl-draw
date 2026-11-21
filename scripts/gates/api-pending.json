@@ -29,31 +29,11 @@
       "main:added:Draw.rendered": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
-    "19": {
-      "main:added:FeaturesCollection.updateAll": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:doc:FeaturesCollection.updateMany": "81ae92828a76a7a55648c489cfa8a4192d995db2416c459c613fcb1825a36210"
-    },
-    "20": {
-      "main:sig:FeaturesCollection.deleteMany": "c679da1dea719c50fd8645606d7afacb0a0b43eb2f4df956a56e17f04b09cc58"
-    },
-    "24": {
-      "main:added:FeaturesCollection.duplicate": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "25": {
       "main:added:FeaturesCollection.restore": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "26": {
       "main:added:FeaturesCollection.releaseValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "31": {
-      "main:doc:LayersCollection": "18d5bfbc804ca40e2e790c77185a46eda5a25988f6e77328ba5cde5c198164a1",
-      "main:doc:LayersCollection.create": "c0130d3102dfefbdd6692ab036699b58463c0cc5a7c579e382ab3f67b599dee0",
-      "main:sig:LayersCollection.delete": "037380bbed9125ef01868f477a052edcab24276f09efea9a3ef03bbd1c30f6d5",
-      "main:sig:LayersCollection.deleteMany": "fc52394e2e5715bb3814534eb7b055d331327c3070af606329515347b3b07d2a"
-    },
-    "39": {
-      "main:added:DuplicateOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:DuplicateOptions.offset": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
     "40": {
       "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
@@ -65,9 +45,6 @@
     },
     "42": {
       "main:doc:SelectionResource.features": "82a883a363b740238c7618842518d0241fd0e8693b70f838e7b837cbc8566721"
-    },
-    "43": {
-      "main:sig:SelectionResource.delete": "58fb0181546e5243436982a3cb766939dba9c8a84aed96b360b2a9d302715e59"
     },
     "45": {
       "main:sig:Selection.ids": "c0a5450b3c7a652735df67132a69ff11b49753fb85d21c801450fa3fd9d3904c"
