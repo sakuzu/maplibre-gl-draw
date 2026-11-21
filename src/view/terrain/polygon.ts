@@ -161,8 +161,10 @@ export function ringBoundingCells(
  * coarsening factor and the relationship with the range. The elevation is not included,
  * because the shader looks the elevation up every frame, so there is no need to subdivide
  * again when the DEM arrives.
+ *
+ * @internal
  */
-function fillSignature(step: TessellationStep, flatCoords: readonly number[]): string {
+export function fillSignature(step: TessellationStep, flatCoords: readonly number[]): string {
   if (flatCoords.length < 2) return 'empty';
 
   let minLng = Number.POSITIVE_INFINITY;

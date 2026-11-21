@@ -23,6 +23,16 @@
  *   of the segments next to it that reach over the corners into its strip, each blended over the
  *   ones drawn before it as the blending of the frame would blend them
  *
+ * On the terrain and on the globe the branches take the formulas the renderers of the features
+ * use there: a segment is drawn in stations along it (`u_stations`, the strip of `line-shader.ts`,
+ * the stations moving along the degrees on the terrain and along the Mercator plane on the globe,
+ * the miters at its ends only); a point packed for the surface stands at the elevation it carries,
+ * the one the hit testing projects it with, and is not hidden by the depth of the terrain (as the
+ * points are drawn with the depth test off: it is drawn at the near plane, which the depth test
+ * of the frame always passes); a fill drops the faces turned away from the camera while the
+ * terrain is drawn (`terrain-cull.ts`); and on a frame that draws the polygons and the lines flat
+ * (`surfacesFlattened`), they get no elevation while the points keep theirs.
+ *
  * The blending is the one of the layer, so the branches differ only in what they emit. The
  * shaders never read `gl_InstanceID`: a range of rows is drawn by pointing the instance
  * attributes at its first instance, so the place of an instance in a draw means nothing.
@@ -49,6 +59,9 @@ function glslFloat(value: number): string {
 /** A distance no fragment is near (device px): the end of a dash that has none */
 const FAR = 1e6;
 
+/** The depth of a point on the terrain in normalized device coordinates: just past the near plane */
+const POINT_NEAR_DEPTH = -0.999999;
+
 /**
  * The vertex shader source
  *
@@ -64,14 +77,17 @@ ${prelude}
 ${define}
 ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}
 
-// The corner of the strip of 4 vertices (0 to 3)
+// The vertex of the strip: a corner (0 to 3) for every kind, and for a segment the side (its
+// lowest bit) and the station along it (the rest)
 layout(location = 0) in float a_corner;
 // The tag: the kind above bit ${ROWS_KIND_SHIFT} and the number of the row in its group below it,
 // taken apart with a shift and a mask (exact on every GPU)
 layout(location = 1) in uint a_tag;
 // xyz: coordinates 0 to 2
 layout(location = 2) in vec3 a_head;
-// x: coordinate 3, w: the length of the line before a dashed segment (CSS px at zoom 0)
+// x: coordinate 3, w: the length of the line before a dashed segment (CSS px at zoom 0), or the
+// elevation of a point packed for the surface (meters); for a segment packed for the surface, y
+// and z: the longest segment of its line in meters and on the Mercator plane
 layout(location = 3) in vec4 a_tail;
 
 // The coordinates of the chunk (offsets from its origin)
@@ -93,6 +109,18 @@ uniform float u_miter_limit;
 uniform float u_size_scale;
 // The factor from device pixels to clip space
 uniform vec2 u_pixel_to_clip;
+// The most stations a segment of the chunk is drawn in (1: its two ends only)
+uniform float u_stations;
+// What the stations of a segment are decided from: the step of the terrain in meters (0 when the
+// terrain does not decide them), else the cell of the globe for the lines on the Mercator plane
+uniform float u_station_step;
+uniform float u_station_grid;
+// 1 when the stations move along the Mercator plane (the globe), 0 along the degrees (the terrain)
+uniform float u_station_mercator;
+// 1 when the rows of the chunk were packed for the surface: its points carry their elevations
+uniform float u_surface;
+// 1 on a frame that draws the polygons and the lines flat (the points keep their elevations)
+uniform float u_surfaces_flat;
 
 flat out int v_kind;
 // The color (the fill of a point)
@@ -129,6 +157,31 @@ flat out vec3 v_dash_miter1;
 out vec4 v_geom;
 
 int g_corner = 0;
+// The vertex of the strip (for a segment, its side and its station)
+int g_vertex = 0;
+
+// The Mercator limit of latitude (the plane reaches infinity at the poles)
+const float STATION_MAX_LAT = 85.0511287798066;
+
+// Mercator coordinates (0-1) -> WGS84
+vec2 stationMercatorToLngLat(vec2 mercator) {
+    float lng = mercator.x * 360.0 - 180.0;
+    float lat = degrees(atan(sinh(PI * (1.0 - 2.0 * mercator.y))));
+    return vec2(lng, lat);
+}
+
+// The point at t along the segment from a to b (offsets): along the degrees on the terrain, along
+// the straight line of the Mercator plane on the globe (the path maplibre draws an edge along)
+vec2 stationOffset(vec2 a, vec2 b, float t) {
+    if (u_station_mercator < 0.5) return mix(a, b, t);
+    vec2 base = u_origin_shift + u_center_lnglat;
+    vec2 la = a + base;
+    vec2 lb = b + base;
+    la.y = clamp(la.y, -STATION_MAX_LAT, STATION_MAX_LAT);
+    lb.y = clamp(lb.y, -STATION_MAX_LAT, STATION_MAX_LAT);
+    vec2 mercator = mix(lngLatToMercator(la), lngLatToMercator(lb), t);
+    return stationMercatorToLngLat(mercator) - base;
+}
 
 vec2 rowsCoord(float index) {
     int i = int(index + 0.5);
@@ -217,6 +270,11 @@ vec4 dashNeighbor(vec2 from, vec2 to, float wFrom, float wTo, float lengthCss, v
 void drawPoint(int style) {
     vec2 offset = rowsCoord(a_head.x);
     emitShadeOffset(offset);
+    // Packed for the surface, the point stands at the elevation it carries
+    if (u_surface > 0.5) {
+        g_anchor_elevation_m = a_tail.w;
+        g_anchor_elevation_on = 1.0;
+    }
     vec4 centerClip = rowsProject(offset);
     vec4 size = rowsStyle(style, 2);
     float radius = max(size.x, 0.0) * u_size_scale;
@@ -229,7 +287,11 @@ void drawPoint(int style) {
         outer = ${glslFloat(POINT_MIN_OUTER_PX)};
     }
     vec2 offsetPx = quadCorner() * (outer + ${glslFloat(POINT_AA_PADDING_PX)});
-    gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, centerClip.z / centerClip.w, 1.0);
+    float depth = centerClip.z / centerClip.w;
+    // On the terrain the point is not hidden by the depth of the ground (the points are drawn with
+    // the depth test off): at the near plane it passes the depth test of the frame
+    if (u_terrain_on > 0.5 && depth >= -1.0 && depth <= 1.0) depth = ${glslFloat(POINT_NEAR_DEPTH)};
+    gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, depth, 1.0);
     v_color = rowsStyle(style, 0);
     v_color2 = rowsStyle(style, 1);
     v_params = vec4(radius, outer, ink, size.z);
@@ -258,24 +320,58 @@ vec3 segmentMiter(vec2 own, vec2 otherNormal) {
 void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     int prevIdx = int(a_head.x);
     int nextIdx = int(a_tail.x);
-    bool atStart = g_corner < 2;
-    bool atEnd = !atStart;
-    float t = atStart ? 0.0 : 1.0;
-    float side = (g_corner & 1) == 0 ? 1.0 : -1.0;
+    // The stations of the segment: those a batch of its line alone is drawn in
+    // (\`resolveLineStations\` from the longest segment of the line), at most those of the chunk.
+    // The vertices past its last station repeat it (no area)
+    float wanted = u_station_step > 0.0
+        ? ceil(a_tail.y / u_station_step)
+        : (u_station_grid > 0.0 ? ceil(a_tail.z / u_station_grid) : 1.0);
+    float stations = clamp(wanted, 1.0, max(u_stations, 1.0));
+    int vertex = min(g_vertex, 2 * int(stations + 0.5) + 1);
+    // The station along the segment (with one station only its two ends: 0 and 1)
+    float t = min(float(vertex >> 1) / stations, 1.0);
+    bool atStart = (vertex >> 1) == 0;
+    bool atEnd = t >= 1.0;
+    float side = (vertex & 1) == 0 ? 1.0 : -1.0;
 
     vec2 startOffset = rowsCoord(a_head.y);
     vec2 endOffset = rowsCoord(a_head.z);
-    emitShadeOffset(atStart ? startOffset : endOffset);
     vec4 startClip = rowsProject(startOffset);
     vec4 endClip = rowsProject(endOffset);
     vec2 startScreen = clipToScreen(startClip);
     vec2 endScreen = clipToScreen(endClip);
     vec4 currentClip = atStart ? startClip : endClip;
+    vec2 currentOffset = atStart ? startOffset : endOffset;
 
     vec2 segmentVec = endScreen - startScreen;
     float screenSegmentLength = length(segmentVec);
     vec2 segmentDir = segmentVec / screenSegmentLength;
     vec2 normal = vec2(-segmentDir.y, segmentDir.x);
+
+    // In stations (the terrain and the globe): the position of the station, and the direction of
+    // the segment there on the screen. With one station the block is skipped, and the strip is
+    // the one of the two ends
+    if (stations > 1.5) {
+        float dt = 1.0 / stations;
+        if (!atStart && !atEnd) {
+            currentOffset = stationOffset(startOffset, endOffset, t);
+            currentClip = rowsProject(currentOffset);
+        }
+        vec2 currentScreen = clipToScreen(currentClip);
+        vec2 backScreen = atStart
+            ? currentScreen
+            : clipToScreen(rowsProject(stationOffset(startOffset, endOffset, max(t - dt, 0.0))));
+        vec2 forwardScreen = atEnd
+            ? currentScreen
+            : clipToScreen(rowsProject(stationOffset(startOffset, endOffset, min(t + dt, 1.0))));
+        vec2 localVec = forwardScreen - backScreen;
+        float localLen = length(localVec);
+        if (localLen > 0.0001) {
+            segmentDir = localVec / localLen;
+            normal = vec2(-segmentDir.y, segmentDir.x);
+        }
+    }
+    emitShadeOffset(currentOffset);
 
     vec3 miter0 = vec3(normal, 1.0);
     vec3 miter1 = vec3(normal, 1.0);
@@ -289,7 +385,8 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         vec2 nextDir = normalize(nextScreen - endScreen);
         miter1 = segmentMiter(normal, vec2(-nextDir.y, nextDir.x));
     }
-    vec3 miter = atStart ? miter0 : miter1;
+    // The miters only at the ends of the segment; a station between them is square to it
+    vec3 miter = atStart ? miter0 : (atEnd ? miter1 : vec3(normal, 1.0));
     vec2 miterNormal = miter.xy;
     float miterScale = miter.z;
 
@@ -429,7 +526,9 @@ void drawFill(int style) {
 void main() {
     int kind = int(a_tag >> ${ROWS_KIND_SHIFT}u);
     int row = int(a_tag & ${ROWS_ROW_MASK}u);
-    g_corner = int(a_corner + 0.5);
+    g_vertex = int(a_corner + 0.5);
+    // A kind drawn as a quad repeats its last corner past the fourth vertex (no area)
+    g_corner = min(g_vertex, 3);
     v_kind = kind;
     v_color = vec4(0.0);
     v_color2 = vec4(0.0);
@@ -460,6 +559,11 @@ void main() {
     int style = int(rowStyle.x + 0.5);
     float createdZoom = rowStyle.y;
     bool hasCreatedZoom = rowStyle.z > 0.5;
+    // On a frame that draws the polygons and the lines flat, they get no elevation
+    if (u_surfaces_flat > 0.5 && kind != ${ROWS_KIND.point}) {
+        g_anchor_elevation_m = 0.0;
+        g_anchor_elevation_on = 1.0;
+    }
 
     if (kind == ${ROWS_KIND.point}) {
         drawPoint(style);
@@ -498,6 +602,8 @@ in vec4 v_geom;
 
 // The opacity factor of the drawing (the opacity of the layer)
 uniform float u_opacity;
+// 1 while the terrain is drawn: a fill drops the faces turned away from the camera
+uniform float u_fill_cull;
 
 out vec4 fragColor;
 
@@ -751,6 +857,9 @@ vec4 shadeOutline() {
 }
 
 vec4 shadeFill() {
+    // The fills cut on the terrain face the camera (\`pushOriented\`): the slope behind a ridge
+    // faces away from it
+    if (u_fill_cull > 0.5 && !gl_FrontFacing) discard;
     return vec4(v_color.rgb * terrainFillShade(), v_color.a * u_opacity);
 }
 

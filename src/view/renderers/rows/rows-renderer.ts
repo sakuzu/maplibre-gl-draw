@@ -15,6 +15,14 @@
  * maplibre starts its main pass (`prerender`): a texture written in the middle of the pass makes
  * a tiled GPU store and reload the frame. A chunk is drawn from the frame after it was written.
  *
+ * On the terrain and on the globe a chunk packed for the surface is drawn with the stations of the
+ * lines (`resolveLineStations`): every instance is drawn as a strip of `2 * (stations + 1)`
+ * vertices, the stations of its longest segment bounded by its instances, as a batch of lines is;
+ * a segment takes the stations a batch of its line alone takes (from the longest segment of its
+ * line), at most those, and repeats its last station past them; the other kinds repeat their last
+ * corner. Its fills drop the faces turned away from the camera while
+ * the terrain is drawn, as the fills of the polygons do (`drawFillWithTerrainCull`).
+ *
  * The program is made for the projection of the frame (`ensureShader`, as the other renderers
  * make theirs). When it cannot be made (`failed`), the side that draws the rows draws them another
  * way.
@@ -26,6 +34,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { RENDERING_DEFAULTS } from '../../../shared/math/index.js';
+import { globeGridOf } from '../../globe-subdivision.js';
 import { type GpuLedger, giveStorage, textureBytes } from '../../gpu-ledger.js';
 import { getRenderFrame } from '../../shaders/frame.js';
 import {
@@ -37,6 +46,11 @@ import {
 import { ProjectionUniformManager } from '../../shaders/projection.js';
 import { TerrainContext } from '../../terrain/context.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
+import {
+  lineStationsOnMercatorPlane,
+  MAX_LINE_STATIONS,
+  resolveLineStations,
+} from '../line/line-geometry.js';
 import { type RowStateTexture, RowStateUniforms } from '../row-state.js';
 import {
   ROWS_COORD_WIDTH,
@@ -62,8 +76,13 @@ const UNIT_STYLES = 3;
 /** The part the GPU memory of this renderer is recorded under in the ledger (row data) */
 export const ROWS_PART = 'rows';
 
-/** The corners of the strip of 4 vertices every instance is drawn with */
-const CORNERS: readonly number[] = Object.freeze([0, 1, 2, 3]);
+/**
+ * The vertices of the strip every instance is drawn with: as many as the most stations of a
+ * segment take (a flat map draws the first 4, the corners of a quad)
+ */
+const CORNERS: readonly number[] = Object.freeze(
+  Array.from({ length: 2 * (MAX_LINE_STATIONS + 1) }, (_, vertex) => vertex),
+);
 
 /** A texture and its size */
 interface SizedTexture {
@@ -121,6 +140,13 @@ interface RowsUniformLocations {
   readonly sizeScale: WebGLUniformLocation | null;
   readonly pixelToClip: WebGLUniformLocation | null;
   readonly opacity: WebGLUniformLocation | null;
+  readonly stations: WebGLUniformLocation | null;
+  readonly stationStep: WebGLUniformLocation | null;
+  readonly stationGrid: WebGLUniformLocation | null;
+  readonly stationMercator: WebGLUniformLocation | null;
+  readonly surface: WebGLUniformLocation | null;
+  readonly surfacesFlat: WebGLUniformLocation | null;
+  readonly fillCull: WebGLUniformLocation | null;
 }
 
 /** The program of the projection of the frame */
@@ -142,6 +168,13 @@ interface RowsUniformMemo {
   coordWidth: number;
   rowBase: number;
   rowStyleWidth: number;
+  stations: number;
+  stationStep: number;
+  stationGrid: number;
+  stationMercator: number;
+  surface: number;
+  surfacesFlat: number;
+  fillCull: number;
 }
 
 /**
@@ -218,7 +251,9 @@ export class RowsRenderer {
           program,
           locations: locationsOf(this.gl, program),
           projection: (() => {
-            const manager = new ProjectionUniformManager(this.gl, { surface: true });
+            // Not drawn flat as a whole on a frame that draws the polygons and the lines flat:
+            // the points keep their elevations, and the program lays the rest flat itself
+            const manager = new ProjectionUniformManager(this.gl);
             manager.useTerrainState(this.terrain);
             manager.getLocations(program);
             return manager;
@@ -327,6 +362,10 @@ export class RowsRenderer {
         return false;
       }
     }
+    // The longest segment of the rows written may be longer than the ones of the chunk
+    const lines = data.lines;
+    lines.maxSegmentMeters = Math.max(lines.maxSegmentMeters, patch.lines.maxSegmentMeters);
+    lines.maxSegmentMercator = Math.max(lines.maxSegmentMercator, patch.lines.maxSegmentMercator);
     const scratch = this.scratch;
     for (let r = 0; r < patch.rows; r++) {
       const row = fromRow + r;
@@ -529,9 +568,13 @@ export class RowsRenderer {
         calculateOffsetUniforms(data.origin, projectionData.mainMatrix as unknown as Float32Array),
       );
     }
-    this.writeUniforms(program, chunk, zoom, factors);
+    const stations = this.stationsOf(chunk);
+    this.writeUniforms(program, chunk, zoom, factors, stations);
     program.rowState.bind(rowState);
     this.bindTextures(chunk);
+    // The faces of the fills are told apart by their winding on the screen (counterclockwise is
+    // in front, as the fills cut on the terrain are wound)
+    if (this.terrain.renderState.active) gl.frontFace(gl.CCW);
 
     gl.bindVertexArray(chunk.vao);
     // The attributes point at the instances of the chunk from the first one drawn
@@ -540,10 +583,26 @@ export class RowsRenderer {
       pointInstanceAttribs(gl, first, false);
       chunk.pointedFirst = first;
     }
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 2 * (stations + 1), count);
     this.draws++;
     gl.bindVertexArray(null);
     return true;
+  }
+
+  /**
+   * The stations the segments of a chunk are drawn in: those of a batch of lines on the surface
+   * of the frame, for a chunk packed for the surface (1 on a flat map, and for a chunk packed for
+   * it). Every instance of the chunk draws the strip, so the vertices are bounded by all of them
+   */
+  private stationsOf(chunk: RowsChunk): number {
+    const lines = chunk.data.lines;
+    if (!lines.surface) return 1;
+    return resolveLineStations(
+      this.terrain,
+      lines.maxSegmentMeters,
+      chunk.data.instanceCount,
+      lines.maxSegmentMercator,
+    );
   }
 
   /** Releases the program, every chunk and texture */
@@ -572,6 +631,7 @@ export class RowsRenderer {
     chunk: RowsChunk,
     zoom: number,
     factors: RetainedDrawFactors,
+    stations: number,
   ): void {
     const gl = this.gl;
     const locations = program.locations;
@@ -618,6 +678,36 @@ export class RowsRenderer {
     if (locations.rowBase && (stale || memo.rowBase !== rowBase)) {
       gl.uniform1i(locations.rowBase, rowBase);
       memo.rowBase = rowBase;
+    }
+    const terrain = this.terrain;
+    const surface = chunk.data.lines.surface ? 1 : 0;
+    // What the stations of a segment are decided from, as `resolveLineStations` decides them: the
+    // step of the terrain while it is drawn with one, else the cell of the globe for the lines
+    const state = terrain.renderState;
+    const stationStep = state.active && state.stepMeters > 0 ? state.stepMeters : 0;
+    const stationGrid = stationStep > 0 ? 0 : Math.max(globeGridOf(terrain, 'line'), 0);
+    const values: Array<[WebGLUniformLocation | null, keyof RowsUniformMemo, number]> = [
+      [locations.stations, 'stations', stations],
+      [locations.stationStep, 'stationStep', stationStep],
+      [locations.stationGrid, 'stationGrid', stationGrid],
+      [
+        locations.stationMercator,
+        'stationMercator',
+        stations > 1 && lineStationsOnMercatorPlane(terrain) ? 1 : 0,
+      ],
+      [locations.surface, 'surface', surface],
+      [
+        locations.surfacesFlat,
+        'surfacesFlat',
+        terrain.renderState.active && terrain.surfacesFlattened ? 1 : 0,
+      ],
+      [locations.fillCull, 'fillCull', terrain.renderState.active ? 1 : 0],
+    ];
+    for (const [location, key, value] of values) {
+      if (location && (stale || memo[key] !== value)) {
+        gl.uniform1f(location, value);
+        memo[key] = value;
+      }
     }
   }
 
@@ -848,6 +938,13 @@ function emptyMemo(): RowsUniformMemo {
     coordWidth: Number.NaN,
     rowBase: Number.NaN,
     rowStyleWidth: Number.NaN,
+    stations: Number.NaN,
+    stationStep: Number.NaN,
+    stationGrid: Number.NaN,
+    stationMercator: Number.NaN,
+    surface: Number.NaN,
+    surfacesFlat: Number.NaN,
+    fillCull: Number.NaN,
   };
 }
 
@@ -863,6 +960,7 @@ function layoutOf(data: RowsChunkData): RowsChunkLayout {
     coordFirst: data.coordFirst,
     rowStyle: data.rowStyle,
     palette: data.palette,
+    lines: { ...data.lines },
   };
 }
 
@@ -904,6 +1002,13 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     sizeScale: at('u_size_scale'),
     pixelToClip: at('u_pixel_to_clip'),
     opacity: at('u_opacity'),
+    stations: at('u_stations'),
+    stationStep: at('u_station_step'),
+    stationGrid: at('u_station_grid'),
+    stationMercator: at('u_station_mercator'),
+    surface: at('u_surface'),
+    surfacesFlat: at('u_surfaces_flat'),
+    fillCull: at('u_fill_cull'),
   };
 }
 

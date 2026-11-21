@@ -111,9 +111,11 @@ export const ROWS_STYLE_WIDTH = 1_024;
  * @param kind The kind ({@link ROWS_KIND})
  * @param row The number of the row in its row group
  * @param i0 The first coordinate (-1 for none)
- * @param extra The length of the line before a dashed segment, in CSS px at zoom 0 (0 otherwise)
- * @param t0 The start of the piece of the segment it draws (0: the start of the segment)
- * @param t1 The end of the piece (1: the end of the segment)
+ * @param extra The length of the line before a dashed segment, in CSS px at zoom 0; for a point
+ *   packed for the terrain, the elevation of the ground under it in meters (0 otherwise)
+ * @param t0 For a segment of a line packed for the terrain or the globe, the longest segment of
+ *   its line in meters (0 otherwise)
+ * @param t1 For such a segment, the longest segment of its line on the Mercator plane (1 otherwise)
  */
 export function writeRowsInstance(
   target: Float32Array,
@@ -134,8 +136,8 @@ export function writeRowsInstance(
   target[base + 2] = i1;
   target[base + 3] = i2;
   target[base + 4] = i3;
-  // The range of the segment it draws (0 to 1: the whole segment; a piece of it where the line
-  // is cut for the surface it is drawn on)
+  // For a segment of a line packed for the surface, the longest segment of its line, which the
+  // stations it is drawn in are decided from
   target[base + 5] = t0;
   target[base + 6] = t1;
   target[base + 7] = extra;
@@ -301,6 +303,24 @@ export class RowsPalette {
 }
 
 /**
+ * What the stations of the segments of a chunk are decided from, on the terrain and on the globe
+ * (`resolveLineStations`): whether its rows were packed for the surface, and its longest segment
+ *
+ * @internal
+ */
+export interface RowsLineMetrics {
+  /**
+   * Whether the rows were packed for the terrain or the globe: their segments are cut into
+   * stations, and their points carry the elevation of the ground under them
+   */
+  surface: boolean;
+  /** The longest segment of its lines, in meters (planar) */
+  maxSegmentMeters: number;
+  /** The longest segment of its lines on the Mercator plane (the world is 1 wide) */
+  maxSegmentMercator: number;
+}
+
+/**
  * What a chunk of rows keeps once it is on the GPU: where each row is in it (its place: its
  * instances and its coordinates) and the style of each row, the
  * counts and what it is drawn with. A place is as large as what its row was packed with, and a
@@ -328,6 +348,8 @@ export interface RowsChunkLayout {
   readonly rowStyle: Int32Array;
   /** The values of the styles the rows name */
   readonly palette: RowsPalette;
+  /** What the stations of its segments are decided from (a row written in place widens it) */
+  readonly lines: RowsLineMetrics;
 }
 
 /**

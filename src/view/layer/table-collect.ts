@@ -16,6 +16,15 @@
  *
  * What is packed of a row reads its geometry through one function (`rowGeometryOf`), so that the
  * shapes drawn are read in one place.
+ *
+ * On the terrain and on the globe a chunk is packed for the surface (`RowsSurface`), with the
+ * formulas the renderers of the features use there: a fill is cut with the step of the surface,
+ * coarsened for the chunk as for a batch of polygons (`surfaceFillStep`, `tessellateSurfaceFill`),
+ * and its outline on the step its fill was cut with (`tessellateRings`); a point carries the
+ * elevation of the ground under it, the one the hit testing projects it with
+ * (`anchorElevationMeters`); the longest segment of the lines is kept, which the stations of the
+ * segments are decided from when they are drawn. Each row keeps the fingerprint of what it was cut
+ * with (`RowsDraft.keys`), so that a new surface packs again only the rows it cuts otherwise.
  */
 
 import earcut from 'earcut';
@@ -34,8 +43,14 @@ import {
   type ShapeFormReader,
 } from '../../store/built-in/drawn-rows.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { tessellateSurfaceFill } from '../globe-subdivision.js';
 import { toPackedPointStyle } from '../renderers/batch-manager.js';
-import { toLineInstanceColor } from '../renderers/line/line-geometry.js';
+import {
+  screenPixelDistanceXY,
+  segmentMetersXY,
+  toLineInstanceColor,
+  WORLD_TILE_SIZE,
+} from '../renderers/line/line-geometry.js';
 import type { SDFStrokeStyle } from '../renderers/line/line-types.js';
 import { type PointShape, toInstancedPointShape } from '../renderers/point/point-instance.js';
 import { POINT_SHAPE_CODE } from '../renderers/point/point-sdf.js';
@@ -49,10 +64,23 @@ import {
   ROWS_STYLE_FLOATS,
   type RowsChunkData,
   type RowsKind,
+  type RowsLineMetrics,
   type RowsPalette,
   writeRowsInstance,
 } from '../renderers/rows/rows-format.js';
 import { applyRuleColor, evaluateStyleRuleValue, type StyleRuleChannel } from '../style-rule.js';
+import { anchorElevationMeters } from '../terrain/anchor.js';
+import type { TerrainContext } from '../terrain/context.js';
+import { TERRAIN_MAX_TILED_COARSEN } from '../terrain/metrics.js';
+import {
+  batchTessellationFactor,
+  fillSignature,
+  polygonTessellationStep,
+  ringBoundingCells,
+  tessellateRings,
+} from '../terrain/polygon.js';
+import { reportTerrainCoarsening } from '../terrain/state.js';
+import type { TessellationStep } from '../terrain/tessellation.js';
 
 /** The key of the created zoom in the attributes of a row */
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
@@ -456,6 +484,126 @@ export interface RowsPackContext {
   readonly slots: RowStyleSlots;
   /** The styles of the layer as the values of a palette */
   readonly rowsStyles: RowsStyles;
+  /** The surface the rows are packed for (none on a flat map) */
+  readonly surface?: RowsSurface | null;
+}
+
+/**
+ * The surface the rows of a chunk are packed for: the terrain, or the globe
+ *
+ * @internal
+ */
+export interface RowsSurface {
+  /** The terrain state of the instance (the elevations, the fills cut so far) */
+  readonly terrain: TerrainContext;
+  /**
+   * The step the fills and the outlines are cut with: the step of the surface coarsened for the
+   * chunk (`surfaceFillStep`), null when the surface cuts none
+   */
+  readonly fill: TessellationStep | null;
+}
+
+/**
+ * The step the fills of a chunk are cut with: the step of the surface coarsened for the cells of
+ * the fills of the chunk, as the polygons of a batch are coarsened together (so the fills next to
+ * each other lie on one grid), the coarsening reported for the bias of the depth
+ *
+ * @param base The step of the surface (`getSurfaceTessellationStep` for the fills)
+ * @param cells The cells of the fills of the chunk (`rowFillCells` of its rows)
+ * @internal
+ */
+export function surfaceFillStep(
+  terrain: TerrainContext,
+  base: TessellationStep,
+  cells: number,
+): TessellationStep {
+  const factor = batchTessellationFactor(cells);
+  reportTerrainCoarsening(terrain, factor);
+  if (factor <= 1) return base;
+  if (base.tiling) return { ...base, coarsen: Math.min(factor, TERRAIN_MAX_TILED_COARSEN) };
+  return { grid: base.grid * factor, maxPoints: base.maxPoints, region: base.region };
+}
+
+/**
+ * The cells of the step of the surface the fills of a row cover (the outer ring of each of its
+ * polygons drawn), which the coarsening of its chunk is decided from
+ *
+ * @internal
+ */
+export function rowFillCells(
+  group: RowGroup,
+  row: number,
+  context: Pick<RowsPackContext, 'rows' | 'slots'>,
+  base: TessellationStep,
+): number {
+  const { rows } = context;
+  if (!rows.hasGeometry(group, row)) return 0;
+  const type = rows.typeOf(group, row);
+  if (type !== 'Polygon' && type !== 'MultiPolygon' && type !== 'Circle') return 0;
+  const slot = context.slots.polygon(
+    rows.styleNumberOf(group, row),
+    type,
+    context.slots.ruleColorOf(group, row),
+  );
+  if (!slot.hasStroke && slot.fillColor[3] <= 0) return 0;
+  let cells = 0;
+  for (const polygon of rowPolygonsOf(group, row, type)) {
+    const outer = polygon[0];
+    if (outer) cells += ringBoundingCells(outer, base.grid, base.region);
+  }
+  return cells;
+}
+
+/**
+ * The fingerprint of what a row is cut with on a surface (0 for a row the surface does not cut):
+ * for a polygon, the conditions that decide the cut of each of its polygons (`fillSignature`),
+ * for a point, the elevations of its points
+ *
+ * @internal
+ */
+export function rowSurfaceKey(group: RowGroup, row: number, context: RowsPackContext): number {
+  const surface = context.surface;
+  const { rows } = context;
+  if (!surface || !rows.hasGeometry(group, row)) return 0;
+  const type = rows.typeOf(group, row);
+  if (type === 'Point' || type === 'MultiPoint') {
+    const geometry = rowGeometryOf(group, row);
+    if (!geometry) return 0;
+    const { reader, at } = geometry;
+    const first = reader.vertexStart(at);
+    const end = reader.depth === 0 ? first + 1 : reader.vertexStart(at + 1);
+    const heights: number[] = [];
+    for (let v = first; v < end; v++) {
+      heights.push(
+        Math.fround(
+          anchorElevationMeters(
+            surface.terrain,
+            reader.coords[v * reader.stride],
+            reader.coords[v * reader.stride + 1],
+          ),
+        ),
+      );
+    }
+    return keyOfText(heights.join(','));
+  }
+  if (type !== 'Polygon' && type !== 'MultiPolygon' && type !== 'Circle') return 0;
+  const step = surface.fill;
+  if (!step) return 0;
+  const signatures: string[] = [];
+  for (const polygon of rowPolygonsOf(group, row, type)) {
+    signatures.push(fillSignature(step, buildEarcutInput(polygon).flatCoords));
+  }
+  return keyOfText(signatures.join('|'));
+}
+
+/** A number of a text (32 bits, never 0: 0 names no fingerprint) */
+function keyOfText(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash === 0 ? 1 : hash;
 }
 
 /**
@@ -474,6 +622,20 @@ export class RowsDraft {
   readonly rowStyle: Int32Array;
   readonly rowFirst: Int32Array;
   readonly coordFirst: Int32Array;
+  /** The fingerprint of what each row is cut with on the surface (`rowSurfaceKey`; 0: none) */
+  readonly keys: Int32Array;
+  /**
+   * On the surface, what each row is in the runs of the lines a batch of lines is drawn from: 0 a
+   * row without a geometry (it joins the run it is in), 1 a line, 2 a row of another kind (it ends
+   * the run)
+   */
+  readonly runKinds: Uint8Array;
+  /** On the surface, the longest segment of each line, then of its run, in meters */
+  readonly runMeters: Float32Array;
+  /** On the surface, the longest segment of each line, then of its run, on the Mercator plane */
+  readonly runMercator: Float32Array;
+  /** What the stations of the segments are decided from */
+  readonly lines: RowsLineMetrics = { surface: false, maxSegmentMeters: 0, maxSegmentMercator: 0 };
 
   /**
    * @param rows The rows of the chunk
@@ -493,6 +655,10 @@ export class RowsDraft {
     this.rowStyle = new Int32Array(rows).fill(-1);
     this.rowFirst = new Int32Array(rows + 1);
     this.coordFirst = new Int32Array(rows + 1);
+    this.keys = new Int32Array(rows);
+    this.runKinds = new Uint8Array(rows);
+    this.runMeters = new Float32Array(rows);
+    this.runMercator = new Float32Array(rows);
   }
 
   /** Sets the resolved style of a row, counted in the palette (the one it had is not counted) */
@@ -524,11 +690,33 @@ export class RowsDraft {
   }
 
   /** Adds an instance */
-  instance(kind: RowsKind, row: number, i0: number, i1: number, i2: number, i3: number, extra = 0) {
+  instance(
+    kind: RowsKind,
+    row: number,
+    i0: number,
+    i1: number,
+    i2: number,
+    i3: number,
+    extra = 0,
+    t0 = 0,
+    t1 = 1,
+  ) {
     if ((this.instanceCount + 1) * ROWS_INSTANCE_FLOATS > this.instances.length) {
       this.instances = grown(this.instances, (this.instanceCount + 1) * ROWS_INSTANCE_FLOATS);
     }
-    writeRowsInstance(this.instances, this.instanceCount++, kind, row, i0, i1, i2, i3, extra);
+    writeRowsInstance(
+      this.instances,
+      this.instanceCount++,
+      kind,
+      row,
+      i0,
+      i1,
+      i2,
+      i3,
+      extra,
+      t0,
+      t1,
+    );
   }
 
   /** The packed arrays of the chunk */
@@ -546,7 +734,57 @@ export class RowsDraft {
       rowFirst: this.rowFirst,
       coordFirst: this.coordFirst,
       palette,
+      lines: this.lines,
     };
+  }
+
+  /**
+   * Gives every segment of a run of lines the longest segment of the run: the lines that follow
+   * each other with no row of another kind between them are the lines a batch of lines is drawn
+   * from, and its segments are drawn in the stations of the longest segment of the batch
+   * (`resolveLineStations`)
+   */
+  spreadRuns(): void {
+    const kinds = this.runKinds;
+    let from = 0;
+    while (from < this.rows) {
+      if (kinds[from] !== 1) {
+        from++;
+        continue;
+      }
+      let to = from;
+      let meters = 0;
+      let mercator = 0;
+      while (to < this.rows && kinds[to] !== 2) {
+        if (kinds[to] === 1) {
+          meters = Math.max(meters, this.runMeters[to]);
+          mercator = Math.max(mercator, this.runMercator[to]);
+        }
+        to++;
+      }
+      for (let i = from; i < to; i++) {
+        if (kinds[i] !== 1) continue;
+        this.runMeters[i] = meters;
+        this.runMercator[i] = mercator;
+        this.writeRun(i, meters, mercator);
+      }
+      from = to;
+    }
+  }
+
+  /** Writes the longest segment of its run into the segments of a line */
+  writeRun(i: number, meters: number, mercator: number): void {
+    for (let k = this.rowFirst[i]; k < this.rowFirst[i + 1]; k++) {
+      this.instances[k * ROWS_INSTANCE_FLOATS + 5] = meters;
+      this.instances[k * ROWS_INSTANCE_FLOATS + 6] = mercator;
+    }
+  }
+
+  /** Widens the longest segment of the lines by the longest segment of a line */
+  segment(meters: number, mercator: number): void {
+    const lines = this.lines;
+    if (meters > lines.maxSegmentMeters) lines.maxSegmentMeters = meters;
+    if (mercator > lines.maxSegmentMercator) lines.maxSegmentMercator = mercator;
   }
 }
 
@@ -611,6 +849,11 @@ export function rowGeometryOf(
  */
 export function rowCreatedZoom(group: RowGroup, row: number): number | undefined {
   return rowNumber(group, row, CREATED_ZOOM_KEY);
+}
+
+/** Whether a type of feature is drawn as a line */
+function isLineType(type: string): boolean {
+  return type === 'LineString' || type === 'Freehand' || type === 'MultiLineString';
 }
 
 /** The length of a segment as the dashes cut on the CPU measure it, in CSS px at zoom 0 */
@@ -704,6 +947,15 @@ export function collectRow(
   const styleAt = i * ROWS_ROW_STYLE_FLOATS;
   draft.rowStyles.fill(0, styleAt, styleAt + ROWS_ROW_STYLE_FLOATS);
   draft.setRowStyle(i, -1);
+  if (context.surface) {
+    draft.lines.surface = true;
+    draft.keys[i] = rowSurfaceKey(group, row, context);
+    draft.runKinds[i] = rows.hasGeometry(group, row)
+      ? isLineType(rows.typeOf(group, row))
+        ? 1
+        : 2
+      : 0;
+  }
   if (rows.hasGeometry(group, row)) {
     const type = rows.typeOf(group, row);
     switch (type) {
@@ -766,13 +1018,14 @@ function collectPointRow(
   const stride = reader.stride;
   const first = reader.vertexStart(at);
   const end = reader.depth === 0 ? first + 1 : reader.vertexStart(at + 1);
+  const terrain = context.surface?.terrain;
   for (let v = first; v < end; v++) {
-    const index = draft.coord(
-      coords[v * stride] - origin[0],
-      coords[v * stride + 1] - origin[1],
-      v - first,
-    );
-    draft.instance(ROWS_KIND.point, row, index, -1, -1, -1);
+    const x = coords[v * stride];
+    const y = coords[v * stride + 1];
+    const index = draft.coord(x - origin[0], y - origin[1], v - first);
+    // On the surface, the elevation of the ground the hit testing projects the point with
+    const elevation = terrain ? anchorElevationMeters(terrain, x, y) : 0;
+    draft.instance(ROWS_KIND.point, row, index, -1, -1, -1, elevation);
   }
 }
 
@@ -807,6 +1060,28 @@ function collectLineRow(
   const dashed = context.slots.line(styleNumber, type, ruleColor).stroke.lineStyle !== 'solid';
   const coords = reader.coords;
   const stride = reader.stride;
+  // On the surface, the longest segment of the line, in meters and on the Mercator plane: each
+  // segment of it is drawn in the stations a batch of this line alone is drawn in
+  let rowMeters = 0;
+  let rowMercator = 0;
+  if (context.surface) {
+    for (let k = 0; k < parts.length; k += 2) {
+      for (let v = parts[k]; v < parts[k + 1] - 1; v++) {
+        const a = v * stride;
+        const b = a + stride;
+        const meters = segmentMetersXY(coords[a], coords[a + 1], coords[b], coords[b + 1]);
+        if (meters > rowMeters) rowMeters = meters;
+        const mercator =
+          screenPixelDistanceXY(coords[a], coords[a + 1], coords[b], coords[b + 1], 0) /
+          WORLD_TILE_SIZE;
+        if (mercator > rowMercator) rowMercator = mercator;
+      }
+    }
+    draft.segment(rowMeters, rowMercator);
+    const i = styleAt / ROWS_ROW_STYLE_FLOATS;
+    draft.runMeters[i] = rowMeters;
+    draft.runMercator[i] = rowMercator;
+  }
   for (let k = 0; k < parts.length; k += 2) {
     const start = parts[k];
     const end = parts[k + 1];
@@ -826,6 +1101,8 @@ function collectLineRow(
         base + s + 1,
         s + 2 < n ? base + s + 2 : -1,
         dashed ? before : 0,
+        context.surface ? rowMeters : 0,
+        context.surface ? rowMercator : 1,
       );
       if (dashed) {
         const a = (start + s) * stride;
@@ -855,8 +1132,13 @@ function collectPolygonRow(
   writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
   const solidOutline = slot.hasStroke && !slot.dashedStroke;
   const dashedOutline = slot.hasStroke && slot.dashedStroke;
+  const surface = context.surface;
+  const step = surface?.fill ?? null;
+  const id = step ? context.rows.idOf(context.rows.refOf(group, row)) : undefined;
   let source = 0;
+  let partIndex = -1;
   for (const polygon of polygons) {
+    partIndex++;
     const outer = polygon[0];
     const count = polygon.reduce((sum, ring) => sum + ring.length, 0);
     const { flatCoords, holeIndices, rings } = buildEarcutInput(polygon);
@@ -870,18 +1152,62 @@ function collectPolygonRow(
       draft.coord(flatCoords[c] - origin[0], flatCoords[c + 1] - origin[1], source + c / 2);
     }
     source += count;
+    // The step the fill was cut with, which the outline is cut with too (on one grid)
+    let polygonStep: TessellationStep | null = null;
     // 1. The fill, a triangle per instance
     if (slot.fillColor[3] > 0) {
-      const triangles = earcut(flatCoords, holeIndices);
+      let triangles: number[] = earcut(flatCoords, holeIndices);
+      let fillBase = base;
+      if (step && surface && triangles.length > 0) {
+        const cut = tessellateSurfaceFill(
+          surface.terrain,
+          id,
+          partIndex,
+          flatCoords,
+          triangles,
+          step,
+        );
+        polygonStep = cut.step;
+        if (cut.flatCoords !== flatCoords) {
+          fillBase = draft.coordCount;
+          const cutCoords = cut.flatCoords;
+          for (let c = 0; c < cutCoords.length; c += 2) {
+            draft.coord(cutCoords[c] - origin[0], cutCoords[c + 1] - origin[1]);
+          }
+        }
+        triangles = cut.indices;
+      }
       for (let t = 0; t < triangles.length; t += 3) {
-        const c = base + triangles[t + 2];
-        draft.instance(ROWS_KIND.fill, row, base + triangles[t], base + triangles[t + 1], c, c);
+        const c = fillBase + triangles[t + 2];
+        draft.instance(
+          ROWS_KIND.fill,
+          row,
+          fillBase + triangles[t],
+          fillBase + triangles[t + 1],
+          c,
+          c,
+        );
       }
     }
     // 2. The outline: the edges of every ring
     if (!solidOutline && !dashedOutline) continue;
     let ringBase = base;
-    for (const ring of rings) {
+    let drawnRings = rings;
+    if (step) {
+      // A polygon without a fill takes the step from its size
+      const ringStep = polygonStep ?? polygonTessellationStep(step, flatCoords);
+      const cut = tessellateRings(rings, ringStep);
+      if (cut !== rings) {
+        drawnRings = cut.filter((ring) => ring.length >= 3);
+        ringBase = draft.coordCount;
+        for (const ring of drawnRings) {
+          for (const coordinate of ring) {
+            draft.coord(coordinate[0] - origin[0], coordinate[1] - origin[1]);
+          }
+        }
+      }
+    }
+    for (const ring of drawnRings) {
       const n = ring.length;
       const at = (j: number) => ringBase + (((j % n) + n) % n);
       let before = 0;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The drawing of the layers from their rows (`TableLayerRenderer`), on a flat map
+ * The drawing of the layers from their rows (`TableLayerRenderer`), on every surface
  *
  * A layer is drawn in the order of its rows: its row groups in their order, and the GPU chunks of
  * a group (`table-partition.ts`) in theirs, with the rows of the parts of its delta at their places
@@ -18,6 +18,20 @@
  * In both, the rows that cannot be in a chunk (images, custom types, features with companions,
  * shapes that are not instanced, and by kind the dashed lines) are drawn at once, in their place,
  * from their features, the ones in view only.
+ *
+ * On the terrain and on the globe the chunks drawn in one draw are packed for the surface
+ * (`RowsSurface` of `table-collect.ts`): their fills and outlines cut with the step of the surface,
+ * their points with the elevations of the ground under them, their segments drawn in stations; the
+ * dashed lines and the polygons with a dashed outline are drawn at once there, as the drawing by
+ * kind draws them. Each chunk keeps what it was cut with and the fingerprint of the cut of each
+ * row (`ChunkCut`). When the surface changes (the step of the terrain, its tiles, the cells of the
+ * globe) or the elevations do, a chunk in view checks its rows again within the budget of the
+ * frames, a slice at a time, packs again the rows whose fingerprint changed, and writes them into
+ * their places once all of them are packed (it draws as it was until then); a row that does not
+ * fit its place makes the chunk build again (drawn as it was until then). When the layers go onto
+ * the terrain or the globe or leave them, every chunk is cut again, the chunks of the cut before
+ * drawn until the new ones are built in view. In the band of the analytic drape the polygons and
+ * the lines are on the drape and the other rows are drawn at once.
  *
  * The chunks are built over the frames within a budget (`view/retained/chunk-scheduler.ts`), and
  * a chunk invalidated keeps drawing until the new one is built. The next versions of the row
@@ -65,6 +79,7 @@ import {
   drawFeatureCompanionsInFrame,
   type FeatureCompanionRegistry,
 } from '../feature-companion.js';
+import { getSurfaceTessellationStep } from '../globe-subdivision.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { layerDrawFactors, type RetainedDrawFactors } from '../renderers/draw-factors.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
@@ -91,6 +106,7 @@ import {
 } from '../retained/chunk-scheduler.js';
 import { getAnchorElevationGeneration } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
+import type { TessellationStep } from '../terrain/tessellation.js';
 import {
   collectRow,
   ROWS_LAYOUT,
@@ -99,8 +115,12 @@ import {
   RowsDraft,
   type RowsPackContext,
   RowsStyles,
+  type RowsSurface,
   resolveRowStyle,
   rowCreatedZoom,
+  rowFillCells,
+  rowSurfaceKey,
+  surfaceFillStep,
 } from './table-collect.js';
 import { buildKindBatch, disposeKindBatch, drawKindBatch, type KindBatch } from './table-kinds.js';
 import {
@@ -129,6 +149,9 @@ export const IMMEDIATE_CACHE_LIMIT = 50_000;
 
 /** The rows packed between two looks at the clock */
 const SLICE_ROWS = 512;
+
+/** The rows a chunk checks against a new surface between two looks at the clock */
+const RECUT_SLICE_ROWS = 64;
 
 /** The whole world: the range drawn when the view is not known */
 function world(): BBox {
@@ -267,6 +290,38 @@ interface KindChunkState extends RetainedChunkState<KindBatch> {
   readonly range: OrderedChunkRange;
 }
 
+/**
+ * What the rows of a chunk drawn in one draw were cut with on the terrain or the globe: the
+ * surface, its generation and the generation of the elevations, the step of its fills, the
+ * fingerprint of the cut of each row (`rowSurfaceKey`), and the check against a newer surface in
+ * progress
+ */
+interface ChunkCut {
+  readonly kind: TableLayerSurface['kind'];
+  generation: number;
+  anchor: number;
+  step: TessellationStep | null;
+  readonly keys: Int32Array;
+  /** The longest segment of the run of lines of each line (`RowsDraft.spreadRuns`) */
+  readonly runMeters: Float32Array;
+  readonly runMercator: Float32Array;
+  check: CutCheck | null;
+}
+
+/** A check of the rows of a chunk against a newer surface, a slice at a time */
+interface CutCheck {
+  readonly generation: number;
+  readonly anchor: number;
+  /** The cells of the fills counted so far (while `step` is undefined) */
+  cells: number;
+  /** The step of the fills on the new surface (undefined until the cells are counted) */
+  step: TessellationStep | null | undefined;
+  /** The next row (of the count of the cells, then of the check) */
+  at: number;
+  /** The rows packed again, written into their places once every row is checked */
+  readonly patches: Array<{ local: number; key: number; draft: RowsDraft }>;
+}
+
 /** A chunk of rows drawn at once */
 interface AtOnceChunk {
   readonly type: 'immediate';
@@ -309,6 +364,8 @@ interface GroupCache {
   chunks: TableChunk[] | null;
   /** The drawing the chunks are of */
   drawing: Drawing | null;
+  /** The surface the chunks were cut for */
+  surfaceKind: TableLayerSurface['kind'];
   /** The generation of the classification of the layer the chunks were cut with */
   generation: number;
   /** The chunks of the cut before, drawn until the chunks of the new cut are built in view */
@@ -356,6 +413,8 @@ interface LayerCache {
   /** The view the layer was drawn in last */
   bounds: BBox;
   drawing: Drawing;
+  /** The surface the rows are classified for */
+  surfaceKind: TableLayerSurface['kind'];
   drawnFrame: number;
 }
 
@@ -408,6 +467,11 @@ export class TableLayerRenderer {
   private surface: TableLayerSurface = { kind: 'flat', draped: false };
   /** The generations of the terrain the chunks were built for (-1 before the first frame) */
   private readonly terrainSeen = { render: -1, globe: -1, anchor: -1 };
+  /** What the surface of the frame is, and the generation that advances when it changes */
+  private surfaceKey = 'flat';
+  private surfaceGeneration = 0;
+  /** What the rows of the chunks drawn in one draw were cut with on the surface */
+  private readonly cuts = new WeakMap<RowsChunk, ChunkCut>();
   private renderers: RetainedRendererSet | null = null;
   private rows: RowsRenderer | null = null;
   private record: TableDrawRecord[] | null = null;
@@ -503,7 +567,10 @@ export class TableLayerRenderer {
         return this.rowsJob(cache, groupCache.group, state.range, origin);
       },
       adoptJob: () => {},
-      disposeBatches: (chunk) => this.rows?.disposeChunk(chunk),
+      disposeBatches: (chunk) => {
+        this.dropCheck(chunk);
+        this.rows?.disposeChunk(chunk);
+      },
       draw: () => true,
     };
     this.kindHost = {
@@ -539,6 +606,15 @@ export class TableLayerRenderer {
   /** Sets the surface the layers are drawn on in this frame */
   setSurface(surface: TableLayerSurface): void {
     this.surface = surface;
+    const terrain = this.options.terrain;
+    const key =
+      surface.kind === 'flat' || !terrain
+        ? surface.kind
+        : `${surface.kind}|${terrain.renderState.generation}|${terrain.globeGeneration}`;
+    if (key !== this.surfaceKey) {
+      this.surfaceKey = key;
+      this.surfaceGeneration++;
+    }
   }
 
   /**
@@ -651,8 +727,9 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Makes the chunks built for the terrain or the globe again when what they were built for
-   * changed: the step of the terrain, the subdivision of the globe, the elevations of the anchors
+   * Makes the chunks drawn by kind for the terrain or the globe again when what they were built
+   * for changed: the step of the terrain, the subdivision of the globe, the elevations of the
+   * anchors (the chunks drawn in one draw check their rows against it, `checkCut`)
    */
   private followTerrain(): void {
     const terrain = this.options.terrain;
@@ -666,7 +743,10 @@ export class TableLayerRenderer {
     seen.render = render;
     seen.globe = globe;
     seen.anchor = anchor;
-    if (changed && !first) this.reclassify();
+    if (!changed || first) return;
+    for (const cache of this.layers.values()) {
+      if (cache.drawing === 'by-kind') cache.slots = null;
+    }
   }
 
   // === What this client hides and selects ===
@@ -986,7 +1066,7 @@ export class TableLayerRenderer {
     this.renderers = deps.renderers;
     this.rows = deps.rows;
     const surface = this.surface;
-    const oneDraw = deps.rows.ready && !this.byKind && surface.kind === 'flat';
+    const oneDraw = deps.rows.ready && !this.byKind;
     const drawing: Drawing = surface.draped ? 'draped' : oneDraw ? 'one-draw' : 'by-kind';
     if (deps.rows.failed && !this.byKind) this.options.drawnByKind?.();
     const cache = this.layerCache(layerId, table, layer, deps, drawing);
@@ -1070,6 +1150,7 @@ export class TableLayerRenderer {
         deps: null,
         bounds: world(),
         drawing,
+        surfaceKind: this.surface.kind,
         drawnFrame: -1,
       };
       this.layers.set(layerId, cache);
@@ -1096,6 +1177,12 @@ export class TableLayerRenderer {
     }
     if (cache.drawing !== drawing) {
       cache.drawing = drawing;
+      cache.generation++;
+      this.deltaStale.add(layerId);
+    }
+    // Onto the terrain or the globe, or off them: the rows are classified and packed for it
+    if (cache.surfaceKind !== this.surface.kind) {
+      cache.surfaceKind = this.surface.kind;
       cache.generation++;
       this.deltaStale.add(layerId);
     }
@@ -1130,13 +1217,141 @@ export class TableLayerRenderer {
     return cache;
   }
 
-  /** The context the rows of a layer are packed with */
-  private packContext(cache: LayerCache): RowsPackContext {
+  /**
+   * The context the rows of a layer are packed with
+   *
+   * @param surface The surface they are packed for (none on a flat map)
+   */
+  private packContext(cache: LayerCache, surface: RowsSurface | null = null): RowsPackContext {
     return {
       rows: this.reader,
       slots: cache.slots as RowStyleSlots,
       rowsStyles: cache.rowsStyles as RowsStyles,
+      surface,
     };
+  }
+
+  /** The surface the rows are packed for with a step of the fills */
+  private surfaceOf(step: TessellationStep | null): RowsSurface | null {
+    const terrain = this.options.terrain;
+    return terrain ? { terrain, fill: step } : null;
+  }
+
+  /** The step of the fills of the surface of the frame (none on a flat map) */
+  private baseFillStep(): TessellationStep | null {
+    const terrain = this.options.terrain;
+    if (!terrain || this.surface.kind === 'flat') return null;
+    return getSurfaceTessellationStep(terrain, 'fill');
+  }
+
+  /**
+   * Checks the rows of a chunk in view cut for an older surface, or older elevations, against the
+   * ones of the frame, within the budget: the cells of its fills are counted for the step of the
+   * new surface, then each row whose fingerprint changed is packed again; once every row is
+   * checked, they are written into their places. A row that does not fit its place makes the chunk
+   * build again; the chunk draws as it was until then
+   */
+  private checkCut(cache: LayerCache, groupCache: GroupCache, chunk: RowsChunkState): void {
+    const gpu = chunk.batches;
+    if (!gpu || chunk.job || chunk.stale) return;
+    const cut = this.cuts.get(gpu);
+    if (!cut || cut.kind !== this.surface.kind) return;
+    const terrain = this.options.terrain as TerrainContext;
+    const generation = this.surfaceGeneration;
+    const anchor = getAnchorElevationGeneration(terrain);
+    if (cut.generation === generation && cut.anchor === anchor) return;
+    if (!meets(chunk.bounds, this.schedule.bounds)) return;
+    const rowsStyles = cache.rowsStyles;
+    const rows = this.rows;
+    if (!rows || !rowsStyles || !cache.slots || gpu.data.palette !== rowsStyles.palette) return;
+    const budget = this.schedule.budget;
+    if (!budget.canStep()) {
+      this.pending = true;
+      return;
+    }
+    if (cut.check && (cut.check.generation !== generation || cut.check.anchor !== anchor)) {
+      this.dropCheck(gpu);
+    }
+    cut.check ??= {
+      generation,
+      anchor,
+      cells: 0,
+      // The step stays when only the elevations changed
+      step: cut.generation === generation ? cut.step : undefined,
+      at: 0,
+      patches: [],
+    };
+    const check = cut.check;
+    const group = groupCache.group;
+    const data = gpu.data;
+    const done = budget.step((deadline) => {
+      const base = this.baseFillStep();
+      if (check.step === undefined) {
+        // The cells of the fills of the chunk, for the coarsening of the step of the new surface
+        const context = this.packContext(cache);
+        while (check.at < data.rows) {
+          if (base) check.cells += rowFillCells(group, data.rowBase + check.at, context, base);
+          check.at++;
+          if (check.at % RECUT_SLICE_ROWS === 0 && budget.now() >= deadline) return false;
+        }
+        check.step = base ? surfaceFillStep(terrain, base, check.cells) : null;
+        check.at = 0;
+      }
+      const context = this.packContext(cache, this.surfaceOf(check.step));
+      // The fingerprints of the polygons follow the surface, those of the points the elevations
+      const polygons = cut.generation !== generation;
+      const points = cut.anchor !== anchor;
+      while (check.at < data.rows) {
+        const local = check.at;
+        const row = data.rowBase + local;
+        const type = this.reader.hasGeometry(group, row) ? this.reader.typeOf(group, row) : '';
+        const point = type === 'Point' || type === 'MultiPoint';
+        const polygon = type === 'Polygon' || type === 'MultiPolygon' || type === 'Circle';
+        if (!(point ? points : polygon && polygons)) {
+          check.at++;
+          if (check.at % RECUT_SLICE_ROWS === 0 && budget.now() >= deadline) return false;
+          continue;
+        }
+        const key = rowSurfaceKey(group, row, context);
+        if (key !== cut.keys[local]) {
+          const draft = new RowsDraft(1, row, undefined, rowsStyles.palette);
+          collectRow(group, row, 0, draft, data.origin, context);
+          check.patches.push({ local, key, draft });
+          this.stats.rowsPacked++;
+        }
+        check.at++;
+        if (check.at % RECUT_SLICE_ROWS === 0 && budget.now() >= deadline) return false;
+      }
+      return true;
+    });
+    if (!done) {
+      this.pending = true;
+      return;
+    }
+    cut.check = null;
+    for (let i = 0; i < check.patches.length; i++) {
+      const { local, key, draft } = check.patches[i];
+      if (rows.patchRows(gpu, local, draft.finish(data.origin, data.palette))) {
+        cut.keys[local] = key;
+        continue;
+      }
+      // A row that does not fit its place: the chunk builds again (drawn until then)
+      for (let j = i; j < check.patches.length; j++) check.patches[j].draft.releaseStyles();
+      this.invalidate(chunk, true);
+      this.pending = true;
+      return;
+    }
+    cut.generation = generation;
+    cut.anchor = anchor;
+    cut.step = check.step ?? null;
+  }
+
+  /** Drops the check of the rows of a chunk in progress (its rows packed again let go) */
+  private dropCheck(gpu: RowsChunk): void {
+    const cut = this.cuts.get(gpu);
+    if (!cut?.check) return;
+    for (const patch of cut.check.patches) patch.draft.releaseStyles();
+    cut.check = null;
   }
 
   /**
@@ -1186,6 +1401,7 @@ export class TableLayerRenderer {
             featureOf: (g, r) => this.featureOfRow(g, r),
             layer: cache.layer ?? undefined,
             oneDraw,
+            onSurface: cache.surfaceKind !== 'flat',
           }),
     );
     const chunks = ranges.flatMap((range) => makeChunk(range));
@@ -1204,6 +1420,7 @@ export class TableLayerRenderer {
     }
     groupCache.chunks = chunks;
     groupCache.drawing = cache.drawing;
+    groupCache.surfaceKind = cache.surfaceKind;
     groupCache.generation = cache.generation;
     groupCache.styleGeneration = cache.styleGeneration;
     return chunks;
@@ -1255,6 +1472,10 @@ export class TableLayerRenderer {
     // The chunks of the new cut are built; until they are built in view, the group draws the
     // chunks of the cut before
     this.buildChunks(groupCache, !groupCache.shown);
+    // The chunks in view cut for an older surface check their rows against this one
+    for (const chunk of chunks) {
+      if (chunk.type === 'rows') this.checkCut(cache, groupCache, chunk);
+    }
     if (builtInView(chunks, cache.bounds)) groupCache.shown = true;
     let drawn = chunks;
     const retiring = groupCache.retiring;
@@ -1501,7 +1722,17 @@ export class TableLayerRenderer {
     origin: [number, number],
   ): RetainedChunkJob<RowsChunk> {
     const rows = this.rows as RowsRenderer;
-    const context = this.packContext(cache);
+    // On the terrain or the globe the rows are packed for the surface of the frame the build
+    // starts in: its fills with the step of the surface coarsened for the cells of the chunk
+    const kind = this.surface.kind;
+    const terrain = this.options.terrain;
+    const onSurface = kind !== 'flat' && terrain !== undefined;
+    const generation = this.surfaceGeneration;
+    const anchor = terrain ? getAnchorElevationGeneration(terrain) : -1;
+    const base = onSurface ? this.baseFillStep() : null;
+    let cells = 0;
+    let counted = !base;
+    let context = this.packContext(cache, onSurface ? this.surfaceOf(null) : null);
     const palette = context.rowsStyles.palette;
     const roundedOrigin: [number, number] = [Math.fround(origin[0]), Math.fround(origin[1])];
     const draft = new RowsDraft(range.to - range.from, range.from, range.vertices, palette);
@@ -1510,6 +1741,23 @@ export class TableLayerRenderer {
     let disposed = false;
     return {
       step: (deadline, now) => {
+        while (!counted) {
+          const end = Math.min(range.to, at + SLICE_ROWS);
+          for (; at < end; at++)
+            cells += rowFillCells(group, at, context, base as TessellationStep);
+          if (at >= range.to) {
+            counted = true;
+            at = range.from;
+            context = this.packContext(
+              cache,
+              this.surfaceOf(
+                surfaceFillStep(terrain as TerrainContext, base as TessellationStep, cells),
+              ),
+            );
+          } else if (now() >= deadline) {
+            return false;
+          }
+        }
         do {
           const end = Math.min(range.to, at + SLICE_ROWS);
           for (; at < end; at++)
@@ -1518,7 +1766,20 @@ export class TableLayerRenderer {
         if (at < range.to) return false;
         this.stats.rowsPacked += range.to - range.from;
         this.stats.chunksBuilt++;
+        if (onSurface) draft.spreadRuns();
         result = rows.createChunk(draft.finish(roundedOrigin, palette));
+        if (onSurface) {
+          this.cuts.set(result, {
+            kind,
+            generation,
+            anchor,
+            step: context.surface?.fill ?? null,
+            keys: draft.keys,
+            runMeters: draft.runMeters,
+            runMercator: draft.runMercator,
+            check: null,
+          });
+        }
         return true;
       },
       take: () => result,
@@ -1746,6 +2007,7 @@ export class TableLayerRenderer {
           featureOf: (g, r) => this.featureOfRow(g, r),
           layer: cache.layer ?? undefined,
           oneDraw: groupCache.drawing === 'one-draw',
+          onSurface: groupCache.surfaceKind !== 'flat',
         });
         if (now !== null && now !== chunk.range.kind) return false;
       }
@@ -1782,7 +2044,11 @@ export class TableLayerRenderer {
       this.invalidate(chunk, true);
       return true;
     }
-    const context = this.packContext(cache);
+    // A row of a chunk cut for the surface is packed with what the chunk was cut with; a check
+    // in progress starts again from the rows as written
+    const cut = this.cuts.get(gpu);
+    if (cut) this.dropCheck(gpu);
+    const context = this.packContext(cache, cut ? this.surfaceOf(cut.step) : null);
     const local = row - chunk.range.from;
     const held = gpu.data.rowStyle[local];
     const styleWritten =
@@ -1790,8 +2056,10 @@ export class TableLayerRenderer {
     const layout = rowsStyles.layoutOf(held);
     const kind = layout & 7;
     this.stats.rowsPacked++;
-    // The positions only: a point or a solid line that keeps its shape and its style
+    // The positions only: a point or a solid line that keeps its shape and its style (not on the
+    // surface, where a point carries its elevation and a line its longest segment)
     if (
+      !cut &&
       (write.what & ROW_WRITE_GEOMETRY) !== 0 &&
       write.sameShape &&
       !styleWritten &&
@@ -1823,7 +2091,22 @@ export class TableLayerRenderer {
     // The row packed again into its place, when it fits
     const draft = new RowsDraft(1, row, undefined, rowsStyles.palette);
     collectRow(group, row, 0, draft, gpu.data.origin, context);
-    if (rows.patchRows(gpu, local, draft.finish(gpu.data.origin, gpu.data.palette))) return true;
+    if (cut && draft.runKinds[0] === 1) {
+      // A line drawn in the stations of its run: a line longer than its run makes the chunk build
+      // again, as a batch of lines builds again with the line
+      const meters = cut.runMeters[local];
+      const mercator = cut.runMercator[local];
+      if (draft.runMeters[0] > meters || draft.runMercator[0] > mercator) {
+        draft.releaseStyles();
+        this.invalidate(chunk, true);
+        return true;
+      }
+      draft.writeRun(0, meters, mercator);
+    }
+    if (rows.patchRows(gpu, local, draft.finish(gpu.data.origin, gpu.data.palette))) {
+      if (cut) cut.keys[local] = draft.keys[0];
+      return true;
+    }
     draft.releaseStyles();
     return false;
   }
@@ -1881,6 +2164,7 @@ function newGroupCache(
     group,
     chunks: null,
     drawing: null,
+    surfaceKind: 'flat',
     generation: -1,
     retiring: null,
     styleGeneration,

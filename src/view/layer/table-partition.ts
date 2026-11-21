@@ -72,6 +72,12 @@ export interface RowClassifyContext {
    * it draws the dashed and dotted lines and the polygons with a dashed outline
    */
   readonly oneDraw: boolean;
+  /**
+   * Whether the rows are drawn on the terrain or the globe: the dashed and dotted lines and the
+   * polygons with a dashed outline are then drawn at once, their dashes cut as the features are
+   * drawn there (the drawing by kind draws them at once on every surface)
+   */
+  readonly onSurface?: boolean;
 }
 
 /**
@@ -114,17 +120,18 @@ export function classifyRow(
     case 'LineString':
     case 'Freehand':
     case 'MultiLineString': {
-      if (context.oneDraw) return 'rows';
-      return context.slots.line(style, type, ruleColor).stroke.lineStyle === 'solid'
-        ? 'line'
-        : 'immediate';
+      if (context.oneDraw && !context.onSurface) return 'rows';
+      const solid = context.slots.line(style, type, ruleColor).stroke.lineStyle === 'solid';
+      if (!solid) return 'immediate';
+      return context.oneDraw ? 'rows' : 'line';
     }
     case 'Polygon':
     case 'MultiPolygon':
     case 'Circle': {
-      if (context.oneDraw) return 'rows';
+      if (context.oneDraw && !context.onSurface) return 'rows';
       const slot = context.slots.polygon(style, type, ruleColor);
-      return slot.dashedStroke ? 'immediate' : 'polygon';
+      if (slot.dashedStroke) return 'immediate';
+      return context.oneDraw ? 'rows' : 'polygon';
     }
     default:
       return 'immediate';
