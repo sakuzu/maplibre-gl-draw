@@ -62,7 +62,8 @@ export interface RegisteredType {
  */
 export interface TransformDeps {
   /** The layer over the Store, through which the rows are read as arrays and the features written */
-  readonly layer: Pick<InstanceDocument, 'getFeature' | 'readFeatureValues' | 'updateFeature'>;
+  readonly layer: Pick<InstanceDocument, 'getFeature' | 'readFeatureValues' | 'updateFeature'> &
+    Partial<Pick<InstanceDocument, 'markWholeGeometry'>>;
   /** The amounts of work of the Store of the instance, to which the arrays made are added */
   readonly counts: WorkCounts | undefined;
   /** The definition registered under the name of a type, or undefined for none */
@@ -459,6 +460,8 @@ export function createTransformWork(
   const fieldsOf = createFieldsResolver(deps);
   return {
     writeFeatures(ids, changed) {
+      // The change of the part writes whole geometries: what it wrote is taken back whole
+      deps.layer.markWholeGeometry?.();
       // A run of the rows of one layer at a time (a row deleted meanwhile is passed over)
       let at = 0;
       while (at < ids.length) {

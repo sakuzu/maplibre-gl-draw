@@ -376,6 +376,28 @@ export interface DocumentMoves {
    */
   createGroupInFrontOf(group: Group, itemId: string): boolean;
   /**
+   * Writes values of rows of a layer as columns, as the Store writes them (`writeRows`): the
+   * fields given (`parent` and `orderKey` included), the geometries, and the deletion (0 brings a
+   * deleted row that is kept back, at its place, and any other value deletes the row). The rows
+   * that are locked (themselves, their group or their layer; a deleted row by the lock it was
+   * kept with) are left out unless `ignoreLocks` is given, and the edit being written in parts is
+   * applied first to the others. A row whose group is not there goes into the layer, at its front.
+   * The rows brought back are told as created
+   *
+   * @param layerId - The layer of the rows
+   * @returns The rows written (none when the Store refused the write)
+   */
+  writeRowValues(
+    layerId: string,
+    values: RowValues,
+    options?: { readonly ignoreLocks?: boolean },
+  ): Int32Array;
+  /**
+   * Puts a group in a layer under a key: creates it with its values when it is not there (with no
+   * feature), or moves it there with its features
+   */
+  placeGroup(group: Group, layerId: string, key: string): boolean;
+  /**
    * Moves features, given in stacking order, to a layer, into a group or out of their group,
    * keeping their order, in one transaction
    */
@@ -491,6 +513,12 @@ export interface DocumentOperations {
   asLayerDeletion<T>(fn: () => T): T;
   /** Whether a layer is marked as being deleted (see `setLayersBeingDeleted`) */
   isLayerBeingDeleted(id: string): boolean;
+  /**
+   * Notes that the transaction open writes whole geometries (a move, a rotation, a scaling): its
+   * change carries the mark, so that what it wrote is taken back whole. Nothing outside a
+   * transaction
+   */
+  markWholeGeometry(): void;
 }
 
 /**

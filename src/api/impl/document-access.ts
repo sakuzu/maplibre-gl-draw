@@ -30,7 +30,9 @@ import { onChangeTold } from '../../store/built-in/changes.js';
 import { compareKeys, createOrderKeyBetween } from '../../store/built-in/order-keys.js';
 import { setRowBoxes } from '../../store/built-in/row-boxes.js';
 import type {
+  DeletedRowsToken,
   FeatureRowField,
+  GeometryColumn,
   LayerTableView,
   StoreChange as RowChange,
   Store as RowStore,
@@ -123,6 +125,17 @@ interface Notes {
   metadataKeys: Set<string> | undefined;
   valuesBefore: ReadonlyMap<string, RowValues> | undefined;
   askedBy: unknown;
+  /**
+   * The tokens that keep the rows the change deleted, held until the change is told (for a
+   * change whose values before a watcher asked for), and whether one who reads the change took
+   * them (see `ChangeSummary.claimDeletedRows`)
+   */
+  tokens: DeletedRowsToken[];
+  claimed: boolean;
+  /** Whether the change wrote whole geometries (see `DocumentOperations.markWholeGeometry`) */
+  wholeGeometry: boolean;
+  /** The groups deleted, with the layer and the key of the place each had */
+  readonly groupsDeleted: Map<string, { layerId: string; key: string }>;
 }
 
 function newNotes(): Notes {
@@ -141,6 +154,10 @@ function newNotes(): Notes {
     metadataKeys: undefined,
     valuesBefore: undefined,
     askedBy: null,
+    tokens: [],
+    claimed: false,
+    wholeGeometry: false,
+    groupsDeleted: new Map(),
   };
 }
 
@@ -223,6 +240,12 @@ function mergeNotes(target: Notes, from: Notes): void {
   }
   if (from.valuesBefore) target.valuesBefore = from.valuesBefore;
   if (from.askedBy !== null) target.askedBy = from.askedBy;
+  // The tokens go with the notes they are merged into, once
+  for (const token of from.tokens.splice(0)) target.tokens.push(token);
+  if (from.wholeGeometry) target.wholeGeometry = true;
+  for (const [id, place] of from.groupsDeleted) {
+    if (!target.groupsDeleted.has(id)) target.groupsDeleted.set(id, place);
+  }
 }
 
 /** Whether a feature changed in a value other than its place */
@@ -263,6 +286,20 @@ export interface ChangeSummary {
   readonly valuesBefore: ReadonlyMap<string, RowValues> | undefined;
   /** What the watcher answered when it was asked for the values before the change */
   readonly askedBy: unknown;
+  /**
+   * Takes the rows the change deleted, which the layer keeps until the change has been told
+   * (only for a change whose values before a watcher asked for): the layer then lets go of them
+   * only when the function returned is called. Undefined when the change deleted no row, or
+   * when it is called once the change has been told
+   */
+  claimDeletedRows(): (() => void) | undefined;
+  /**
+   * Whether the change wrote whole geometries (a move, a rotation, a scaling): every geometry it
+   * wrote is taken back whole
+   */
+  readonly wholeGeometry: boolean;
+  /** The groups the change deleted, with the layer and the key of the place each had */
+  readonly groupsDeleted: ReadonlyMap<string, { readonly layerId: string; readonly key: string }>;
 }
 
 /**
@@ -518,6 +555,55 @@ function storedGroupOf(group: Omit<Group, 'featureIds'>, orderKey: string): Stor
   }
   out.orderKey = orderKey;
   return out as unknown as StoreGroup;
+}
+
+/** The values of some of the rows of values (by their positions, in order) */
+function selectRows(values: RowValues, at: readonly number[]): RowValues {
+  const rows = Int32Array.from(at, (i) => values.rows[i]);
+  const fields = new Map<FeatureRowField, unknown[]>();
+  for (const [field, column] of values.fields)
+    fields.set(
+      field,
+      at.map((i) => column[i]),
+    );
+  const out: {
+    rows: Int32Array;
+    fields: typeof fields;
+    geometry?: GeometryColumn;
+    deleted?: Uint8Array;
+  } = { rows, fields };
+  if (values.deleted) out.deleted = Uint8Array.from(at, (i) => values.deleted?.[i] ?? 0);
+  const g = values.geometry;
+  if (g) {
+    const types = new Uint8Array(at.length);
+    const partStarts = new Int32Array(at.length + 1);
+    const ringStarts: number[] = [0];
+    const positionStarts: number[] = [0];
+    const coordinates: number[] = [];
+    const n = g.valuesPerPosition;
+    at.forEach((row, k) => {
+      types[k] = g.types[row];
+      for (let p = g.partStarts[row]; p < g.partStarts[row + 1]; p++) {
+        for (let r = g.ringStarts[p]; r < g.ringStarts[p + 1]; r++) {
+          for (let v = g.positionStarts[r]; v < g.positionStarts[r + 1]; v++) {
+            for (let c = 0; c < n; c++) coordinates.push(g.coordinates[v * n + c]);
+          }
+          positionStarts.push(coordinates.length / n);
+        }
+        ringStarts.push(positionStarts.length - 1);
+      }
+      partStarts[k + 1] = ringStarts.length - 1;
+    });
+    out.geometry = {
+      types,
+      coordinates: Float64Array.from(coordinates),
+      valuesPerPosition: n,
+      partStarts,
+      ringStarts: Int32Array.from(ringStarts),
+      positionStarts: Int32Array.from(positionStarts),
+    };
+  }
+  return out;
 }
 
 /**
@@ -1199,7 +1285,27 @@ export function createDocumentAccess(
       metadataKeys,
       valuesBefore: notes.valuesBefore,
       askedBy: notes.askedBy,
+      claimDeletedRows() {
+        if (notes.claimed || notes.tokens.length === 0) return undefined;
+        notes.claimed = true;
+        const tokens = notes.tokens.splice(0);
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          for (const token of tokens) store.releaseDeletedRows(token);
+        };
+      },
+      wholeGeometry: notes.wholeGeometry,
+      groupsDeleted: notes.groupsDeleted,
     };
+  };
+
+  /** Lets go of the rows the tokens of a change keep, unless one who read it took them */
+  const releaseTokensOf = (change: StoreChange): void => {
+    const notes = notesOf(change);
+    if (!notes) return;
+    for (const token of notes.tokens.splice(0)) store.releaseDeletedRows(token);
   };
 
   /** What a change of the Store did that the changes of the layer do not say, noted with it */
@@ -1221,11 +1327,18 @@ export function createDocumentAccess(
       if (group.layerId === previous.layerId && group.orderKey === previous.orderKey) continue;
       notes.groupsMoved.set(id, { layerId: previous.layerId, key: previous.orderKey });
     }
+    for (const group of change.groups?.deleted ?? []) {
+      notes.groupsDeleted.set(group.id, { layerId: group.layerId, key: group.orderKey });
+    }
     if (askedNow !== null) {
       notes.askedBy = askedNow;
       notes.valuesBefore = change.previousValues;
     }
     askedNow = null;
+    if (wholeGeometryNow) {
+      notes.wholeGeometry = true;
+      wholeGeometryNow = false;
+    }
     return notes;
   };
 
@@ -1357,6 +1470,7 @@ export function createDocumentAccess(
     if (awaitingRows) return;
     if (isEmptyChange(pending) && !toldWhenEmpty(notesOf(pending))) {
       ordersBefore = new Map();
+      releaseTokensOf(pending);
       return;
     }
     const change = pending;
@@ -1412,6 +1526,8 @@ export function createDocumentAccess(
     } finally {
       toldOrdersBefore = null;
       trimCache();
+      // The rows the change deleted that no one took go once it has been told
+      releaseTokensOf(change);
     }
   };
 
@@ -1432,6 +1548,11 @@ export function createDocumentAccess(
 
   /** How deep the transactions of the instance on the Store are */
   let rowDepth = 0;
+  /**
+   * Whether the transaction of the instance open writes whole geometries (see
+   * `DocumentOperations.markWholeGeometry`): noted with its change
+   */
+  let wholeGeometryNow = false;
   let rowSource: UpdateSource = 'local';
   /** Whether a transaction of the instance on the Store is being opened */
   let opening = false;
@@ -1531,6 +1652,8 @@ export function createDocumentAccess(
       result = store.transact(run, rowSource, options);
     } finally {
       opening = false;
+      // The change of an outermost transaction has been told: its mark goes with it
+      if (openedOutermost) wholeGeometryNow = false;
     }
     if (!openedOutermost && wroteRows && !awaitingRows) {
       // The change of the Store comes when the transaction opened from elsewhere ends: what
@@ -3650,6 +3773,112 @@ export function createDocumentAccess(
   const groupMoved: Array<{ id: string; previous: Group }> = [];
 
   // ==========================================================================
+  // The values written back
+  // ==========================================================================
+
+  /**
+   * The rows this layer brought back (a deletion written 0) whose change has not been read yet:
+   * read as created, as the rows a change written to the Store directly brings back
+   */
+  const broughtBack = new Set<number>();
+
+  /** Writes values of rows of a layer as columns (see `DocumentMoves.writeRowValues`) */
+  const writeRowValuesNow = (
+    layerId: string,
+    values: RowValues,
+    ignoreLocks: boolean,
+  ): Int32Array => {
+    const { rows } = values;
+    if (rows.length === 0) return new Int32Array(0);
+    refuseInDeletion(layerId);
+    // The edit being written in parts is applied first to the rows written
+    for (let i = 0; i < rows.length; i++) {
+      const id = tables.getRowId(rows[i]);
+      if (id !== undefined) beforeFeatureWrite?.(id);
+    }
+    // The rows there, and those a deleted row kept: the locked ones are left out
+    const now = tables.readValues(rows, ['locked', 'parent', 'orderKey']).fields;
+    const layerLocked = store.getLayer(layerId)?.locked === true;
+    const keep: number[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      if (tables.getRowId(rows[i]) === undefined) continue;
+      if (!ignoreLocks) {
+        const parent = String(now.get('parent')?.[i]);
+        const group = parent === layerId ? undefined : store.getGroup(parent);
+        if (layerLocked || now.get('locked')?.[i] === true || group?.locked === true) continue;
+      }
+      keep.push(i);
+    }
+    if (keep.length === 0) return new Int32Array(0);
+    let write = keep.length === rows.length ? values : selectRows(values, keep);
+    // A row whose group is not there goes into the layer, at its front
+    const parents = write.fields.get('parent');
+    const parentOf = (k: number): string =>
+      String(parents ? parents[k] : now.get('parent')?.[keep[k]]);
+    const homeless: number[] = [];
+    for (let k = 0; k < write.rows.length; k++) {
+      const parent = parentOf(k);
+      if (parent !== layerId && !store.getGroup(parent)) homeless.push(k);
+    }
+    if (homeless.length > 0) {
+      const keys = keysBetween(endKeysOf(layerId).front, undefined, homeless.length);
+      const parentColumn = Array.from(write.rows, (_, k) => parentOf(k) as unknown);
+      const keyColumn = Array.from(
+        write.rows,
+        (_, k) => write.fields.get('orderKey')?.[k] ?? now.get('orderKey')?.[keep[k]],
+      );
+      homeless.forEach((k, j) => {
+        parentColumn[k] = layerId;
+        keyColumn[k] = keys[j];
+      });
+      const fields = new Map(write.fields);
+      fields.set('parent', parentColumn);
+      fields.set('orderKey', keyColumn);
+      write = { ...write, fields };
+      for (const key of keys) keyTaken(layerId, key);
+    }
+    // Read from the change of the Store, as a change written to it directly
+    stored(store.writeRows(write));
+    const deleted = write.deleted;
+    if (deleted) {
+      for (let k = 0; k < write.rows.length; k++) {
+        if (deleted[k] === 0) broughtBack.add(write.rows[k]);
+      }
+    }
+    return write.rows;
+  };
+
+  /** Puts a group in a layer under a key (see `DocumentMoves.placeGroup`) */
+  const placeGroupNow = (group: Group, layerId: string, key: string): void => {
+    refuseInDeletion(layerId, layerOfGroup(group.id));
+    if (!store.getLayer(layerId)) throw new Error(`Layer with id "${layerId}" not found`);
+    const layerBefore = getLayer(layerId);
+    noteOrderBefore(layerId);
+    if (store.getGroup(group.id)) {
+      moveGroupTo(group.id, layerId, key);
+      layerOrderChanged(layerId, layerBefore);
+      for (const { id, previous } of groupMoved.splice(0)) {
+        const moved = getGroup(id);
+        if (moved) mergeDocument({ groups: { updated: [{ id, group: moved, previous }] } });
+      }
+      return;
+    }
+    stored(store.createGroup(storedGroupOf({ ...group, layerId }, key)));
+    ownGroups.add(group.id);
+    wrote();
+    keyTaken(layerId, key);
+    bumpLayer(layerId);
+    const created = Object.freeze(
+      Object.defineProperty({ ...groupOf(store.getGroup(group.id)) }, 'featureIds', {
+        value: Object.freeze([]),
+        enumerable: false,
+      }),
+    );
+    mergeDocument({ groups: { created: [created as Group] } });
+    layerOrderChanged(layerId, layerBefore);
+  };
+
+  // ==========================================================================
   // The changes written to the Store directly
   // ==========================================================================
 
@@ -3723,9 +3952,28 @@ export function createDocumentAccess(
       if (change.reset) notes.reset = true;
     }
     for (const [layerId, rows] of change.rows?.layers ?? []) {
-      const createdRefs = rows.created.filter((ref) => !ownRows.has(ref));
-      const updatedRefs = rows.updated.filter((ref) => !ownRows.has(ref));
+      let createdRefs = rows.created.filter((ref) => !ownRows.has(ref));
+      let updatedRefs = rows.updated.filter((ref) => !ownRows.has(ref));
       const deletedRefs = rows.deleted.filter((ref) => !ownRows.has(ref));
+      // A row brought back (its deletion written 0) is told as created, whoever wrote it
+      const backFrom = change.previousValues?.get(layerId);
+      const wasDeleted = new Set<number>();
+      if (backFrom?.deleted) {
+        for (let i = 0; i < backFrom.rows.length; i++) {
+          if (backFrom.deleted[i] !== 0) wasDeleted.add(backFrom.rows[i]);
+        }
+      }
+      if (broughtBack.size > 0 || wasDeleted.size > 0) {
+        const back = updatedRefs.filter((ref) => broughtBack.has(ref) || wasDeleted.has(ref));
+        if (back.length > 0) {
+          const backSet = new Set(back);
+          updatedRefs = updatedRefs.filter((ref) => !backSet.has(ref));
+          const joined = new Int32Array(createdRefs.length + back.length);
+          joined.set(createdRefs);
+          joined.set(back, createdRefs.length);
+          createdRefs = joined;
+        }
+      }
       if (createdRefs.length + updatedRefs.length + deletedRefs.length === 0) continue;
       // The order of a layer changes with the rows it gains or loses, and with the places written
       const placed = rows.fields.has('parent') || rows.fields.has('orderKey');
@@ -3873,6 +4121,7 @@ export function createDocumentAccess(
         }
       }
     }
+    broughtBack.clear();
     if (created.length + updated.length + deleted.length > 0) {
       out.features = {
         ...(created.length > 0 && { created }),
@@ -4168,6 +4417,8 @@ export function createDocumentAccess(
   const onRowChange = (change: RowChange): void => {
     // Whoever wrote it, the document is no longer the one last read
     documentVersion += 1;
+    /** Whether the token of the change goes with its notes, until the change is told */
+    let held = false;
     try {
       rowsLeaveIterators(change);
       rowsLeaveSets(change);
@@ -4177,6 +4428,11 @@ export function createDocumentAccess(
       clearOwn();
       // What the change of the Store says besides its rows, with the change it belongs to
       const rowNotes = notesOfRows(change);
+      // The rows deleted are kept until the change is told, for one who reads the values before
+      if (change.deletedRowsToken !== undefined && rowNotes.askedBy !== null) {
+        rowNotes.tokens.push(change.deletedRowsToken);
+        held = true;
+      }
       mergeNotes(notesFor(own ? documentPending : foreign), rowNotes);
       if (own && awaitingRows) {
         // The writes of the instance in a transaction opened from elsewhere end with it: told
@@ -4197,7 +4453,10 @@ export function createDocumentAccess(
         return;
       }
       // An empty change is told when it ends an operation (see `toldWhenEmpty`)
-      if (isEmptyChange(foreign) && !toldWhenEmpty(rowNotes)) return;
+      if (isEmptyChange(foreign) && !toldWhenEmpty(rowNotes)) {
+        releaseTokensOf(foreign);
+        return;
+      }
       const { source } = change;
       const orders = foreignOrdersBefore;
       afterTold.push(() =>
@@ -4212,7 +4471,9 @@ export function createDocumentAccess(
         ),
       );
     } finally {
-      if (change.deletedRowsToken !== undefined) store.releaseDeletedRows(change.deletedRowsToken);
+      if (change.deletedRowsToken !== undefined && !held) {
+        store.releaseDeletedRows(change.deletedRowsToken);
+      }
     }
   };
 
@@ -4333,6 +4594,18 @@ export function createDocumentAccess(
       write(() => void createFeatureRows(features, places)),
     createGroupInFrontOf: (group: Group, itemId: string) =>
       write(() => createGroupRow(group, itemId)),
+    writeRowValues(layerId: string, values: RowValues, options?: { ignoreLocks?: boolean }) {
+      let written: Int32Array = new Int32Array(0);
+      attempt(
+        () => {
+          written = writeRowValuesNow(layerId, values, options?.ignoreLocks === true);
+        },
+        busDepth > 0 ? busSource : 'local',
+      );
+      return written;
+    },
+    placeGroup: (group: Group, layerId: string, key: string) =>
+      write(() => placeGroupNow(group, layerId, key)),
     updateFeature: (id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions) =>
       write(() => updateFeatureRow(id, updates, options)),
     // A drag given up has written the values it started from back: nothing is left to drop
@@ -4435,6 +4708,9 @@ export function createDocumentAccess(
       }
     },
     isLayerBeingDeleted: (id: string) => layersBeingDeleted?.has(id) === true,
+    markWholeGeometry() {
+      if (rowDepth > 0) wholeGeometryNow = true;
+    },
 
     // The reads by position
     countItems: (layerId: string) => tables.get(layerId)?.itemCount ?? 0,
