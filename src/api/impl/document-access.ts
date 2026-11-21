@@ -2165,6 +2165,19 @@ export function createDocumentAccess(
   };
   const getGroup = (id: string): Group | undefined => groupOf(store.getGroup(id));
 
+  /** Whether the row of a reference is locked, a deleted row kept included (see `DocumentPlaces`) */
+  const isRowLocked = (ref: number, layerId?: string): boolean => {
+    if (typeof ref !== 'number' || tables.getRowId(ref) === undefined) return false;
+    writePendingPlaces();
+    const fields = tables.readValues(Int32Array.of(ref), ['locked', 'parent']).fields;
+    if (fields.get('locked')?.[0] === true) return true;
+    const parent = String(fields.get('parent')?.[0]);
+    const group = store.getLayer(parent) ? undefined : store.getGroup(parent);
+    if (group?.locked === true) return true;
+    const layerOfRow = group ? group.layerId : store.getLayer(parent) ? parent : layerId;
+    return layerOfRow !== undefined && store.getLayer(layerOfRow)?.locked === true;
+  };
+
   /** The values of fields of the rows of features, a run of the rows of one layer (see `DocumentPlaces`) */
   const readFeatureValues = (
     ids: readonly string[],
@@ -3797,16 +3810,11 @@ export function createDocumentAccess(
       if (id !== undefined) beforeFeatureWrite?.(id);
     }
     // The rows there, and those a deleted row kept: the locked ones are left out
-    const now = tables.readValues(rows, ['locked', 'parent', 'orderKey']).fields;
-    const layerLocked = store.getLayer(layerId)?.locked === true;
+    const now = tables.readValues(rows, ['parent', 'orderKey']).fields;
     const keep: number[] = [];
     for (let i = 0; i < rows.length; i++) {
       if (tables.getRowId(rows[i]) === undefined) continue;
-      if (!ignoreLocks) {
-        const parent = String(now.get('parent')?.[i]);
-        const group = parent === layerId ? undefined : store.getGroup(parent);
-        if (layerLocked || now.get('locked')?.[i] === true || group?.locked === true) continue;
-      }
+      if (!ignoreLocks && isRowLocked(rows[i], layerId)) continue;
       keep.push(i);
     }
     if (keep.length === 0) return new Int32Array(0);
@@ -4728,6 +4736,7 @@ export function createDocumentAccess(
       return tables.get(layerOfRow(ref))?.getRowProperty(ref, key);
     },
     getFeaturePlace,
+    isRowLocked,
     readFeatureValues,
     holdFeatures<T>(fn: () => T): T {
       cacheHolds += 1;

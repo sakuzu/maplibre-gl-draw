@@ -54,6 +54,11 @@ export interface BulkWorkHooks {
    * client, until the edit ends
    */
   readonly deletesLayers?: readonly string[];
+  /**
+   * The number of vertices the edit left as they are because they could not be followed, read
+   * when its promise resolves (`EditCounts.skippedVertexCount`, given only by a work that has it)
+   */
+  skippedVertexCount?(): number;
 }
 
 /**
@@ -89,11 +94,29 @@ export interface BulkBatchWork extends BulkWorkHooks {
 }
 
 /**
+ * A work that writes the edit to several rows at a time, given by their references: the work of
+ * an edit started with a target of rows (`BulkStartOptions.targetRows`), and of no other
+ *
+ * @internal
+ */
+export interface BulkRowWork extends BulkWorkHooks {
+  /**
+   * Writes the edit to rows through the layer, in the transaction open (a part of the edit, or
+   * the transaction of a write that touches one of them first)
+   *
+   * @param rows - The rows, each once, none of them locked (unless the edit ignores the locks)
+   *   nor gone when the batch was made; a deleted row that is kept may be among them
+   * @param changed - One entry per row, 0 when given: set to 1 for each row it changed
+   */
+  writeRows(rows: Int32Array, changed: Uint8Array): void;
+}
+
+/**
  * What one bulk edit does to the features of its target
  *
  * @internal
  */
-export type BulkWork = BulkFeatureWork | BulkBatchWork;
+export type BulkWork = BulkFeatureWork | BulkBatchWork | BulkRowWork;
 
 /**
  * What the work of an edit is made from, once the target is read and the number of the
@@ -155,6 +178,14 @@ export interface BulkStartOptions {
   readonly writesLocked?: boolean;
   /** The features counted as locked before the edit starts (those it leaves out of its target) */
   readonly lockedBefore?: number;
+  /**
+   * The target as the references of its rows, read in place of the target given (an empty array
+   * then): a deleted row that is kept may be among them. They are copied once when the edit
+   * starts, a reference given again visited once, and none is counted as missing; the work is
+   * then one that writes rows ({@link BulkRowWork}), and the locks are read by the references
+   * (`DocumentPlaces.isRowLocked`)
+   */
+  readonly targetRows?: Int32Array;
 }
 
 /**

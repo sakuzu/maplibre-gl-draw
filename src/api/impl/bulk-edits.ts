@@ -25,6 +25,9 @@
  *   typed arrays: no array of IDs, no feature per row. An ID that names nothing then is counted
  *   as missing; a row deleted afterwards leaves the target (the Store tells it), and is not
  *   counted; a locked feature stays as it is and is counted, when the edit starts or meanwhile.
+ *   An edit may be given its target as references of rows instead (deleted rows that are kept
+ *   among them): they are copied once, none is missing, the locks are read by the references,
+ *   and the work writes rows.
  * - The edits of this client are written one at a time, in the order they were started. A write
  *   of a few features of this client does not wait: before it reads a feature to write it, or to
  *   make the values it writes (and, as a net, the layer before it writes the row of a feature),
@@ -53,6 +56,7 @@ import type {
   BulkBatchWork,
   BulkEditStarter,
   BulkFeatureWork,
+  BulkRowWork,
   BulkStartOptions,
   BulkWork,
   BulkWorkFactory,
@@ -90,6 +94,14 @@ export type BulkEditFeatureWork = BulkFeatureWork;
  * @internal
  */
 export type BulkEditBatchWork = BulkBatchWork;
+
+/**
+ * What one bulk edit does to the rows of its target, several at a time, given by their
+ * references (an edit started with `BulkStartOptions.targetRows`)
+ *
+ * @internal
+ */
+export type BulkEditRowWork = BulkRowWork;
 
 /**
  * What one bulk edit does to the features of its target
@@ -181,6 +193,8 @@ interface Edit {
   readonly source: UpdateSource;
   readonly ignoreLocks: boolean;
   readonly work: BulkEditWork;
+  /** Whether the target was given as references of rows (the work then writes rows) */
+  readonly byRows: boolean;
   /** The references of the rows of the target, in its order; -1 for one given again */
   readonly order: Int32Array;
   /** The same references, each once, in rising order */
@@ -468,22 +482,35 @@ export function createBulkEdits(
     return store.getLayer(place.layerId)?.locked === true;
   };
 
+  /**
+   * Whether the row of a feature is locked: by its ID, or by its reference for a target given as
+   * references of rows (a deleted row kept included)
+   */
+  const rowLocked = (byRows: boolean, id: string, ref: number): boolean =>
+    byRows ? layer.isRowLocked(ref) : isLocked(id);
+
   /** Whether every feature of a target is locked (false for a target of no feature) */
-  const everyLocked = (order: Int32Array): boolean => {
+  const everyLocked = (order: Int32Array, byRows: boolean): boolean => {
     let any = false;
     for (let i = 0; i < order.length; i++) {
       const ref = order[i];
       if (ref < 0) continue;
       const id = tables.getRowId(ref);
       if (id === undefined) continue;
-      if (!isLocked(id)) return false;
+      if (!rowLocked(byRows, id, ref)) return false;
       any = true;
     }
     return any;
   };
 
   /** Writes the edit to one feature, whatever the work writes at a time */
-  const writeOne = (work: BulkEditWork, id: string): boolean => {
+  const writeOne = (work: BulkEditWork, id: string, ref: number): boolean => {
+    if ('writeRows' in work) {
+      const changed = new Uint8Array(1);
+      countWork(counts, 'objectsCreated', 2);
+      work.writeRows(Int32Array.of(ref), changed);
+      return changed[0] === 1;
+    }
     if (!('writeFeatures' in work)) return work.writeFeature(id);
     const changed = new Uint8Array(1);
     countWork(counts, 'objectsCreated', 2);
@@ -492,12 +519,12 @@ export function createBulkEdits(
   };
 
   /** Applies the edit to one feature: a locked one stays as it is, and is counted */
-  const visit = (edit: Edit, id: string): void => {
-    if (!edit.ignoreLocks && isLocked(id)) {
+  const visit = (edit: Edit, id: string, ref: number): void => {
+    if (!edit.ignoreLocks && rowLocked(edit.byRows, id, ref)) {
       edit.counts.lockedCount += 1;
       return;
     }
-    if (writeOne(edit.work, id)) edit.counts.changedCount += 1;
+    if (writeOne(edit.work, id, ref)) edit.counts.changedCount += 1;
   };
 
   /**
@@ -513,15 +540,23 @@ export function createBulkEdits(
 
   /**
    * Gives the next rows of the order, at most `size` of them, to a work that writes several
-   * features at a time: the rows deleted or written first are passed over, and a locked one is
-   * counted and left out
+   * features or rows at a time: the rows deleted or written first are passed over, and a locked
+   * one is counted and left out
    *
    * @returns The rows it went through, the locked ones included
    */
-  const writeBatch = (edit: Edit, work: BulkEditBatchWork, size: number): number => {
+  const writeBatch = (
+    edit: Edit,
+    work: BulkEditBatchWork | BulkEditRowWork,
+    size: number,
+  ): number => {
     const started = now();
     const { order } = edit;
+    const byRows = 'writeRows' in work;
     const ids: string[] = [];
+    // The references of the rows given, for a work that writes rows
+    const refs = byRows ? new Int32Array(Math.min(size, order.length - edit.at)) : null;
+    let given = 0;
     let rows = 0;
     while (edit.at < order.length && rows < size) {
       const ref = order[edit.at];
@@ -530,16 +565,19 @@ export function createBulkEdits(
       const id = tables.getRowId(ref);
       if (id === undefined) continue;
       rows += 1;
-      if (!edit.ignoreLocks && isLocked(id)) {
+      if (!edit.ignoreLocks && rowLocked(edit.byRows, id, ref)) {
         edit.counts.lockedCount += 1;
         continue;
       }
-      ids.push(id);
+      if (refs) refs[given] = ref;
+      else ids.push(id);
+      given += 1;
     }
-    if (ids.length > 0) {
-      const changed = new Uint8Array(ids.length);
+    if (given > 0) {
+      const changed = new Uint8Array(given);
       countWork(counts, 'objectsCreated', 2);
-      work.writeFeatures(ids, changed);
+      if (refs) (work as BulkEditRowWork).writeRows(refs.subarray(0, given), changed);
+      else (work as BulkEditBatchWork).writeFeatures(ids, changed);
       for (let i = 0; i < changed.length; i++) {
         if (changed[i] === 1) edit.counts.changedCount += 1;
       }
@@ -595,7 +633,7 @@ export function createBulkEdits(
     try {
       withLocksOf(current, () => {
         if (layer.currentOperationId() !== undefined) {
-          visit(current, id);
+          visit(current, id, ref);
           return;
         }
         layer.transact(
@@ -605,7 +643,7 @@ export function createBulkEdits(
             if (layer.currentOperationId() === current.operationId) {
               layer.transact(nothing, current.source, { hasMoreParts: true });
             }
-            visit(current, id);
+            visit(current, id, ref);
           },
           current.source,
           { operationId: current.operationId },
@@ -701,7 +739,7 @@ export function createBulkEdits(
             () => {
               const { order, work } = edit;
               while (edit.at < order.length) {
-                if ('writeFeatures' in work) {
+                if ('writeFeatures' in work || 'writeRows' in work) {
                   const size = Math.min(batchSizeOf(edit, now() - started), limit - rows);
                   rows += writeBatch(edit, work, Math.max(1, size));
                 } else {
@@ -710,7 +748,7 @@ export function createBulkEdits(
                   if (ref >= 0 && !edit.early.has(ref) && !edit.gone.has(ref)) {
                     const id = tables.getRowId(ref);
                     if (id !== undefined) {
-                      visit(edit, id);
+                      visit(edit, id, ref);
                       rows += 1;
                     }
                   }
@@ -752,6 +790,9 @@ export function createBulkEdits(
     };
     const created = edit.work.createdIds?.();
     if (created) result.createdIds = makeIdSet(created);
+    // The vertices left as they are, for a work that counts them
+    const skipped = edit.work.skippedVertexCount?.();
+    if (skipped !== undefined) result.skippedVertexCount = skipped;
     return result;
   };
 
@@ -886,14 +927,18 @@ export function createBulkEdits(
         );
       }
     }
-    const { refs, missing } = readTarget(target);
+    // A target given as references of rows is read in place of the target (copied once)
+    const byRows = startOptions.targetRows !== undefined;
+    const { refs, missing } = startOptions.targetRows
+      ? { refs: startOptions.targetRows, missing: 0 }
+      : readTarget(target);
     if (layer.isReadOnly()) return Promise.resolve(null);
     const { order, sorted, places } = indexTarget(refs);
     const ignoreLocks =
       startOptions.writesLocked === true ||
       (editOptions.ignoreLocks ?? open?.ignoreLocks ?? locksIgnored(layer));
     if (startOptions.refuses?.(ignoreLocks)) return Promise.resolve(null);
-    if (!ignoreLocks && everyLocked(order)) return Promise.resolve(null);
+    if (!ignoreLocks && everyLocked(order, byRows)) return Promise.resolve(null);
     const operationId = (open ? layer.currentOperationId() : undefined) ?? store.newOperationId();
     const work =
       typeof makeWork === 'function'
@@ -913,6 +958,14 @@ export function createBulkEdits(
             },
           )
         : makeWork;
+    // An edit of a target of rows writes rows, and no other edit does
+    if (byRows !== 'writeRows' in work) {
+      throw new Error(
+        byRows
+          ? 'An edit of a target of rows needs a work that writes rows'
+          : 'A work that writes rows needs a target of rows',
+      );
+    }
     let resolve: (counts: EditCounts | null) => void = () => {};
     let reject: (error: unknown) => void = () => {};
     const promise = new Promise<EditCounts | null>((res, rej) => {
@@ -928,6 +981,7 @@ export function createBulkEdits(
       source: editOptions.source ?? open?.source ?? 'local',
       ignoreLocks,
       work,
+      byRows,
       order,
       sorted,
       places,

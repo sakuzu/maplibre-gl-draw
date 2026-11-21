@@ -309,6 +309,16 @@ export interface DocumentPlaces {
    */
   getFeaturePlace(id: string): FeaturePlace | undefined;
   /**
+   * Whether the row of a reference is locked, read without the feature being made: a row there by
+   * its own lock, that of its group and that of its layer; a deleted row that is kept by the lock
+   * it was kept with, and those of the group and the layer it goes back to as they are now (its
+   * layer read from its group, or `layerId` when its group is not there). False for a reference
+   * that names no row
+   *
+   * @param layerId - The layer of the row, read when its group is not there
+   */
+  isRowLocked(ref: number, layerId?: string): boolean;
+  /**
    * The values of fields of features, read from their rows as arrays, as the Store reads them
    * (one array per field, the geometries as one column), without the features being made: the
    * rows of the IDs from `start` on that are in the layer of the first of them that is a
