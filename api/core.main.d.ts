@@ -1626,9 +1626,9 @@ export interface LayersCollection {
      * {@link FeaturesCollection}), however many features it holds. Its features and groups are
      * deleted in parts, and the layer itself in the last part. From its first part on, the
      * layer takes no other write of this client, as if it were locked, also from a write that
-     * ignores the locks: such a write returns `null` or `false`. A feature that comes into the
-     * layer meanwhile (from another client) is deleted in the last part too. The selection of
-     * the layer (`selection.delete`) deletes it the same way.
+     * ignores the locks: such a write returns `null` or `false`. A feature written into the
+     * layer meanwhile from outside this instance is deleted in the last part too. The selection
+     * of the layer (`selection.delete`) deletes it the same way.
      *
      * Its changes list the features in `features.deleted` and the layer in `layers.deleted`, and
      * the values before (for a subscriber that asks) keep the features, so that
