@@ -835,6 +835,111 @@
       "path": "bench/edit-document.test.ts",
       "change": "the list of the scenes of the editing benchmark gains panInterleaved, a pan over a layer of polygons, lines and points one after another",
       "unit": "the drawing of the layers from their rows"
+    },
+    {
+      "path": "src/api/impl/features.test.ts",
+      "change": "CHANGES 20 (deleteMany returns a Promise of EditCounts: a locked feature is left and counted, an ID that names nothing is counted; the collection is made with the bulk edits)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/layers.test.ts",
+      "change": "CHANGES 31 (layers.delete and deleteMany return a Promise of EditCounts and are waited for; a layer that is not there is counted; the collection is made with the bulk edits)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/create-draw.test.ts",
+      "change": "CHANGES 31 (layers.delete is waited for, its refusal is null)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/events.test.ts",
+      "change": "CHANGES 31 (layers.delete is waited for on the fake clock)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/selection.test.ts",
+      "change": "CHANGES 43 (selection.delete returns a Promise of EditCounts or null; the resource is made with the bulk edits)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/modes/select/shortcut-handler.test.ts",
+      "change": "CHANGES 43 (the Delete key deletes through the bulk edits of the context and is waited for; the result of the deletion is read from startSelectionDeletion)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/index.test.ts",
+      "change": "CHANGES 39 (the list of the public names gains DuplicateOptions)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "ui/test/fake-draw.ts",
+      "change": "CHANGES 43 (the stand-in selection.delete returns a Promise of EditCounts or null)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/test-utils.ts",
+      "change": "CHANGES 20, 31, 43 (observeParity moves the fake clock on while it waits for the promise of a scene; createTestEdits and testFeatureBulk are added)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/parity/records/writes.jsonl",
+      "change": "CHANGES 20, 31 (only the rows marked for them are written again)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/parity/records/selection.jsonl",
+      "change": "CHANGES 31, 43 (only the rows marked for them are written again)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/parity/records/events.jsonl",
+      "change": "CHANGES 43 (only the row marked for it is written again)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/document-changes.test.ts",
+      "change": "CHANGES 31 (layers.delete is waited for)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/document-rows.test.ts",
+      "change": "CHANGES 20, 31, 43 (the refusals under read-only are waited for, and are null)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/store-refused-writes.test.ts",
+      "change": "CHANGES 31 (the scene of a layer deleted is written again: when the Store refuses the deletion of the layer in the last part, layers.delete gives the EditCounts of the features deleted with stopped true, they are told, the layer stays, and the last change has no part after it; the other scenes are as they were)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/view/gpu-ledger-coverage.test.ts",
+      "change": "CHANGES 31 (layers.delete is waited for before the frame is drawn)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/work-scenes.test.ts",
+      "change": "CHANGES 31 (the deletion of a layer is written in parts: the notifications are counted per part)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/e2e/parity.e2e.test.ts",
+      "change": "CHANGES 20, 31 (the two deletions before a picture are bulk edits, waited for one after the other outside draw.transact)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/e2e/playground.e2e.test.ts",
+      "change": "CHANGES 19, 24 (a test of the buttons of the playground that copy the selection and paint it is added)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/operations/bulk-transform.test.ts",
+      "change": "a test is added: a rotation of a point whose center the computation does not take rejects, and a write that touches the point first goes on",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "CHANGES 19, 20, 24, 31 (the list of the scenes of the editing benchmark gains deleteLayerFeatures, deleteLayer, writeLayerFeatures and duplicateLayerFeatures)",
+      "unit": "the deletions, the copies and the writes of the same patch in parts"
     }
   ]
 }
