@@ -602,11 +602,11 @@ describe('the refusals and the locks', () => {
     const mine = record(true);
     draw.features.update('a', { properties: { name: 'two' } });
     const [values] = mine.all();
-    await draw.features.restore([values], { source: 'undo' });
+    await draw.features.restore([values], { source: 'back' });
     const back = mine.changes[mine.changes.length - 1];
-    expect(back.source).toBe('undo');
+    expect(back.source).toBe('back');
     expect(draw.features.get('a')?.properties.name).toBe('one');
-    await draw.features.restore([back.previousValues as FeatureValues], { source: 'redo' });
+    await draw.features.restore([back.previousValues as FeatureValues], { source: 'again' });
     expect(draw.features.get('a')?.properties.name).toBe('two');
   });
 });

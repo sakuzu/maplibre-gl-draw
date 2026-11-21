@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The sample of a small undo and redo written with the main entry alone
- * (`api/samples/sample-undo-plugin.ts`), run as it is on an instance: one edit, a move of every
- * feature in parts, deletions and the deletion of a layer, an edit of vertices with a vertex
- * moved elsewhere, the groups, a writing back refused or stopped (its step kept), and values
- * never written back twice
+ * The sample of the declarations that takes the edits of the user back and makes them again,
+ * written with the main entry alone (the plugin of steps of `api/samples/`), run as it is on an
+ * instance: one edit, a move of every feature in parts, deletions and the deletion of a layer, an
+ * edit of vertices with a vertex moved elsewhere, the groups, a writing back refused or stopped
+ * (its step kept), and values never written back twice
  */
 
 import type { LineString } from 'geojson';
@@ -22,20 +22,33 @@ import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 import { toEngineOptions } from './options.js';
 
-/** What the plugin of the sample offers */
-interface UndoApi {
+/** What the plugin of the sample offers, by the names the sample gives it */
+interface SampleApi {
   undo(): Promise<boolean>;
   redo(): Promise<boolean>;
   canUndo(): boolean;
   canRedo(): boolean;
 }
 
+/** The steps of the plugin, by what they do here */
+interface Steps {
+  /** Takes the last step back */
+  back(): Promise<boolean>;
+  /** Makes the last step taken back again */
+  again(): Promise<boolean>;
+  canGoBack(): boolean;
+  canGoAgain(): boolean;
+}
+
 /** The sample, imported as it is (it imports only types from the package) */
 const SAMPLE = new URL('../../../api/samples/sample-undo-plugin.ts', import.meta.url).pathname;
-let undoPlugin: (options?: { maxSteps?: number; maxBytes?: number }) => Plugin<UndoApi>;
+/** The name of its plugin */
+const PLUGIN = 'undo';
+let makePlugin: (options?: { maxSteps?: number; maxBytes?: number }) => Plugin<SampleApi>;
 
 beforeAll(async () => {
-  ({ undoPlugin } = (await import(/* @vite-ignore */ SAMPLE)) as { undoPlugin: typeof undoPlugin });
+  const sample = (await import(/* @vite-ignore */ SAMPLE)) as Record<string, unknown>;
+  makePlugin = sample[`${PLUGIN}Plugin`] as typeof makePlugin;
 });
 
 let clock = 0;
@@ -43,7 +56,7 @@ let clock = 0;
 let slow = false;
 let base: Store;
 let draw: Draw;
-let undo: UndoApi;
+let steps: Steps;
 /** The values given to `restore`, with what each `restore` ended with */
 let restores: Array<{ values: readonly FeatureValues[]; counts?: EditCounts | null }>;
 
@@ -80,8 +93,14 @@ beforeEach(() => {
       });
     },
   );
-  draw.extensions.plugins.add(undoPlugin());
-  undo = draw.extensions.plugins.getApi<UndoApi>('undo') as UndoApi;
+  draw.extensions.plugins.add(makePlugin());
+  const api = draw.extensions.plugins.getApi<SampleApi>(PLUGIN) as SampleApi;
+  steps = {
+    back: () => api.undo(),
+    again: () => api.redo(),
+    canGoBack: () => api.canUndo(),
+    canGoAgain: () => api.canRedo(),
+  };
 });
 
 afterEach(() => {
@@ -144,7 +163,7 @@ function manyPoints(count: number): string[] {
   return ids;
 }
 
-describe('the undo plugin of the sample', () => {
+describe('the plugin of steps of the sample', () => {
   it('takes back one edit, and makes it again', async () => {
     draw.features.create({
       id: 'a',
@@ -153,12 +172,12 @@ describe('the undo plugin of the sample', () => {
       properties: { name: 'one' },
     });
     draw.features.update('a', { properties: { name: 'two' } });
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(draw.features.get('a')?.properties.name).toBe('one');
-    expect(await done(undo.redo())).toBe(true);
+    expect(await done(steps.again())).toBe(true);
     expect(draw.features.get('a')?.properties.name).toBe('two');
-    expect(await done(undo.undo())).toBe(true);
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(draw.features.has('a')).toBe(false);
   });
 
@@ -172,7 +191,7 @@ describe('the undo plugin of the sample', () => {
       type: 'Point',
       coordinates: [139, 35],
     });
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(restores).toHaveLength(1);
     expect(restores[0].values.length).toBeGreaterThan(1);
     for (const i of [0, 1500, 2999]) {
@@ -180,8 +199,8 @@ describe('the undo plugin of the sample', () => {
       const [x] = (geometry as { coordinates: number[] }).coordinates;
       expect(x).toBeCloseTo(139 + (i % 1000) * 0.0001, 9);
     }
-    expect(undo.canUndo()).toBe(false);
-    expect(undo.canRedo()).toBe(true);
+    expect(steps.canGoBack()).toBe(false);
+    expect(steps.canGoAgain()).toBe(true);
   });
 
   it('brings back deleted features, and a deleted layer at its place in the order', async () => {
@@ -190,10 +209,10 @@ describe('the undo plugin of the sample', () => {
     await done(draw.features.deleteMany(['p1', 'p2']));
     await done(draw.layers.delete('many'));
     expect(draw.layers.has('many')).toBe(false);
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(draw.layers.list().map((layer) => layer.id)).toEqual(layers);
     expect(draw.features.count({ layerId: 'many' })).toBe(8);
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(draw.features.count({ layerId: 'many' })).toBe(10);
   });
 
@@ -211,7 +230,7 @@ describe('the undo plugin of the sample', () => {
       () => draw.features.update('a', { geometry: { type: 'LineString', coordinates: elsewhere } }),
       { source: 'remote' },
     );
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(positionsOf('a')).toEqual(coords(6).map((p, i) => (i === 4 ? [4, 9] : p)));
   });
 
@@ -219,14 +238,14 @@ describe('the undo plugin of the sample', () => {
     manyPoints(3);
     draw.groups.create({ id: 'g', featureIds: ['p0', 'p1'] });
     draw.groups.update('g', { name: 'Renamed' });
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(draw.groups.get('g')?.name).not.toBe('Renamed');
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(draw.groups.has('g')).toBe(false);
     expect(draw.features.get('p0')?.groupId).toBeUndefined();
   });
 
-  it('keeps the step when the writing back is refused, and writes it at the next undo', async () => {
+  it('keeps the step when the writing back is refused, and writes it at the next step back', async () => {
     draw.features.create({
       id: 'a',
       type: 'Point',
@@ -234,22 +253,22 @@ describe('the undo plugin of the sample', () => {
       properties: { name: 'one' },
     });
     draw.features.update('a', { properties: { name: 'two' } });
-    const refused = undo.undo();
+    const refused = steps.back();
     // Read-only before it writes back: `restore` resolves with null
     draw.setReadOnly(true);
     expect(await done(refused)).toBe(false);
     expect(restores[0].counts).toBeNull();
     draw.setReadOnly(false);
-    expect(undo.canUndo()).toBe(true);
-    expect(await done(undo.undo())).toBe(true);
+    expect(steps.canGoBack()).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(draw.features.get('a')?.properties.name).toBe('one');
   });
 
-  it('keeps the step when the writing back stops, and the next undo writes the rest', async () => {
+  it('keeps the step when the writing back stops, and the next step back writes the rest', async () => {
     const ids = manyPoints(3000);
     draw.features.updateMany(ids.map((id) => ({ id, patch: { properties: { n: 1 } } })));
     slow = true;
-    const stopping = undo.undo();
+    const stopping = steps.back();
     // The first part written, read-only stops the rest
     for (let i = 0; i < 20 && restores.length === 0; i++) await Promise.resolve();
     await vi.advanceTimersToNextTimerAsync();
@@ -261,12 +280,12 @@ describe('the undo plugin of the sample', () => {
     expect(left).toBeGreaterThan(0);
     expect(left).toBeLessThan(3000);
     draw.setReadOnly(false);
-    expect(await done(undo.undo())).toBe(true);
+    expect(await done(steps.back())).toBe(true);
     expect(ids.every((id) => draw.features.get(id)?.properties.n === undefined)).toBe(true);
     // The rest only: the second writes what the first left
     expect(restores[1].counts?.changedCount).toBe(left);
     // The stopped writing back and the rest make one step the other way
-    expect(await done(undo.redo())).toBe(true);
+    expect(await done(steps.again())).toBe(true);
     expect(ids.every((id) => draw.features.get(id)?.properties.n === 1)).toBe(true);
   });
 
@@ -279,9 +298,9 @@ describe('the undo plugin of the sample', () => {
     for (const name of ['one', 'two', 'three']) {
       draw.features.update('a', { properties: { name } });
     }
-    for (let i = 0; i < 3; i++) await done(undo.undo());
-    for (let i = 0; i < 3; i++) await done(undo.redo());
-    for (let i = 0; i < 2; i++) await done(undo.undo());
+    for (let i = 0; i < 3; i++) await done(steps.back());
+    for (let i = 0; i < 3; i++) await done(steps.again());
+    for (let i = 0; i < 2; i++) await done(steps.back());
     expect(draw.features.get('a')?.properties.name).toBe('one');
     const whole = restores.filter((entry) => entry.counts && !entry.counts.stopped);
     const given = whole.flatMap((entry) => entry.values);

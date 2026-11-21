@@ -414,6 +414,73 @@ describe('the playground', () => {
     expect(errors).toEqual([]);
   });
 
+  it('takes the last edit back with its button, a step a press, and the button stands clear of the others', {
+    timeout: 60_000,
+  }, async () => {
+    const { page, context, errors } = await open('&plain', { width: 1024, height: 757 });
+    await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
+    const button = page.locator('.pg-back button[data-back="last"]');
+    expect(await button.textContent()).toBe('Take back (0)');
+    const id = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const { lng, lat } = map.getCenter();
+      const feature = draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [lng, lat] },
+        properties: { name: 'one' },
+      });
+      if (feature) draw.features.update(feature.id, { properties: { name: 'two' } });
+      return feature?.id as string;
+    });
+    await settle(page);
+    expect(await button.textContent()).toBe('Take back (2)');
+    const boxes = await page.evaluate(() => {
+      const box = (element: Element) => {
+        const r = element.getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      };
+      const own = document.querySelector('.pg-back button') as Element;
+      const b = box(own);
+      const hit = document.elementFromPoint((b.left + b.right) / 2, (b.top + b.bottom) / 2);
+      return {
+        page: { width: window.innerWidth, height: window.innerHeight },
+        button: { ...b, pressed: hit === own || own.contains(hit) },
+        others: Array.from(
+          document.querySelectorAll(
+            '.pg-transforms button, .pg-edits button, .pg-select button, .pg-select output, .mgd-ui [data-role="drawbar"], .mgd-ui [data-role="floating"]',
+          ),
+        )
+          .map(box)
+          .filter((o) => o.right > o.left && o.bottom > o.top),
+      };
+    });
+    expect(boxes.button.pressed).toBe(true);
+    expect(boxes.button.left >= 0 && boxes.button.top >= 0).toBe(true);
+    for (const o of boxes.others) {
+      const b = boxes.button;
+      const meets = b.left < o.right && o.left < b.right && b.top < o.bottom && o.top < b.bottom;
+      expect(meets, `${JSON.stringify(b)} meets ${JSON.stringify(o)}`).toBe(false);
+    }
+    await button.click();
+    await page.waitForFunction(
+      (feature) =>
+        (window as unknown as E2EWindow).draw.features.get(feature)?.properties.name === 'one',
+      id,
+      { timeout: browserTimeout(10_000) },
+    );
+    expect(await button.textContent()).toBe('Take back (1)');
+    await button.click();
+    await page.waitForFunction(
+      () => (window as unknown as E2EWindow).draw.features.count() === 0,
+      undefined,
+      { timeout: browserTimeout(10_000) },
+    );
+    expect(await button.textContent()).toBe('Take back (0)');
+    expect(await button.isDisabled()).toBe(true);
+    await context.close();
+    expect(errors).toEqual([]);
+  });
+
   it('has its switches in the card of actions, which a press and Shift with a letter run, and which show changes made by code', {
     timeout: 60_000,
   }, async () => {
