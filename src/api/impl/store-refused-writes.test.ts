@@ -225,7 +225,7 @@ describe('a write the Store refuses', () => {
       write: 'deleteLayer' as const,
       rule: () => true,
       run: (draw: Draw) => draw.layers.delete('b'),
-      refused: false,
+      refused: null,
     },
     {
       what: 'a group updated (updateGroup)',
@@ -260,7 +260,7 @@ describe('a write the Store refuses', () => {
     },
   ])(
     '$what: returns what read-only returns, tells nothing and keeps nothing',
-    ({ write, rule, run, refused }) => {
+    async ({ write, rule, run, refused }) => {
       const { draw, base, rules, told } = written();
       draw.selection.set('feature', ['p']);
       told.length = 0;
@@ -269,6 +269,12 @@ describe('a write the Store refuses', () => {
       expect(() => {
         result = run(draw);
       }).not.toThrow();
+      // An edit written in parts gives its result once its last part is written
+      if (result instanceof Promise) {
+        const pending = result;
+        await vi.runAllTimersAsync();
+        result = await pending;
+      }
       expect(result).toBe(refused);
       expect(told).toEqual([]);
       expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['p'] });
@@ -276,7 +282,9 @@ describe('a write the Store refuses', () => {
       // Read-only refuses the same write with the same value
       rules.clear();
       draw.setReadOnly(true);
-      expect(run(draw)).toBe(refused);
+      let again: unknown = run(draw);
+      if (again instanceof Promise) again = await again;
+      expect(again).toBe(refused);
       draw.setReadOnly(false);
     },
   );

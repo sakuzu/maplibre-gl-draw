@@ -146,12 +146,11 @@ async function picture(page: Page, calls: readonly Call[]): Promise<Picture> {
       draw.setMode('select');
       draw.selection.clear();
       draw.hidden.clear();
-      // What the scene before locked is unlocked first, so that it can be deleted
-      draw.transact(
-        () => {
-          if (draw.layers.has('second')) draw.layers.delete('second');
-          draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
-        },
+      // What the scene before locked is deleted with the locks ignored; the two deletions are
+      // bulk edits, written one after the other
+      if (draw.layers.has('second')) await draw.layers.delete('second', { ignoreLocks: true });
+      await draw.features.deleteMany(
+        draw.features.list().map((feature) => feature.id),
         { ignoreLocks: true },
       );
       draw.layers.create({ id: 'second', name: 'Second' });

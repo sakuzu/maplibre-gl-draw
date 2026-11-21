@@ -20,6 +20,7 @@ import {
   gridPoints,
   storeWorkDuring,
   WORK_SCENES,
+  WORK_SIZES,
   workDuring,
 } from '../../test-utils.js';
 
@@ -157,12 +158,23 @@ describe(WORK_SCENES.receiveChange, () => {
 });
 
 describe(WORK_SCENES.deleteLayer, () => {
-  it('notifies as often for a layer of 10,000 features as for one of 1,000', () => {
-    expectNotProportional((size) => {
+  it('notifies as often in a part for a layer of 10,000 features as for one of 1,000', async () => {
+    // The deletion is written in parts, whose number grows with the features: what does not grow
+    // is the number of notifications a part gives
+    const perPart = new Map<number, number>();
+    for (const size of [WORK_SIZES.small, WORK_SIZES.large]) {
       const instance = instanceOf(size);
       const layer = instance.draw.layers.list()[0];
-      return workDuring(instance.counts, () => instance.draw.layers.delete(layer.id)).notifications;
-    }, 'the notifications');
+      let parts = 0;
+      const stop = instance.draw.document.subscribe(() => {
+        parts += 1;
+      });
+      const before = instance.counts.notifications;
+      await instance.draw.layers.delete(layer.id);
+      stop();
+      perPart.set(size, (instance.counts.notifications - before) / Math.max(parts, 1));
+    }
+    expectNotProportional((size) => perPart.get(size) ?? 0, 'the notifications of a part');
   });
 });
 

@@ -322,7 +322,7 @@ describe('read-only and the locks', () => {
     expect(draw.features.update('a', { properties: { n: 1 } })).toBeNull();
     expect(draw.features.updateMany([{ id: 'a', patch: { visible: false } }])).toBeNull();
     expect(draw.features.delete('a')).toBe(false);
-    expect(draw.features.deleteMany(['a'])).toBe(false);
+    expect(await draw.features.deleteMany(['a'])).toBeNull();
     expect(draw.features.move('a', { groupId: 'g' })).toBe(false);
     expect(draw.features.moveMany(['a'], { layerId, index: 0 })).toBe(false);
     expect(draw.features.union(['c', 'd'])).toBeNull();
@@ -333,7 +333,7 @@ describe('read-only and the locks', () => {
     expect(draw.layers.create({ name: 'New' })).toBeNull();
     expect(draw.layers.update(layerId, { name: 'Renamed' })).toBeNull();
     expect(draw.layers.reorder([layerId])).toBe(false);
-    expect(draw.layers.delete(layerId)).toBe(false);
+    expect(await draw.layers.delete(layerId)).toBeNull();
     expect(draw.groups.create({ featureIds: ['a'] })).toBeNull();
     expect(draw.groups.update('g', { name: 'Renamed' })).toBeNull();
     expect(draw.groups.move('g', { layerId, index: 0 })).toBe(false);
@@ -341,7 +341,7 @@ describe('read-only and the locks', () => {
     draw.selection.set('feature', ['a', 'c']);
     expect(draw.selection.group()).toBeNull();
     expect(draw.selection.move({ groupId: 'g' })).toBe(false);
-    expect(draw.selection.delete()).toBe(false);
+    expect(await draw.selection.delete()).toBeNull();
     draw.selection.set('group', ['g']);
     expect(draw.selection.ungroup()).toBe(false);
     expect(draw.metadata.update({ title: 'Renamed' })).toBeNull();

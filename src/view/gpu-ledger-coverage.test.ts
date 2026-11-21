@@ -900,7 +900,7 @@ describe('the GPU side of an instance gives everything back', () => {
     expect(ledger.snapshot().leakedObjects).toBe(0);
   });
 
-  it('of a layer of the document that is deleted, by what its features held', () => {
+  it('of a layer of the document that is deleted, by what its features held', async () => {
     const { mock, map, draw, ledger } = tracked();
     const kept = draw.layers.create({ name: 'kept' }) as unknown as { id: string } | string;
     const keptId = typeof kept === 'string' ? kept : kept.id;
@@ -914,7 +914,8 @@ describe('the GPU side of an instance gives everything back', () => {
     );
     renderSettled({ map, draw });
     expect(ledger.snapshot().rowBytes).toBeGreaterThan(before.rowBytes);
-    draw.layers.delete(goneId);
+    // The deletion of a layer is written in parts
+    await draw.layers.delete(goneId);
     map.render();
     expect(ledger.snapshot().rowBytes).toBe(before.rowBytes);
     expectLedgerMatches(mock, ledger);

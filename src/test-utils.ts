@@ -1899,6 +1899,24 @@ function thrownRecord(error: unknown): unknown {
 }
 
 /**
+ * Waits for a promise on the fake clock: the clock goes on while it waits, so that an edit
+ * written in parts, a part in a task of its own, comes to its end
+ */
+async function settled<T>(promise: Promise<T>): Promise<T> {
+  let done = false;
+  promise.then(
+    () => {
+      done = true;
+    },
+    () => {
+      done = true;
+    },
+  );
+  for (let tick = 0; !done && tick < 100_000; tick++) await vi.advanceTimersByTimeAsync(1);
+  return promise;
+}
+
+/**
  * What a scene's action did, read after it: what it returned (or threw), the document, the
  * state of this client, the events other than `document.changed`, the `document.changed`
  * notifications and the order of every event
@@ -1912,7 +1930,7 @@ export async function observeParity(
   let returned: unknown;
   try {
     const value = act();
-    returned = readParity(t.draw, 'value', value instanceof Promise ? await value : value);
+    returned = readParity(t.draw, 'value', value instanceof Promise ? await settled(value) : value);
   } catch (error) {
     returned = thrownRecord(error);
   }

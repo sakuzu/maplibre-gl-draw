@@ -133,12 +133,12 @@ describe('the sets of IDs of a change', () => {
     expect(changes[0]).not.toHaveProperty('previousValues');
   });
 
-  it('carries the keys the metadata wrote, and the order when a layer is created or deleted', () => {
+  it('carries the keys the metadata wrote, and the order when a layer is created or deleted', async () => {
     const changes = changesOf();
     draw.metadata.update({ title: 'Map' });
     const first = draw.layers.list()[0].id;
     const layer = draw.layers.create({ name: 'Second' });
-    draw.layers.delete(layer?.id as string);
+    await draw.layers.delete(layer?.id as string);
     expect(changes[0].metadata?.keys).toEqual(['title']);
     expect(changes[1].layers?.orderChanged).toEqual({
       order: [first, layer?.id],
