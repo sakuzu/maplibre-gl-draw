@@ -99,6 +99,10 @@ first part and is stopped at the next.
 | `scaleAll` | Scales every feature selected by 2 (`scale`) |
 | `translateLayer` | Moves every feature of the layer 100 m east, nothing selected |
 | `delete` | Deletes every feature selected with `draw.selection.delete` |
+| `deleteLayerFeatures` | `draw.features.deleteMany` of the layer |
+| `deleteLayer` | `draw.layers.delete` of the layer with its features |
+| `writeLayerFeatures` | `draw.features.updateAll` of the layer |
+| `duplicateLayerFeatures` | `draw.features.duplicate` of the layer |
 | `import` | `draw.document.load` of a GeoJSON `File` into the layer |
 | `export` | `draw.document.toJSON` and `JSON.stringify` of the document |
 | `gpuMemory` | Reads what the drawing holds on the GPU, per part, the document open |

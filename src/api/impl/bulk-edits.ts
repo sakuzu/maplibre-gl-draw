@@ -39,6 +39,12 @@
  *   `draw.transact` returns (a transaction of the Store has one number); in a transaction opened
  *   on the Store directly, it folds into that transaction and closes nothing, so that the
  *   operation stays open.
+ * - A work may refuse when it is about to write for the first time (`prepare`): the edit then
+ *   rejects, nothing of it is written, and a write of this client that touched one of its
+ *   features goes on as if it had not been started. It may write besides its target in the
+ *   transaction of the last part (`end`, stopped or not), give the IDs of the features it created
+ *   (`EditCounts.createdIds`), and not be applied first (a deletion of layers: from its first
+ *   part on, the layer refuses the other writes of this client to the layers it deletes).
  *
  * The edits hold their state per instance; nothing is kept at the level of the module.
  */
