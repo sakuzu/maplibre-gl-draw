@@ -14,7 +14,7 @@
  * mouse sent to the canvas of the map, as a hand would make them.
  */
 
-import type { Draw, DrawDocument } from '@sakuzu/maplibre-gl-draw';
+import type { Draw, DrawDocument, FeatureValues } from '@sakuzu/maplibre-gl-draw';
 import {
   createStore,
   type FeatureRowField,
@@ -389,6 +389,46 @@ function transformScenes(): Scene[] {
           ),
         );
         noteCounts(ctx, counts);
+        await ctx.settle();
+      },
+    }),
+    scene({
+      name: 'restoreLayerMove',
+      label:
+        'Write back a move of every feature of the layer 100 m east, with the values before ' +
+        '(draw.features.restore, in parts)',
+      async prepare(ctx): Promise<FeatureValues[]> {
+        await ctx.openDocument();
+        ctx.draw.selection.clear();
+        // The move, with the values before of each of its parts (not measured)
+        const values: FeatureValues[] = [];
+        const stop = ctx.draw.document.subscribe(
+          (change) => {
+            if (change.previousValues) values.push(change.previousValues);
+          },
+          { previousValues: ['local'] },
+        );
+        ctx.markChanged();
+        try {
+          await ctx.draw.features.translate({ layerIds: [LAYER_ID] }, eastward(ctx.n));
+        } finally {
+          stop();
+        }
+        await rest(ctx);
+        return values;
+      },
+      async run(ctx, values) {
+        ctx.note('valueParts', values.length);
+        ctx.note(
+          'valueBytes',
+          values.reduce((sum, value) => sum + value.byteLength, 0),
+        );
+        const counts = await ctx.inputAsync(() =>
+          ctx.draw.features.restore(values, { source: 'bench' }),
+        );
+        noteCounts(ctx, counts);
+        // Written back, the values keep nothing that is needed
+        ctx.draw.features.releaseValues(values);
         await ctx.settle();
       },
     }),

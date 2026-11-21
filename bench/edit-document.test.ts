@@ -50,6 +50,7 @@ describe('the scenes', () => {
       'translateAll',
       'rotateAll',
       'scaleAll',
+      'restoreLayerMove',
       'translateLayer',
       'delete',
       'deleteLayerFeatures',

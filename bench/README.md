@@ -97,6 +97,7 @@ first part and is stopped at the next.
 | `translateAll` | Moves every feature selected 100 m east (`translate`) |
 | `rotateAll` | Turns every feature selected 90 degrees (`rotate`) |
 | `scaleAll` | Scales every feature selected by 2 (`scale`) |
+| `restoreLayerMove` | Writes back a move of the layer with `features.restore` |
 | `translateLayer` | Moves the features of the layer 100 m east, none selected |
 | `delete` | Deletes every feature selected with `draw.selection.delete` |
 | `deleteLayerFeatures` | `draw.features.deleteMany` of the layer |
