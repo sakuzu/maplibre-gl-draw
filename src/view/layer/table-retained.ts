@@ -1760,11 +1760,12 @@ export class TableLayerRenderer {
         }
         do {
           const end = Math.min(range.to, at + SLICE_ROWS);
+          // Counted as they are packed, in the frame they are packed in
+          this.stats.rowsPacked += end - at;
           for (; at < end; at++)
             collectRow(group, at, at - range.from, draft, roundedOrigin, context);
         } while (at < range.to && now() < deadline);
         if (at < range.to) return false;
-        this.stats.rowsPacked += range.to - range.from;
         this.stats.chunksBuilt++;
         if (onSurface) draft.spreadRuns();
         result = rows.createChunk(draft.finish(roundedOrigin, palette));
