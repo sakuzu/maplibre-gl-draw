@@ -149,12 +149,32 @@ describe('the notification of a deletion of every feature', () => {
     instance.draw.features.update(ids[5], { properties: { name: 'held' } });
     stop();
     instance.draw.on('document.changed', () => {});
-    const read = callsDuring(instance, 'getRowId', () => instance.draw.features.deleteMany(ids));
-    return { read, held: [...held[0].features.updated.iterate()], expected: ids[5] };
+    let deletion: Promise<unknown> = Promise.resolve();
+    const read = callsDuring(instance, 'getRowId', () => {
+      deletion = instance.draw.features.deleteMany(ids);
+    });
+    // What the deletion still being written ends with, once the instance is destroyed
+    const ended = deletion.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    return {
+      read,
+      held: [...held[0].features.updated.iterate()],
+      expected: ids[5],
+      instance,
+      ended,
+    };
   });
 
-  it('reads as many IDs from the rows for 10,000 features as for 1,000', () => {
+  it('reads as many IDs from the rows for 10,000 features as for 1,000', async () => {
     expectNotProportional((size) => scene(size).read, 'the IDs read from the rows');
+    // The deletions still being written end with their instances: they reject with invalidState
+    for (const size of [WORK_SIZES.small, WORK_SIZES.large]) {
+      const { instance, ended } = scene(size);
+      instance.draw.destroy();
+      expect(await ended).toMatchObject({ code: 'invalidState' });
+    }
   });
 
   it('keeps the IDs of the set held', () => {

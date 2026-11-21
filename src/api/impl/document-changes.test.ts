@@ -74,7 +74,7 @@ describe('the sets of IDs of a change', () => {
     expect(change.reset).toBe(false);
   });
 
-  it('keeps the IDs it was given after later writes, and those of deleted features', () => {
+  it('keeps the IDs it was given after later writes, and those of deleted features', async () => {
     const a = draw.features.create(point()) as Feature;
     const changes = changesOf();
     const b = draw.features.create(point(1, 1)) as Feature;
@@ -90,9 +90,12 @@ describe('the sets of IDs of a change', () => {
     const deleted = changes[1].features.deleted;
     expect(idsOf(deleted)).toEqual([b.id]);
     // Until the whole document is replaced
-    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+    const deletion = draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
     expect(idsOf(created)).toEqual([b.id]);
     expect(idsOf(deleted)).toEqual([b.id]);
+    // The deletion still being written ends with the instance: it rejects with invalidState
+    draw.destroy();
+    await expect(deletion).rejects.toMatchObject({ code: 'invalidState' });
   });
 
   it('a feature created and deleted in one change is in none of the sets', () => {
