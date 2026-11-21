@@ -518,6 +518,8 @@ function trackingGL() {
       const value = Reflect.get(target, prop) as unknown;
       if (typeof prop !== 'string' || typeof value !== 'function') return value;
       if (prop === 'isContextLost') return () => state.lost;
+      // The allocations succeed (the drape checks them)
+      if (prop === 'getError') return () => Reflect.get(target, 'NO_ERROR');
       if (prop.startsWith('create')) {
         return (...args: unknown[]) => {
           if (state.lost) return null;
@@ -638,17 +640,36 @@ describe('what the rows hold on the GPU on the terrain and on the globe', () => 
   });
 
   it('is drawn when what is held outside the rows is at the limit, the drape refused', () => {
-    const instance = trackedInstance();
-    instance.ledger.limitBytes = GPU_FLOOR_BYTES + 1;
-    putTerrain(instance.map);
-    instance.draw.features.createMany(shapes(600) as never);
-    expect(() => settle(instance)).not.toThrow();
-    expect(() => instance.map.render()).not.toThrow();
-    const snapshot = instance.ledger.snapshot();
-    expect(snapshot.byPart.rows ?? 0).toBeGreaterThan(0);
-    expect(snapshot.byPart.drape ?? 0).toBe(0);
-    expect(getTerrainDrapeDebug(instance.engine.customLayer.getTerrainContext()).used).toBe(false);
-    expect(instance.ledger.audit()).toBe(true);
-    instance.draw.destroy();
+    // In the band of the drape (zoom 13): drawn on the drape while it fits
+    const drawn = (limited: boolean) => {
+      const instance = trackedInstance();
+      if (limited) instance.ledger.limitBytes = GPU_FLOOR_BYTES + 1;
+      putTerrain(instance.map);
+      (instance.map.map as unknown as { getZoom: () => number }).getZoom = () => 13;
+      instance.draw.features.createMany(shapes(600) as never);
+      expect(() => settle(instance)).not.toThrow();
+      const rows = (rendererOf(instance) as unknown as { rows: { draws: number } }).rows;
+      const before = rows.draws;
+      expect(() => instance.map.render()).not.toThrow();
+      const result = {
+        drape: instance.ledger.snapshot().byPart.drape ?? 0,
+        used: getTerrainDrapeDebug(instance.engine.customLayer.getTerrainContext()).used,
+        rowDraws: rows.draws - before,
+        surface: surfaceKinds(rendererOf(instance)),
+      };
+      expect(instance.ledger.audit()).toBe(true);
+      instance.draw.destroy();
+      return result;
+    };
+    const free = drawn(false);
+    expect(free.used).toBe(true);
+    expect(free.drape).toBeGreaterThan(0);
+    expect(free.surface).toEqual(['draped/terrain']);
+    // At the limit the drape is refused, and the rows are drawn in one draw on the terrain
+    const limited = drawn(true);
+    expect(limited.used).toBe(false);
+    expect(limited.drape).toBe(0);
+    expect(limited.surface).toEqual(['one-draw/terrain']);
+    expect(limited.rowDraws).toBeGreaterThan(0);
   });
 });
