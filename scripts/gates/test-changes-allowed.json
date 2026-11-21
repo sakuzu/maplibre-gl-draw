@@ -815,6 +815,26 @@
       "path": "bench/edit-document.test.ts",
       "change": "the list of the scenes of the editing benchmark gains gpuMemory, the GPU memory of the drawing per part",
       "unit": "the ledger of the GPU memory and its limit"
+    },
+    {
+      "path": "src/view/gpu-ledger-coverage.test.ts",
+      "change": "the counting GL knows the bytes of the R8UI texels of the state of the rows, the scenes that write 64 rows or more draw until the work of the drawing is done, and the rows are read from the part of the rows",
+      "unit": "the drawing of the layers from their rows"
+    },
+    {
+      "path": "src/api/impl/work-scenes.test.ts",
+      "change": "the click scene draws until the work of the drawing is done and moves the pointer to the place before it clicks there",
+      "unit": "the drawing of the layers from their rows"
+    },
+    {
+      "path": "src/e2e/bench-limit.e2e.test.ts",
+      "change": "the page is opened with 10,000 features and no time to run a scene once it is prepared, so every scene runs out of time whatever the speed of the machine",
+      "unit": "the drawing of the layers from their rows"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "the list of the scenes of the editing benchmark gains panInterleaved, a pan over a layer of polygons, lines and points one after another",
+      "unit": "the drawing of the layers from their rows"
     }
   ]
 }
