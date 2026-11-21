@@ -329,10 +329,11 @@ export function fakeDraw(
         setSelection(type, [...next]);
         return true;
       }),
-      delete: vi.fn(() => {
-        if (ids.length === 0) return false;
+      delete: vi.fn(async () => {
+        if (ids.length === 0) return null;
+        const changedCount = ids.length;
         select([]);
-        return true;
+        return { operationId: 0, changedCount, lockedCount: 0, missingCount: 0, stopped: false };
       }),
       clear: vi.fn(() => select([])),
       group: vi.fn(() => null),
@@ -670,12 +671,13 @@ export function fakeDocument(
       return true;
     }),
     clear: vi.fn(() => setSelection(null, [])),
-    delete: vi.fn(() => {
-      if (selection.ids.length === 0) return false;
+    delete: vi.fn(async () => {
+      if (selection.ids.length === 0) return null;
+      const changedCount = selection.ids.length;
       for (const id of selection.ids) features.delete(id);
       setSelection(null, []);
       changed();
-      return true;
+      return { operationId: 0, changedCount, lockedCount: 0, missingCount: 0, stopped: false };
     }),
     group: vi.fn(() => null),
     ungroup: vi.fn(() => true),

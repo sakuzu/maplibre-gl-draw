@@ -10,7 +10,7 @@ import type { Draw, EditCounts, Position } from '@sakuzu/maplibre-gl-draw';
 import { bbox, destination } from '@sakuzu/maplibre-gl-draw/geometry';
 
 /** The center of the box of the features selected, or null when none is */
-function selectionCenter(draw: Draw): Position | null {
+export function selectionCenter(draw: Draw): Position | null {
   let west = Number.POSITIVE_INFINITY;
   let south = Number.POSITIVE_INFINITY;
   let east = Number.NEGATIVE_INFINITY;

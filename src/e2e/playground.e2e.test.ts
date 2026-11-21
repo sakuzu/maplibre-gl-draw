@@ -288,6 +288,91 @@ describe('the playground', () => {
     }
   });
 
+  it('copies the selection and paints it with its buttons, which stand clear of the other buttons, of the bar of the drawing tools and of the panels', {
+    timeout: 60_000,
+  }, async () => {
+    for (const width of [900, 1280]) {
+      const { page, context, errors } = await open('&plain', { width, height: 757 });
+      await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
+      const ids = await page.evaluate(() => {
+        const { draw, map } = window as unknown as E2EWindow;
+        const { lng, lat } = map.getCenter();
+        const made: string[] = [];
+        for (const dx of [0, 0.02]) {
+          const ring = [
+            [lng + dx, lat],
+            [lng + dx + 0.01, lat],
+            [lng + dx + 0.01, lat + 0.01],
+            [lng + dx, lat],
+          ];
+          const feature = draw.features.create({
+            type: 'Polygon',
+            geometry: { type: 'Polygon', coordinates: [ring] },
+          });
+          if (feature) made.push(feature.id);
+        }
+        draw.selection.set('feature', made);
+        return made;
+      });
+      await settle(page);
+      const boxes = await page.evaluate(() => {
+        const box = (element: Element) => {
+          const r = element.getBoundingClientRect();
+          return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        };
+        return {
+          page: { width: window.innerWidth, height: window.innerHeight },
+          buttons: Array.from(document.querySelectorAll('.pg-edits button')).map((button) => {
+            const b = box(button);
+            const hit = document.elementFromPoint((b.left + b.right) / 2, (b.top + b.bottom) / 2);
+            return { ...b, pressed: hit === button || button.contains(hit) };
+          }),
+          others: Array.from(
+            document.querySelectorAll(
+              '.pg-transforms button, .mgd-ui [data-role="drawbar"], .mgd-ui [data-role="floating"]',
+            ),
+          )
+            .map(box)
+            .filter((b) => b.right > b.left && b.bottom > b.top),
+        };
+      });
+      expect(boxes.buttons, `${width}`).toHaveLength(2);
+      for (const b of boxes.buttons) {
+        expect(b.pressed, `${width}`).toBe(true);
+        expect(b.left >= 0 && b.top >= 0, `${width}`).toBe(true);
+        expect(b.right <= boxes.page.width && b.bottom <= boxes.page.height, `${width}`).toBe(true);
+        for (const o of boxes.others) {
+          const meets =
+            b.left < o.right && o.left < b.right && b.top < o.bottom && o.top < b.bottom;
+          expect(meets, `${width}: ${JSON.stringify(b)} meets ${JSON.stringify(o)}`).toBe(false);
+        }
+      }
+      // The copies stand next to their originals, and the selection stays on the originals
+      await page.locator('.pg-edits button[data-edit="duplicate"]').click();
+      await page.waitForFunction(
+        () => (window as unknown as E2EWindow).draw.features.count() === 4,
+        undefined,
+        { timeout: browserTimeout(10_000) },
+      );
+      const selected = await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.selection.get().ids,
+      );
+      expect(selected).toEqual(ids);
+      // The same look on every feature selected
+      await page.locator('.pg-edits button[data-edit="updateAll"]').click();
+      await page.waitForFunction(
+        (wanted) => {
+          const { draw } = window as unknown as E2EWindow;
+          return wanted.every((id) => draw.features.get(id)?.style.fillColor === '#f08c00');
+        },
+        ids,
+        { timeout: browserTimeout(10_000) },
+      );
+      await context.close();
+      expect(errors).toEqual([]);
+    }
+  });
+
   it('has its switches in the card of actions, which a press and Shift with a letter run, and which show changes made by code', {
     timeout: 60_000,
   }, async () => {

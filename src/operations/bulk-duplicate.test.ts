@@ -191,13 +191,13 @@ describe('features.duplicate', () => {
     const counts = await finish(
       draw.features.duplicate(['a'], { offset: { from: [10, 0], to: [11, 0] } }),
     );
-    const copy = draw.features.get(copiesOf(counts)[0]);
-    const [x, y] = (copy?.geometry as { coordinates: number[] }).coordinates;
+    /** The position of a point */
+    const at = (id: string) =>
+      (draw.features.get(id)?.geometry as { coordinates: number[] } | undefined)?.coordinates;
+    const [x, y] = at(copiesOf(counts)[0]) ?? [];
     expect(x).toBeCloseTo(11, 6);
     expect(y).toBeCloseTo(0, 6);
-    expect((draw.features.get('a')?.geometry as { coordinates: number[] }).coordinates).toEqual([
-      10, 0,
-    ]);
+    expect(at('a')).toEqual([10, 0]);
   });
 
   it('rejects a target or an offset of the wrong shape, and copies nothing', async () => {

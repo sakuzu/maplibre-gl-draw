@@ -183,7 +183,7 @@ describe('transact', () => {
     expect(notifications[1].metadata?.metadata.title).toBe('Local');
   });
 
-  it('lets the writes change locked features, groups and layers with ignoreLocks', () => {
+  it('lets the writes change locked features, groups and layers with ignoreLocks', async () => {
     const layer = draw.layers.getActive() as NonNullable<ReturnType<typeof draw.layers.getActive>>;
     const other = draw.layers.create({ name: 'Other' });
     const point = (x: number) => ({
@@ -230,8 +230,12 @@ describe('transact', () => {
 
     // After the call the locks refuse the writes again
     expect(draw.features.update(locked.id, { properties: { a: 2 } })).toBeNull();
-    expect(draw.layers.delete(other.id)).toBe(false);
-    expect(draw.transact(() => draw.layers.delete(other.id), { ignoreLocks: true })).toBe(true);
+    expect(await draw.layers.delete(other.id)).toBeNull();
+    // The deletion of a layer is written in parts: started in the transaction, it ends after it
+    const deleted = draw.transact(() => draw.layers.delete(other.id), { ignoreLocks: true });
+    await vi.runAllTimersAsync();
+    expect(await deleted).not.toBeNull();
+    expect(draw.layers.get(other.id)).toBeUndefined();
     expect(draw.layers.get(layer.id)).toBeDefined();
   });
 

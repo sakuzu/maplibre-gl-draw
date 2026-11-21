@@ -185,8 +185,10 @@ function toggleCells(draw: Draw, map: maplibregl.Map): void {
  */
 async function toggleBig(draw: Draw, map: maplibregl.Map): Promise<void> {
   if (draw.layers.get(BIG_LAYER)) {
-    if (!draw.layers.delete(BIG_LAYER)) return;
-    console.info('200,000 points: removed');
+    // A deletion in parts: the map draws between them
+    const counts = await draw.layers.delete(BIG_LAYER);
+    if (!counts) return;
+    console.info(`200,000 points: removed (${counts.changedCount} features)`);
     return;
   }
   const { lng, lat } = map.getCenter();

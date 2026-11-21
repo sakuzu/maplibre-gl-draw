@@ -174,12 +174,15 @@ describe('the events of the features', () => {
 });
 
 describe('the events of the layers, the groups and the metadata', () => {
-  it('layer.created, layer.updated, layer.reordered and layer.deleted', () => {
+  it('layer.created, layer.updated, layer.reordered and layer.deleted', async () => {
     const first = draw.layers.getActive()?.id as string;
     const layer = draw.layers.create({ name: 'Roads' });
     const renamed = draw.layers.update(layer?.id as string, { name: 'Streets' });
     draw.layers.reorder([layer?.id as string, first]);
-    draw.layers.delete(layer?.id as string);
+    // The deletion of a layer is written in parts
+    const deleted = draw.layers.delete(layer?.id as string);
+    await vi.runAllTimersAsync();
+    await deleted;
 
     expect(payloadsOf(events, 'layer.created')).toEqual([{ layer, source: 'local' }]);
     expect(payloadsOf(events, 'layer.updated')).toContainEqual({

@@ -414,6 +414,68 @@ function transformScenes(): Scene[] {
   ];
 }
 
+/** Notes what a bulk edit did: the features it changed, and whether it stopped */
+function noteEditCounts(
+  ctx: SceneContext,
+  counts: { changedCount: number; stopped: boolean } | null,
+): void {
+  ctx.note('changed', counts?.changedCount ?? 0);
+  // An edit stopped when the time of the scene ran out (the page made the instance read-only)
+  if (counts?.stopped) ctx.note('stopped', 'yes');
+}
+
+/**
+ * The deletions, the copies and the writes of the same patch of every feature of the layer, each
+ * a bulk edit in parts, with nothing selected: each is timed until its promise settles
+ */
+function deletionScenes(): Scene[] {
+  const prepare = async (ctx: SceneContext): Promise<void> => {
+    await ctx.openDocument();
+    ctx.draw.selection.clear();
+    await rest(ctx);
+  };
+  const timed = (
+    name: string,
+    label: string,
+    start: (ctx: SceneContext) => Promise<{ changedCount: number; stopped: boolean } | null>,
+  ): Scene =>
+    scene({
+      name,
+      label,
+      prepare,
+      async run(ctx) {
+        ctx.markChanged();
+        const counts = await ctx.inputAsync(() => start(ctx));
+        noteEditCounts(ctx, counts);
+        ctx.note('features', ctx.draw.features.count());
+        await ctx.settle();
+      },
+    });
+  return [
+    timed(
+      'deleteLayerFeatures',
+      'Delete every feature of the layer (draw.features.deleteMany on { layerIds }, in parts)',
+      (ctx) => ctx.draw.features.deleteMany({ layerIds: [LAYER_ID] }),
+    ),
+    timed(
+      'deleteLayer',
+      'Delete the layer with its features (draw.layers.delete, in parts)',
+      (ctx) => ctx.draw.layers.delete(LAYER_ID),
+    ),
+    timed(
+      'writeLayerFeatures',
+      'Write an attribute of every feature of the layer (draw.features.updateAll on { layerIds }, in parts)',
+      (ctx) =>
+        ctx.draw.features.updateAll({ layerIds: [LAYER_ID] }, { properties: { edited: true } }),
+    ),
+    timed(
+      'duplicateLayerFeatures',
+      'Copy every feature of the layer (draw.features.duplicate on { layerIds }, in parts)',
+      (ctx) => ctx.draw.features.duplicate({ layerIds: [LAYER_ID] }),
+    ),
+  ];
+}
+
 /** The scenes, in the order of the page */
 export const SCENES: readonly Scene[] = [
   scene({
@@ -646,11 +708,13 @@ export const SCENES: readonly Scene[] = [
     async run(ctx) {
       const { draw } = ctx;
       ctx.markChanged();
-      ctx.input(() => draw.selection.delete());
+      const counts = await ctx.inputAsync(() => draw.selection.delete());
+      noteEditCounts(ctx, counts);
       ctx.note('features', draw.features.count());
       await ctx.settle();
     },
   }),
+  ...deletionScenes(),
   scene({
     name: 'import',
     label: 'Import a GeoJSON file into the layer (draw.document.load of a File)',

@@ -35,6 +35,18 @@ body {
   transform: translateX(-50%);
 }
 
+.pg-edits {
+  position: absolute;
+  bottom: 184px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform: translateX(-50%);
+}
+
+.pg-edits button,
 .pg-transforms button {
   padding: 4px 10px;
   border: 1px solid #b8bec6;

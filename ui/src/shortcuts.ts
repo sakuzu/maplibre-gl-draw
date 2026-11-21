@@ -43,7 +43,12 @@ export function toolbarShortcuts(
         label: messages.deleteSelection,
         group: messages.editGroup,
         when: () => draw.selection.get().ids.length > 0,
-        run: (e) => !fromMapCanvas(draw, e) && draw.selection.delete(),
+        // The deletion is written in parts: the key has acted once it is started
+        run: (e) => {
+          if (fromMapCanvas(draw, e)) return false;
+          void draw.selection.delete();
+          return true;
+        },
       });
     }
   }
