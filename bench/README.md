@@ -70,6 +70,7 @@ layer.
 | Parameter | Meaning | Default |
 | --- | --- | --- |
 | `n` | Number of features (1 to 250,000) | `1000` |
+| `run` | Time a scene may run once it is prepared (ms) | none |
 
 The page links to 1,000, 10,000 and 100,000 features; start with the
 fewest. Nothing runs until a scene is asked for. A button, or
@@ -80,7 +81,10 @@ makes the edit while every frame is drawn (`triggerRepaint` in every
 animation frame), until the drawing has nothing left to do. A scene stops
 after 20 seconds, preparation included, and nothing runs after it: an
 edit written in parts is stopped at its next part (the page makes the
-instance read-only, and writable again after the scene).
+instance read-only, and writable again after the scene). With `run`, a
+scene stops once it has run that long after its preparation (which still
+has the 20 seconds): with `run=0`, an edit written in parts writes its
+first part and is stopped at the next.
 
 | Scene | What it does |
 | --- | --- |

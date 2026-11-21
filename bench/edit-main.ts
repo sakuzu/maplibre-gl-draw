@@ -9,13 +9,15 @@
  * makes the features in code (`edit-document.ts`) and runs one scene of `edit-scenes.ts` at a
  * time, from a button or from `window.runEditBench(name)`. A scene first puts the page in the
  * state it starts from (not measured), then runs while every frame is drawn, until the drawing
- * has nothing left to do. A scene stops when it has run for 20 seconds, preparation included;
- * nothing runs between scenes. An edit written in parts writes them in later tasks, so when the
+ * has nothing left to do. A scene stops when it has run for 20 seconds, preparation included, or
+ * when it has run for the time given by `run` once it is prepared; nothing runs between scenes. An edit written in parts writes them in later tasks, so when the
  * time runs out the instance is made read-only, which stops the edit at its next part, and it is
  * made writable again once the scene has given its result.
  *
  * Address parameters:
  *   - `n`: the number of features (default 1000; 1000, 10000 and 100000 are linked)
+ *   - `run`: the time a scene may run once it is prepared (ms; the preparation still has the 20
+ *     seconds). With `run=0`, an edit written in parts is stopped at its second part
  *
  * On window:
  *   - `window.editReady`: a Promise that settles once the map is loaded
@@ -35,6 +37,7 @@ import {
   makeDocument,
   makeEmptyDocument,
   makeFeatureCollection,
+  runLimitFromSearch,
 } from './edit-document';
 import {
   longTasksObserved,
@@ -119,6 +122,9 @@ const countsEl = el('counts');
 
 const requested = countFromSearch(location.search);
 const n = 'n' in requested ? requested.n : 0;
+const runRequested = runLimitFromSearch(location.search);
+/** The time a scene may run once it is prepared (null: the limit of the page, preparation included) */
+const runLimitMs = 'runMs' in runRequested ? runRequested.runMs : null;
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -195,7 +201,8 @@ function setButtons(enabled: boolean): void {
 /** Runs one scene once: its preparation, then the edit while the page records */
 async function runScene(scene: Scene): Promise<SceneResult> {
   const startedAt = performance.now();
-  const deadline = startedAt + SCENE_LIMIT_MS;
+  // Moved to the end of the time given to the run once the scene is prepared, when one is given
+  let deadline = startedAt + SCENE_LIMIT_MS;
   const expired = (): boolean => performance.now() > deadline;
 
   const inputs: number[] = [];
@@ -285,11 +292,12 @@ async function runScene(scene: Scene): Promise<SceneResult> {
   // When the time runs out, an edit still writing its parts is stopped by making the instance
   // read-only (it stops at its next part, and its promise settles); given back after the scene
   let stoppedAtLimit = false;
-  const limitTimer = setTimeout(() => {
+  const stopAtLimit = (): void => {
     if (draw.isReadOnly()) return;
     stoppedAtLimit = true;
     draw.setReadOnly(true);
-  }, SCENE_LIMIT_MS);
+  };
+  let limitTimer = setTimeout(stopAtLimit, SCENE_LIMIT_MS);
 
   let error: string | null = null;
   let completed = false;
@@ -304,6 +312,11 @@ async function runScene(scene: Scene): Promise<SceneResult> {
     const prepared = await scene.prepare(ctx);
     prepareMs = performance.now() - startedAt;
     if (expired()) throw new Error('the time ran out while the scene was prepared');
+    if (runLimitMs !== null) {
+      clearTimeout(limitTimer);
+      deadline = performance.now() + runLimitMs;
+      limitTimer = setTimeout(stopAtLimit, runLimitMs);
+    }
     const recording = startRecording(map);
     const runStart = performance.now();
     try {
@@ -389,6 +402,7 @@ for (const scene of SCENES) {
 
 window.editReady = (async (): Promise<EditInfo> => {
   if ('error' in requested) throw new Error(requested.error);
+  if ('error' in runRequested) throw new Error(runRequested.error);
   await new Promise<void>((resolve) => {
     if (map.loaded()) resolve();
     else map.once('load', () => resolve());

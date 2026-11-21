@@ -53,6 +53,22 @@ export function countFromSearch(search: string): { n: number } | { error: string
   return { n };
 }
 
+/**
+ * Reads the time a scene may run once it is prepared from the address (`run`, in ms)
+ *
+ * @returns The time (null when `run` is not given: a scene may take the limit of the page,
+ *   preparation included), or an error to show when it is not a whole number of 0 or more
+ */
+export function runLimitFromSearch(search: string): { runMs: number | null } | { error: string } {
+  const value = new URLSearchParams(search).get('run');
+  if (value === null || value === '') return { runMs: null };
+  const runMs = Number(value);
+  if (!Number.isInteger(runMs) || runMs < 0) {
+    return { error: `run=${value} is not a whole number of milliseconds, 0 or more` };
+  }
+  return { runMs };
+}
+
 /** The extent of the grid of `n` features */
 export interface GridExtent {
   readonly columns: number;

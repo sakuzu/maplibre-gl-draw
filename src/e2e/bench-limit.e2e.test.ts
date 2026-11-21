@@ -3,8 +3,10 @@
 
 /**
  * End-to-end test of the time limit of the editing benchmark (`bench/edit.html`): a scene of a
- * bulk edit of 100,000 features stops when its 20 seconds have run out and gives its result,
- * though the edit writes its parts in later tasks, and the page is writable again after it
+ * bulk edit stops when its time has run out and gives its result, though the edit writes its
+ * parts in later tasks, and the page is writable again after it. The page is given no time to run
+ * a scene once it is prepared (`run=0`), so every scene runs out of time whatever the speed of the
+ * machine, on a document small enough to be prepared well within the 20 seconds of the page
  *
  * The benchmark is built with its own vite configuration (in memory, the library from its
  * sources) and served to headless Chromium from that build; nothing goes to the network. The
@@ -29,7 +31,7 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 /** The number of features of the page */
-const COUNT = 100_000;
+const COUNT = 10_000;
 
 /** The limit of a scene of the page, preparation included (ms) */
 const SCENE_LIMIT_MS = 20_000;
@@ -83,7 +85,8 @@ beforeAll(async () => {
     });
   });
   page = await context.newPage();
-  await page.goto(`${ORIGIN}/edit.html?n=${COUNT}`);
+  // No time to run a scene once it is prepared: the edit is stopped at its next part
+  await page.goto(`${ORIGIN}/edit.html?n=${COUNT}&run=0`);
   await page.evaluate(() => (window as unknown as BenchWindow).editReady);
 }, browserTimeout(120_000));
 
@@ -123,15 +126,9 @@ describe(`the editing benchmark with ${COUNT.toLocaleString('en')} features`, ()
       // The edit had started: it gave the number of features it changed
       const detail = JSON.stringify({ took, result });
       expect(typeof result.notes.changed, detail).toBe('number');
-      if (result.notes.changed === COUNT) {
-        // A fast machine writes every feature within the time, and the drawing after it runs
-        // out: nothing was left to stop
-        expect(result.notes.stopped, detail).toBeUndefined();
-      } else {
-        // The edit was still writing when the time ran out, and was stopped
-        expect(result.notes.changed as number, detail).toBeLessThan(COUNT);
-        expect(result.notes, detail).toMatchObject({ stopped: 'yes' });
-      }
+      // The edit was still writing when the time ran out, and was stopped
+      expect(result.notes.changed as number, detail).toBeLessThan(COUNT);
+      expect(result.notes, detail).toMatchObject({ stopped: 'yes' });
     });
   }
 
