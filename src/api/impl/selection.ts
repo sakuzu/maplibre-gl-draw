@@ -5,15 +5,15 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
+import { startSelectionDeletion } from '../../operations/bulk-deletion.js';
+import type { BulkEditStarter } from '../../operations/bulk-work.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
-import {
-  deleteSelectedItems,
-  deleteSelectedVertices,
-} from '../../operations/selection-operations.js';
+import { deleteSelectedVertices } from '../../operations/selection-operations.js';
 import { coordinatesOf, supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
+import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { GroupsCollection } from '../groups.js';
 import type { Feature } from '../model.js';
@@ -42,7 +42,12 @@ const SELECTION_TYPES: readonly SelectionType[] = ['feature', 'group', 'layer'];
  */
 export function createSelection(
   deps: ResourceDeps,
-  collections: { features: FeaturesCollection; groups: GroupsCollection },
+  collections: {
+    features: FeaturesCollection;
+    groups: GroupsCollection;
+    /** The bulk edits of the instance; `delete` throws `invalidState` without them */
+    edits?: BulkEditStarter;
+  },
 ): SelectionResource {
   const { store } = deps;
   // The selection and read-only are the state of this client, held by the instance
@@ -118,7 +123,11 @@ export function createSelection(
     },
 
     delete() {
-      return deleteSelectedItems(store);
+      const { edits } = collections;
+      if (!edits) {
+        throw new DrawError('invalidState', 'The bulk edits are not available on this selection');
+      }
+      return startSelectionDeletion(edits);
     },
 
     group() {

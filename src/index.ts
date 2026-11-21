@@ -68,6 +68,7 @@ export type {
 } from './api/options.js';
 export type { Messages } from './messages.js';
 export type {
+  DuplicateOptions,
   EditCounts,
   EditOptions,
   FeaturesCollection,

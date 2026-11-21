@@ -7,7 +7,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { InstanceDocument } from '../../store/document-access.js';
-import { createResourceDeps, createTestDocument } from '../../test-utils.js';
+import { createResourceDeps, createTestEdits } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
@@ -44,7 +44,9 @@ function layer(id: string): void {
 }
 
 beforeEach(() => {
-  store = createTestDocument();
+  // The layer over a built-in Store, with the bulk edits the deletion is written with
+  const made = createTestEdits();
+  store = made.store;
   layer('l1');
   layer('l2');
   const deps = createResourceDeps(store);
@@ -73,7 +75,7 @@ beforeEach(() => {
     },
   ]);
   groups.create({ id: 'g', featureIds: ['b'] });
-  selection = createSelection(deps, { features, groups });
+  selection = createSelection(deps, { features, groups, edits: made.edits });
   vertices = createVertexSelection(deps);
 });
 
@@ -119,16 +121,16 @@ describe('draw.selection', () => {
     expect(selection.features().map((f) => f.id)).toEqual(['line']);
   });
 
-  it('deletes what is selected, and refuses read-only, the interaction lock and nothing', () => {
-    expect(selection.delete()).toBe(false);
+  it('deletes what is selected, and refuses read-only, the interaction lock and nothing', async () => {
+    expect(await selection.delete()).toBeNull();
     selection.set('feature', ['a']);
     store.setInteractionLock(true);
-    expect(selection.delete()).toBe(false);
+    expect(await selection.delete()).toBeNull();
     store.setInteractionLock(false);
     store.setReadOnly(true);
-    expect(selection.delete()).toBe(false);
+    expect(await selection.delete()).toBeNull();
     store.setReadOnly(false);
-    expect(selection.delete()).toBe(true);
+    expect(await selection.delete()).not.toBeNull();
     expect(store.getFeature('a')).toBeUndefined();
   });
 

@@ -60,6 +60,7 @@ const MAIN = [
   'DrawOptions',
   'DrawPointerEvent',
   'DrawProperties',
+  'DuplicateOptions',
   'EditCounts',
   'EditingFeaturesResource',
   'EditOptions',

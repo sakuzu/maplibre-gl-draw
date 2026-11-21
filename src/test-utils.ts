@@ -14,6 +14,7 @@ import { createDraw } from './api/draw.js';
 import type { DocumentChange, DrawEvents } from './api/events.js';
 import type { ModeFactory } from './api/extension/mode.js';
 import type { ExtensionsCollections } from './api/extensions.js';
+import { type BulkEdits, createBulkEdits } from './api/impl/bulk-edits.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
 import { createDrawOnEngine } from './api/impl/create-draw.js';
@@ -244,6 +245,31 @@ export function createMapStub(options: { boxZoomEnabled?: boolean } = {}) {
  */
 export function createTestDocument(client?: ClientState): InstanceDocument {
   return createDocumentAccess(createStore(), client);
+}
+
+/**
+ * The layer over a built-in Store with the bulk edits an instance makes over them: for the tests
+ * that run the bulk edits of the resources without an instance
+ */
+export function createTestEdits(): { store: InstanceDocument; rows: RowStore; edits: BulkEdits } {
+  const rows = createStore();
+  const store = createDocumentAccess(rows);
+  return { store, rows, edits: createBulkEdits(store, rows) };
+}
+
+/**
+ * What the bulk edits of `draw.features` are written with, over the bulk edits given: no
+ * computation set and no feature type registered
+ */
+export function testFeatureBulk(edits: BulkEdits) {
+  return {
+    edits,
+    extensions: {
+      getTransformProvider: () => undefined,
+      featureTypes: { get: () => undefined },
+    } as unknown as Pick<ExtensionsCollections, 'getTransformProvider' | 'featureTypes'>,
+    counts: undefined,
+  };
 }
 
 /**

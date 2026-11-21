@@ -168,7 +168,7 @@ export interface FeaturesCollection {
    */
   update(id: string, patch: FeaturePatch): Feature | null;
   /**
-   * Changes several features in one transaction: all of them or none.
+   * Changes several features in one transaction, each with its own patch: all of them or none.
    *
    * @returns The changed features in the order of the patches, or `null` when the change is
    *   refused
@@ -177,6 +177,25 @@ export interface FeaturesCollection {
    */
   updateMany(patches: readonly { id: string; patch: FeaturePatch }[]): Feature[] | null;
   /**
+   * Writes the same patch to all the features of the target, as `update` writes it to one: a
+   * bulk edit, in parts (see {@link FeaturesCollection}). A feature for which the patch changes
+   * nothing is not counted as changed. As with `update`, a patch of `locked` and `visible`
+   * alone is written to the locked features too.
+   *
+   * @param target - The features
+   * @param patch - The keys to change, the same for every feature
+   * @param options - Where the writes come from, and whether they ignore the locks
+   * @returns The counts of the edit, or `null` when it is refused (read-only, or every feature
+   *   is locked)
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target or
+   *   the patch has the wrong shape; nothing changes then
+   */
+  updateAll(
+    target: FeatureTarget,
+    patch: FeaturePatch,
+    options?: EditOptions,
+  ): Promise<EditCounts | null>;
+  /**
    * Deletes a feature.
    *
    * @returns True when it was deleted, false when the deletion is refused (read-only, a lock)
@@ -184,13 +203,18 @@ export interface FeaturesCollection {
    */
   delete(id: string): boolean;
   /**
-   * Deletes several features in one transaction: all of them or none.
+   * Deletes every feature of the target: a bulk edit, in parts (see
+   * {@link FeaturesCollection}). A group whose last feature goes is deleted with it. The
+   * selection, the editing and the items this client hides let go of the features deleted.
    *
-   * @returns True when they were deleted, false when the deletion is refused
-   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing
-   *   is deleted then
+   * @param target - The features
+   * @param options - Where the writes come from, and whether they ignore the locks
+   * @returns The counts of the edit, or `null` when it is refused (read-only, or every feature
+   *   is locked)
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
+   *   the wrong shape; nothing is deleted then
    */
-  deleteMany(ids: readonly string[]): boolean;
+  deleteMany(target: FeatureTarget, options?: EditOptions): Promise<EditCounts | null>;
   /**
    * Moves a feature to another layer, into a group or out of its group; `index` of the
    * target sets its position there.
@@ -351,6 +375,27 @@ export interface FeaturesCollection {
    *   changes then
    */
   scale(target: FeatureTarget, scaling: Scaling, options?: EditOptions): Promise<EditCounts | null>;
+  /**
+   * Copies every feature of the target: a bulk edit, in parts (see
+   * {@link FeaturesCollection}). Each copy gets a new ID (`generateId`) and the values of its
+   * original as they are, its name included, and goes just in front of the original, in its
+   * layer and its group. When the target holds every feature of a group, the copies of those
+   * features make a new group instead, just in front of that group, with the values of the
+   * group (its name, its lock); when the target holds only some features of a group, their
+   * copies go into the group itself. With `offset`, the copies are moved as `translate` moves
+   * features. The copies can be read by their IDs in `EditCounts.createdIds`, and are not
+   * selected.
+   *
+   * A locked feature is copied too: the copy is a new feature, and has the lock of its
+   * original.
+   *
+   * @param target - The features to copy
+   * @param options - Where the writes come from, and the move of the copies
+   * @returns The counts of the edit, or `null` when it is refused (read-only)
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the target has
+   *   the wrong shape; nothing is copied then
+   */
+  duplicate(target: FeatureTarget, options?: DuplicateOptions): Promise<EditCounts | null>;
 }
 
 /**
@@ -394,6 +439,15 @@ export interface EditOptions {
    * that of the `draw.transact` the edit is started in.
    */
   ignoreLocks?: boolean;
+}
+
+/** The options of `features.duplicate`. */
+export interface DuplicateOptions extends EditOptions {
+  /**
+   * How far the copies are moved from their originals, given as two points as `translate` takes
+   * it (a {@link Translation}, in degrees); they stand on their originals when it is left out
+   */
+  offset?: Translation;
 }
 
 /**

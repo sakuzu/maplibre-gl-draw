@@ -58,10 +58,11 @@ export function handleUngroupShortcut(context: EngineModeContext): void {
 
 /**
  * Handling of the Delete / Backspace key: deletes what is selected (vertices, features, groups
- * or layers; locked items are kept) with `deleteSelection` of `operations/`.
+ * or layers; locked items are kept) with `deleteSelection` of `operations/`, through the bulk
+ * edits of the instance (the deletion of features, groups and layers is written in parts)
  */
 export function handleDeleteShortcut(context: EngineModeContext): void {
-  deleteSelection(context.store);
+  deleteSelection(context.bulkEdits);
 }
 
 /**

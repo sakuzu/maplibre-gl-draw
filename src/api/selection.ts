@@ -5,6 +5,7 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
+import type { EditCounts } from './features.js';
 import type { Feature, Group, MoveTarget } from './model.js';
 import type { Selection, SelectionType, VertexRef, VertexSelection } from './state.js';
 
@@ -43,11 +44,20 @@ export interface SelectionResource {
   /** The selected features; for a group or a layer, the features in it. */
   features(): Feature[];
   /**
-   * Deletes what is selected.
+   * Deletes what is selected: the selected features, or the selected groups with their
+   * features, or the selected layers with their features and groups. Features and groups are
+   * deleted as `features.deleteMany({ selection: true })` deletes them, and layers as
+   * `layers.deleteMany` deletes them (the layers in the last part): a bulk edit in parts, as
+   * the Delete key does. What is locked stays, and the rest is deleted: a selected layer that
+   * holds a lock is left out, and its features are counted (`EditCounts.lockedCount`). The
+   * document keeps one layer: when every layer is selected, the last of the selection stays.
+   * Once the edit has deleted something, nothing is selected. The selected vertices are not
+   * deleted (see {@link VertexSelectionResource.delete}).
    *
-   * @returns False when nothing is selected or the deletion is refused (read-only, a lock)
+   * @returns The counts of the edit, or `null` when nothing is selected or the deletion is
+   *   refused (read-only, the interaction lock, or everything selected is locked)
    */
-  delete(): boolean;
+  delete(): Promise<EditCounts | null>;
   /**
    * Makes a group of the selected features.
    *

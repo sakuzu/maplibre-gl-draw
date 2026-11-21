@@ -10,7 +10,12 @@ import type { Polygon } from 'geojson';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { InstanceDocument } from '../../store/document-access.js';
 import type { StoreChange } from '../../store/types.js';
-import { createResourceDeps, createTestDocument } from '../../test-utils.js';
+import {
+  createResourceDeps,
+  createTestDocument,
+  createTestEdits,
+  testFeatureBulk,
+} from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { FeatureInput } from '../model.js';
@@ -73,10 +78,12 @@ function itemsOf(layerId: string): readonly string[] {
 }
 
 beforeEach(() => {
-  store = createTestDocument();
+  // The layer over a built-in Store, with the bulk edits the deletions are written with
+  const made = createTestEdits();
+  store = made.store;
   layer('l1');
   layer('l2');
-  features = createFeatures(createResourceDeps(store));
+  features = createFeatures(createResourceDeps(store), testFeatureBulk(made.edits));
   notifications = [];
   store.subscribe((changes) => notifications.push(changes));
 });
@@ -344,12 +351,16 @@ describe('delete and deleteMany', () => {
     expect(features.count()).toBe(3);
   });
 
-  it('deletes several in one notification, or none', () => {
-    expect(codeOf(() => features.deleteMany(['a', 'x']))).toBe('notFound');
-    expect(features.deleteMany(['a', 'c'])).toBe(false);
+  it('deletes several in one notification, leaving the locked ones and counting the IDs that name nothing', async () => {
+    expect(await features.deleteMany(['x'])).toEqual(
+      expect.objectContaining({ changedCount: 0, missingCount: 1 }),
+    );
+    expect(await features.deleteMany(['c'])).toBeNull();
     expect(features.count()).toBe(3);
     notifications.length = 0;
-    expect(features.deleteMany(['a', 'b'])).toBe(true);
+    expect(await features.deleteMany(['a', 'b', 'c'])).toEqual(
+      expect.objectContaining({ changedCount: 2, lockedCount: 1 }),
+    );
     expect(features.list().map((f) => f.id)).toEqual(['c']);
     expect(notifications).toHaveLength(1);
   });

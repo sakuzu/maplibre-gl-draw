@@ -272,6 +272,39 @@ export class ClientState {
   }
 
   /**
+   * Removes the IDs of a set that no longer name anything in the document from the selection, the
+   * features being edited and the hidden items, in one write: each of them is read once, and the
+   * work is that of the IDs this client holds and of the set, not of the one times the other
+   */
+  forgetAll(ids: ReadonlySet<string>): void {
+    const document = this.#notification?.document;
+    if (!document || ids.size === 0) return;
+    const gone = (id: string): boolean =>
+      ids.has(id) && !document.getFeature(id) && !document.getGroup(id) && !document.getLayer(id);
+    this.#write(() => {
+      const selected = this.#selection.ids;
+      if (selected.length > 0) {
+        const kept = selected.filter((id) => !gone(id));
+        if (kept.length !== selected.length) {
+          this.#select(kept.length === 0 ? null : this.#selection.type, kept);
+        }
+      }
+      if (this.#editingIds.length > 0) {
+        const ended = this.#editingIds.filter(gone);
+        if (ended.length > 0) this.endEditing(ended);
+      }
+      let unhidden = false;
+      for (const id of [...this.#locallyHidden]) {
+        if (gone(id)) {
+          this.#locallyHidden.delete(id);
+          unhidden = true;
+        }
+      }
+      if (unhidden) this.#changed({ uiStateChanged: true });
+    });
+  }
+
+  /**
    * Takes out of the selection what cannot be seen: an item that no longer exists, whose own
    * visible flag or the one of its group or layer is off, or that is hidden here with its group
    * or its layer. A hidden item never keeps its handles, its vertex hits or its place in a Delete

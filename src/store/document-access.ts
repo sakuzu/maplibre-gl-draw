@@ -323,6 +323,14 @@ export interface DocumentPlaces {
   watchMoves(watching: () => boolean): void;
 }
 
+/**
+ * Where a feature is created in its container (its group, or its layer when it is in no group):
+ * just in front of an item of that container (a feature, or a group of the layer), or at the key
+ * of the order an item has in its own container (the copies of the features of a group, made in
+ * a new group in the order of their originals)
+ */
+export type CreatedPlace = { readonly inFrontOf: string } | { readonly keyOf: string };
+
 /** The writes that move features and groups, and the replacements of the whole document */
 export interface DocumentMoves {
   /**
@@ -330,6 +338,17 @@ export interface DocumentMoves {
    * rows of one layer that follow each other are written at once)
    */
   createFeatures(features: readonly Feature[]): boolean;
+  /**
+   * Creates features, each as `createFeature` does but at the place given (`places[i]` for
+   * `features[i]`), one after another in one transaction; a place whose item is not in the
+   * container of the feature puts the feature at the front
+   */
+  createFeaturesAt(features: readonly Feature[], places: readonly CreatedPlace[]): boolean;
+  /**
+   * Creates a group, as `createGroup` does with no feature, just in front of an item of its layer
+   * (a feature in no group, or a group); at the front when the item is not in the layer
+   */
+  createGroupInFrontOf(group: Group, itemId: string): boolean;
   /**
    * Moves features, given in stacking order, to a layer, into a group or out of their group,
    * keeping their order, in one transaction
@@ -409,6 +428,16 @@ export interface DocumentOperations {
    * of an operation told so far, for its last part to be told even when it is empty)
    */
   releaseOpenOperations(): void;
+  /**
+   * Marks the layers being deleted (null takes the mark back): the writes of this client to them,
+   * to their groups and to their features are refused, as the Store refuses a write (they return
+   * false), whether they ignore the locks or not, except those `asLayerDeletion` runs
+   */
+  setLayersBeingDeleted(ids: ReadonlySet<string> | null): void;
+  /** Runs `fn` as the writes of the deletion of the layers marked, which the mark does not refuse */
+  asLayerDeletion<T>(fn: () => T): T;
+  /** Whether a layer is marked as being deleted (see `setLayersBeingDeleted`) */
+  isLayerBeingDeleted(id: string): boolean;
 }
 
 /**

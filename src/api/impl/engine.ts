@@ -45,6 +45,8 @@ import {
   DEFAULT_VIEWPORT_EXPANSION_FACTOR,
   getExpandedViewportBounds,
 } from '../../view/viewport.js';
+import type { BulkEdits } from './bulk-edits.js';
+import { createBulkEdits } from './bulk-edits.js';
 import type { Context, EngineOptions } from './engine-context.js';
 import { createContext } from './engine-context.js';
 import type { EventHub } from './events.js';
@@ -96,6 +98,8 @@ export interface Engine {
   readonly map: MapLibreMap;
   /** The context: the Store, the services and the resolved options */
   readonly context: Context;
+  /** The bulk edits of the instance: one for the instance, made here, which the modes reach too */
+  readonly edits: BulkEdits;
   /** The custom layer that draws the document and the datasets */
   readonly customLayer: CustomLayerInterface;
   /** The modes */
@@ -158,6 +162,10 @@ export function createEngine(
     snapService,
     pixelRatioSource,
   } = context;
+
+  // The edits of any number of features, written in parts, one at a time: the resources of the
+  // draw instance and the modes start them
+  const edits = createBulkEdits(store, context.exposedStore);
 
   // Everything acquired below is released by destroy, in the reverse order
   const teardown = createTeardown();
@@ -358,6 +366,7 @@ export function createEngine(
   const modeContext: EngineModeContext = {
     map,
     store,
+    bulkEdits: edits,
     spatialIndex,
     hitTestService,
     hitTestTopmost,
@@ -480,6 +489,7 @@ export function createEngine(
   return {
     map,
     context,
+    edits,
     customLayer,
     modeManager,
     datasets,

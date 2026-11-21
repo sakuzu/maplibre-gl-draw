@@ -5,20 +5,21 @@
  * `draw.layers`: the layers of the document
  */
 
+import { startLayerDeletion } from '../../operations/bulk-deletion.js';
+import type { BulkEditStarter } from '../../operations/bulk-work.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import type { Layer as StoredLayer, StyleRule } from '../../store/types.js';
 import { DrawError } from '../errors.js';
+import type { EditOptions } from '../features.js';
 import type { LayersCollection } from '../layers.js';
 import type { Layer, LayerFilter, LayerInput, LayerPatch } from '../model.js';
 import type { ResourceDeps } from './shared.js';
 import {
-  featureLocked,
   filterEntries,
   invalidInput,
   isRecord,
   isTaken,
   layerLocked,
-  locksIgnored,
   matches,
   notFound,
   onlyKeys,
@@ -27,7 +28,6 @@ import {
   optionalIndex,
   optionalString,
   requireId,
-  requireIds,
   requireRecord,
 } from './shared.js';
 
@@ -87,8 +87,22 @@ export function requireRange(range: unknown): { start: number; end: number } {
 export function createLayers(
   deps: ResourceDeps,
   isStackEntry: (id: string) => boolean = () => false,
+  edits?: BulkEditStarter,
 ): LayersCollection {
   const { store } = deps;
+
+  /** Starts the deletion of layers, a bulk edit (a wrong input rejects the promise) */
+  const startDeletion = (ids: readonly string[], options: EditOptions | undefined) => {
+    if (!edits) {
+      throw new DrawError('invalidState', 'The bulk edits are not available on these layers');
+    }
+    try {
+      return startLayerDeletion(edits, ids, options);
+    } catch (error) {
+      if (error instanceof DrawError && error.code === 'invalidInput') return Promise.reject(error);
+      throw error;
+    }
+  };
 
   const require = (id: unknown): StoredLayer => {
     const layer = typeof id === 'string' ? store.getLayer(id) : undefined;
@@ -196,21 +210,9 @@ export function createLayers(
       return prepared.map(({ layer }) => store.getLayer(layer.id) as StoredLayer);
     },
 
-    delete(id) {
-      const layer = require(id);
-      if (store.isReadOnly() || holdsLock(store, layer)) return false;
-      return store.deleteLayer(layer.id);
-    },
+    delete: (id, options) => startDeletion([id], options),
 
-    deleteMany(ids) {
-      const layers = requireIds(ids).map(require);
-      if (store.isReadOnly() || layers.some((layer) => holdsLock(store, layer))) return false;
-      const written = store.transactUntilRefused(() => {
-        for (const layer of layers) store.deleteLayer(layer.id);
-        return true;
-      });
-      return written !== null;
-    },
+    deleteMany: (ids, options) => startDeletion(ids, options),
 
     reorder(order) {
       if (!Array.isArray(order) || order.some((id) => typeof id !== 'string')) {
@@ -253,18 +255,6 @@ export function createLayers(
       return true;
     },
   };
-}
-
-/** Whether a deletion of the layer is refused: it, or a feature or group in it, is locked */
-function holdsLock(store: DocumentAccess, layer: StoredLayer): boolean {
-  if (locksIgnored(store)) return false;
-  if (layer.locked) return true;
-  for (const itemId of layer.items) {
-    if (store.getGroup(itemId)?.locked) return true;
-  }
-  return store
-    .listFeatures()
-    .some((feature) => feature.layerId === layer.id && featureLocked(store, feature));
 }
 
 /**

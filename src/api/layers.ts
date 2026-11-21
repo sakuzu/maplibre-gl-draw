@@ -5,6 +5,8 @@
  * `draw.layers`: the layers of the document
  */
 
+import type { DocumentChange } from './events.js';
+import type { EditCounts, EditOptions, FeaturesCollection } from './features.js';
 import type { IndexRange, Layer, LayerFilter, LayerInput, LayerPatch } from './model.js';
 
 /**
@@ -14,7 +16,12 @@ import type { IndexRange, Layer, LayerFilter, LayerInput, LayerPatch } from './m
  * A wrong argument (an ID that does not exist, an input of the wrong shape) throws a
  * `DrawError` and changes nothing. A refusal because of the state (read-only, a lock) returns
  * `null` or `false` and changes nothing. A method whose name ends in `Many` runs in one
- * transaction: all of it happens or none of it does.
+ * transaction: all of it happens or none of it does, except `deleteMany`, which is a bulk edit
+ * as `delete` is.
+ *
+ * The change of a creation and that of a deletion of a layer always carry the change of the
+ * stacking order (`layers.orderChanged` of {@link DocumentChange}), so that the position of a
+ * layer deleted can be read from the change and given back to `create` as `index`.
  */
 export interface LayersCollection {
   /**
@@ -73,6 +80,10 @@ export interface LayersCollection {
   /**
    * Creates a layer and returns it as it was stored.
    *
+   * The ID of a layer this instance had and a change deleted is taken as it is, without
+   * `acceptsId`: it is how a layer deleted is created again, before `features.restore` brings
+   * its features back.
+   *
    * @returns The new layer, or `null` when the document is read-only
    * @throws `DrawError` with the code `invalidInput` when the input has the wrong shape, or
    *   `alreadyExists` when its ID is taken
@@ -105,20 +116,36 @@ export interface LayersCollection {
    */
   updateMany(patches: readonly { id: string; patch: LayerPatch }[]): Layer[] | null;
   /**
-   * Deletes a layer with its features and groups.
+   * Deletes a layer with its features and groups: a bulk edit, in parts (see
+   * {@link FeaturesCollection}), however many features it holds. Its features and groups are
+   * deleted in parts, and the layer itself in the last part. From its first part on, the
+   * layer takes no other write of this client, as if it were locked, also from a write that
+   * ignores the locks: such a write returns `null` or `false`. A feature that comes into the
+   * layer meanwhile (from another client) is deleted in the last part too. The selection of
+   * the layer (`selection.delete`) deletes it the same way.
    *
-   * @returns True when it was deleted, false when the deletion is refused (read-only, a lock)
-   * @throws `DrawError` with the code `notFound` when there is no layer with this ID
+   * Its changes list the features in `features.deleted` and the layer in `layers.deleted`, and
+   * the values before (for a subscriber that asks) keep the features, so that
+   * `features.restore` brings them back once the layer is created again. When the edit stops
+   * (read-only), the layer stays with the features not deleted yet.
+   *
+   * @param options - Where the writes come from, and whether they ignore the locks
+   * @returns The counts of the edit (`changedCount` is the number of features deleted), or
+   *   `null` when the deletion is refused: read-only, or the layer, one of its groups or one
+   *   of its features is locked when the edit starts (nothing is deleted then; a feature
+   *   locked while the edit writes stays, and the layer stays with it)
    */
-  delete(id: string): boolean;
+  delete(id: string, options?: EditOptions): Promise<EditCounts | null>;
   /**
-   * Deletes several layers in one transaction: all of them or none.
+   * Deletes several layers as one bulk edit, each as `delete` deletes one.
    *
-   * @returns True when they were deleted, false when the deletion is refused
-   * @throws `DrawError` with the code `notFound` when one of the IDs does not exist; nothing
-   *   is deleted then
+   * @param options - Where the writes come from, and whether they ignore the locks
+   * @returns The counts of the edit, or `null` when the deletion is refused: none is deleted
+   *   when one of them is refused
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when the IDs are
+   *   not an array of strings; nothing is deleted then
    */
-  deleteMany(ids: readonly string[]): boolean;
+  deleteMany(ids: readonly string[], options?: EditOptions): Promise<EditCounts | null>;
   /**
    * Changes the stacking order.
    *

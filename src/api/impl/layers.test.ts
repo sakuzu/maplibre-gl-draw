@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { InstanceDocument } from '../../store/document-access.js';
 import type { StoreChange } from '../../store/types.js';
-import { createResourceDeps, createTestDocument } from '../../test-utils.js';
+import { createResourceDeps, createTestEdits } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { LayersCollection } from '../layers.js';
 import { createLayers } from './layers.js';
@@ -43,8 +43,10 @@ function addPoint(id: string, layerId: string, locked = false): void {
 }
 
 beforeEach(() => {
-  store = createTestDocument();
-  layers = createLayers(createResourceDeps(store));
+  // The layer over a built-in Store, with the bulk edits the deletions are written with
+  const made = createTestEdits();
+  store = made.store;
+  layers = createLayers(createResourceDeps(store), undefined, made.edits);
   notifications = [];
   store.subscribe((changes) => notifications.push(changes));
 });
@@ -160,24 +162,24 @@ describe('delete and deleteMany', () => {
     addPoint('q', 'b', true);
   });
 
-  it('deletes a layer with its features', () => {
-    expect(layers.delete('a')).toBe(true);
+  it('deletes a layer with its features', async () => {
+    expect(await layers.delete('a')).toEqual(expect.objectContaining({ changedCount: 1 }));
     expect(store.getFeature('p')).toBeUndefined();
   });
 
-  it('throws notFound, and refuses a layer that holds a lock and read-only', () => {
-    expect(codeOf(() => layers.delete('x'))).toBe('notFound');
-    expect(layers.delete('b')).toBe(false);
+  it('counts a layer that is not there, and refuses a layer that holds a lock and read-only', async () => {
+    expect(await layers.delete('x')).toEqual(expect.objectContaining({ missingCount: 1 }));
+    expect(await layers.delete('b')).toBeNull();
     store.setReadOnly(true);
-    expect(layers.delete('a')).toBe(false);
+    expect(await layers.delete('a')).toBeNull();
     expect(layers.count()).toBe(3);
   });
 
-  it('deletes several in one notification, or none', () => {
-    expect(codeOf(() => layers.deleteMany(['a', 'x']))).toBe('notFound');
-    expect(layers.deleteMany(['a', 'b'])).toBe(false);
+  it('deletes several in one notification, or none', async () => {
+    expect(await layers.deleteMany(['x'])).toEqual(expect.objectContaining({ missingCount: 1 }));
+    expect(await layers.deleteMany(['a', 'b'])).toBeNull();
     notifications.length = 0;
-    expect(layers.deleteMany(['a', 'c'])).toBe(true);
+    expect(await layers.deleteMany(['a', 'c'])).not.toBeNull();
     expect(layers.list().map((l) => l.id)).toEqual(['b']);
     expect(notifications).toHaveLength(1);
   });

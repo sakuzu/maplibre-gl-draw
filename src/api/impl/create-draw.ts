@@ -11,7 +11,7 @@ import type { UpdateSource } from '../../store/types.js';
 import type { Draw, TransactOptions } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawOptions } from '../options.js';
-import { createBulkEdits, holdBulkEdits } from './bulk-edits.js';
+import { holdBulkEdits } from './bulk-edits.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 import { createDocument } from './document.js';
@@ -65,8 +65,8 @@ export function createDrawOnEngine(
     getZoom: () => map.getZoom(),
     spatialIndex: context.spatialIndex,
   };
-  // The edits of any number of features, written in parts, one at a time
-  const edits = createBulkEdits(store, exposedStore);
+  // The edits of any number of features, written in parts, one at a time (made by the engine)
+  const { edits } = engine;
   // The bulk edits of the features read the computation set and the feature types, and add to
   // the amounts of work of the Store
   const features = createFeatures(deps, {
@@ -88,11 +88,12 @@ export function createDrawOnEngine(
       deps,
       (id) =>
         engine.datasets.get(id)?.order === 'layerOrder' || context.isExternalEntry?.(id) === true,
+      edits,
     ),
     groups,
     datasets: createDatasets(engine.datasets, events, context.eventEmitter),
     hidden: createHidden(deps),
-    selection: createSelection(deps, { features, groups }),
+    selection: createSelection(deps, { features, groups, edits }),
     vertexSelection: createVertexSelection(deps),
     editingFeatures: createEditingFeatures(deps),
     drawing: createDrawingResource(engine),

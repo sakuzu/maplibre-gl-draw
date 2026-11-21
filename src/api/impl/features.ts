@@ -8,17 +8,20 @@
 import type { Position } from 'geojson';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
+import { startFeatureDeletion } from '../../operations/bulk-deletion.js';
+import { createDuplicateWork } from '../../operations/bulk-duplicate.js';
 import {
   createTransformWork,
   rotationCenterOf,
   type TransformDeps,
   type TransformWork,
 } from '../../operations/bulk-transform.js';
+import { createUpdateAllWork, type SamePatch } from '../../operations/bulk-update.js';
 import { createBuiltInTransform } from '../../shared/math/enu-transform.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { TransformOperation } from '../../shared/types/model.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
-import type { WorkCounts } from '../../shared/work-counts.js';
+import { countWork, type WorkCounts } from '../../shared/work-counts.js';
 import type { DocumentAccess, FeatureMatch } from '../../store/document-access.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -29,7 +32,13 @@ import type {
 import { getStyleRuleChannel, resolveFeatureStyle } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { EditCounts, EditOptions, FeaturesCollection, FeatureTarget } from '../features.js';
+import type {
+  DuplicateOptions,
+  EditCounts,
+  EditOptions,
+  FeaturesCollection,
+  FeatureTarget,
+} from '../features.js';
 import type {
   Feature,
   FeatureFilter,
@@ -154,15 +163,17 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
         const { onlyId } = started;
         if (operation.kind !== 'rotate' || onlyId === undefined) return workOf(operation);
         // A single feature of a Point geometry with a field of rotation turns about its position,
-        // read when the edit writes to it first: the edits started before it have all ended then
+        // read when the edit is about to write to it: the edits started before it have all ended
+        // then. A computation that does not take the rotation about that center rejects the
+        // edit there, and nothing of it is written
         let work: TransformWork | undefined;
         return {
+          prepare() {
+            const center = rotationCenterOf(transformDeps, onlyId);
+            work = workOf(center ? { ...operation, center } : operation);
+          },
           writeFeatures(ids, changed) {
-            if (!work) {
-              const center = rotationCenterOf(transformDeps, onlyId);
-              work = workOf(center ? { ...operation, center } : operation);
-            }
-            work.writeFeatures(ids, changed);
+            work?.writeFeatures(ids, changed);
           },
         };
       });
@@ -171,6 +182,24 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
       throw error;
     }
   };
+  /** The bulk edits, or `invalidState` when the features were made without them */
+  const requireBulk = (): FeatureBulkDeps => {
+    if (!bulk) {
+      throw new DrawError('invalidState', 'The bulk edits are not available on these features');
+    }
+    return bulk;
+  };
+
+  /** Runs the start of a bulk edit: a wrong input rejects the promise, and changes nothing */
+  const rejecting = (fn: () => Promise<EditCounts | null>): Promise<EditCounts | null> => {
+    try {
+      return fn();
+    } catch (error) {
+      if (error instanceof DrawError && error.code === 'invalidInput') return Promise.reject(error);
+      throw error;
+    }
+  };
+
   const geometryDeps: GeometryDeps = {
     store,
     generateFeatureId: deps.generateId,
@@ -326,17 +355,74 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
       return store.deleteFeature(feature.id);
     },
 
-    deleteMany(ids) {
-      const features = requireAllToWrite(ids);
-      if (store.isReadOnly()) return false;
-      if (features.some((feature) => featureLocked(store, feature))) return false;
-      const written = store.transactUntilRefused(() => {
-        for (const feature of features) {
-          if (store.getFeature(feature.id)) store.deleteFeature(feature.id);
-        }
-        return true;
+    deleteMany(target, options) {
+      const { edits } = requireBulk();
+      return rejecting(() => startFeatureDeletion(edits, target, options));
+    },
+
+    updateAll(target, patch, options) {
+      const { edits, counts } = requireBulk();
+      return rejecting(() => {
+        const checked = checkSamePatch(patch);
+        return edits.start(
+          target,
+          options,
+          (_started, read) => {
+            if (checked.geometry !== undefined) {
+              for (const type of read.targetTypes()) {
+                const problem = describeGeometryProblem(type, checked.geometry);
+                if (problem) throw invalidInput(`The patch has ${problem}`);
+              }
+            }
+            return createUpdateAllWork(store, checked, () => countWork(counts, 'objectsCreated'));
+          },
+          // As with `update`, the lock and the visibility of a locked feature can change
+          { writesLocked: onlyLockOrVisibility(patch) },
+        );
       });
-      return written !== null;
+    },
+
+    duplicate(target, options) {
+      const { edits, extensions } = requireBulk();
+      return rejecting(() => {
+        let offset: TransformOperation | undefined;
+        if (options !== undefined) {
+          requireRecord(options, 'The options');
+          if (options.offset !== undefined) {
+            requireRecord(options.offset, 'offset');
+            offset = {
+              kind: 'translate',
+              from: requirePosition(options.offset.from, 'from'),
+              to: requirePosition(options.offset.to, 'to'),
+            };
+          }
+        }
+        const editOptions = editOptionsOf(options);
+        return edits.start(
+          target,
+          editOptions,
+          (started, read) => {
+            let move: TransformWork | undefined;
+            if (offset && transformDeps) {
+              const provider = extensions.getTransformProvider() ?? builtInTransform;
+              if (!provider.accepts(offset)) {
+                throw invalidInput(
+                  `The computation ${JSON.stringify(provider.name)} does not compute it`,
+                );
+              }
+              move = createTransformWork(transformDeps, provider, offset, started.operationId);
+            }
+            return createDuplicateWork({
+              layer: store,
+              generateId: deps.generateId,
+              targets: read.targets,
+              move,
+            });
+          },
+          // A locked feature is copied too: only read-only refuses
+          { writesLocked: true },
+        );
+      });
     },
 
     move(id, to) {
@@ -347,7 +433,12 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
 
     isEditable(id) {
       const feature = require(id);
-      return !store.isReadOnly() && !isFeatureLocked(feature, store);
+      // A feature of a layer being deleted takes no write, as a locked one
+      return (
+        !store.isReadOnly() &&
+        !isFeatureLocked(feature, store) &&
+        !store.isLayerBeingDeleted(feature.layerId)
+      );
     },
 
     getAppliedStyle(id) {
@@ -638,6 +729,42 @@ function requireImageSize(properties: Record<string, unknown>): void {
       throw invalidInput(`An Image needs its ${name} in pixels, a number greater than 0`);
     }
   }
+}
+
+/**
+ * Checks a patch that is written to many features, as `preparePatch` checks one for a feature,
+ * the geometry aside (it is checked against the types of the features); throws DrawError on a
+ * wrong patch
+ */
+function checkSamePatch(patch: FeaturePatch): SamePatch {
+  requireRecord(patch, 'The patch');
+  const record = patch as unknown as Record<string, unknown>;
+  onlyKeys(record, PATCH_KEYS, 'The patch');
+  optionalBoolean(record, 'visible');
+  optionalBoolean(record, 'locked');
+  if (patch.properties !== undefined && !isRecord(patch.properties)) {
+    throw invalidInput('properties must be an object');
+  }
+  if (patch.style !== undefined) {
+    const problem = describeStyleProblem(patch.style);
+    if (problem) throw invalidInput(`The patch has ${problem}`);
+  }
+  const checked: {
+    -readonly [K in keyof SamePatch]: SamePatch[K];
+  } = {};
+  if (patch.geometry !== undefined) checked.geometry = patch.geometry;
+  if (patch.properties !== undefined) checked.properties = { ...patch.properties };
+  if (patch.style !== undefined) checked.style = { ...(patch.style as Record<string, unknown>) };
+  if (patch.visible !== undefined) checked.visible = patch.visible;
+  if (patch.locked !== undefined) checked.locked = patch.locked;
+  return checked;
+}
+
+/** The options of a bulk edit in the options of a copy (the move left out) */
+function editOptionsOf(options: DuplicateOptions | undefined): EditOptions | undefined {
+  if (options === undefined) return undefined;
+  const { offset: _offset, ...rest } = options;
+  return rest;
 }
 
 /**

@@ -39,6 +39,7 @@ import type {
   StoreTransactOptions,
 } from '../../store/built-in/types.js';
 import {
+  type CreatedPlace,
   FEATURES_KEPT,
   type FeatureBoxes,
   type FeatureMatch,
@@ -889,15 +890,89 @@ export function createDocumentAccess(
     else partsTold.delete(operationId);
   };
 
+  /**
+   * The part of an operation written in parts that the outermost transaction of the instance
+   * writes now (a transaction given the number of its operation), and whether more parts follow
+   * it, as the transactions inside it say
+   */
+  let partScope: { readonly operationId: number; more: boolean } | null = null;
+  /**
+   * The IDs the parts of each operation written in parts deleted: they leave the selection, the
+   * editing and the items this client hides at once, when the last part of the operation is told
+   */
+  const goneInParts = new Map<number, Set<string>>();
+
+  /** Notes the IDs a change of a part deleted, for the end of its operation */
+  const noteGoneInPart = (operationId: number, change: StoreChange): void => {
+    let gone = goneInParts.get(operationId);
+    for (const list of [change.features?.deleted, change.groups?.deleted, change.layers?.deleted]) {
+      if (!list || list.length === 0) continue;
+      gone ??= new Set();
+      for (const item of list) gone.add(item.id);
+    }
+    if (gone) goneInParts.set(operationId, gone);
+  };
+
+  /** The IDs the parts of an operation deleted leave the state of this client, at once */
+  const forgetGoneInParts = (operationId: number): void => {
+    const gone = goneInParts.get(operationId);
+    goneInParts.delete(operationId);
+    if (gone && gone.size > 0) client.forgetAll(gone);
+  };
+
+  /**
+   * A change as the state of this client follows it in a part of an operation: without what it
+   * deleted, which the end of the operation forgets, and with only the updates of groups and
+   * layers that show or hide them (the others, such as an order that lost a feature, would take
+   * what no longer exists out of the selection now)
+   */
+  const withoutDeleted = (change: StoreChange): StoreChange => {
+    const followed: StoreChange = { ...change };
+    if (change.features?.deleted) followed.features = { ...change.features, deleted: undefined };
+    if (change.groups) {
+      followed.groups = {
+        ...change.groups,
+        deleted: undefined,
+        updated: change.groups.updated?.filter(
+          ({ group, previous }) => group.visible !== previous.visible,
+        ),
+      };
+    }
+    if (change.layers) {
+      followed.layers = {
+        ...change.layers,
+        deleted: undefined,
+        updated: change.layers.updated?.filter(
+          ({ layer, previous }) => layer.visible !== previous.visible,
+        ),
+      };
+    }
+    return followed;
+  };
+
   /** Takes the changes of the document the writes made into the change, and follows them */
   const followDocument = (): void => {
-    if (isEmptyChange(documentPending)) return;
+    const part = partScope;
+    if (isEmptyChange(documentPending)) {
+      if (part && !part.more && goneInParts.has(part.operationId)) {
+        busTransact(() => forgetGoneInParts(part.operationId), busSource);
+      }
+      return;
+    }
     const change = documentPending;
     documentPending = {};
     documentFolds = newFolds();
     busTransact(() => {
       appendChange(pending, change, pendingFolds);
-      client.followDocument(change, drawing.dragState !== null);
+      if (!part) {
+        client.followDocument(change, drawing.dragState !== null);
+        return;
+      }
+      // A part of an operation: what it deleted leaves the state of this client once the
+      // operation ends, in one write
+      noteGoneInPart(part.operationId, change);
+      client.followDocument(withoutDeleted(change), drawing.dragState !== null);
+      if (!part.more) forgetGoneInParts(part.operationId);
     }, busSource);
   };
 
@@ -1109,6 +1184,28 @@ export function createDocumentAccess(
     throw new RefusedWrite();
   };
 
+  /**
+   * The layers being deleted (see `setLayersBeingDeleted`), and how deep the writes of their
+   * deletion are, which the mark does not refuse
+   */
+  let layersBeingDeleted: ReadonlySet<string> | null = null;
+  let deletionDepth = 0;
+
+  /**
+   * Stops the write of the layer under way, as a refusal of the Store, when it touches a layer
+   * being deleted (outside the writes of the deletion)
+   */
+  const refuseInDeletion = (...layerIds: readonly (string | undefined)[]): void => {
+    if (layersBeingDeleted === null || deletionDepth > 0) return;
+    for (const layerId of layerIds) {
+      if (layerId !== undefined && layersBeingDeleted.has(layerId)) refuse();
+    }
+  };
+
+  /** The layer of a group, or undefined for no group */
+  const layerOfGroup = (groupId: string | undefined): string | undefined =>
+    groupId === undefined ? undefined : store.getGroup(groupId)?.layerId;
+
   /** A write of the Store: applied, or the write of the layer stops */
   const stored = (applied: boolean): void => {
     if (!applied) refuse();
@@ -1184,6 +1281,21 @@ export function createDocumentAccess(
     source: UpdateSource = 'local',
     options?: StoreTransactOptions,
   ): T {
+    if (partScope !== null || rowDepth > 0 || options?.operationId === undefined) {
+      // Inside a part: a transaction that says more parts follow makes the part one of them
+      if (partScope !== null && options?.hasMoreParts === true) partScope.more = true;
+      return transactOnce(fn, source, options);
+    }
+    partScope = { operationId: options.operationId, more: options.hasMoreParts === true };
+    try {
+      return transactOnce(fn, source, options);
+    } finally {
+      partScope = null;
+    }
+  }
+
+  /** Runs one transaction of the instance (see `transact`) */
+  function transactOnce<T>(fn: () => T, source: UpdateSource, options?: StoreTransactOptions): T {
     return client.hold(() =>
       busTransact(() => {
         try {
@@ -2226,7 +2338,10 @@ export function createDocumentAccess(
    * are written in one write of the Store, and told in the order given. A feature that cannot be
    * created throws once the ones before it are written.
    */
-  const createFeatureRows = (features: readonly Feature[]): Feature[] => {
+  const createFeatureRows = (
+    features: readonly Feature[],
+    places?: readonly CreatedPlace[],
+  ): Feature[] => {
     const made: Feature[] = [];
     type Pending = {
       stored: Feature;
@@ -2300,8 +2415,10 @@ export function createDocumentAccess(
         refuse();
       }
     };
+    for (const feature of features)
+      refuseInDeletion(feature.layerId, layerOfGroup(feature.groupId));
     try {
-      for (const feature of features) {
+      for (const [at, feature] of features.entries()) {
         if (pendingRows?.has(feature.id) || getFeature(feature.id)) {
           throw new Error(`Feature with id "${feature.id}" already exists`);
         }
@@ -2312,7 +2429,9 @@ export function createDocumentAccess(
         const stored = frozenFeature(undefined, feature);
         const container = stored.groupId ?? stored.layerId;
         const listing = listings.get(stored.id);
-        const listed = listing !== undefined && listing.container === container;
+        const place = places?.[at];
+        const listed =
+          place === undefined && listing !== undefined && listing.container === container;
         const before = listed
           ? undefined
           : stored.groupId !== undefined
@@ -2320,7 +2439,11 @@ export function createDocumentAccess(
             : getLayer(container);
         if (!listed) noteOrderBefore(container);
         const version = placeVersion;
-        const key = listed ? keyOfListing(listing) : tailKeyOf(container);
+        const key = place
+          ? keyOfPlace(container, place)
+          : listed
+            ? keyOfListing(listing)
+            : tailKeyOf(container);
         pendingRows ??= new Map();
         pendingRows.set(stored.id, { container, key });
         batch.push({ stored, container, key, listed, before });
@@ -2328,6 +2451,8 @@ export function createDocumentAccess(
           listings.delete(stored.id);
           keyTaken(container, key);
           listingPlaced(listing, version);
+        } else if (place) {
+          keyTaken(container, key);
         } else {
           frontTaken(container, key);
         }
@@ -2338,6 +2463,24 @@ export function createDocumentAccess(
     }
     flush();
     return made;
+  };
+
+  /**
+   * The key a new item takes at a place of a container: just in front of an item of the container
+   * (between it and the item in front of it), or the key of the order an item has in its own
+   * container; at the front when the item is not in the container
+   */
+  const keyOfPlace = (container: string, place: CreatedPlace): string => {
+    if ('keyOf' in place) {
+      const key = itemKeyOf(place.keyOf);
+      return key ?? tailKeyOf(container);
+    }
+    const itemId = place.inFrontOf;
+    const key = containerOfItem(itemId) === container ? itemKeyOf(itemId) : undefined;
+    if (key === undefined) return tailKeyOf(container);
+    const at = positionOf(container, { id: itemId, key });
+    const above = at < 0 ? undefined : placedOf(container, at + 1, at + 2)[0]?.key;
+    return keysBetween(key, above, 1)[0];
   };
 
   /** Creates the row of a feature (see `createFeatureRows`) */
@@ -2359,6 +2502,7 @@ export function createDocumentAccess(
     beforeFeatureWrite?.(id);
     const previous = getFeature(id);
     if (!previous) throw new Error(`Feature with id "${id}" not found`);
+    refuseInDeletion(previous.layerId, updates.layerId, layerOfGroup(updates.groupId));
     if ('layerId' in updates && updates.layerId !== previous.layerId) {
       requireLayer(updates.layerId);
     }
@@ -2460,6 +2604,7 @@ export function createDocumentAccess(
     beforeFeatureWrite?.(id);
     const feature = getFeature(id);
     if (!feature) throw new Error(`Feature with id "${id}" not found`);
+    refuseInDeletion(feature.layerId);
     const ref = tables.getRowRef(id) as number;
     const container = feature.groupId ?? feature.layerId;
     noteOrderBefore(container);
@@ -2499,6 +2644,7 @@ export function createDocumentAccess(
   const deleteGroupRow = (id: string): void => {
     const base = store.getGroup(id);
     if (!base) throw new Error(`Group with id "${id}" not found`);
+    refuseInDeletion(base.layerId);
     const group = getGroup(id) as Group;
     const layerId = base.layerId;
     const layerBefore = getLayer(layerId);
@@ -2678,6 +2824,7 @@ export function createDocumentAccess(
   const updateLayerRow = (id: string, updates: Partial<Layer>): void => {
     const base = store.getLayer(id);
     if (!base) throw new Error(`Layer with id "${id}" not found`);
+    refuseInDeletion(id);
     const previous = getLayer(id) as Layer;
     noteOrderBefore(id);
     const fields = storedLayerOf({ ...updates, id } as Layer) as unknown as Record<string, unknown>;
@@ -2711,6 +2858,7 @@ export function createDocumentAccess(
   const deleteLayerRow = (id: string): void => {
     const base = store.getLayer(id);
     if (!base) throw new Error(`Layer with id "${id}" not found`);
+    refuseInDeletion(id);
     const layerBefore = getLayer(id) as Layer;
     noteOrderBefore(id);
     // What goes, in the order of the items: the features, and the groups their going empties
@@ -2774,20 +2922,25 @@ export function createDocumentAccess(
     mergeDocument({ layers: { deleted: [layerBefore] } });
   };
 
-  const createGroupRow = (group: Group): void => {
+  const createGroupRow = (group: Group, inFrontOf?: string): void => {
     if (store.getGroup(group.id)) {
       throw new Error(`Group with id "${group.id}" already exists`);
     }
-    const featureIds = [...(group.featureIds ?? [])];
-    const listing = listings.get(group.id);
+    const featureIds = inFrontOf === undefined ? [...(group.featureIds ?? [])] : [];
+    const listing = inFrontOf === undefined ? listings.get(group.id) : undefined;
     const firstMember = featureIds.map((id) => getFeature(id)).find((f) => f !== undefined);
     const layerId = listing
       ? listing.container
       : (firstMember?.layerId ?? (store.getLayer(group.layerId) ? group.layerId : undefined));
     if (layerId === undefined) throw new Error(`Layer with id "${group.layerId}" not found`);
+    refuseInDeletion(layerId);
     const version = placeVersion;
     let key: string;
-    if (listing) {
+    const layerBefore = inFrontOf === undefined ? undefined : getLayer(layerId);
+    if (inFrontOf !== undefined) {
+      noteOrderBefore(layerId);
+      key = keyOfPlace(layerId, { inFrontOf });
+    } else if (listing) {
       key = keyOfListing(listing);
       listings.delete(group.id);
     } else {
@@ -2809,13 +2962,14 @@ export function createDocumentAccess(
     ownGroups.add(group.id);
     wrote();
     // A new item of its layer: the ends of the layer and the front of the order follow it
-    if (listing) {
+    if (listing || inFrontOf !== undefined) {
       keyTaken(layerId, key);
-      listingPlaced(listing, version);
+      if (listing) listingPlaced(listing, version);
     } else {
       frontTaken(layerId, key);
     }
     bumpLayer(layerId);
+    if (inFrontOf !== undefined) layerOrderChanged(layerId, layerBefore);
     // The features it was created with, as a field that is not enumerable (see `groupOf`); told
     // before its features join it, which the Store may refuse
     const created = Object.freeze(
@@ -2851,6 +3005,7 @@ export function createDocumentAccess(
   const updateGroupRow = (id: string, updates: Partial<Group>): void => {
     const base = store.getGroup(id);
     if (!base) throw new Error(`Group with id "${id}" not found`);
+    refuseInDeletion(base.layerId, updates.layerId);
     const previous = getGroup(id) as Group;
     noteOrderBefore(id);
     const fields: Record<string, unknown> = {};
@@ -2932,6 +3087,12 @@ export function createDocumentAccess(
 
   /** Moves features (see `moveFeatures`), in the transaction of the caller */
   const moveFeaturesTo = (ids: readonly string[], to: MoveDestination): void => {
+    refuseInDeletion(to.kind === 'layer' ? to.layerId : undefined);
+    if (to.kind === 'group') refuseInDeletion(layerOfGroup(to.groupId));
+    for (const id of ids) {
+      const ref = tables.getRowRef(id);
+      if (ref !== undefined) refuseInDeletion(layerOfRow(ref));
+    }
     if (to.kind === 'layer') {
       const { layerId } = to;
       const before = getLayer(layerId);
@@ -3043,6 +3204,7 @@ export function createDocumentAccess(
   const moveGroups = (ids: readonly string[], layerId: string, index: number | undefined) =>
     attempt(
       () => {
+        refuseInDeletion(layerId, ...ids.map(layerOfGroup));
         const before = getLayer(layerId);
         noteOrderBefore(layerId);
         const keys = keysAt(layerId, ids, index);
@@ -3790,6 +3952,10 @@ export function createDocumentAccess(
     // The writes of the document, the transactions and the subscription
     createFeature: (feature: Feature) => write(() => void createFeatureRow(feature)),
     createFeatures: (features: readonly Feature[]) => write(() => void createFeatureRows(features)),
+    createFeaturesAt: (features: readonly Feature[], places: readonly CreatedPlace[]) =>
+      write(() => void createFeatureRows(features, places)),
+    createGroupInFrontOf: (group: Group, itemId: string) =>
+      write(() => createGroupRow(group, itemId)),
     updateFeature: (id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions) =>
       write(() => updateFeatureRow(id, updates, options)),
     // A drag given up has written the values it started from back: nothing is left to drop
@@ -3799,8 +3965,9 @@ export function createDocumentAccess(
     deleteFeature: (id: string) =>
       write(() => {
         deleteFeatureRow(id);
-        // At once, so that the rest of a transaction already sees the selection without it
-        client.forget(id);
+        // At once, so that the rest of a transaction already sees the selection without it; in a
+        // part of an operation, once the operation ends (see `followDocument`)
+        if (partScope === null) client.forget(id);
       }),
     createLayer: (value: Layer) => write(() => createLayerRow(value)),
     updateLayer: (id: string, updates: Partial<Layer>) => write(() => updateLayerRow(id, updates)),
@@ -3877,7 +4044,20 @@ export function createDocumentAccess(
     },
     releaseOpenOperations() {
       partsTold.clear();
+      goneInParts.clear();
     },
+    setLayersBeingDeleted(ids: ReadonlySet<string> | null) {
+      layersBeingDeleted = ids;
+    },
+    asLayerDeletion<T>(fn: () => T): T {
+      deletionDepth += 1;
+      try {
+        return fn();
+      } finally {
+        deletionDepth -= 1;
+      }
+    },
+    isLayerBeingDeleted: (id: string) => layersBeingDeleted?.has(id) === true,
 
     // The reads by position
     countItems: (layerId: string) => tables.get(layerId)?.itemCount ?? 0,

@@ -11,7 +11,9 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { type BulkEdits, createBulkEdits } from '../../api/impl/bulk-edits.js';
 import { createDocumentAccess } from '../../api/impl/document-access.js';
+import { startSelectionDeletion } from '../../operations/bulk-deletion.js';
 import { groupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
@@ -49,20 +51,34 @@ function feature(id: string, layerId: string): Feature {
 }
 
 let store: InstanceDocument;
+let edits: BulkEdits;
 let spatial: DeletionLog;
 let index: StoreSpatialIndex;
 let context: EngineModeContext;
 
+/** The layer an instance makes over a built-in Store, with the bulk edits of the instance */
+function documentWithEdits(): { store: InstanceDocument; edits: BulkEdits } {
+  const rows = createStore();
+  const layer = createDocumentAccess(rows);
+  return { store: layer, edits: createBulkEdits(layer, rows) };
+}
+
 beforeEach(() => {
   // The layer an instance makes over the built-in Store
-  store = createDocumentAccess(createStore());
+  ({ store, edits } = documentWithEdits());
   spatial = new DeletionLog(store);
   index = new StoreSpatialIndex(store);
-  context = { store, spatialIndex: index } as unknown as EngineModeContext;
+  context = { store, spatialIndex: index, bulkEdits: edits } as unknown as EngineModeContext;
 });
 
+/** Presses the Delete key, and waits for the deletion it starts (written in parts) */
+async function pressDelete(): Promise<void> {
+  handleDeleteShortcut(context);
+  await edits.waitForWrites();
+}
+
 describe('handleDeleteShortcut with a group selection', () => {
-  it('Delete on a group selection deletes its contents and the emptied group', () => {
+  it('Delete on a group selection deletes its contents and the emptied group', async () => {
     store.createLayer({
       id: 'l1',
       name: 'l1',
@@ -85,7 +101,7 @@ describe('handleDeleteShortcut with a group selection', () => {
     });
 
     store.setSelection('group', ['g1']);
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getFeature('f1')).toBeUndefined();
     expect(store.getFeature('f2')).toBeUndefined();
@@ -96,7 +112,7 @@ describe('handleDeleteShortcut with a group selection', () => {
 });
 
 describe('handleDeleteShortcut with a layer selection', () => {
-  it('Delete on a layer selection deletes everything under it and cleans the index', () => {
+  it('Delete on a layer selection deletes everything under it and cleans the index', async () => {
     store.createLayer({
       id: 'l1',
       name: 'l1',
@@ -121,7 +137,7 @@ describe('handleDeleteShortcut with a layer selection', () => {
     store.createFeature(feature('f2', 'l1'));
 
     store.setSelection('layer', ['l1']);
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getLayer('l1')).toBeUndefined();
     expect(store.getFeature('f1')).toBeUndefined();
@@ -130,7 +146,7 @@ describe('handleDeleteShortcut with a layer selection', () => {
     expect(index.findNear([0, 0], 0)).toEqual([]);
   });
 
-  it('the last remaining layer is not deleted', () => {
+  it('the last remaining layer is not deleted', async () => {
     store.createLayer({
       id: 'l1',
       name: 'l1',
@@ -143,7 +159,7 @@ describe('handleDeleteShortcut with a layer selection', () => {
     });
 
     store.setSelection('layer', ['l1']);
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getLayer('l1')).toBeDefined();
   });
@@ -175,24 +191,24 @@ describe('suppression of handleDeleteShortcut (interaction lock / readOnly)', ()
     store.createFeature(feature('f2', 'l1'));
   }
 
-  it('nothing is deleted while the interaction lock is on (the index keeps them)', () => {
+  it('nothing is deleted while the interaction lock is on (the index keeps them)', async () => {
     setupTwoLayersWithFeatures();
     store.setSelection('feature', ['f1', 'f2']);
     store.setInteractionLock(true);
 
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getFeature('f1')).toBeDefined();
     expect(store.getFeature('f2')).toBeDefined();
     expect(spatial.removed).toEqual([]);
   });
 
-  it('nothing is deleted while readOnly (the index keeps them)', () => {
+  it('nothing is deleted while readOnly (the index keeps them)', async () => {
     setupTwoLayersWithFeatures();
     store.setSelection('feature', ['f1', 'f2']);
     store.setReadOnly(true);
 
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getFeature('f1')).toBeDefined();
     expect(store.getFeature('f2')).toBeDefined();
@@ -201,12 +217,12 @@ describe('suppression of handleDeleteShortcut (interaction lock / readOnly)', ()
     expect(index.findNear([0, 0], 0).sort()).toEqual(['f1', 'f2']);
   });
 
-  it('deleting a layer selection is suppressed while the interaction lock is on too', () => {
+  it('deleting a layer selection is suppressed while the interaction lock is on too', async () => {
     setupTwoLayersWithFeatures();
     store.setSelection('layer', ['l1']);
     store.setInteractionLock(true);
 
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getLayer('l1')).toBeDefined();
     expect(spatial.removed).toEqual([]);
@@ -229,7 +245,7 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
     }
   });
 
-  it('a group loses only its unlocked members and stays with the locked one', () => {
+  it('a group loses only its unlocked members and stays with the locked one', async () => {
     store.createFeature(feature('f1', 'l1'));
     store.createFeature({ ...feature('f2', 'l1'), locked: true });
     store.createGroup({
@@ -242,14 +258,14 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
     });
 
     store.setSelection('group', ['g1']);
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getFeature('f1')).toBeUndefined();
     expect(store.getFeature('f2')).toBeDefined();
     expect(store.getGroup('g1')?.featureIds).toEqual(['f2']);
   });
 
-  it('a layer holding a locked feature or a locked group is not deleted', () => {
+  it('a layer holding a locked feature or a locked group is not deleted', async () => {
     store.createFeature({ ...feature('f1', 'l1'), locked: true });
     store.createFeature(feature('f2', 'l2'));
     store.createGroup({
@@ -262,9 +278,9 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
     });
 
     store.setSelection('layer', ['l1']);
-    handleDeleteShortcut(context);
+    await pressDelete();
     store.setSelection('layer', ['l2']);
-    handleDeleteShortcut(context);
+    await pressDelete();
 
     expect(store.getLayer('l1')).toBeDefined();
     expect(store.getFeature('f1')).toBeDefined();
@@ -275,8 +291,10 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
 
 describe('deleteSelection runs the same deletion as the Delete key', () => {
   /** Builds a store, selects, runs the deletion and returns the state and the notifications */
-  function run(deleteWith: (s: InstanceDocument) => boolean | undefined) {
-    const s = createTestDocument();
+  async function run(
+    deleteWith: (s: InstanceDocument, e: BulkEdits) => Promise<boolean | undefined>,
+  ) {
+    const { store: s, edits: e } = documentWithEdits();
     for (const id of ['l1', 'l2']) {
       s.createLayer({
         id,
@@ -297,7 +315,7 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
     s.subscribe((changes) => {
       if (changes.features) notifications++;
     });
-    const result = deleteWith(s);
+    const result = await deleteWith(s, e);
     return {
       result,
       notifications,
@@ -309,10 +327,11 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
     };
   }
 
-  it('deletes the unlocked features in one change and returns true', () => {
-    const viaApi = run((s) => deleteSelection(s));
-    const viaKey = run((s) => {
-      handleDeleteShortcut({ store: s } as unknown as EngineModeContext);
+  it('deletes the unlocked features in one change and returns true', async () => {
+    const viaApi = await run(async (_s, e) => (await startSelectionDeletion(e)) !== null);
+    const viaKey = await run(async (s, e) => {
+      handleDeleteShortcut({ store: s, bulkEdits: e } as unknown as EngineModeContext);
+      await e.waitForWrites();
       return undefined;
     });
 
@@ -350,7 +369,7 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
     store.setSelection('feature', ['line']);
     store.setSelectedVertices({ featureId: 'line', vertices: [{ ring: 0, index: 1 }] });
 
-    expect(deleteSelection(store)).toBe(true);
+    deleteSelection(edits);
     expect(coordinatesOf(store.getFeature('line'))).toEqual([
       [0, 0],
       [2, 0],
@@ -358,7 +377,8 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
     expect(store.getVertexSelection()).toBeNull();
   });
 
-  it('returns false and deletes nothing while read-only, locked or with nothing to delete', () => {
+  it('returns false and deletes nothing while read-only, locked or with nothing to delete', async () => {
+    const deleted = async (): Promise<boolean> => (await startSelectionDeletion(edits)) !== null;
     store.createLayer({
       id: 'l1',
       name: 'l1',
@@ -372,23 +392,23 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
     store.createFeature(feature('f1', 'l1'));
     store.createFeature({ ...feature('f2', 'l1'), locked: true });
 
-    expect(deleteSelection(store)).toBe(false);
+    expect(await deleted()).toBe(false);
 
     store.setSelection('feature', ['f2']);
-    expect(deleteSelection(store)).toBe(false);
+    expect(await deleted()).toBe(false);
 
     store.setSelection('feature', ['f1']);
     store.setReadOnly(true);
-    expect(deleteSelection(store)).toBe(false);
+    expect(await deleted()).toBe(false);
     store.setReadOnly(false);
     store.setInteractionLock(true);
-    expect(deleteSelection(store)).toBe(false);
+    expect(await deleted()).toBe(false);
     expect(store.getFeature('f1')).toBeDefined();
 
     // The last layer is kept, so deleting it deletes nothing
     store.setInteractionLock(false);
     store.setSelection('layer', ['l1']);
-    expect(deleteSelection(store)).toBe(false);
+    expect(await deleted()).toBe(false);
     expect(store.getLayer('l1')).toBeDefined();
   });
 });
