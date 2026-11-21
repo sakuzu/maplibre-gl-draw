@@ -940,6 +940,61 @@
       "path": "bench/edit-document.test.ts",
       "change": "CHANGES 19, 20, 24, 31 (the list of the scenes of the editing benchmark gains deleteLayerFeatures, deleteLayer, writeLayerFeatures and duplicateLayerFeatures)",
       "unit": "the deletions, the copies and the writes of the same patch in parts"
+    },
+    {
+      "path": "src/api/impl/extensions.test.ts",
+      "change": "the import of customRendererOf from table-partition.ts, where it moved",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/render.test.ts",
+      "change": "the retained path checked with a stub of the drawing of the rows: the order of the layers, the features not walked, the fallback, the visible ids asked once a frame, the opacity of the layer",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/frame-render.test.ts",
+      "change": "the dependency storeRetainedCache taken out of the deps",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained-bbox.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained-chunk.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained-classify.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained-collect.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained-coord-patch.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained-immediate.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
+    },
+    {
+      "path": "src/view/layer/store-retained-invalidation.test.ts",
+      "change": "deleted with the module of the same name",
+      "unit": "the layers drawn from their rows on the terrain and on the globe"
     }
   ]
 }

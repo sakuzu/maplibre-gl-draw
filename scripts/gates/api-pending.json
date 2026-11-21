@@ -35,6 +35,9 @@
     "26": {
       "main:added:FeaturesCollection.releaseValues": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
+    "39": {
+      "main:doc:FeatureValues": "d0fd8ec02ca04dc76197d8e332777db9f31da9e68a2813648860985fc6ffedb1"
+    },
     "40": {
       "main:doc:SelectionResource.get": "6ca001bc7ccda5cf18a43d8646baf8528e9912cd0d1bf86fb775a4376323c005"
     },
