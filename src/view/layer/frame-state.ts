@@ -103,6 +103,11 @@ export interface FrameState {
   readonly drapeUsable: boolean;
   readonly wideFallback: boolean;
   readonly useRetained: boolean;
+  /**
+   * Whether the layers are drawn from their rows (a flat map, pitched or not; the terrain and the
+   * globe draw the retained batches of the features)
+   */
+  readonly useRows: boolean;
   readonly features: Feature[];
   readonly selectedIdSet: Set<string>;
   readonly selectedFeatures: Feature[];
@@ -263,6 +268,8 @@ export interface FrameBuildInput {
   terrainState: TerrainRenderState;
   /** Whether the retained batches of the Store rendering exist */
   retainedAvailable: boolean;
+  /** Whether the drawing of the layers from their rows exists */
+  rowsAvailable?: boolean;
   overlayRenderers: readonly EngineOverlayRenderer[];
   segments: readonly RenderSegment[];
 }
@@ -339,6 +346,12 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
 
   const useRetained =
     !drapeUsable && input.retainedAvailable && r.batchManager.getRetainedRenderers() !== undefined;
+  // A flat map (pitched or not) draws the layers from their rows
+  const useRows =
+    useRetained &&
+    input.rowsAvailable === true &&
+    !terrainState.active &&
+    (defaultProjectionData.projectionTransition ?? 0) === 0;
 
   // Viewport filtering. The display list is "the list that should be shown", which
   // excludes the local visibility of this client in addition to the shared visible flag.
@@ -479,6 +492,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     drapeUsable,
     wideFallback,
     useRetained,
+    useRows,
     features,
     selectedIdSet,
     selectedFeatures,

@@ -39,6 +39,11 @@ export interface ShaderInitializerRenderers {
   sdfPolygonRenderer: SDFPolygonRenderer | null;
   /** The fill shared with the render context of custom feature renderers */
   fillShaderManager: FillShaderManager | null;
+  /** The renderer that draws the rows of the layers in one draw */
+  rowsRenderer?: {
+    ensureShader(shaderData: ShaderData): unknown;
+    setOffsetUniforms(uniforms: OffsetUniforms): void;
+  } | null;
 }
 
 /**
@@ -105,6 +110,7 @@ export class ShaderInitializer {
       sdfPolygonRenderer.ensureShader(shaderData);
     }
     fillShaderManager?.ensureShader(shaderData);
+    this.renderers.rowsRenderer?.ensureShader(shaderData);
   }
 
   /**
@@ -182,6 +188,7 @@ export class ShaderInitializer {
       sdfPolygonRenderer.setOffsetUniforms(uniforms);
     }
     fillShaderManager?.setOffsetUniforms(uniforms);
+    this.renderers.rowsRenderer?.setOffsetUniforms(uniforms);
   }
 
   /**

@@ -47,6 +47,7 @@ import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { drawnRowsOf } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -76,6 +77,7 @@ import { SlotManager } from './slot-manager.js';
 import { type StackSlot, slotLayerId } from './slots.js';
 import { StoreRetainedCache } from './store-retained.js';
 import { isOpacityOnlyLayersChange } from './store-retained-invalidation.js';
+import { TableLayerRenderer } from './table-retained.js';
 import { TerrainResolver } from './terrain-resolver.js';
 
 /**
@@ -86,6 +88,11 @@ import { TerrainResolver } from './terrain-resolver.js';
 export interface CustomLayerDeps {
   map: MapLibreMap;
   store: DocumentAccess;
+  /**
+   * The tables of the Store (`Store.tables`): the layers are drawn from their rows when they are
+   * those of a built-in Store
+   */
+  tables?: unknown;
   spatialIndex: SpatialIndex;
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;
@@ -183,6 +190,8 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   getGL(): WebGL2RenderingContext | null;
   /** What the drawing of this instance holds on the GPU, per part */
   getGpuLedger(): GpuLedger;
+  /** The drawing of the layers from their rows (null while the GPU side is not built) */
+  getTableRenderer(): TableLayerRenderer | null;
   /**
    * The instance is gone: the GPU side is dropped if it is still there, and what is still in the
    * ledger was left behind. It is deleted and counted (`leakedBytes` of the ledger)
@@ -222,6 +231,8 @@ interface EngineState {
    * used.
    */
   storeRetainedCache: StoreRetainedCache | null;
+  /** The drawing of the layers from their rows (null while not built) */
+  tableRetained: TableLayerRenderer | null;
   /**
    * The rendering pixel ratio baked into the retained batches (null when not built yet)
    *
@@ -277,6 +288,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     mapInstance: null,
     renderers: null,
     storeRetainedCache: null,
+    tableRetained: null,
     builtPixelRatio: null,
     unsubscribeStore: null,
     unwatchContextLoss: null,
@@ -475,6 +487,19 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         terrain: terrainContext,
         extensions: renderScope.selection.extensions,
       });
+      // The layers of a flat map are drawn from the rows of the built-in Store
+      const reader = drawnRowsOf(deps.tables);
+      if (reader) {
+        engine.tableRetained = new TableLayerRenderer({
+          gl,
+          reader,
+          store,
+          ledger: renderScope.gpu,
+          pixelRatio,
+          requestRepaint: () => engine.mapInstance?.triggerRepaint(),
+          timeSlicing: () => renderingConfig.timeSlicing !== false,
+        });
+      }
     }
 
     // Initialize the custom renderers and the overlay renderers (an overlay added before the
@@ -513,6 +538,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Release the retained batches of the Store rendering too (before disposing the renderers)
     engine.storeRetainedCache?.dispose(r.batchManager.getRetainedRenderers());
     engine.storeRetainedCache = null;
+    engine.tableRetained?.dispose();
+    engine.tableRetained = null;
     engine.builtPixelRatio = null;
 
     // The DEM atlas, the drape renderers, and the plan and the index that point into the pack
@@ -628,9 +655,14 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // when the ratio changes, so they are discarded.
     const dpr = resolvePixelRatio(pixelRatio);
     if (engine.builtPixelRatio !== dpr) {
-      if (engine.builtPixelRatio !== null) engine.storeRetainedCache?.invalidateAll();
+      if (engine.builtPixelRatio !== null) {
+        engine.storeRetainedCache?.invalidateAll();
+        engine.tableRetained?.reclassify();
+      }
       engine.builtPixelRatio = dpr;
     }
+    // The work of the tables and what this client hides and selects, before the frame is built
+    engine.tableRetained?.beginFrame();
 
     return buildFrameState({
       gl,
@@ -647,6 +679,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       contentDpr: resolveContentPixelRatio(pixelRatio),
       terrainState,
       retainedAvailable: engine.storeRetainedCache !== null,
+      rowsAvailable: engine.tableRetained !== null,
       overlayRenderers: dynamicOverlayRenderers,
       segments: slots.segments,
     });
@@ -683,6 +716,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       featureCompanions,
       datasets,
       storeRetainedCache: engine.storeRetainedCache,
+      tableRetained: engine.tableRetained,
       selectionScope: renderScope.selection,
     };
     renderSegment(renderDeps, frame, index);
@@ -690,6 +724,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     if (index === frame.segments.length - 1) {
       renderForeground(renderDeps, frame);
+      engine.tableRetained?.endFrame();
       engine.frame = null;
     }
   }
@@ -737,6 +772,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       const { gl } = engine;
       if (!gl || !engine.renderers || gl.isContextLost()) return;
       engine.preparedTerrainState = terrainResolver.resolve(gl);
+      // What the drawing of the rows queued is written before the main pass
+      engine.tableRetained?.prerender();
     },
 
     // The first argument also accepts WebGL1, to match the declaration of CustomRenderMethod
@@ -757,6 +794,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       // An element involved in the rendering was added, so the prepared retained batches are
       // rebuilt
       engine.storeRetainedCache?.invalidateAll();
+      engine.tableRetained?.reclassify();
       // Only while the GPU side exists (otherwise buildGpuResources calls onAdd)
       if (engine.renderers && engine.gl && engine.mapInstance) {
         renderer.onAdd(engine.gl, engine.mapInstance);
@@ -769,6 +807,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       if (index === -1) return;
       dynamicOverlayRenderers.splice(index, 1);
       engine.storeRetainedCache?.invalidateAll();
+      engine.tableRetained?.reclassify();
       // Its GPU resources exist only while the engine does
       if (engine.renderers && engine.gl) renderer.onRemove();
       engine.mapInstance?.triggerRepaint();
@@ -780,6 +819,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       // Adding a custom type changes the classification of the features (whether they can be
       // retained)
       engine.storeRetainedCache?.invalidateAll();
+      engine.tableRetained?.reclassify();
       // Only while the GPU side exists (otherwise buildGpuResources calls onAdd)
       if (engine.renderers && engine.gl && engine.mapInstance) {
         // A renderer can serve several types: it is released only when no type uses it
@@ -790,6 +830,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         if (customRenderers.get(type) !== renderer) return;
         customRenderers.delete(type);
         engine.storeRetainedCache?.invalidateAll();
+        engine.tableRetained?.reclassify();
         if (engine.renderers && engine.gl && !isRegisteredRenderer(renderer)) renderer.onRemove();
         engine.mapInstance?.triggerRepaint();
       };
@@ -814,6 +855,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       return renderScope.gpu;
     },
 
+    getTableRenderer(): TableLayerRenderer | null {
+      return engine.tableRetained;
+    },
+
     destroyGpu(): void {
       releaseGpuResources();
       drainGpu();
@@ -821,6 +866,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     hasPendingWork(): boolean {
       if (drape.hasPendingWork) return true;
+      if (engine.tableRetained?.hasPendingWork) return true;
       if (datasets?.hasPendingWork()) return true;
       for (const renderer of dynamicOverlayRenderers) {
         if (renderer.hasPendingWork?.()) return true;

@@ -22,6 +22,7 @@ import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
 import { customRendererOf } from './store-retained-classify.js';
+import type { TableLayerRenderer } from './table-retained.js';
 
 /**
  * Draw features and overlays layer by layer
@@ -66,6 +67,8 @@ import { customRendererOf } from './store-retained-classify.js';
  * @param view The part of the view to draw, on one copy of the world (the expanded viewport
  *   of the ViewportFilter when omitted). A view across the antimeridian is drawn once per
  *   copy, each with its own range
+ * @param tableLayers The drawing of the layers from their rows: when given, the layers are drawn
+ *   from their rows rather than from the retained batches of the features
  */
 export function renderLayers(
   r: Renderers,
@@ -83,6 +86,7 @@ export function renderLayers(
   restoreBlendState?: () => void,
   range?: RenderLayersRange,
   view?: RenderLayersView,
+  tableLayers?: TableLayerRenderer,
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets
@@ -99,7 +103,8 @@ export function renderLayers(
     storeRetained !== undefined && typeof r.batchManager.getRetainedRenderers === 'function'
       ? r.batchManager.getRetainedRenderers()
       : undefined;
-  const useRetained = storeRetained !== undefined && retainedRenderers !== undefined;
+  const useRows = tableLayers !== undefined && retainedRenderers !== undefined;
+  const useRetained = !useRows && storeRetained !== undefined && retainedRenderers !== undefined;
 
   if (useRetained) storeRetained.beginFrame(companions);
 
@@ -137,7 +142,7 @@ export function renderLayers(
 
   // Group the features by layer id (immediate mode only)
   const featuresByLayer = new Map<string, Feature[]>();
-  if (!useRetained) {
+  if (!useRetained && !useRows) {
     for (const feature of features) {
       const layerFeatures = featuresByLayer.get(feature.layerId) ?? [];
       layerFeatures.push(feature);
@@ -161,7 +166,32 @@ export function renderLayers(
     // The custom renderers and the companions of the layer get its opacity in their context
     const layerContext = layerRendererContext(customRendererContext, layer);
 
-    if (useRetained && retainedRenderers) {
+    if (useRows && retainedRenderers) {
+      tableLayers.drawLayer(
+        layerId,
+        layer,
+        {
+          projectionData: defaultProjectionData,
+          zoom,
+          bounds: viewportBounds && [
+            viewportBounds.minX,
+            viewportBounds.minY,
+            viewportBounds.maxX,
+            viewportBounds.maxY,
+          ],
+        },
+        {
+          renderers: retainedRenderers,
+          rows: r.rowsRenderer,
+          batchManager: r.batchManager,
+          customRenderers,
+          customRendererContext: layerContext,
+          companions,
+          getVisibleIds,
+          restoreBlendState,
+        },
+      );
+    } else if (useRetained && retainedRenderers) {
       storeRetained.drawLayer(
         layerId,
         layer,

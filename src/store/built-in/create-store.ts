@@ -11,6 +11,7 @@
 import { holdWorkCounts } from '../../shared/work-counts.js';
 import { holdChanges } from './changes.js';
 import { openDocument, type StoreDocument } from './document.js';
+import { holdDrawnRows } from './drawn-rows.js';
 import { featureTablesOf, listPropertyKeysOf } from './feature-tables.js';
 import { holdRowBoxes } from './row-boxes.js';
 import type { Store, StoreOptions } from './types.js';
@@ -39,6 +40,7 @@ export function storeOf(document: StoreDocument): Store {
   holdWorkCounts(store, document.counts);
   holdChanges(store.tables, document.changes);
   holdRowBoxes(store.tables, document.rowBoxes);
+  holdDrawnRows(store.tables, document);
   return store;
 }
 

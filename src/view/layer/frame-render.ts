@@ -43,6 +43,7 @@ import {
 import { renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
+import type { TableLayerRenderer } from './table-retained.js';
 
 /**
  * The datasets as the per-layer rendering takes them (the type is owned by
@@ -62,6 +63,8 @@ export interface FrameRenderDeps {
   featureCompanions: FeatureCompanionRegistry;
   datasets?: RenderedDatasets;
   storeRetainedCache: StoreRetainedCache | null;
+  /** The drawing of the layers from their rows (null when the Store does not hand out its rows) */
+  tableRetained?: TableLayerRenderer | null;
   selectionScope: SelectionScope;
 }
 
@@ -236,6 +239,7 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
       f.restoreBlendState,
       { from: segment.from, to: segment.to, first, last },
       copy.view,
+      f.useRows ? (deps.tableRetained ?? undefined) : undefined,
     );
   }
   applyCopy(deps, f.baseCopy);

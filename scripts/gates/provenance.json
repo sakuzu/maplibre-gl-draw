@@ -280,6 +280,69 @@
       "from": "src/view/terrain/drape/renderer.ts",
       "to": "src/view/terrain/drape/renderer.ts",
       "note": "only the rows of a table of the drape under the limit (rowsUnderLimit) and the record of the textures and of the mesh in the ledger; the drape of the rows is not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/renderers/rows/rows-writes.ts",
+      "to": "src/view/renderers/rows/rows-writes.ts",
+      "note": "the writes in place of the texels and the instances of a chunk of rows, as they are"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/retained/chunk-scheduler.ts",
+      "to": "src/view/retained/chunk-scheduler.ts",
+      "note": "the builds of the chunks over the frames within a budget, with the origin chosen by the functions of the retained batches; the regions of the rows moved by a drag are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/renderers/rows/rows-format.ts",
+      "to": "src/view/renderers/rows/rows-format.ts",
+      "note": "the layout of the instances of the rows and the palette of the resolved styles; the pictures of the points of an extension and the marks of the ground are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/renderers/rows/rows-shader.ts",
+      "to": "src/view/renderers/rows/rows-shader.ts",
+      "note": "the branches of the kinds and the dashes of the segments of the program of the rows, written again on the projection and the formulas of the renderers of the features (flat map only); the globe, the terrain, the ground and the pictures are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/renderers/rows/rows-renderer.ts",
+      "to": "src/view/renderers/rows/rows-renderer.ts",
+      "note": "the chunks of rows on the GPU, their uploads and their writes in place, and the draw of a range; the variants of the projection, the ground, the heights and the pictures are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/renderers/row-state.ts",
+      "to": "src/view/renderers/row-state.ts",
+      "note": "the texture of one byte per row and its upload; the moving sets, their motions and the GPU of the extensions are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/layer/table-collect.ts",
+      "to": "src/view/layer/table-collect.ts",
+      "note": "the resolution of the styles of the rows and the packing of a row into a chunk drawn in one draw; the surfaces, the ground and the batches by kind are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/layer/table-partition.ts",
+      "to": "src/view/layer/table-partition.ts",
+      "note": "the classification of a row and the runs of a row group; the extensions that hold rows and the pictures are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/layer/table-retained.ts",
+      "to": "src/view/layer/table-retained.ts",
+      "note": "the drawing of the layers from their row groups and the parts of their deltas, the next versions, the state of the rows and the writes in place, written again over the reader of the built-in Store; the drape, the surfaces, the extensions and the moving sets are not brought"
     }
   ]
 }

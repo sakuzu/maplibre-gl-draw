@@ -79,6 +79,7 @@ const TEXEL_BYTES: Readonly<Record<string, number>> = {
   R8: 1,
   RG8: 2,
   RGBA8: 4,
+  R8UI: 1,
   R16F: 2,
   RGBA16F: 8,
   R32F: 4,

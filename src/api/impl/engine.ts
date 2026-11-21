@@ -271,6 +271,8 @@ export function createEngine(
   const customLayer = createCustomLayer({
     map,
     store,
+    // The layers are drawn from the rows of the tables of the Store
+    tables: context.exposedStore.tables,
     spatialIndex,
     featureStyle,
     selectionConfig: selectionStyle,

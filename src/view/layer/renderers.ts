@@ -26,6 +26,7 @@ import { PointShapeRenderer } from '../renderers/point/point-shape.js';
 import { PolygonBatchRenderer } from '../renderers/polygon/batch.js';
 import { FillShaderManager } from '../renderers/polygon/fill.js';
 import { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
+import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { StrokeRenderer } from '../renderers/stroke.js';
 import { ShaderInitializer } from '../shaders/initializer.js';
 import { QuadShader } from '../shaders/quad.js';
@@ -51,6 +52,8 @@ export interface Renderers {
   polygonBatchRenderer: PolygonBatchRenderer;
   sdfPolygonRenderer: SDFPolygonRenderer;
   fillShaderManager: FillShaderManager;
+  /** The rows of the layers drawn in one draw */
+  rowsRenderer: RowsRenderer;
   selectionUIRenderer: SelectionUIRenderer;
   selectionHandlesRenderer: SelectionHandlesRenderer;
   featureDrawer: FeatureDrawer;
@@ -126,6 +129,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   const polygonBatchRenderer = new PolygonBatchRenderer(gl, polygonScope);
   const sdfPolygonRenderer = new SDFPolygonRenderer(gl, pixelRatio, polygonScope);
   const fillShaderManager = new FillShaderManager(gl, terrain, gpu);
+  const rowsRenderer = new RowsRenderer(gl, gpu, terrain);
 
   const selectionExtensions = scope.selection.extensions;
   const selectionUIRenderer = new SelectionUIRenderer(
@@ -201,6 +205,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     polygonBatchRenderer,
     sdfPolygonRenderer,
     fillShaderManager,
+    rowsRenderer,
   });
 
   const batchManager = new BatchManager({
@@ -225,6 +230,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     polygonBatchRenderer,
     sdfPolygonRenderer,
     fillShaderManager,
+    rowsRenderer,
     selectionUIRenderer,
     selectionHandlesRenderer,
     featureDrawer,
@@ -267,6 +273,7 @@ const GPU_OWNERS = [
   'polygonBatchRenderer',
   'sdfPolygonRenderer',
   'fillShaderManager',
+  'rowsRenderer',
 ] as const satisfies readonly GpuOwnerKey[];
 
 /** The members with a dispose() that GPU_OWNERS leaves out (must be never) */
