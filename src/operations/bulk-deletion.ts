@@ -86,6 +86,8 @@ function layerDeletionWork(
   after: (stopped: boolean, deletedAny: boolean) => void = () => {},
 ): BulkBatchWork {
   let deletedAny = false;
+  /** Whether the Store refused the deletion of a layer in the last part */
+  let refused = false;
   const features = deletionWork(layer, () => {
     deletedAny = true;
   });
@@ -103,12 +105,18 @@ function layerDeletionWork(
           if (layer.deleteLayer(layerId)) {
             more += left;
             deletedAny = true;
+          } else {
+            // Refused by the Store: the layer stays, as when the edit stops
+            refused = true;
           }
         }
       }
       after(stopped, deletedAny);
       return more;
     },
+    // A layer the Store refused to delete: the edit stopped, or wrote nothing when it had deleted
+    // nothing before
+    outcome: () => (refused ? (deletedAny ? 'stopped' : 'refused') : undefined),
   };
 }
 

@@ -34,6 +34,14 @@ export interface BulkWorkHooks {
    *   `changedCount`)
    */
   end?(stopped: boolean): number | undefined;
+  /**
+   * How the edit ended, read once its last part is written (not when it stopped): `stopped` when
+   * the Store refused a write of that part after the edit had written something (the edit then
+   * resolves as one that stopped, the parts written staying), `refused` when it refused a write
+   * before anything was written (the edit resolves with null, as read-only gives); undefined
+   * when it wrote everything
+   */
+  outcome?(): 'stopped' | 'refused' | undefined;
   /** The IDs of the features the edit created, read when its promise resolves */
   createdIds?(): readonly string[];
   /**

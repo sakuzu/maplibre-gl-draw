@@ -386,6 +386,20 @@ describe('layers.delete', () => {
     expect(kept).toBe(ids.length);
   });
 
+  it('stops when the Store refuses the deletion of the layer in the last part, and is refused when nothing was written before', async () => {
+    layerOfPoints('a', 2);
+    draw.layers.create({ id: 'empty', name: 'empty' });
+    store.deleteLayer = () => false;
+    expect(await finish(draw.layers.delete('a'))).toEqual(
+      counts({ changedCount: 2, stopped: true }),
+    );
+    expect(draw.layers.has('a')).toBe(true);
+    expect(draw.features.count()).toBe(0);
+    // Nothing deleted before the refusal: as read-only gives
+    expect(await finish(draw.layers.delete('empty'))).toBeNull();
+    expect(draw.layers.has('empty')).toBe(true);
+  });
+
   it('counts a layer that is not there', async () => {
     layerOfPoints('a', 1);
     expect(await finish(draw.layers.delete('none'))).toEqual(

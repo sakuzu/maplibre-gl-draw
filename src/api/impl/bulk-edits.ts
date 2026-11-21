@@ -827,7 +827,10 @@ export function createBulkEdits(
       }
       if (last) {
         leave(edit);
-        edit.resolve(resultOf(edit, false));
+        // A write of the last part the Store refused ends the edit as one that stopped, or as one
+        // refused when nothing of it was written
+        const outcome = edit.work.outcome?.();
+        edit.resolve(outcome === 'refused' ? null : resultOf(edit, outcome === 'stopped'));
       }
     }
     next();

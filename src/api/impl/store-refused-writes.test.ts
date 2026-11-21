@@ -15,7 +15,7 @@ import { createStore } from '../../store/built-in/create-store.js';
 import type { Store } from '../../store/built-in/types.js';
 import { createMapStub, readRowFeature } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
-import type { DrawEvents } from '../events.js';
+import type { DocumentChange, DrawEvents } from '../events.js';
 import type { Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
@@ -221,13 +221,6 @@ describe('a write the Store refuses', () => {
       refused: null,
     },
     {
-      what: 'a layer deleted (deleteLayer)',
-      write: 'deleteLayer' as const,
-      rule: () => true,
-      run: (draw: Draw) => draw.layers.delete('b'),
-      refused: null,
-    },
-    {
       what: 'a group updated (updateGroup)',
       write: 'updateGroup' as const,
       rule: () => true,
@@ -260,7 +253,7 @@ describe('a write the Store refuses', () => {
     },
   ])(
     '$what: returns what read-only returns, tells nothing and keeps nothing',
-    async ({ write, rule, run, refused }) => {
+    ({ write, rule, run, refused }) => {
       const { draw, base, rules, told } = written();
       draw.selection.set('feature', ['p']);
       told.length = 0;
@@ -269,12 +262,6 @@ describe('a write the Store refuses', () => {
       expect(() => {
         result = run(draw);
       }).not.toThrow();
-      // An edit written in parts gives its result once its last part is written
-      if (result instanceof Promise) {
-        const pending = result;
-        await vi.runAllTimersAsync();
-        result = await pending;
-      }
       expect(result).toBe(refused);
       expect(told).toEqual([]);
       expect(draw.selection.get()).toEqual({ type: 'feature', ids: ['p'] });
@@ -282,12 +269,34 @@ describe('a write the Store refuses', () => {
       // Read-only refuses the same write with the same value
       rules.clear();
       draw.setReadOnly(true);
-      let again: unknown = run(draw);
-      if (again instanceof Promise) again = await again;
-      expect(again).toBe(refused);
+      expect(run(draw)).toBe(refused);
       draw.setReadOnly(false);
     },
   );
+
+  it('a layer deleted (deleteLayer): the deletion written in parts stops at its last part, and the layer stays', async () => {
+    const { draw, base, rules, told } = written();
+    draw.selection.set('feature', ['p']);
+    const changes: DocumentChange[] = [];
+    draw.document.subscribe((change) => changes.push(change));
+    told.length = 0;
+    rules.set('deleteLayer', () => true);
+    const deleted = draw.layers.delete('b');
+    await vi.runAllTimersAsync();
+    // The features went in the parts before: counted, and told; the layer stays
+    expect(await deleted).toEqual(
+      expect.objectContaining({ changedCount: 1, lockedCount: 0, missingCount: 0, stopped: true }),
+    );
+    expect(told).toContain('feature.deleted');
+    expect(draw.features.get('r')).toBeUndefined();
+    expect(draw.layers.get('b')).toBeDefined();
+    expect(base.getLayer('b')).toBeDefined();
+    expectSameAsStore(draw, base);
+    // The last change of the operation has no part after it
+    expect(changes.length).toBeGreaterThan(0);
+    expect(changes[changes.length - 1].hasMoreParts).toBe(false);
+    expect(new Set(changes.map((change) => change.operationId)).size).toBe(1);
+  });
 
   it.each([
     {
