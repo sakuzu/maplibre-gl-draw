@@ -66,6 +66,7 @@ import { setOwnProperty } from './import-export/own-property.js';
 import { describeStyleProblem } from './import-export/style-validation.js';
 import { toAppliedDefaults } from './options.js';
 import { moveFeatures, resolveMoveTarget } from './placement.js';
+import { startRestore } from './restore.js';
 import type { ResourceDeps } from './shared.js';
 import {
   featureLocked,
@@ -383,6 +384,25 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
           { writesLocked: onlyLockOrVisibility(patch) },
         );
       });
+    },
+
+    restore(values, options) {
+      const { edits, counts, values: keeper } = requireBulk();
+      if (!keeper) {
+        throw new DrawError('invalidState', 'The values before are not kept on these features');
+      }
+      try {
+        return startRestore({ layer: store, edits, values: keeper, counts }, values, options);
+      } catch (error) {
+        // A value that cannot be written back rejects the promise, and nothing is written
+        if (
+          error instanceof DrawError &&
+          (error.code === 'invalidInput' || error.code === 'notFound')
+        ) {
+          return Promise.reject(error);
+        }
+        throw error;
+      }
     },
 
     releaseValues(values) {

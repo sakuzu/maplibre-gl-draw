@@ -4,8 +4,7 @@
   "samples": {
     "sample-follow-drag.ts": 4,
     "sample-main-usage.ts": 14,
-    "sample-presence-events.ts": 20,
-    "sample-undo-plugin.ts": 4
+    "sample-presence-events.ts": 20
   },
   "declarations": {
     "1": {
@@ -28,12 +27,6 @@
     "13": {
       "main:added:Draw.rendered": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "25": {
-      "main:added:FeaturesCollection.restore": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "39": {
-      "main:doc:FeatureValues": "d0fd8ec02ca04dc76197d8e332777db9f31da9e68a2813648860985fc6ffedb1"
     },
     "46": {
       "main:added:Sketch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",

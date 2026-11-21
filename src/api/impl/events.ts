@@ -35,7 +35,7 @@ import type { UpdateSource } from '../extension/store.js';
 import type { ChangedIds, Feature, FeatureInput, Group, MoveTarget } from '../model.js';
 import type { SnapResult } from '../state.js';
 import { type ChangeSummary, summaryOfChange, watchChanges } from './document-access.js';
-import { SharedValues } from './feature-values.js';
+import { groupChangesOf, valuesOfChange } from './feature-values.js';
 import { makeIdSet } from './id-set.js';
 import { toDatasetRow } from './rows.js';
 import { createValuesKeeper, type ValuesKeeper } from './values-keeper.js';
@@ -232,8 +232,10 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
   let readOnly = client.isReadOnly();
   let locked = client.isInteractionLocked();
   const readsChanges = (): boolean => hub.has('document.changed') || hub.subscribers().length > 0;
+  // The geometries the values before write back vertex by vertex follow the changes of their rows
+  const follows = (): boolean => hub.values.following();
   const counts = watchChanges(store, {
-    wanted: () => readsChanges() || hub.has('feature.moved') || hub.has('group.moved'),
+    wanted: () => readsChanges() || hub.has('feature.moved') || hub.has('group.moved') || follows(),
     deletedFeatures: () => hub.has('feature.deleted'),
     asksValues(change) {
       const asking = hub.subscribers().filter((subscriber) => subscriber.asks(change));
@@ -245,7 +247,12 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
   const stop = store.subscribe((changes) => {
     const summary = summaryOfChange(changes);
     // The sets of IDs are made before any listener can write
-    const ids = summary && (readsChanges() || hub.has('feature.moved')) ? summary.ids() : null;
+    const ids =
+      summary && (readsChanges() || hub.has('feature.moved') || follows()) ? summary.ids() : null;
+    // The values before given earlier follow what this change did to their geometries
+    if (ids && follows()) {
+      hub.values.follow(changes.reset ? null : ids.updated, store.getTables());
+    }
     emitResourceEvents(hub, store, changes, summary, ids, counts);
 
     const nextVertexSelection = client.getVertexSelection();
@@ -282,7 +289,7 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
     if (!summary || !ids) return;
     const change = toDocumentChange(changes, summary, ids, store);
     hub.emit('document.changed', change);
-    tellSubscribers(hub, change, summary);
+    tellSubscribers(hub, change, summary, changes, store, counts);
   });
   return () => {
     stop();
@@ -291,16 +298,32 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
 }
 
 /** The changes of the subscribers of `draw.document.subscribe`: each with values of its own */
-function tellSubscribers(hub: EventHub, change: DocumentChange, summary: ChangeSummary): void {
+function tellSubscribers(
+  hub: EventHub,
+  change: DocumentChange,
+  summary: ChangeSummary,
+  changes: StoreChange,
+  store: InstanceDocument,
+  counts: WorkCounts | undefined,
+): void {
   const subscribers = hub.subscribers();
   if (subscribers.length === 0) return;
   const asked = Array.isArray(summary.askedBy) ? (summary.askedBy as unknown[]) : [];
-  const before = summary.valuesBefore;
   // Held once for every subscriber that asked for them; none for a change that wrote no feature
+  // and no group
   const shared =
-    asked.length > 0 && before && [...before.values()].some((values) => values.rows.length > 0)
-      ? new SharedValues(before)
+    asked.length > 0
+      ? valuesOfChange({
+          before: summary.valuesBefore,
+          created: store.rowsOfFeatureSet(change.features.created).slice(),
+          tables: store.getTables(),
+          layerIds: () => store.getLayerOrder(),
+          wholeGeometry: summary.wholeGeometry,
+          groups: groupChangesOf(changes.groups, summary.groupsMoved, summary.groupsDeleted),
+          made: (count) => countWork(counts, 'objectsCreated', count),
+        })
       : null;
+  if (shared) hub.values.adopt(shared);
   // The rows the change deleted stay while the values given to the subscribers keep them (the
   // layer lets go of them once the change is told, when they were not taken)
   const release = shared ? summary.claimDeletedRows() : undefined;

@@ -398,6 +398,72 @@ export interface FeaturesCollection {
    */
   duplicate(target: FeatureTarget, options?: DuplicateOptions): Promise<EditCounts | null>;
   /**
+   * Writes back the values features had before a change, as the changes of a subscriber that
+   * asked for them carry them (`previousValues` of {@link DocumentChange}, see
+   * `draw.document.subscribe`): a bulk edit, in parts (see {@link FeaturesCollection}). The
+   * features take back what the change did, and only that, onto what they are now:
+   *
+   * - The geometry is taken back vertex by vertex, as the values keep it (see
+   *   {@link FeatureValues}): a vertex the change moved goes back to where it was, a vertex it
+   *   added is deleted, and a vertex it deleted comes back; the other vertices, such as those
+   *   another edit moved since, stay as they are. The vertices are followed from the change to
+   *   now as {@link VertexRef} says; one that cannot be followed is left as it is and counted
+   *   (`EditCounts.skippedVertexCount`). A change that changed the whole geometry (a move, a
+   *   rotation, a scaling, an edit that changed the type of the geometry, the number of its
+   *   parts or the number of the rings of a part) takes the whole geometry back. A geometry
+   *   given whole (`features.update`) with the same type, parts and rings is compared with
+   *   the one before vertex by vertex, as any other edit.
+   * - Any other value (an attribute, a key of the look, a flag, the place) is written back key
+   *   by key: a key the change did not write keeps what it has now.
+   * - A feature the change deleted comes back where it was, in its layer and its group, while
+   *   the values keep it ({@link FeaturesCollection.releaseValues}). (Deleting features does
+   *   not delete the embedded files they name, so there is no file to bring back with them.) A
+   *   feature whose group is not there goes into the layer of the group. A feature the change
+   *   created is deleted.
+   * - The groups, which hold the features, are written back with them: a group the change
+   *   deleted comes back where it was, a group it created is deleted, a group it moved goes
+   *   back to where it was, and a group whose values it changed (its name, its visibility,
+   *   its lock) takes them back.
+   *
+   * The values of several changes are written back from the last to the first, so the values
+   * of the changes of one bulk edit, given in the order they arrived, take the whole edit back.
+   * The features that come back are told as created (`ChangedIds.created`, and
+   * `feature.created` on the main entry).
+   *
+   * The layers are not written back here: the change carries their values before as objects
+   * (`layers` of {@link DocumentChange}), and the caller writes them back with `draw.layers`
+   * (a layer created again, its values, the stacking order). A layer the change deleted is
+   * created again by the caller first, with `layers.create` and the `index` it had in the
+   * stacking order (`layers.orderChanged.previous` of the change). The metadata, which is
+   * neither a feature, a group nor a layer, is not written back here either: the caller
+   * writes it back with `draw.metadata` (`metadata.previous` of the change).
+   *
+   * It is an edit of the document like any other: read-only refuses it, and a lock of a
+   * feature, its group or its layer leaves the feature as it is unless `ignoreLocks` is given,
+   * as writing back what an edit of the user did needs. Its own changes carry, for a subscriber
+   * that asks, the values the features had before it, which written back make the change
+   * again.
+   *
+   * @param values - The values, in the order their changes arrived
+   * @param options - Where the writes come from (`'local'` when left out; an extension that
+   *   writes back the edits of the user names its own source), and whether they ignore the
+   *   locks
+   * @returns The counts of the edit, or `null` when it is refused (read-only, or every feature
+   *   is locked)
+   * Values are used up by what is written back of them. A `restore` that stopped
+   * (`stopped: true`) leaves the rest of its values: given to `restore` again, the same values
+   * write the rest that was not written (the `restore` goes on from where it stopped). Values
+   * written back whole are used up: given to `restore` again, they make it reject with
+   * `invalidInput`. A `restore` refused (`null`) writes nothing and uses nothing. The changes
+   * of a `restore` carry, for a subscriber that asks, the values that take back what it wrote
+   * (only that, for one that stopped): to make the change again, give those.
+   *
+   * @throws `DrawError` (the promise rejects) with the code `invalidInput` when a value is not
+   *   one this instance gave to this subscriber, was let go of, or was written back whole, or
+   *   `notFound` when it names a layer that is not there; nothing is written then
+   */
+  restore(values: readonly FeatureValues[], options?: EditOptions): Promise<EditCounts | null>;
+  /**
    * Lets go of what values of features keep: the features and groups a change deleted,
    * kept so that `restore` can bring them back. Every subscriber that asks for the values
    * before gets values of its own for each change, and a deleted feature is kept until all the
