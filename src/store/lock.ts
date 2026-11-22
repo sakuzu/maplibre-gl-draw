@@ -78,8 +78,8 @@ export function isInteractionBlocked(feature: Feature, store: InteractionGateSto
 /**
  * Whether the group is effectively locked: by itself or by the layer it belongs to
  *
- * @param findLayerOfGroup A function that returns the layer the group belongs to
- *   (because groups are stored in layer.order, the caller resolves it and passes it in)
+ * @param findLayerOfGroup A function that returns the layer the group belongs to (the layer
+ *   its `layerId` names)
  */
 export function isGroupLocked(
   group: Group,
