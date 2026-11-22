@@ -3326,6 +3326,11 @@ export interface DrawEvents {
      * It arrives once per feature, also when one change touches many features. The feature
      * objects are made only while the event has a listener; for changes of many features, listen
      * to `document.changed` instead.
+     *
+     * `from` is where the feature was before the change, and its `index` the position the feature
+     * had there, 0 at the back, counted as the layer or the group was before the change. For a
+     * feature of a group that was ungrouped, `from` is that group and the position in it. Only a
+     * feature the same change created has a `from` without `index`: it had no position before.
      */
     'feature.moved': {
         feature: Feature;
@@ -3374,7 +3379,13 @@ export interface DrawEvents {
         previous: Group;
         source: UpdateSource;
     };
-    /** A group moved to another layer, or to another position in its layer */
+    /**
+     * A group moved to another layer, or to another position in its layer
+     *
+     * `from` is the layer the group was in before the change, and its `index` the position the
+     * group had there, 0 at the back, counted as the layer was before the change. Only a group
+     * the same change created has a `from` without `index`.
+     */
     'group.moved': {
         group: Group;
         from: MoveTarget;
@@ -3689,7 +3700,9 @@ export interface DocumentChange {
         /**
          * Groups moved themselves (not what they hold): `from` and `to` are each a layer and a
          * position in it (`MoveTarget`, `{ layerId, index }`), where the group was before and
-         * where it is now: in another layer, or at another position in its layer
+         * where it is now: in another layer, or at another position in its layer. The `index`
+         * of `from` is counted as the layer was before the change, and is there whatever events
+         * are listened to; only a group the same change created has a `from` without it
          */
         moved?: Array<{
             id: string;
