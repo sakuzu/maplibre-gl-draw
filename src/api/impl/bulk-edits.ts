@@ -13,8 +13,9 @@
  *   written even when it writes nothing, with `stopped: true` when the edit stops.
  * - A part is cut by time (`BULK_PART_BUDGET_MS`), the work of the listeners of its change
  *   included: the time the rows of a part took, with the listeners, gives the number of rows of
- *   the next part, and a part also ends once its writes alone have taken the budget. A part writes
- *   one row at least, however long it takes.
+ *   the next part, and a part also ends once its writes alone have taken the budget. The first
+ *   part, written before the work of the listeners is known, writes `BULK_BATCH_MAX` rows at most.
+ *   A part writes one row at least, however long it takes.
  * - An edit that writes several features at a time is given them in batches, the locked ones and
  *   the ones deleted meanwhile left out, and the clock is read after each batch. The first batch
  *   is small (`BULK_FIRST_BATCH`); each next one is as many rows as the time a row of the batch
@@ -207,7 +208,7 @@ interface Edit {
   readonly early: Set<number>;
   /** The rows of the target deleted since the edit started */
   readonly gone: Set<number>;
-  /** How many rows the next part writes at most */
+  /** How many rows the next part writes at most (`BULK_BATCH_MAX` for the first) */
   rowsPerPart: number;
   /** How many rows the last batch had (a work that writes several features at a time) */
   batchRows: number;
@@ -988,7 +989,8 @@ export function createBulkEdits(
       at: 0,
       early: new Set(),
       gone: new Set(),
-      rowsPerPart: Number.POSITIVE_INFINITY,
+      // The work of the listeners is not known before the first part: it writes a batch at most
+      rowsPerPart: BULK_BATCH_MAX,
       batchRows: 0,
       batchRowMs: Number.NaN,
       counts: {
