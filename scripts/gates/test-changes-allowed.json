@@ -1200,6 +1200,21 @@
       "path": "src/api/impl/selection-frame.test.ts",
       "change": "createCoordinateTransform takes the anchor projection of the instance, or null for none; the tests without a terrain pass null, and their values do not change",
       "unit": "the work that gives each instance its own anchor projection"
+    },
+    {
+      "path": "src/view/feature-companion.test.ts",
+      "change": "the fake store or document of the set-up no longer passes the order a layer or a group holds, which the code read no longer reads (the values checked do not change)",
+      "unit": "the layers and the groups that no longer carry the order of what they hold"
+    },
+    {
+      "path": "src/view/renderers/batch-manager.test.ts",
+      "change": "the fake store or document of the set-up no longer passes the order a layer or a group holds, which the code read no longer reads (the values checked do not change)",
+      "unit": "the layers and the groups that no longer carry the order of what they hold"
+    },
+    {
+      "path": "src/view/renderers/drawer.test.ts",
+      "change": "the fake store or document of the set-up no longer passes the order a layer or a group holds, which the code read no longer reads (the values checked do not change)",
+      "unit": "the layers and the groups that no longer carry the order of what they hold"
     }
   ]
 }
