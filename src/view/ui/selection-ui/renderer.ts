@@ -116,15 +116,58 @@ export class SelectionUIRenderer {
     }
 
     // A multi-selection: the individual bboxes + the combined bbox
-    for (const feature of features) {
-      const bbox = computeBoundingBox(feature, this.#extensions);
-      if (bbox && hasZeroArea(bbox)) {
-        this.#drawPointBoundingBox(feature, bbox.center, zoom);
-      } else {
-        this.#drawIndividualBoundingBox(feature, zoom);
-      }
-    }
+    for (const feature of features) this.#drawMemberBoundingBox(feature, zoom);
     this.#drawBoundingBoxWithMargin(features, zoom);
+  }
+
+  /**
+   * Draw the UI of a selection of many features whose rows are framed on the GPU: the frame of
+   * each feature given (the ones framed from their features), as for a selection of several, and
+   * the frame of every feature selected, from the box of all of them (`bbox`, as
+   * computeCombinedBoundingBox gives it; no such frame when it is null)
+   *
+   * While rotating, the features given and the box of all of them are turned as for several.
+   */
+  drawMany(
+    features: readonly Feature[],
+    bbox: BoundingBoxCoords | null,
+    zoom: number,
+    dragState?: DragState | null,
+  ): void {
+    const rotateInfo = dragState?.operation === 'rotate' ? dragState.rotateInfo : undefined;
+    if (rotateInfo) {
+      const { initialBbox, initialFeatureBboxes, currentAngle } = rotateInfo;
+      for (const feature of features) {
+        const initial = initialFeatureBboxes?.get(feature.id);
+        if (!initial) continue;
+        const rotated = rotateBoundingBox(initial, currentAngle, initialBbox.center);
+        this.#strokeBoundingBox(this.#applyMargin(rotated, zoom), zoom);
+      }
+      if (!bbox) return;
+      const rotated = rotateBoundingBox(initialBbox, currentAngle);
+      this.#strokeBoundingBox(this.#applyMargin(rotated, zoom), zoom);
+      return;
+    }
+    for (const feature of features) this.#drawMemberBoundingBox(feature, zoom);
+    if (bbox) this.#strokeBoundingBox(this.#applyMargin(bbox, zoom), zoom);
+  }
+
+  /** The configuration the frames are drawn with */
+  get config(): SelectionUIConfig {
+    return this.#config;
+  }
+
+  /**
+   * Draw the frame of one feature of a selection of several: the frame of a point for a feature
+   * of no extent, else its box with the margin
+   */
+  #drawMemberBoundingBox(feature: Feature, zoom: number): void {
+    const bbox = computeBoundingBox(feature, this.#extensions);
+    if (bbox && hasZeroArea(bbox)) {
+      this.#drawPointBoundingBox(feature, bbox.center, zoom);
+    } else {
+      this.#drawIndividualBoundingBox(feature, zoom);
+    }
   }
 
   /**

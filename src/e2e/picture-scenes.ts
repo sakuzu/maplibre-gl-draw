@@ -492,6 +492,147 @@ export const SCENES: readonly PictureScene[] = MAPS.flatMap((map) =>
   KINDS.flatMap((kind) => STATES.map((state) => sceneOf(map, kind, state))),
 );
 
+// ============================================================================
+// The scenes of a selection of many features
+// ============================================================================
+
+/** The number of features a selection holds at most for its frames to be drawn one by one */
+export const FEW_SELECTED = 1_024;
+
+/** The two counts of a selection of many features: one by one, and from the rows */
+export const MANY_COUNTS = [FEW_SELECTED, FEW_SELECTED + 1] as const;
+
+/**
+ * A scene of a selection of many features: its map, the number of features selected, the
+ * document and the calls, and the boxes (in the units of the places) of the parts the pictures of
+ * the two counts are compared on
+ */
+export interface ManyScene {
+  /** `<map>/many/<count>` */
+  readonly name: string;
+  readonly map: MapName;
+  readonly count: number;
+  readonly document: DrawDocument;
+  readonly calls: readonly Call[];
+}
+
+/**
+ * The parts of a scene of a selection of many features the pictures of the two counts are
+ * compared on: the ID of each feature, and the pixels around its box that hold its frame
+ *
+ * - `image`: the image turned by 30 degrees, selected (its frame is drawn from its feature at
+ *   both counts, and turns with it)
+ * - `area`: an area selected (its frame is drawn from its row past the count of a few)
+ * - `point`: a point selected
+ * - `free`: an area not selected, among the features selected (no frame at either count)
+ */
+export const MANY_PARTS = {
+  image: { id: 'image', padPx: 16 },
+  area: { id: 'area', padPx: 14 },
+  point: { id: 'point', padPx: 24 },
+  free: { id: 'free', padPx: 14 },
+} as const;
+
+/** The color of the frames of the selection UI, as it is drawn (`#FF2D55`) */
+export const FRAME_COLOR = [255, 45, 85] as const;
+
+/** The places of the parts of a scene of a selection of many features */
+function manyFeatures(map: MapName, count: number): Feature[] {
+  const at = placesOf(map);
+  const square = (x0: number, y0: number, x1: number, y1: number) => ({
+    type: 'Polygon' as const,
+    coordinates: [[at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), at(x0, y0)]],
+  });
+  const features: Feature[] = [
+    feature(
+      map,
+      'image',
+      'Image',
+      { type: 'Point', coordinates: at(-4.2, 1.2) },
+      { imageOpacity: 1 },
+      {
+        'maplibre-gl-draw:imageFileId': IMAGE_FILE,
+        'maplibre-gl-draw:imageWidth': 3 * UNIT_PX,
+        'maplibre-gl-draw:imageHeight': 2 * UNIT_PX,
+        'maplibre-gl-draw:rotation': 30,
+      },
+    ),
+    feature(map, 'area', 'Polygon', square(-0.8, 0.8, 0.2, 1.8), {
+      fillColor: COLORS.b,
+      fillOpacity: 0.6,
+      strokeColor: '#1b1b3a',
+      strokeWidth: 2,
+    }),
+    feature(
+      map,
+      'point',
+      'Point',
+      { type: 'Point', coordinates: at(-0.3, -2) },
+      { pointColor: COLORS.b, pointRadius: 8, pointShape: 'circle' },
+    ),
+    feature(map, 'free', 'Polygon', square(-4.7, -2.6, -3.7, -1.6), {
+      fillColor: COLORS.b,
+      fillOpacity: 0.6,
+      strokeColor: '#1b1b3a',
+      strokeWidth: 2,
+    }),
+  ];
+  // The rest of the features selected: small points in a block on the right
+  const rest = count - 3;
+  const side = 32;
+  for (let i = 0; i < rest; i++) {
+    const x = 3.8 + (2 * (i % side)) / (side - 1);
+    const y = -4 + (5 * Math.floor(i / side)) / (side - 1);
+    features.push(
+      feature(
+        map,
+        `fill-${i}`,
+        'Point',
+        { type: 'Point', coordinates: at(x, y) },
+        { pointColor: '#3a7d44', pointRadius: 2, pointShape: 'circle' },
+      ),
+    );
+  }
+  return features;
+}
+
+/** The scene of a selection of `count` features on a map (every feature but `free` selected) */
+function manySceneOf(map: MapName, count: number): ManyScene {
+  const features = manyFeatures(map, count);
+  const ids = features.map((f) => f.id).filter((id) => id !== 'free');
+  const document: DrawDocument = {
+    version: '3.0.0',
+    metadata: { title: 'pictures' },
+    layerOrder: [LAYER],
+    layers: [
+      {
+        id: LAYER,
+        name: 'Pictures',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        styleRule: undefined,
+        metadata: undefined,
+        items: features.map((f) => f.id),
+      },
+    ],
+    features,
+    files: { [IMAGE_FILE]: imageFile() },
+  };
+  return {
+    name: `${map}/many/${count}`,
+    map,
+    count,
+    document,
+    calls: [['selection.set', 'feature', ids]],
+  };
+}
+
+/** The scenes of a selection of many features: every map, at the two counts */
+export const MANY_SCENES: readonly ManyScene[] = MAPS.flatMap((map) =>
+  MANY_COUNTS.map((count) => manySceneOf(map, count)),
+);
+
 /**
  * A document with one image at the center of the camera of a map, which the page loads once
  * before the scenes, so that every scene finds the image decoded

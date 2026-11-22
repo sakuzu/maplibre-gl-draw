@@ -17,7 +17,12 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
-import { type DocumentAccess, FEATURES_KEPT } from '../../store/document-access.js';
+import { type DrawnRows, drawnRowsOf } from '../../store/built-in/drawn-rows.js';
+import {
+  type DocumentAccess,
+  type DocumentTables,
+  FEATURES_KEPT,
+} from '../../store/document-access.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Feature } from '../../store/types.js';
 import {
@@ -39,7 +44,7 @@ import {
 import type { QuadDrapeFrame } from '../terrain/drape/quad.js';
 import { type DrapeLight, resolveDrapeLight } from '../terrain/drape/renderer.js';
 import { setQuadDrapeFrame, setTerrainSurfacesFlattened } from '../terrain/state.js';
-import { getSelectedFeatureIdSet } from '../ui/helper.js';
+import { getSelectedFeatureIdSet, type SelectedFeatureIds } from '../ui/helper.js';
 import { applyDrawBlendState } from './blend.js';
 import type { DisplayListCache } from './display-list.js';
 import {
@@ -111,8 +116,16 @@ export interface FrameState {
   /** The surface the layers drawn from their rows are drawn on in this frame */
   readonly tableSurface: TableLayerSurface;
   readonly features: Feature[];
-  readonly selectedIdSet: Set<string>;
+  /** The IDs of the features selected (read by the drawing in immediate mode) */
+  readonly selectedIdSet: Pick<SelectedFeatureIds, 'has'>;
+  /** The features selected, when a few are (none when many are: see `manySelected`) */
   readonly selectedFeatures: Feature[];
+  /**
+   * When more features are selected than the layer keeps features of, the rows they are read
+   * from: the selection UI is then drawn from the rows (`ui/bulk-frames.ts`), and no feature is
+   * made for it (undefined when a few are selected, or the layers are not drawn from their rows)
+   */
+  readonly manySelected?: DrawnRows;
   readonly customRendererContext: FrameDrawContext;
   readonly layerAwareRenderers: LayeredOverlayRenderer[];
   readonly otherRenderers: EngineOverlayRenderer[];
@@ -376,25 +389,34 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
             excluded === null || (excluded.has(feature.id) && !interleavedQuadIds.has(feature.id)),
         );
 
+  // When more features are selected than the layer keeps features of, and the layers are drawn
+  // from their rows, the selection UI is drawn from the rows selected (frame-render.ts): neither
+  // their IDs nor their features are read here. The number selected is read from the selection
+  // and the rows, once per selection and change of the rows
+  const rowsRead = useRows
+    ? drawnRowsOf((store as DocumentAccess & Partial<DocumentTables>).getTables?.())
+    : undefined;
+  const manySelected =
+    rowsRead && r.boxSelectionRenderer.bulkFrames.selection.countOf(store, rowsRead) > FEATURES_KEPT
+      ? rowsRead
+      : undefined;
+
   // The single source of truth of the selection carries a kind. A group / layer selection is
   // resolved to its members and reflected on the map (getSelectedFeatureIdSet absorbs
   // feature / group / layer).
-  const selectedIds = getSelectedFeatureIdSet(store);
-  const selectedIdSet = new Set(selectedIds.iterate());
+  const selectedIds: Pick<SelectedFeatureIds, 'has' | 'iterate'> = manySelected
+    ? NO_FEATURE_IDS
+    : getSelectedFeatureIdSet(store);
 
   // The features for the selection UI are resolved directly from the selected ids. This keeps
   // them independent of the rendering path (retained / immediate mode), so the selection UI is
   // the same either way. They used to be picked from the features after the viewport filter, so
   // a selected feature off the screen got no selection UI. Now it does (it is drawn correctly
-  // when part of the selection box reaches into the screen).
+  // when part of the selection box reaches into the screen). With the layers drawn from their
+  // rows, these are a few, which the layer keeps, so they are not made again in every frame
   const selectedFeatures: Feature[] = [];
-  // More ids selected than the layer keeps features made of one by one are read from the features
-  // of the whole document in stacking order, which the layer keeps while the document does not
-  // change: read one by one, each would be made again in every frame. This read goes when the
-  // selection is drawn from the rows
-  const kept = selectedIds.count() > FEATURES_KEPT ? selectedOfEvery(store, selectedIdSet) : null;
   for (const id of selectedIds.iterate()) {
-    const feature = kept?.get(id) ?? store.getFeature(id);
+    const feature = store.getFeature(id);
     if (!feature?.visible || isLocallyHidden(feature, store)) continue;
     selectedFeatures.push(feature);
   }
@@ -503,8 +525,9 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     useRows,
     tableSurface,
     features,
-    selectedIdSet,
+    selectedIdSet: selectedIds,
     selectedFeatures,
+    ...(manySelected && { manySelected }),
     customRendererContext,
     layerAwareRenderers,
     otherRenderers,
@@ -676,11 +699,8 @@ export function planCopies(
   });
 }
 
-/** The features of the ids selected, read from the features of the whole document in order */
-function selectedOfEvery(store: DocumentAccess, ids: ReadonlySet<string>): Map<string, Feature> {
-  const out = new Map<string, Feature>();
-  for (const feature of store.listFeaturesInOrder()) {
-    if (ids.has(feature.id)) out.set(feature.id, feature);
-  }
-  return out;
-}
+/** No feature selected (the IDs read when the selection UI is drawn from the rows) */
+const NO_FEATURE_IDS: Pick<SelectedFeatureIds, 'has' | 'iterate'> = Object.freeze({
+  has: () => false,
+  iterate: () => [][Symbol.iterator](),
+});

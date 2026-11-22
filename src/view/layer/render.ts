@@ -74,7 +74,7 @@ export function renderLayers(
   r: Renderers,
   store: DocumentAccess,
   features: Feature[],
-  selectedIdSet: Set<string>,
+  selectedIdSet: Pick<ReadonlySet<string>, 'has'>,
   defaultProjectionData: ProjectionData,
   zoom: number,
   customRenderers: Map<string, FeatureTypeHandler['renderer']>,

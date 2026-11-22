@@ -29,6 +29,7 @@ import {
   compareRowKeys,
   type DeltaPart,
   type DeltaRowsChange,
+  flagBitOf,
   type GroupVersion,
   type GroupVersionReceiver,
   geometryAt,
@@ -87,6 +88,8 @@ const TYPE_AT = rowColumnLayoutOf(ROW_COLUMNS).wholes.indexOf('type');
 const STYLE_AT = rowColumnLayoutOf(ROW_COLUMNS).wholes.indexOf('style');
 /** The place of the column of the geometry in the `shape` columns of a page */
 const GEOMETRY_AT = rowColumnLayoutOf(ROW_COLUMNS).shapes.indexOf('geometry');
+/** The bit of the flag `locked` in the flags of a row of a page */
+const LOCKED_BIT = flagBitOf(rowColumnLayoutOf(ROW_COLUMNS), 'locked');
 
 /**
  * The bits of the copy of the state of a row that leave it out of the rows drawn: hidden by its own
@@ -132,6 +135,8 @@ export interface DrawnRows {
   styleEpochOf(number: number): number;
   /** Whether a row has a geometry */
   hasGeometry(group: RowGroup, row: number): boolean;
+  /** Whether a row is locked by its own flag (not by its group or its layer) */
+  lockedOf(group: RowGroup, row: number): boolean;
   /** The reference of a row of a group */
   refOf(group: RowGroup, row: number): number;
   /** The id of the feature of a reference (undefined for none) */
@@ -210,6 +215,7 @@ function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
       if (shapes && shapes.types[row] >= 0) return true;
       return group.geometries?.geometry(row) !== undefined;
     },
+    lockedOf: (group, row) => (group.data.flags[row] & LOCKED_BIT) !== 0,
     refOf: (group, row) => group.data.rows[row],
     idOf: (ref) => pages.ids.idOf(ref),
     refOfId: (id) => document.rows.getRowRef(id),

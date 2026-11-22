@@ -23,6 +23,7 @@ import type {
 } from '../../store/types.js';
 import type { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import type { AuxiliaryHandleContext } from './auxiliary-handles.js';
+import type { ManySelection } from './bulk-selection.js';
 import type { ThinningViewport, VisibleHandleSet } from './handle-thinning.js';
 import { computeVisibleHandleSet, shouldThinHandles } from './handle-thinning.js';
 import type { HandleInfo } from './handles.js';
@@ -144,6 +145,51 @@ export function renderSelectionUI(
       scope,
     );
   }
+}
+
+/**
+ * Draw the selection UI of a selection of many features, but for the frames of its rows (drawn on
+ * the GPU, `bulk-frames.ts`): the frames of the features framed from their features (the images,
+ * the custom types, the features with companions, the ones drawn in this frame), the frame of every
+ * feature selected and its resize and rotate handles, as for a selection of several features
+ *
+ * @param framed The features framed from their features, on this copy of the world
+ * @param many What the frame of every feature selected is drawn with
+ * @param isLocked Whether the selection cannot be edited: no handle is drawn then
+ * @param withFrame Whether the frame of every feature selected and its handles are drawn on this
+ *   copy of the world
+ */
+export function renderManySelectionUI(
+  framed: readonly Feature[],
+  many: Pick<ManySelection, 'bbox' | 'hasArea'>,
+  zoom: number,
+  projectionData: CustomRenderMethodInput['defaultProjectionData'],
+  deps: SelectionUIDrawerDeps,
+  dragState: DragState | null,
+  isLocked: boolean,
+  withFrame: boolean,
+): void {
+  const { selectionUIRenderer, selectionHandlesRenderer, pointInstanceRenderer, map } = deps;
+  if (!selectionUIRenderer || !selectionHandlesRenderer || !many.bbox) return;
+  if (pointInstanceRenderer) pointInstanceRenderer.setProjectionData(projectionData);
+  const coordinateTransform = createCoordinateTransform(map);
+  selectionUIRenderer.setTransform(coordinateTransform);
+  selectionUIRenderer.setProjectionData(projectionData);
+  selectionHandlesRenderer.setTransform(coordinateTransform);
+  selectionHandlesRenderer.setProjectionData(projectionData);
+  if (!withFrame) {
+    selectionUIRenderer.drawMany(framed, null, zoom, dragState);
+    return;
+  }
+  selectionUIRenderer.drawMany(framed, many.bbox, zoom, dragState);
+  if (isLocked || !many.hasArea) return;
+  const operation = dragState?.operation ?? null;
+  let bbox = many.bbox;
+  const rotateInfo = dragState?.rotateInfo;
+  if (operation === 'rotate' && rotateInfo) {
+    bbox = rotateBoundingBox(rotateInfo.initialBbox, rotateInfo.currentAngle);
+  }
+  drawMultiSelectionHandles(bbox, zoom, selectionHandlesRenderer, operation);
 }
 
 /**
@@ -538,7 +584,19 @@ function renderMultiSelectionHandles(
   if (!hasNonPoint) {
     return;
   }
+  drawMultiSelectionHandles(bbox, zoom, selectionHandlesRenderer, operation);
+}
 
+/**
+ * Draw the resize and rotate handles of the box of a selection of several features, as the drag
+ * shows them
+ */
+function drawMultiSelectionHandles(
+  bbox: BoundingBoxCoords,
+  zoom: number,
+  selectionHandlesRenderer: SelectionHandlesRenderer,
+  operation: DragState['operation'] | null,
+): void {
   let showResize = true;
   let showRotate = true;
 

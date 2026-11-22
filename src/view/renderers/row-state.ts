@@ -16,7 +16,8 @@
  *   read elsewhere)
  * - bits 1 to 3: the set of rows moving together the row is in (0 for none). Nothing writes it
  *   yet: the drawing writes 0
- * - bit 4: the row is selected (the drawing of the rows draws it as it draws any row)
+ * - bit 4: the row is selected (the drawing of the rows draws it as it draws any row; the frames
+ *   of a selection of many features are drawn for the rows with it, `ui/bulk-frames.ts`)
  */
 
 import type { GpuLedger } from '../gpu-ledger.js';
@@ -54,6 +55,16 @@ uint readRowState(int index) {
 
 bool rowStateHidden(uint state) {
     return (state & ${ROW_STATE_HIDDEN}u) != 0u;
+}
+`;
+
+/**
+ * The GLSL that reads the mark of a row selected from its byte: `rowStateSelected(state)` (after
+ * {@link ROW_STATE_GLSL})
+ */
+export const ROW_STATE_SELECTED_GLSL = `
+bool rowStateSelected(uint state) {
+    return (state & ${ROW_STATE_SELECTED}u) != 0u;
 }
 `;
 

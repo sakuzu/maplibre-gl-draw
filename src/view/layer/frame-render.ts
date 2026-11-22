@@ -13,8 +13,10 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
+import type { DrawnRows } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import { isInteractionBlocked } from '../../store/lock.js';
+import type { Feature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { TerrainContext } from '../terrain/context.js';
 import {
@@ -24,10 +26,13 @@ import {
   setTerrainShadeLight,
   setTerrainSurfacesFlattened,
 } from '../terrain/state.js';
+import { type BulkFrameRows, framedByFeature } from '../ui/bulk-frames.js';
+import type { ManySelection } from '../ui/bulk-selection.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 import {
   renderFollowedVertices,
   renderGlobalAuxiliaryHandles,
+  renderManySelectionUI,
   renderSelectionUI,
 } from '../ui/selection-ui-drawer.js';
 import type { DrapePlanner } from './drape-planner.js';
@@ -42,7 +47,7 @@ import {
 } from './gl-state.js';
 import { renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
-import type { TableLayerRenderer } from './table-retained.js';
+import type { DrawnRowGroup, TableLayerRenderer } from './table-retained.js';
 
 /**
  * The datasets as the per-layer rendering takes them (the type is owned by
@@ -262,9 +267,12 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   // locked). The box is shown even in read-only or under an interaction lock (so that a viewer
   // also gets the on-map feedback of "what is selected", in the same grammar as the read-only
   // mode of someone with edit permission).
-  const selectionLocked = f.selectedFeatures.some((feature) =>
-    isInteractionBlocked(feature, store),
-  );
+  // A selection of many features is drawn from its rows: the frames of its rows on the GPU, and
+  // the frame of all of them with its handles from what is read of the rows selected
+  const many = f.manySelected ? manySelectionOf(deps, f, f.manySelected) : null;
+  const selectionLocked = many
+    ? many.selection.locked || store.isReadOnly() || store.isInteractionLocked()
+    : f.selectedFeatures.some((feature) => isInteractionBlocked(feature, store));
   const selectionUIDeps = {
     selectionUIRenderer: r.selectionUIRenderer,
     selectionHandlesRenderer: r.selectionHandlesRenderer,
@@ -281,15 +289,49 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   // antimeridian is drawn on the copy the feature is drawn on)
   for (const copy of f.copies) {
     applyCopy(deps, copy);
-    renderSelectionUI(
-      copy.selectedFeatures,
-      f.zoom,
-      copy.projectionData,
-      selectionUIDeps,
-      store.getDragState(),
-      store.getVertexSelection(),
-      selectionLocked,
-    );
+    if (many) {
+      r.boxSelectionRenderer.bulkFrames.drawGroups(
+        {
+          shaderData: f.shaderData,
+          projectionData: copy.projectionData,
+          offsetUniforms: copy.offsetUniforms,
+          zoom: f.zoom,
+          config: r.selectionUIRenderer.config,
+          terrain: terrainContext,
+          longestSide: many.selection.longestSide,
+        },
+        many.rows,
+        many.groups,
+        many.selection.groups,
+      );
+      f.restoreBlendState();
+      // The features framed from their features, on the copy they are drawn on; the frame of
+      // all of them on the stored copy
+      const framed =
+        f.copies.length === 1 || !copy.view
+          ? many.framed
+          : many.framed.filter((feature) => copy.view?.getVisibleIds().has(feature.id));
+      renderManySelectionUI(
+        framed,
+        many.selection,
+        f.zoom,
+        copy.projectionData,
+        selectionUIDeps,
+        store.getDragState(),
+        selectionLocked,
+        copy.lngShift === 0,
+      );
+    } else {
+      renderSelectionUI(
+        copy.selectedFeatures,
+        f.zoom,
+        copy.projectionData,
+        selectionUIDeps,
+        store.getDragState(),
+        store.getVertexSelection(),
+        selectionLocked,
+      );
+    }
     // The handles of the extensions that belong to no feature, while they can be grabbed
     if (globalHandlesShown) {
       renderGlobalAuxiliaryHandles(
@@ -343,6 +385,9 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     }
   }
   applyCopy(deps, f.baseCopy);
+  // The frames of the rows of the groups not drawn go; everything goes with no selection of many
+  if (many) r.boxSelectionRenderer.bulkFrames.endFrame();
+  else r.boxSelectionRenderer.bulkFrames.releaseAll();
 
   restoreSegmentGlState(gl, f);
 
@@ -359,4 +404,106 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   // The entry point of the quads lasts only for this frame (it is always removed so that it is
   // not read from outside the rendering)
   if (f.quadDrapeFrame) setQuadDrapeFrame(terrainContext, null);
+}
+
+/** What the selection UI of a selection of many features is drawn with in a frame */
+interface ManySelectionFrame {
+  readonly selection: ManySelection;
+  /** How the frames of the rows are read */
+  readonly rows: BulkFrameRows;
+  /** The row groups drawn in the frame */
+  readonly groups: readonly DrawnRowGroup[];
+  /** The features selected framed from their features, drawn in the frame */
+  readonly framed: readonly Feature[];
+}
+
+/**
+ * Reads what the selection UI of a selection of many features is drawn with: the row groups
+ * drawn, the rows selected (read again only when something they come from changed) and the
+ * features drawn in the frame that are framed from their features (null without the drawing of
+ * the rows)
+ */
+function manySelectionOf(
+  deps: FrameRenderDeps,
+  f: FrameState,
+  reader: DrawnRows,
+): ManySelectionFrame | null {
+  const table = deps.tableRetained;
+  if (!table) return null;
+  const { store, customRenderers, featureCompanions, selectionScope } = deps;
+  const extensions = selectionScope.extensions;
+  const groups: DrawnRowGroup[] = [];
+  const layerOf = new Map<unknown, string>();
+  const generations = new Map<string, number>();
+  table.forEachDrawnGroup((entry) => {
+    groups.push(entry);
+    layerOf.set(entry.group, entry.layerId);
+    generations.set(entry.layerId, entry.generation);
+  });
+  const classification = [
+    ...generations.entries(),
+    ['companions', featureCompanions.generation()],
+    ['types', customRenderers.size],
+  ].join(',');
+  const rows: BulkFrameRows = {
+    reader,
+    revision: `${reader.revision}|${classification}`,
+    framedByFeature: (type) =>
+      type === 'Image' ||
+      customRenderers.has(type) ||
+      extensions.getBoundingBoxCalculator(type) !== undefined,
+    companions: featureCompanions.any(),
+    pointExtent: (type, style, at) => {
+      // The extent of the marker is read from the type and the style alone, as the frame of a
+      // point reads it from its feature
+      const extent = extensions.resolvePointFrameExtent({
+        id: '',
+        type,
+        geometry: { type: 'Point', coordinates: at },
+        layerId: '',
+        groupId: undefined,
+        properties: {},
+        style: style ?? {},
+        visible: true,
+        locked: false,
+      } as Feature);
+      return [extent.halfWidth, extent.halfHeight];
+    },
+  };
+  const selection = deps.renderers.boxSelectionRenderer.bulkFrames.selection.read(store, {
+    reader,
+    framedByFeature: (type, group, row) =>
+      framedByFeature(rows, type, () => table.rowDrawnAtOnce(group, row)),
+    layerOf: (group) => layerOf.get(group),
+    classification,
+    extensions,
+  });
+  const framed: Feature[] = [];
+  table.forEachDrawnAtOnce((feature, group, row, selected) => {
+    if (!selected) return;
+    if (framedByFeature(rows, feature.type, () => table.rowDrawnAtOnce(group, row))) {
+      framed.push(feature);
+    }
+  });
+  // The images the analytic drape draws are not drawn at once: their features are those of the
+  // drape
+  const chosen = store.getSelection();
+  for (const feature of [...f.pendingQuads.map((quad) => quad.feature), ...f.drapeFallbackQuads]) {
+    if (selectedIn(chosen, feature)) framed.push(feature);
+  }
+  return { selection, rows, groups, framed };
+}
+
+/** Whether a feature is in a selection (by its ID, its group or its layer) */
+function selectedIn(selection: ReturnType<DocumentAccess['getSelection']>, feature: Feature) {
+  switch (selection.type) {
+    case 'feature':
+      return selection.ids.has(feature.id);
+    case 'group':
+      return feature.groupId !== undefined && selection.ids.has(feature.groupId);
+    case 'layer':
+      return selection.ids.has(feature.layerId);
+    default:
+      return false;
+  }
 }

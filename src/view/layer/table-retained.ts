@@ -50,6 +50,10 @@
  *
  * For tests and measurements it can record the ranges it draws in order (`recordDraws`) and counts
  * its work (`stats`).
+ *
+ * The frames of a selection of many features (`ui/bulk-frames.ts`) read what it drew in a frame
+ * (`forEachDrawnGroup`, `forEachDrawnAtOnce`, `rowDrawnAtOnce`): the row groups with the textures
+ * of the state of their rows, and the features drawn at once. These reads change nothing.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -1121,6 +1125,67 @@ export class TableLayerRenderer {
     this.atOnce.clear();
     this.renderers = null;
     this.rows = null;
+  }
+
+  // === What the frames of a selection of many features read ===
+
+  /** What the drawing reads of the rows of the Store */
+  get rowsRead(): DrawnRows {
+    return this.reader;
+  }
+
+  /**
+   * Calls `fn` with every row group (and every part of the delta) of the layers whose rows were
+   * drawn in the last frame, with the texture of the state of its rows as it is written (null
+   * before it is made). Nothing is changed
+   */
+  forEachDrawnGroup(fn: (group: DrawnRowGroup) => void): void {
+    for (const [layerId, cache] of this.layers) {
+      if (cache.drawnFrame !== this.frameCount) continue;
+      if (cache.layer?.visible === false || this.client.hiddenLayers.has(layerId)) continue;
+      for (const groupCache of [...cache.groups.values(), ...cache.extras.values()]) {
+        fn({
+          layerId,
+          group: groupCache.group,
+          texture: groupCache.texture,
+          generation: cache.generation,
+          drawnAtOnce: (row) => drawnAtOnceIn(groupCache, row),
+        });
+      }
+    }
+  }
+
+  /**
+   * Whether a row is drawn at once from its feature, as the rows of a chunk of its group are cut
+   * now (false for a row of a group not drawn, and for the rows the analytic drape draws)
+   */
+  rowDrawnAtOnce(group: RowGroup, row: number): boolean {
+    const groupCache = this.cacheOfGroup(group);
+    return groupCache ? drawnAtOnceIn(groupCache, row) : false;
+  }
+
+  /**
+   * Calls `fn` with every feature drawn at once in the last frame (the features the drawing
+   * keeps of the rows drawn at once), with the row it was drawn from and whether the byte of the
+   * state of the row marks it as selected. Nothing is changed, and no feature is made
+   */
+  forEachDrawnAtOnce(
+    fn: (feature: Feature, group: RowGroup, row: number, selected: boolean) => void,
+  ): void {
+    if (this.atOnce.size === 0) return;
+    const reader = this.reader;
+    for (const [id, kept] of this.atOnce) {
+      if (kept.frame !== this.frameCount) continue;
+      const ref = reader.refOfId(id);
+      const place = ref === undefined ? undefined : reader.placeOf(ref);
+      if (!place) continue;
+      const groupCache = this.cacheOfGroup(place.group);
+      const selected =
+        groupCache !== undefined &&
+        groupCache.stateVersion >= 0 &&
+        (groupCache.bytes[place.row] & ROW_STATE_SELECTED) !== 0;
+      fn(kept.feature, place.group, place.row, selected);
+    }
   }
 
   private releaseLayer(cache: LayerCache): void {
@@ -2211,6 +2276,34 @@ export class TableLayerRenderer {
     }
     return false;
   }
+}
+
+/**
+ * A row group drawn in a frame, as the frames of a selection of many features read it
+ *
+ * @internal
+ */
+export interface DrawnRowGroup {
+  readonly layerId: string;
+  readonly group: RowGroup;
+  /** The texture of the state of its rows (null before it is made) */
+  readonly texture: RowStateTexture | null;
+  /** Advances whenever the rows of its layer are classified again */
+  readonly generation: number;
+  /** Whether a row of it is drawn at once from its feature */
+  drawnAtOnce(row: number): boolean;
+}
+
+/**
+ * Whether a row of a group is in a chunk drawn at once (the rows the analytic drape draws are
+ * not: they are passed over there)
+ */
+function drawnAtOnceIn(groupCache: GroupCache, row: number): boolean {
+  if (groupCache.drawing === 'draped') return false;
+  for (const chunk of groupCache.chunks ?? []) {
+    if (row >= chunk.range.from && row < chunk.range.to) return chunk.type === 'immediate';
+  }
+  return false;
 }
 
 /** A chunk for a range of rows (none for a range of a chunk without a box) */

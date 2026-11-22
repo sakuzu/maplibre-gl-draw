@@ -21,6 +21,7 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DrawDocument } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
+import { computeBoundingBox } from '../view/ui/selection-ui/bounding-box.js';
 import {
   compareSets,
   describeComparison,
@@ -32,8 +33,12 @@ import { type Bundle, bundlePage, type E2EWindow, launchBrowser, openMapPage } f
 import {
   type Call,
   CUSTOM_TYPE,
+  FRAME_COLOR,
   imageWarmUp,
   KINDS,
+  MANY_COUNTS,
+  MANY_PARTS,
+  MANY_SCENES,
   MAP_SETUPS,
   MAPS,
   type MapName,
@@ -152,7 +157,7 @@ async function openPage(map: MapName): Promise<Page> {
 }
 
 /** Writes the document of a scene, makes its calls, and reads the pixels once it is drawn */
-async function take(page: Page, scene: PictureScene): Promise<Picture> {
+async function take(page: Page, scene: Pick<PictureScene, 'document' | 'calls'>): Promise<Picture> {
   const { width, height, base64 } = await page.evaluate(
     async ({ document, calls, frames }) => {
       const { draw, map } = window as unknown as E2EWindow;
@@ -295,6 +300,162 @@ for (const map of MAPS) {
           difference(taken.get(scene.name) as Picture, plain).pixels,
           scene.name,
         ).toBeGreaterThan(0);
+      }
+    });
+  });
+}
+
+// ============================================================================
+// A selection of many features
+// ============================================================================
+
+/** A box of the drawing buffer, in device px from its top left (`x1` and `y1` excluded) */
+interface PixelBox {
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
+}
+
+/**
+ * The box of the drawing buffer the frame of a part of a scene of a selection of many features
+ * lies in: the box of the feature on the screen, and the pixels of the part around it
+ */
+async function pixelBoxOf(
+  page: Page,
+  scene: (typeof MANY_SCENES)[number],
+  part: keyof typeof MANY_PARTS,
+): Promise<PixelBox> {
+  const { id, padPx } = MANY_PARTS[part];
+  const feature = scene.document.features.find((f) => f.id === id);
+  const bbox = feature ? computeBoundingBox(feature as never) : null;
+  if (!bbox) throw new Error(`no box of the part ${part}`);
+  return page.evaluate(
+    ({ corners, pad }) => {
+      const { map } = window as unknown as E2EWindow;
+      const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+      const ratio = gl.drawingBufferWidth / map.getCanvas().clientWidth;
+      const points = corners.map((c) => map.project(c as [number, number]));
+      const xs = points.map((p) => p.x * ratio);
+      const ys = points.map((p) => p.y * ratio);
+      return {
+        x0: Math.max(0, Math.floor(Math.min(...xs) - pad * ratio)),
+        y0: Math.max(0, Math.floor(Math.min(...ys) - pad * ratio)),
+        x1: Math.min(gl.drawingBufferWidth, Math.ceil(Math.max(...xs) + pad * ratio)),
+        y1: Math.min(gl.drawingBufferHeight, Math.ceil(Math.max(...ys) + pad * ratio)),
+      };
+    },
+    { corners: [bbox.topLeft, bbox.topRight, bbox.bottomRight, bbox.bottomLeft], pad: padPx },
+  );
+}
+
+/** The pixels of a box of a picture, from its top row */
+function pixelsIn(picture: Picture, box: PixelBox): Uint8Array {
+  const width = box.x1 - box.x0;
+  const out = new Uint8Array(width * (box.y1 - box.y0) * 4);
+  for (let y = box.y0; y < box.y1; y++) {
+    const row = picture.height - 1 - y;
+    const from = (row * picture.width + box.x0) * 4;
+    out.set(picture.pixels.subarray(from, from + width * 4), (y - box.y0) * width * 4);
+  }
+  return out;
+}
+
+/** Whether a pixel shows the color of the frames, whatever covers it */
+function isFrame(pixels: Uint8Array, at: number): boolean {
+  const [r, g, b] = FRAME_COLOR;
+  const alpha = pixels[at + 3];
+  if (alpha < 96) return false;
+  // The color of a pixel the line covers in part comes in scaled by its coverage
+  const scale = alpha / 255;
+  return (
+    Math.abs(pixels[at] - r * scale) < 48 &&
+    Math.abs(pixels[at + 1] - g * scale) < 48 &&
+    Math.abs(pixels[at + 2] - b * scale) < 48
+  );
+}
+
+/** The extent of the pixels of the color of the frames in a box (null for none) */
+function frameExtentIn(picture: Picture, box: PixelBox): PixelBox | null {
+  const pixels = pixelsIn(picture, box);
+  const width = box.x1 - box.x0;
+  let x0 = Number.POSITIVE_INFINITY;
+  let y0 = Number.POSITIVE_INFINITY;
+  let x1 = Number.NEGATIVE_INFINITY;
+  let y1 = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (!isFrame(pixels, i)) continue;
+    const x = (i / 4) % width;
+    const y = Math.floor(i / 4 / width);
+    x0 = Math.min(x0, x);
+    y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x + 1);
+    y1 = Math.max(y1, y + 1);
+  }
+  return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
+}
+
+for (const map of MAPS) {
+  describe(`the pictures of a selection of many features on the ${map} map`, () => {
+    const scenes = MANY_SCENES.filter((scene) => scene.map === map);
+    const taken = new Map<number, Picture>();
+    const boxes = new Map<keyof typeof MANY_PARTS, PixelBox>();
+    let page: Page;
+
+    beforeAll(async () => {
+      page = await openPage(map);
+    }, browserTimeout(90_000));
+
+    afterAll(async () => {
+      await page?.close();
+    });
+
+    for (const scene of scenes) {
+      it(scene.name, async () => {
+        const picture = await take(page, scene);
+        taken.set(scene.count, picture);
+        if (OUT) await writePicture(OUT, scene.name, picture);
+        for (const part of Object.keys(MANY_PARTS) as (keyof typeof MANY_PARTS)[]) {
+          boxes.set(part, await pixelBoxOf(page, scene, part));
+        }
+      });
+    }
+
+    /** The pictures of the two counts */
+    const pictures = (): [Picture, Picture] => {
+      const [few, many] = MANY_COUNTS.map((count) => taken.get(count));
+      if (!few || !many) throw new Error('the pictures of the two counts were not taken');
+      return [few, many];
+    };
+
+    it('frame the image turned with it the same way at both counts', () => {
+      const [few, many] = pictures();
+      const box = boxes.get('image') as PixelBox;
+      expect(frameExtentIn(few, box)).not.toBeNull();
+      expect(Buffer.from(pixelsIn(many, box)).equals(Buffer.from(pixelsIn(few, box)))).toBe(true);
+    });
+
+    it('frame no feature not selected at either count', () => {
+      const [few, many] = pictures();
+      const box = boxes.get('free') as PixelBox;
+      // The frame of all of them may pass by it, the same at both counts
+      expect(Buffer.from(pixelsIn(many, box)).equals(Buffer.from(pixelsIn(few, box)))).toBe(true);
+    });
+
+    it('frame an area and a point at the same size at both counts', () => {
+      const [few, many] = pictures();
+      for (const part of ['area', 'point'] as const) {
+        const box = boxes.get(part) as PixelBox;
+        const one = frameExtentIn(few, box);
+        const other = frameExtentIn(many, box);
+        expect(one, part).not.toBeNull();
+        expect(other, part).not.toBeNull();
+        for (const side of ['x0', 'y0', 'x1', 'y1'] as const) {
+          expect(
+            Math.abs((other as PixelBox)[side] - (one as PixelBox)[side]),
+            `${part} ${side}`,
+          ).toBeLessThanOrEqual(1);
+        }
       }
     });
   });

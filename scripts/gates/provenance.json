@@ -371,6 +371,20 @@
       "from": "src/feature-table/selection.test.ts",
       "to": "src/api/impl/row-id-set.test.ts",
       "note": "only the bound of a set of 100,000 rows held in less than 500,000 bytes"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/ui/bulk-frames.ts",
+      "to": "src/view/ui/bulk-frames.ts",
+      "note": "only the frames of the rows drawn in one instanced draw per row group, four sides a row, from the boxes of the rows and the byte of their state, with the miters and the coverage of the line of the frames; the boxes are read through the reader of the drawing, the ledger is that of the instance, the rows framed are marked as selected by the selection itself, and the move of the rows by their moving set, the scale of the frame of the map and the frame of a point turned are not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "36086b35d8e93d48c8df282fb988d81e4f3b2713",
+      "from": "src/view/ui/selection-ui-drawer.ts",
+      "to": "src/view/ui/selection-ui-drawer.ts",
+      "note": "only the frame of every feature of a selection of many features drawn from the box of all of them, with its resize and rotate handles when one has an area and none is locked (renderManySelectionUI); the box is read from the rows selected and the selection held as a set, and the move of the frame while the rows are dragged is not brought"
     }
   ]
 }
