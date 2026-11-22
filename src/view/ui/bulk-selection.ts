@@ -22,7 +22,7 @@
  */
 
 import { type DrawnRows, pageRowBox, type RowGroup } from '../../store/built-in/drawn-rows.js';
-import type { DocumentAccess } from '../../store/document-access.js';
+import type { DocumentAccess, InstanceDocument } from '../../store/document-access.js';
 import type { Feature, Group, Layer, Selection } from '../../store/types.js';
 import type { BoundingBoxCoords, SelectionExtensionRegistry } from './selection-ui/index.js';
 import { computeBoundingBox, hasZeroArea } from './selection-ui/index.js';
@@ -87,7 +87,10 @@ export class SelectedRows {
    * The number of features selected: the IDs of a selection of features, the members of the
    * groups or the rows of the layers selected (read once per selection and change of the rows)
    */
-  countOf(store: DocumentAccess, reader: DrawnRows): number {
+  countOf(
+    store: DocumentAccess & Pick<InstanceDocument, 'countGroupFeatures'>,
+    reader: DrawnRows,
+  ): number {
     const selection = store.getSelection();
     const known = this.#count;
     if (
@@ -104,9 +107,7 @@ export class SelectedRows {
         count = selection.ids.count();
         break;
       case 'group':
-        for (const id of selection.ids.iterate()) {
-          count += store.getGroup(id)?.featureIds?.length ?? 0;
-        }
+        for (const id of selection.ids.iterate()) count += store.countGroupFeatures(id);
         break;
       case 'layer':
         for (const id of selection.ids.iterate()) count += reader.table(id)?.rowCount ?? 0;
