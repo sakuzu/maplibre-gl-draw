@@ -12,7 +12,7 @@ import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
 import type { GroupShell } from './groups.js';
-import { insertGroup, prepareGroupShell } from './groups.js';
+import { prepareGroupShell } from './groups.js';
 import { isNativeFormat, toFeatureCollection } from './import-export/format-detection.js';
 import { exportGeoJSON } from './import-export/geojson-export.js';
 import { prepareGeoJSON } from './import-export/geojson-import.js';
@@ -111,7 +111,8 @@ export function createDocument(
       const featureIds = result.featureIds.filter(
         (id) => store.getFeature(id)?.layerId === first.layerId,
       );
-      insertGroup(store, { ...group, layerId: first.layerId, featureIds });
+      // The group stands where the frontmost of them stood
+      store.createGroupWith({ ...group, layerId: first.layerId, featureIds: [] }, featureIds);
       result.groupId = group.id;
     }
     return result;

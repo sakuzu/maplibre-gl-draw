@@ -5,9 +5,7 @@
  * `draw.groups`: the groups of the document
  */
 
-import type { DocumentAccess } from '../../store/document-access.js';
-import { listEveryFeatureInOrder } from '../../store/ordering.js';
-import type { Feature as StoredFeature, Group as StoredGroup } from '../../store/types.js';
+import type { Group as StoredGroup } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
 import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from '../model.js';
@@ -51,21 +49,15 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     return group;
   };
 
-  /** Every group in stacking order, from the back; a group no layer lists comes last */
-  const inOrder = (): StoredGroup[] => {
-    const result: StoredGroup[] = [];
-    for (const layerId of store.getLayerOrder()) {
-      for (const itemId of store.getLayer(layerId)?.items ?? []) {
-        const group = store.getGroup(itemId);
-        if (group) result.push(group);
-      }
-    }
-    if (result.length < store.listGroups().length) {
-      const listed = new Set(result.map((group) => group.id));
-      result.push(...store.listGroups().filter((group) => !listed.has(group.id)));
-    }
-    return result;
-  };
+  /** Every group in stacking order, from the back; a group that stands in no layer comes last */
+  const inOrder = (): StoredGroup[] => inStackingOrder(store.listGroups().map((group) => group.id));
+
+  /** The groups of the IDs given in stacking order, from the back */
+  const inStackingOrder = (ids: readonly string[]): StoredGroup[] =>
+    store
+      .sortGroupsInStackingOrder(ids)
+      .map((id) => store.getGroup(id))
+      .filter((group): group is StoredGroup => group !== undefined);
 
   const matching = (filter?: GroupFilter): StoredGroup[] => {
     const entries = filterEntries(filter, FILTER_KEYS);
@@ -93,7 +85,10 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     }
   }
 
-  const createOne = (prepared: StoredGroup): void => insertGroup(store, prepared);
+  /** Creates a group where its frontmost feature stood, in the transaction of the caller */
+  const createOne = ({ group, featureIds }: PreparedGroup): void => {
+    store.createGroupWith(group, featureIds);
+  };
 
   return {
     get: (id) => store.getGroup(id),
@@ -122,7 +117,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       const prepared = prepareGroup(deps, input, new Set(), new Set());
       if (store.isReadOnly()) return null;
       if (store.transactUntilRefused(() => createOne(prepared)) === null) return null;
-      return store.getGroup(prepared.id) ?? null;
+      return store.getGroup(prepared.group.id) ?? null;
     },
 
     createMany(inputs) {
@@ -131,7 +126,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       const claimed = new Set<string>();
       const prepared = inputs.map((input) => {
         const group = prepareGroup(deps, input, pending, claimed);
-        pending.add(group.id);
+        pending.add(group.group.id);
         for (const featureId of group.featureIds) claimed.add(featureId);
         return group;
       });
@@ -141,7 +136,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
         return true;
       });
       if (written === null) return null;
-      return prepared.map((group) => store.getGroup(group.id) as StoredGroup);
+      return prepared.map(({ group }) => store.getGroup(group.id) as StoredGroup);
     },
 
     update(id, patch) {
@@ -204,41 +199,13 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
 
   function moveMany(ids: readonly string[], to: MoveTarget): boolean {
     const wanted = new Set(requireIds(ids).map((id) => require(id).id));
-    const groups = inOrder().filter((group) => wanted.has(group.id));
+    const groups = inStackingOrder([...wanted]);
     const target = resolveMoveTarget(store, to);
     if (target.kind !== 'layer') throw invalidInput('A group can only be moved to a layer');
     if (store.isReadOnly()) return false;
     if (target.locked || groups.some((group) => groupLocked(store, group))) return false;
     return moveGroups(store, groups, target.layer, target.index);
   }
-}
-
-/**
- * Creates a group where its frontmost member was, in the transaction of the caller
- *
- * @internal
- */
-export function insertGroup(store: DocumentAccess, prepared: StoredGroup): void {
-  const members = new Set(prepared.featureIds);
-  const layer = store.getLayer(prepared.layerId);
-  if (layer) {
-    // The group takes the place of its frontmost member standing in the layer
-    let at = -1;
-    for (let i = layer.items.length - 1; i >= 0; i--) {
-      if (members.has(layer.items[i])) {
-        at = i;
-        break;
-      }
-    }
-    const items: string[] = [];
-    layer.items.forEach((itemId, i) => {
-      if (i === at) items.push(prepared.id);
-      if (!members.has(itemId)) items.push(itemId);
-    });
-    if (at === -1) items.push(prepared.id);
-    store.updateLayer(layer.id, { items });
-  }
-  store.createGroup(prepared);
 }
 
 /** The fields of a group that do not depend on its features */
@@ -284,13 +251,21 @@ export function prepareGroupShell(
   };
 }
 
+/** A group checked and built from an input, with the IDs of its features in stacking order */
+interface PreparedGroup {
+  /** The group to store */
+  group: StoredGroup;
+  /** Its features, from the back */
+  featureIds: string[];
+}
+
 /** Checks an input and builds the group to store; throws DrawError on a wrong input */
 function prepareGroup(
   deps: ResourceDeps,
   input: GroupInput,
   pending: ReadonlySet<string>,
   claimed: ReadonlySet<string>,
-): StoredGroup {
+): PreparedGroup {
   const { store } = deps;
   requireRecord(input, 'The input');
   const ids = requireIds(input.featureIds, 'featureIds');
@@ -311,16 +286,9 @@ function prepareGroup(
   }
   const shell = prepareGroupShell(deps, input, INPUT_KEYS, pending);
   return {
-    ...shell,
-    layerId,
-    featureIds: inStackingOrder(store, members).map((feature) => feature.id),
+    group: { ...shell, layerId, featureIds: [] },
+    featureIds: store.sortInStackingOrder(ids),
   };
-}
-
-/** The features in stacking order, from the back */
-function inStackingOrder(store: DocumentAccess, features: StoredFeature[]): StoredFeature[] {
-  const position = new Map(listEveryFeatureInOrder(store).map((f, index) => [f.id, index]));
-  return [...features].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
 }
 
 /** Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch */
