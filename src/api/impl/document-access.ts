@@ -2784,10 +2784,11 @@ export function createDocumentAccess(
 
   /**
    * The key a new item takes at a place of a container: just in front of an item of the container
-   * (between it and the item in front of it), or the key of the order an item has in its own
-   * container; at the front when the item is not in the container
+   * (between it and the item in front of it), the key of the order an item has in its own
+   * container (at the front when the item is not in the container), or the key given
    */
   const keyOfPlace = (container: string, place: CreatedPlace): string => {
+    if ('key' in place) return place.key;
     if ('keyOf' in place) {
       const key = itemKeyOf(place.keyOf);
       return key ?? tailKeyOf(container);
@@ -3115,16 +3116,21 @@ export function createDocumentAccess(
   /**
    * Creates a group in its layer and puts features in it (see `DocumentMoves.createGroupWith`):
    * the group is made just in front of the frontmost of the features that stand in the layer
-   * outside a group, so that it takes its place once they have joined it
+   * outside a group, so that it takes its place once they have joined it, and they join it in the
+   * order given
    */
   const createGroupWithRows = (group: Group, featureIds: readonly string[]): void => {
     // The features are read to be written: the edit being written in parts is applied first
     for (const id of featureIds) beforeFeatureWrite?.(id);
-    const members = sortInStackingOrder([...new Set(featureIds)]);
+    const given = new Set(featureIds);
+    // The features in stacking order, to find the frontmost; they join in the order given
+    const inOrder = sortInStackingOrder([...given]);
+    const kept = new Set(inOrder);
+    const members = [...given].filter((id) => kept.has(id));
     let frontmost: string | undefined;
-    for (let i = members.length - 1; i >= 0 && frontmost === undefined; i--) {
-      const place = getFeaturePlace(members[i]);
-      if (place?.groupId === undefined && place?.layerId === group.layerId) frontmost = members[i];
+    for (let i = inOrder.length - 1; i >= 0 && frontmost === undefined; i--) {
+      const place = getFeaturePlace(inOrder[i]);
+      if (place?.groupId === undefined && place?.layerId === group.layerId) frontmost = inOrder[i];
     }
     createGroupRow(group, frontmost);
     if (members.length === 0) return;

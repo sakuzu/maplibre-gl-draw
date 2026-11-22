@@ -379,11 +379,15 @@ export interface ItemPosition {
 
 /**
  * Where a feature is created in its container (its group, or its layer when it is in no group):
- * just in front of an item of that container (a feature, or a group of the layer), or at the key
+ * just in front of an item of that container (a feature, or a group of the layer), at the key
  * of the order an item has in its own container (the copies of the features of a group, made in
- * a new group in the order of their originals)
+ * a new group in the order of their originals), or at a key of the order given (a document read,
+ * whose order of items decides the keys)
  */
-export type CreatedPlace = { readonly inFrontOf: string } | { readonly keyOf: string };
+export type CreatedPlace =
+  | { readonly inFrontOf: string }
+  | { readonly keyOf: string }
+  | { readonly key: string };
 
 /** The writes that move features and groups, and the replacements of the whole document */
 export interface DocumentMoves {
@@ -404,8 +408,8 @@ export interface DocumentMoves {
    */
   createGroupInFrontOf(group: Group, itemId: string): boolean;
   /**
-   * Creates a group in its layer and puts features in it, in one transaction: the features keep
-   * their stacking order in it, and they leave their groups (a group they leave empty is
+   * Creates a group in its layer and puts features in it, in one transaction: the features go
+   * in it in the order given, and they leave their groups (a group they leave empty is
    * deleted). The group stands where the frontmost of the features that stand in the layer
    * outside a group stood, and at the front of the layer when none does; with no feature, it is
    * created at the front of its layer, as `createGroup` creates it. An ID that is not a feature

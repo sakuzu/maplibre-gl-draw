@@ -98,9 +98,9 @@ describe('sortGroupsInStackingOrder', () => {
 });
 
 describe('createGroupWith', () => {
-  it('stands where the frontmost feature stood, its features in stacking order', () => {
+  it('stands where the frontmost feature stood, its features in the order given', () => {
     expect(doc.createGroupWith(group('g'), ['d', 'a', 'c'])).toBe(true);
-    expect(itemsOf()).toEqual(['b', 'g[a,c,d]', 'e']);
+    expect(itemsOf()).toEqual(['b', 'g[d,a,c]', 'e']);
     expect(doc.getFeature('a')?.groupId).toBe('g');
   });
 
