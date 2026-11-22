@@ -48,6 +48,7 @@ import {
   type FeaturePlace,
   type FeatureValuesRead,
   type InstanceDocument,
+  type ItemPosition,
   type MoveDestination,
   type SelectableRows,
 } from '../../store/document-access.js';
@@ -2285,6 +2286,23 @@ export function createDocumentAccess(
     return -1;
   };
 
+  /** Where an item is now, by its key (see `DocumentPlaces.getItemPosition`) */
+  const getItemPosition = (id: string): ItemPosition | undefined => {
+    if (typeof id !== 'string') return undefined;
+    writePendingPlaces();
+    const group = store.getGroup(id);
+    if (group) {
+      const index = positionOf(group.layerId, { id, key: group.orderKey });
+      return index < 0 ? undefined : { containerId: group.layerId, index };
+    }
+    const ref = tables.getRowRef(id);
+    if (ref === undefined) return undefined;
+    const fields = tables.readValues(Int32Array.of(ref), ['parent', 'orderKey']).fields;
+    const containerId = String(fields.get('parent')?.[0]);
+    const index = positionOf(containerId, { id, key: String(fields.get('orderKey')?.[0] ?? '') });
+    return index < 0 ? undefined : { containerId, index };
+  };
+
   /**
    * The keys around a position of a container, once the items given have left it: the position
    * counts from the back, and is the front when it is undefined
@@ -3515,6 +3533,25 @@ export function createDocumentAccess(
     }
   };
 
+  /**
+   * Creates a group in its layer and puts features in it (see `DocumentMoves.createGroupWith`):
+   * the group is made just in front of the frontmost of the features that stand in the layer
+   * outside a group, so that it takes its place once they have joined it
+   */
+  const createGroupWithRows = (group: Group, featureIds: readonly string[]): void => {
+    // The features are read to be written: the edit being written in parts is applied first
+    for (const id of featureIds) beforeFeatureWrite?.(id);
+    const members = sortInStackingOrder([...new Set(featureIds)]);
+    let frontmost: string | undefined;
+    for (let i = members.length - 1; i >= 0 && frontmost === undefined; i--) {
+      const place = getFeaturePlace(members[i]);
+      if (place?.groupId === undefined && place?.layerId === group.layerId) frontmost = members[i];
+    }
+    createGroupRow(group, frontmost);
+    if (members.length === 0) return;
+    placesTogether(() => moveFeaturesTo(members, { kind: 'group', groupId: group.id }));
+  };
+
   const updateGroupRow = (id: string, updates: Partial<Group>): void => {
     const base = store.getGroup(id);
     if (!base) throw new Error(`Group with id "${id}" not found`);
@@ -4586,6 +4623,25 @@ export function createDocumentAccess(
     return placed.map((entry) => entry.id);
   };
 
+  /** The groups given in stacking order (see `DocumentPlaces.sortGroupsInStackingOrder`) */
+  const sortGroupsInStackingOrder = (ids: readonly string[]): string[] => {
+    writePendingPlaces();
+    const layerAt = new Map<string, number>();
+    for (const layerId of layerIdsInOrder(false)) layerAt.set(layerId, layerAt.size);
+    const placed: Array<{ layer: number; item: Placed }> = [];
+    const standingNowhere: string[] = [];
+    for (const id of ids) {
+      const group = typeof id === 'string' ? store.getGroup(id) : undefined;
+      if (!group) continue;
+      const layer = layerAt.get(group.layerId);
+      // A group with no feature is no item of its layer
+      if (layer === undefined || countMembers(id) === 0) standingNowhere.push(id);
+      else placed.push({ layer, item: { id, key: group.orderKey } });
+    }
+    placed.sort((a, b) => a.layer - b.layer || comparePlaced(a.item, b.item));
+    return [...placed.map((entry) => entry.item.id), ...standingNowhere];
+  };
+
   /** The IDs of the features whose box meets a box, read from the spatial index of the Store */
   const findFeatureIdsInBox = (bounds: BoundingBox): string[] => {
     const cursor = tables.scan({ bbox: [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY] });
@@ -4624,6 +4680,8 @@ export function createDocumentAccess(
       write(() => void createFeatureRows(features, places)),
     createGroupInFrontOf: (group: Group, itemId: string) =>
       write(() => createGroupRow(group, itemId)),
+    createGroupWith: (group: Group, featureIds: readonly string[]) =>
+      write(() => createGroupWithRows(group, featureIds)),
     writeRowValues(layerId: string, values: RowValues, options?: { ignoreLocks?: boolean }) {
       let written: Int32Array = new Int32Array(0);
       attempt(
@@ -4770,6 +4828,8 @@ export function createDocumentAccess(
       }
     },
     sortInStackingOrder,
+    sortGroupsInStackingOrder,
+    getItemPosition,
     countFeatures: (match?: FeatureMatch) => countMatching(match),
     iterateFeatures: (match?: FeatureMatch) => iterateMatching(match),
     getOrderBefore: (containerId: string) => toldOrdersBefore?.get(containerId),

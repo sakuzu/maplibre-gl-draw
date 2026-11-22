@@ -342,6 +342,20 @@ export interface DocumentPlaces {
    * each of them alone (an ID that is not a feature is left out)
    */
   sortInStackingOrder(ids: readonly string[]): string[];
+  /**
+   * The groups of the IDs given in stacking order, from the back: what is read is each of the
+   * groups and the stacking order of the layers. The groups that stand in no layer of the
+   * stacking order (a group with no feature, which is no item of its layer, or one of a layer off
+   * the order) come after them, in the order given; an ID that is not a group is left out
+   */
+  sortGroupsInStackingOrder(ids: readonly string[]): string[];
+  /**
+   * Where an item is now: a feature in its group, or in its layer when it is in no group, and a
+   * group in its layer, read from its key without the other items of the container being read.
+   * Undefined for an ID that names neither, and for a group with no feature (no item of its
+   * layer)
+   */
+  getItemPosition(id: string): ItemPosition | undefined;
   /** Counts the features that match */
   countFeatures(match?: FeatureMatch): number;
   /**
@@ -357,6 +371,14 @@ export interface DocumentPlaces {
   getOrderBefore(containerId: string): readonly string[] | undefined;
   /** Sets the question whether the orders before a change are kept (see `getOrderBefore`) */
   watchMoves(watching: () => boolean): void;
+}
+
+/** Where an item is (see `DocumentPlaces.getItemPosition`) */
+export interface ItemPosition {
+  /** The group or the layer the item is in */
+  readonly containerId: string;
+  /** Its position there, from the back */
+  readonly index: number;
 }
 
 /**
@@ -385,6 +407,15 @@ export interface DocumentMoves {
    * (a feature in no group, or a group); at the front when the item is not in the layer
    */
   createGroupInFrontOf(group: Group, itemId: string): boolean;
+  /**
+   * Creates a group in its layer and puts features in it, in one transaction: the features keep
+   * their stacking order in it, and they leave their groups (a group they leave empty is
+   * deleted). The group stands where the frontmost of the features that stand in the layer
+   * outside a group stood, and at the front of the layer when none does; with no feature, it is
+   * created at the front of its layer, as `createGroup` creates it. An ID that is not a feature
+   * is left out
+   */
+  createGroupWith(group: Group, featureIds: readonly string[]): boolean;
   /**
    * Writes values of rows of a layer as columns, as the Store writes them (`writeRows`): the
    * fields given (`parent` and `orderKey` included), the geometries, and the deletion (0 brings a
