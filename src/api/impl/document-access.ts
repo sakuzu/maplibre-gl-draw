@@ -3795,6 +3795,27 @@ export function createDocumentAccess(
    */
   const broughtBack = new Set<number>();
 
+  /** The parents and the keys of rows, read at once, or one at a time for rows of several layers */
+  const readPlaces = (rows: Int32Array): ReadonlyMap<FeatureRowField, readonly unknown[]> => {
+    try {
+      return tables.readValues(rows, ['parent', 'orderKey']).fields;
+    } catch (error) {
+      if (!(error instanceof DrawError)) throw error;
+      const parents: unknown[] = [];
+      const keys: unknown[] = [];
+      for (let i = 0; i < rows.length; i++) {
+        const one = tables.readValues(Int32Array.of(rows[i]), ['parent', 'orderKey']).fields;
+        parents.push(one.get('parent')?.[0]);
+        keys.push(one.get('orderKey')?.[0]);
+      }
+      countWork(counts, 'objectsCreated', 2);
+      return new Map<FeatureRowField, readonly unknown[]>([
+        ['parent', parents],
+        ['orderKey', keys],
+      ]);
+    }
+  };
+
   /** Writes values of rows of a layer as columns (see `DocumentMoves.writeRowValues`) */
   const writeRowValuesNow = (
     layerId: string,
@@ -3809,8 +3830,9 @@ export function createDocumentAccess(
       const id = tables.getRowId(rows[i]);
       if (id !== undefined) beforeFeatureWrite?.(id);
     }
-    // The rows there, and those a deleted row kept: the locked ones are left out
-    const now = tables.readValues(rows, ['parent', 'orderKey']).fields;
+    // The rows there, and those a deleted row kept: the locked ones are left out. A deleted row
+    // whose group is gone is read alone (its parent names no layer the others are in)
+    const now = readPlaces(rows);
     const keep: number[] = [];
     for (let i = 0; i < rows.length; i++) {
       if (tables.getRowId(rows[i]) === undefined) continue;

@@ -624,6 +624,9 @@ export function storeWritesOf(
       const now = tables(() => document.rows.readValues(rows, ['parent', 'deleted']));
       countWork(counts, 'objectsCreated', 3);
       const parentsNow = now.fields.get('parent') ?? [];
+      const parents = fields.get('parent');
+      if (parents !== undefined && !Array.isArray(parents))
+        invalid(`${what}: parent is not an array`);
       let layerId: string | undefined;
       let broughtBack: Set<number> | undefined;
       for (let i = 0; i < rows.length; i++) {
@@ -639,8 +642,16 @@ export function storeWritesOf(
           broughtBack ??= new Set();
           broughtBack.add(rows[i]);
         }
-        const layer = layerNamed(parentsNow[i]);
-        if (layer === undefined) notFound(`${what}: no row has the reference ${rows[i]}`);
+        // A deleted row whose group is no longer there comes back under the parent given
+        const layer =
+          layerNamed(parentsNow[i]) ?? (now.deleted?.[i] ? layerNamed(parents?.[i]) : undefined);
+        if (layer === undefined) {
+          notFound(
+            now.deleted?.[i]
+              ? `${what}: the group of the deleted row ${rows[i]} is not there; give it a parent to come back to`
+              : `${what}: no row has the reference ${rows[i]}`,
+          );
+        }
         if (layerId === undefined) layerId = layer;
         else if (layer !== layerId) {
           invalid(
@@ -649,9 +660,6 @@ export function storeWritesOf(
         }
       }
       const layer = layerId as string;
-      const parents = fields.get('parent');
-      if (parents !== undefined && !Array.isArray(parents))
-        invalid(`${what}: parent is not an array`);
       checkParents(what, parents);
       // The geometries have the number of values of the layer each row is in after the write
       let valuesPerPosition = positionsOf(document, layer).valuesPerPosition as number;

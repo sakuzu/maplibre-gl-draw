@@ -123,7 +123,9 @@ export interface Store extends StoreView {
    * the rows given ({@link RowValues}). `deleted` deletes a row (non-zero), or brings back a
    * deleted row that a {@link DeletedRowsToken} keeps (zero), with its values and at its place as
    * they were: it is how a change made outside the instance is written, deletions and the rows
-   * that come back included.
+   * that come back included. A deleted row whose group is no longer there has no place to come
+   * back to: the call that brings it back gives it a new `parent` (its layer, or a group that is
+   * there) and it comes back there; without one the call throws `notFound`.
    *
    * A new `parent` puts a row in another layer or group (into the layer of the group), and a new
    * `orderKey` puts it in another place there. The rows of one call are those of one layer.

@@ -350,6 +350,28 @@ describe('the features deleted and created', () => {
     expect(items[items.length - 1]).toBe('a');
   });
 
+  it('brings back a deleted feature whose group is gone into its layer, at its front', async () => {
+    const layerId = draw.layers.list()[0].id;
+    draw.features.createMany([point('a'), point('b', 1), point('c', 2)]);
+    draw.groups.create({ id: 'g', featureIds: ['a', 'b'] });
+    const mine = record();
+    draw.features.delete('a');
+    // Deleted by a later change, whose values are not written back
+    draw.groups.delete('g');
+    expect(draw.groups.has('g')).toBe(false);
+    const created: string[] = [];
+    draw.on('feature.created', ({ feature }) => created.push(feature.id));
+    const [values] = mine.all();
+    const counts = await draw.features.restore([values]);
+    expect(counts?.changedCount).toBe(1);
+    expect(draw.features.get('a')?.groupId).toBeUndefined();
+    expect(draw.features.get('a')?.layerId).toBe(layerId);
+    const items = draw.layers.listItemIds(layerId, { start: 0, end: 10 });
+    expect(items[items.length - 1]).toBe('a');
+    expect(created).toEqual(['a']);
+    await expect(draw.features.restore([values])).rejects.toMatchObject({ code: 'invalidInput' });
+  });
+
   it('neither deletes nor adds an embedded file of an image deleted and brought back', async () => {
     store.createFile({
       id: 'file-1',

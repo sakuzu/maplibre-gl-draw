@@ -405,7 +405,8 @@ function restoreWork(
         list.push(k);
       }
     }
-    // A deleted row goes back to the layer of its parent: a layer, or the layer of its group
+    // A deleted row goes back to the layer of its parent: a layer, or the layer of its group; a row
+    // whose group is gone goes back into the layer it was in (the layer gives it a place there)
     for (const [layerId, list] of deletedRows) {
       const parents = parentsOf(
         tables,
@@ -420,7 +421,9 @@ function restoreWork(
             : undefined;
         if (there !== undefined) {
           layerOf[k] = indexOf(layers, there);
-        } else if (!layer.getLayer(layerId)) {
+        } else if (layer.getLayer(layerId)) {
+          layerOf[k] = indexOf(layers, layerId);
+        } else {
           // Its layer is gone since the edit started: the row is passed over, as written
           markWritten(k);
         }
@@ -588,7 +591,7 @@ function restoreWork(
       const missing = names.filter((field) =>
         list.some((k) => fieldValues.get(field)?.[k] === NOT_GIVEN),
       );
-      const now = missing.length > 0 ? tables.readValues(refs, missing).fields : undefined;
+      const now = missing.length > 0 ? readFields(tables, refs, missing) : undefined;
       const fields = new Map<FeatureRowField, unknown[]>();
       for (const field of names) {
         const given = fieldValues.get(field) as unknown[];
@@ -632,6 +635,28 @@ function indexOf(list: string[], layerId: string): number {
   if (at >= 0) return at;
   list.push(layerId);
   return list.length - 1;
+}
+
+/**
+ * Values of fields of rows, read at once, or one row at a time when the rows are not read as those
+ * of one layer (a deleted row whose group is gone among them)
+ */
+function readFields(
+  tables: FeatureTables,
+  refs: Int32Array,
+  fields: readonly FeatureRowField[],
+): ReadonlyMap<FeatureRowField, readonly unknown[]> {
+  try {
+    return tables.readValues(refs, fields).fields;
+  } catch (error) {
+    if (!(error instanceof DrawError)) throw error;
+    const out = new Map<FeatureRowField, unknown[]>(fields.map((field) => [field, []]));
+    for (const ref of refs) {
+      const one = tables.readValues(Int32Array.of(ref), fields).fields;
+      for (const field of fields) out.get(field)?.push(one.get(field)?.[0]);
+    }
+    return out;
+  }
 }
 
 /** The parents of deleted rows that are kept, read at once when they are in one layer */

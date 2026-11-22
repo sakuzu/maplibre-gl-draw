@@ -537,6 +537,41 @@ describe.each(STORES)('%s', (_name, make) => {
       expect(store.tables.getRowRef('m')).toBe(m);
     });
 
+    it('come back under the parent given when their group is gone, and not without one', () => {
+      const store = withRows(make);
+      const m = refOf(store, 'm');
+      const keeping = record(store, { keepDeletedRows: true });
+      deleteRows(store, 'm');
+      // The next change deletes the group the row was in
+      store.deleteGroup('g');
+      expect(store.getGroup('g')).toBeUndefined();
+      const written = keeping.length;
+      expectCode(
+        () => store.writeRows(valuesOf([m], [], { deleted: Uint8Array.of(0) })),
+        'notFound',
+      );
+      expect(keeping).toHaveLength(written);
+      expect(store.tables.getRowRef('m')).toBeUndefined();
+      store.writeRows(
+        valuesOf(
+          [m],
+          [
+            ['parent', ['a']],
+            ['orderKey', ['k9']],
+          ],
+          { deleted: Uint8Array.of(0) },
+        ),
+      );
+      expect(store.tables.getRowRef('m')).toBe(m);
+      expect(
+        Object.fromEntries(
+          store.tables.readValues(Int32Array.of(m), ['parent', 'orderKey', 'properties:name'])
+            .fields,
+        ),
+      ).toEqual({ parent: ['a'], orderKey: ['k9'], 'properties:name': ['M'] });
+      expect(idsOf(store, store.tables.get('a')?.listRowRefs(0, 10))).toEqual(['p', 'q', 'm']);
+    });
+
     it('are kept with the rows of a layer deleted, and come back once the layer is there again', () => {
       const store = withRows(make);
       const p = refOf(store, 'p');
