@@ -1045,6 +1045,12 @@
       "term": "\\bwriters?\\b",
       "reason": "the writing side of the tables of the rows, which @sakuzu/kasane names writer (createTables returns { tables, writer }); not a person who writes",
       "hits": 1
+    },
+    {
+      "where": "src/api/impl/sample-undo-plugin.test.ts",
+      "term": "\\b(undo|redo)\\b(?! vertex)",
+      "reason": "the test runs the sample of the fixed declarations as it is, and reads the names the sample gives its file, its plugin and its members",
+      "hits": 10
     }
   ]
 }

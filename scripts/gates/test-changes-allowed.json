@@ -1150,6 +1150,36 @@
       "path": "ui/test/layers.test.ts",
       "change": "CHANGES 45 (the IDs of the selection read as a set, with toArray, count and has; what is selected does not change)",
       "unit": "the selection held as a set of IDs, and the features of layers selected"
+    },
+    {
+      "path": "src/shared/utils/vertex-changes.test.ts",
+      "change": "the rule of following vertices (a geometry of another type or another number of parts follows no vertex, a part of another number of rings follows none of its vertices): three tests of the rule before are given the expectations of the rule now",
+      "unit": "the values before a change and writing them back"
+    },
+    {
+      "path": "src/api/impl/document-changes.test.ts",
+      "change": "the deletion left being written when the instance is destroyed is held, and its rejection with invalidState is checked (the expectations do not change)",
+      "unit": "the values before a change and writing them back"
+    },
+    {
+      "path": "src/api/impl/document-changes-work.test.ts",
+      "change": "the deletion left being written when the instance is destroyed is held, and its rejection with invalidState is checked (the expectations do not change)",
+      "unit": "the values before a change and writing them back"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "the list of the scenes of the editing benchmark gains restoreLayerMove, the writing back of a move of every feature of the layer",
+      "unit": "the values before a change and writing them back"
+    },
+    {
+      "path": "src/e2e/playground.e2e.test.ts",
+      "change": "a test of the button of the playground that takes the last edit back is added",
+      "unit": "the values before a change and writing them back"
+    },
+    {
+      "path": "src/store/built-in/store-before.test.ts",
+      "change": "a test of a deleted row whose group is gone, brought back under the parent given and refused without one, is added",
+      "unit": "the values before a change and writing them back"
     }
   ]
 }
