@@ -87,21 +87,21 @@ describe('features taken out of their group at once', () => {
     const draw = withGroup();
     draw.selection.set('feature', ['a', 'b']);
     expect(draw.selection.ungroup()).toBe(true);
-    expect(itemsOf(draw)).toEqual(['x', 'g[c]', 'b', 'a', 'y']);
+    expect(itemsOf(draw)).toEqual(['x', 'g[c]', 'a', 'b', 'y']);
   });
 
   it('the two at the front of the three', () => {
     const draw = withGroup();
     draw.selection.set('feature', ['b', 'c']);
     expect(draw.selection.ungroup()).toBe(true);
-    expect(itemsOf(draw)).toEqual(['x', 'g[a]', 'c', 'b', 'y']);
+    expect(itemsOf(draw)).toEqual(['x', 'g[a]', 'b', 'c', 'y']);
   });
 
-  it('the three: the group goes, and the last taken out stands where it was', () => {
+  it('the three: the group goes, and they stand where it was', () => {
     const draw = withGroup();
     draw.selection.set('feature', ['a', 'b', 'c']);
     expect(draw.selection.ungroup()).toBe(true);
-    expect(itemsOf(draw)).toEqual(['x', 'c', 'b', 'a', 'y']);
+    expect(itemsOf(draw)).toEqual(['x', 'a', 'b', 'c', 'y']);
     expect(draw.groups.has('g')).toBe(false);
   });
 
@@ -110,6 +110,39 @@ describe('features taken out of their group at once', () => {
     draw.selection.set('feature', ['b', 'a']);
     expect(draw.selection.ungroup()).toBe(true);
     expect(itemsOf(draw)).toEqual(['x', 'g[c]', 'a', 'b', 'y']);
+  });
+});
+
+describe('features taken out of a group of four at once keep the order they stood in it', () => {
+  /** The layer `l` holding x, the group g of a, b, c and d, and y */
+  function withFour(): Draw {
+    const draw = instance();
+    areas(draw, ['x', 'a', 'b', 'c', 'd', 'y']);
+    draw.groups.create({ id: 'g', featureIds: ['a', 'b', 'c', 'd'] });
+    expect(itemsOf(draw)).toEqual(['x', 'g[a,b,c,d]', 'y']);
+    return draw;
+  }
+
+  it('three of them, just in front of the group', () => {
+    const draw = withFour();
+    draw.selection.set('feature', ['a', 'b', 'd']);
+    expect(draw.selection.ungroup()).toBe(true);
+    expect(itemsOf(draw)).toEqual(['x', 'g[c]', 'a', 'b', 'd', 'y']);
+  });
+
+  it('three of them selected in another order, in their stacking order', () => {
+    const draw = withFour();
+    draw.selection.set('feature', ['d', 'a', 'c']);
+    expect(draw.selection.ungroup()).toBe(true);
+    expect(itemsOf(draw)).toEqual(['x', 'g[b]', 'a', 'c', 'd', 'y']);
+  });
+
+  it('all of them: the group goes, and they stand where it was', () => {
+    const draw = withFour();
+    draw.selection.set('feature', ['c', 'a', 'd', 'b']);
+    expect(draw.selection.ungroup()).toBe(true);
+    expect(itemsOf(draw)).toEqual(['x', 'a', 'b', 'c', 'd', 'y']);
+    expect(draw.groups.has('g')).toBe(false);
   });
 });
 

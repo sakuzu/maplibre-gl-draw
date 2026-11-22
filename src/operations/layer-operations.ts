@@ -13,21 +13,6 @@ import type { InstanceDocument } from '../store/document-access.js';
 import type { Feature, Group } from '../store/types.js';
 
 /**
- * Takes a feature out of its group: it stands just in front of the group in the layer, or in its
- * place when it was the last feature of the group, which goes then
- *
- * @returns False when the Store refused the write
- * @internal
- */
-export function takeOutOfGroup(store: InstanceDocument, featureId: string): boolean {
-  // The edit being written in parts is applied first to the feature read to be written
-  store.applyEditFirst?.(featureId);
-  const feature = store.getFeature(featureId);
-  if (!feature?.groupId || !store.getGroup(feature.groupId)) return true;
-  return store.moveFeatures([featureId], { kind: 'ungroup' });
-}
-
-/**
  * Groups the selected features
  *
  * @returns The group ID, or null when grouping was not possible
@@ -92,10 +77,10 @@ export function groupSelection(
  *
  * - When a group is selected -> that group is dissolved (its children are expanded into the
  *   original position)
- * - When a member feature of a group is selected -> only that feature is taken out of the
- *   group (the group is kept; the member is placed right in front of the group by
- *   takeOutOfGroup, and the group is deleted automatically when it becomes empty).
- *   The group is not dissolved as a whole
+ * - When member features of a group are selected -> only those features are taken out of the
+ *   group (the group is kept; they are placed right in front of the group, in the order they
+ *   stood in it, and the group is deleted automatically when it becomes empty, they taking its
+ *   place). The group is not dissolved as a whole
  * - Otherwise (a feature that is not a member / no selection) -> nothing is done
  *
  * Even with several targets it is gathered into one transaction, making it one undo unit.
@@ -130,15 +115,10 @@ export function ungroupSelection(store: InstanceDocument): boolean {
     const memberIds = selectedIds.filter((id) => store.getFeature(id)?.groupId !== undefined);
     if (memberIds.length === 0) return false;
 
-    // One at a time, each just in front of its group; a write the Store refuses stops them, and
-    // the operation returns what read-only returns
-    const done = store.transactUntilRefused(() => {
-      for (const id of memberIds) {
-        if (!takeOutOfGroup(store, id)) return false;
-      }
-      return true;
-    });
-    return done === true;
+    // At once, just in front of their groups, in the order they stood in them (a group left empty
+    // goes, and they take its place); a write the Store refuses moves none, and the operation
+    // returns what read-only returns
+    return store.moveFeatures(store.sortInStackingOrder(memberIds), { kind: 'ungroup' });
   }
   return false;
 }
