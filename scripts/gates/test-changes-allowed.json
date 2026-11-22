@@ -1185,6 +1185,21 @@
       "path": "src/view/shaders/compile.test.ts",
       "change": "the program of the frames of the rows of a selection of many features is built with the others, and the call sites and the programs are counted up by it",
       "unit": "the work that draws the frames and the handles of a selection from the rows"
+    },
+    {
+      "path": "src/view/terrain/anchor.test.ts",
+      "change": "the projector of the anchor projection is made from the terrain state of the instance and handed to createCoordinateTransform, in place of the one set per map; the projected values do not change",
+      "unit": "the work that gives each instance its own anchor projection"
+    },
+    {
+      "path": "src/view/terrain/context.test.ts",
+      "change": "the projector of the anchor projection is made from the terrain state of the instance and handed to createCoordinateTransform, in place of the one set per map; the projected values do not change",
+      "unit": "the work that gives each instance its own anchor projection"
+    },
+    {
+      "path": "src/api/impl/selection-frame.test.ts",
+      "change": "createCoordinateTransform takes the anchor projection of the instance, or null for none; the tests without a terrain pass null, and their values do not change",
+      "unit": "the work that gives each instance its own anchor projection"
     }
   ]
 }
