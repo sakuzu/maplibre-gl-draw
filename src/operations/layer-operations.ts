@@ -9,66 +9,21 @@
  */
 
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
-import type { DocumentAccess } from '../store/document-access.js';
+import type { InstanceDocument } from '../store/document-access.js';
 import type { Feature, Group } from '../store/types.js';
 
 /**
- * Deletes the group if it has become empty (the standard behavior of canvas tools).
- * Called at the end of each path that moves or removes a feature out of a group.
- */
-function deleteGroupIfEmpty(store: DocumentAccess, groupId: string): void {
-  const group = store.getGroup(groupId);
-  if (group && group.featureIds.length === 0) {
-    store.deleteGroup(groupId);
-  }
-}
-
-/**
- * Removes a feature from a group
+ * Takes a feature out of its group: it stands just in front of the group in the layer, or in its
+ * place when it was the last feature of the group, which goes then
  *
  * @internal
  */
-export function takeOutOfGroup(store: DocumentAccess, featureId: string): void {
+export function takeOutOfGroup(store: InstanceDocument, featureId: string): boolean {
   // The edit being written in parts is applied first to the feature read to be written
   store.applyEditFirst?.(featureId);
   const feature = store.getFeature(featureId);
-  if (!feature?.groupId) return;
-
-  const group = store.getGroup(feature.groupId);
-  if (!group) return;
-
-  // Find the layer the group belongs to
-  let layerId: string | null = null;
-  for (const layer of store.listLayers()) {
-    if (layer.items.includes(group.id)) {
-      layerId = layer.id;
-      break;
-    }
-  }
-
-  store.transact(() => {
-    // Remove the feature from the group
-    const newFeatureIds = group.featureIds.filter((id) => id !== featureId);
-    store.updateGroup(group.id, { featureIds: newFeatureIds });
-
-    // Remove the groupId from the feature
-    store.updateFeature(featureId, { groupId: undefined });
-
-    // Add the feature to the order of the layer (right after the group)
-    if (layerId) {
-      const layer = store.getLayer(layerId);
-      if (layer) {
-        const groupIndex = layer.items.indexOf(group.id);
-        const newOrder = [...layer.items];
-        newOrder.splice(groupIndex + 1, 0, featureId);
-        store.updateLayer(layerId, { items: newOrder });
-      }
-    }
-
-    // Delete the group when it has become empty (after the feature has been moved out
-    // directly under the layer)
-    deleteGroupIfEmpty(store, group.id);
-  });
+  if (!feature?.groupId || !store.getGroup(feature.groupId)) return true;
+  return store.moveFeatures([featureId], { kind: 'ungroup' });
 }
 
 /**
@@ -79,7 +34,7 @@ export function takeOutOfGroup(store: DocumentAccess, featureId: string): void {
  * @internal
  */
 export function groupSelection(
-  store: DocumentAccess,
+  store: InstanceDocument,
   generateFeatureId: () => string,
   autoNameGenerator: AutoNameGenerator,
 ): string | null {
@@ -113,7 +68,8 @@ export function groupSelection(
     return null;
   }
 
-  // Create the group
+  // Create the group: it stands where the frontmost of the features stood, and they keep their
+  // stacking order in it
   const groupId = generateFeatureId();
   const groupName = autoNameGenerator.generateGroupName();
 
@@ -121,85 +77,13 @@ export function groupSelection(
     id: groupId,
     layerId,
     name: groupName,
-    featureIds: [...selectedIds],
+    featureIds: [],
     locked: false,
     visible: true,
   };
 
-  store.transact(() => {
-    // Remove the feature IDs from the order of the layer and add the group ID
-    const layer = store.getLayer(layerId);
-    if (layer) {
-      // Find the frontmost one (the largest index) among the selected features
-      let frontmostSelectedId: string | null = null;
-      for (let i = layer.items.length - 1; i >= 0; i--) {
-        if (selectedIds.includes(layer.items[i])) {
-          frontmostSelectedId = layer.items[i];
-          break;
-        }
-      }
-
-      // Build the new order (insert the group at the position of the frontmost selected feature)
-      const newOrder: string[] = [];
-      for (const id of layer.items) {
-        if (selectedIds.includes(id)) {
-          // Insert the group at the position of the frontmost selected feature
-          if (id === frontmostSelectedId) {
-            newOrder.push(groupId);
-          }
-          // The selected features are excluded from the order
-        } else {
-          newOrder.push(id);
-        }
-      }
-      // Even when not a single selected feature is included in order (for example when they
-      // are missing from order because of stale data), the group is appended at the tail so
-      // that it is not left out of order.
-      if (frontmostSelectedId === null) {
-        newOrder.push(groupId);
-      }
-      store.updateLayer(layerId, { items: newOrder });
-    }
-
-    // Create the group
-    store.createGroup(group);
-  });
-
+  store.createGroupWith(group, selectedIds);
   return groupId;
-}
-
-/**
- * Dissolves a group (outside a transaction, a pure mutation).
- * It removes the group from the order, expands its member features into the same position,
- * and then deletes the group itself. The caller must wrap it in store.transact.
- */
-function dissolveGroup(store: DocumentAccess, groupId: string): void {
-  const group = store.getGroup(groupId);
-  if (!group) return;
-
-  // Identify the layer the group belongs to
-  let targetLayerId: string | null = null;
-  for (const layer of store.listLayers()) {
-    if (layer.items.includes(groupId)) {
-      targetLayerId = layer.id;
-      break;
-    }
-  }
-
-  if (!targetLayerId) return;
-
-  // Remove the group ID from the order of the layer and expand the feature IDs into the same
-  // position
-  const layer = store.getLayer(targetLayerId);
-  if (layer) {
-    const groupIndex = layer.items.indexOf(groupId);
-    const newOrder = [...layer.items];
-    newOrder.splice(groupIndex, 1, ...group.featureIds);
-    store.updateLayer(targetLayerId, { items: newOrder });
-  }
-
-  // Delete the group
-  store.deleteGroup(groupId);
 }
 
 /**
@@ -208,7 +92,7 @@ function dissolveGroup(store: DocumentAccess, groupId: string): void {
  * - When a group is selected -> that group is dissolved (its children are expanded into the
  *   original position)
  * - When a member feature of a group is selected -> only that feature is taken out of the
- *   group (the group is kept; the member is placed right after the group by
+ *   group (the group is kept; the member is placed right in front of the group by
  *   takeOutOfGroup, and the group is deleted automatically when it becomes empty).
  *   The group is not dissolved as a whole
  * - Otherwise (a feature that is not a member / no selection) -> nothing is done
@@ -218,17 +102,17 @@ function dissolveGroup(store: DocumentAccess, groupId: string): void {
  * @returns Whether a group was dissolved or a feature taken out of its group
  * @internal
  */
-export function ungroupSelection(store: DocumentAccess): boolean {
+export function ungroupSelection(store: InstanceDocument): boolean {
   const selection = store.getSelection();
   if (selection.ids.count() === 0) return false;
 
-  // A group selection -> dissolve
+  // A group selection -> dissolve: its features take its place in the layer
   if (selection.type === 'group') {
     const groupIds = [...selection.ids.iterate()].filter((id) => store.getGroup(id) !== undefined);
     if (groupIds.length === 0) return false;
     store.transact(() => {
       for (const groupId of groupIds) {
-        dissolveGroup(store, groupId);
+        if (store.getGroup(groupId)) store.deleteGroup(groupId);
       }
     });
     return true;
@@ -243,10 +127,9 @@ export function ungroupSelection(store: DocumentAccess): boolean {
     const memberIds = selectedIds.filter((id) => store.getFeature(id)?.groupId !== undefined);
     if (memberIds.length === 0) return false;
 
+    // One at a time, each just in front of its group
     store.transact(() => {
-      for (const id of memberIds) {
-        takeOutOfGroup(store, id);
-      }
+      for (const id of memberIds) takeOutOfGroup(store, id);
     });
     return true;
   }

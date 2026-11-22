@@ -76,7 +76,7 @@ export interface EngineModeContext {
    */
   anchorProjector: import('../shared/math/transform.js').AnchorProjector;
   /** The Store of the document; a mode writes features through it */
-  store: import('../store/document-access.js').DocumentAccess;
+  store: import('../store/document-access.js').InstanceDocument;
   /**
    * The bulk edits of the instance, which write any number of features in parts, one edit at a
    * time (the Delete key deletes the selection with them)
