@@ -167,7 +167,7 @@ export function startVertexDrag(
 
 /**
  * Start a midpoint drag: insert a vertex at the midpoint and continue as a move of that
- * vertex. Returns null when the feature is gone
+ * vertex. Returns null when the feature is gone, or the Store refused the vertex added
  */
 export function startMidpointDrag(
   event: DragNormalizedEvent,
@@ -184,7 +184,12 @@ export function startMidpointDrag(
   const newCoord: Coordinate = [startLngLat.lng, startLngLat.lat];
   const newCoords = addVertex(feature, after, newCoord);
 
-  store.updateFeature(featureId, { geometry: geometryFromCoordinates(feature.type, newCoords) });
+  // A vertex the Store refused to add starts no drag
+  if (
+    !store.updateFeature(featureId, { geometry: geometryFromCoordinates(feature.type, newCoords) })
+  ) {
+    return null;
+  }
 
   // The added vertex is afterIndex + 1 in the same part and same ring
   const newVertexRef: VertexRef = { ...after, index: after.index + 1 };

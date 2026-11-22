@@ -26,23 +26,32 @@ import type { InstanceDocument } from '../store/document-access.js';
 import type { BulkBatchWork, BulkEditStarter } from './bulk-work.js';
 
 /**
- * Deletes features through the layer; `deleted` hears of each one deleted
+ * Deletes features through the layer; `deleted` hears of each one deleted. Once the Store
+ * refuses a deletion, the work deletes nothing more, and the edit ends as one that stopped, or
+ * as one refused when nothing was deleted before (see `BulkWorkHooks.outcome`)
  *
  * @internal
  */
 function deletionWork(
   layer: InstanceDocument,
   deleted: () => void = () => {},
-): Pick<BulkBatchWork, 'writeFeatures'> {
+): Pick<BulkBatchWork, 'writeFeatures' | 'outcome'> & { refused(): boolean } {
+  let refused = false;
+  let deletedAny = false;
   return {
     writeFeatures(ids, changed) {
-      for (let i = 0; i < ids.length; i++) {
+      for (let i = 0; i < ids.length && !refused; i++) {
         if (layer.deleteFeature(ids[i])) {
           changed[i] = 1;
+          deletedAny = true;
           deleted();
+        } else {
+          refused = true;
         }
       }
     },
+    outcome: () => (refused ? (deletedAny ? 'stopped' : 'refused') : undefined),
+    refused: () => refused,
   };
 }
 
@@ -68,7 +77,8 @@ export function startFeatureDeletion(
   target: FeatureTarget,
   options: EditOptions | undefined,
 ): Promise<EditCounts | null> {
-  return edits.start(target, options, deletionWork(edits.layer));
+  const { writeFeatures, outcome } = deletionWork(edits.layer);
+  return edits.start(target, options, { writeFeatures, outcome });
 }
 
 /**
@@ -97,7 +107,8 @@ function layerDeletionWork(
     writeFeatures: features.writeFeatures,
     end(stopped) {
       let more = 0;
-      if (!stopped) {
+      // A deletion of a feature the Store refused stops the edit: the layers stay
+      if (!stopped && !features.refused()) {
         for (const layerId of layerIds) {
           if (!layer.getLayer(layerId)) continue;
           if (!ignoreLocks && layerHoldsLock(layer, layerId)) continue;
@@ -114,9 +125,10 @@ function layerDeletionWork(
       after(stopped, deletedAny);
       return more;
     },
-    // A layer the Store refused to delete: the edit stopped, or wrote nothing when it had deleted
-    // nothing before
-    outcome: () => (refused ? (deletedAny ? 'stopped' : 'refused') : undefined),
+    // A layer or a feature the Store refused to delete: the edit stopped, or wrote nothing when
+    // it had deleted nothing before
+    outcome: () =>
+      refused || features.refused() ? (deletedAny ? 'stopped' : 'refused') : undefined,
   };
 }
 
@@ -175,6 +187,7 @@ export function startSelectionDeletion(edits: BulkEditStarter): Promise<EditCoun
     });
     return edits.start({ selection: true }, options, {
       writeFeatures: features.writeFeatures,
+      outcome: features.outcome,
       end() {
         clearSelection(deletedAny);
         return 0;
@@ -191,23 +204,31 @@ export function startSelectionDeletion(edits: BulkEditStarter): Promise<EditCoun
     const unlocked = groupIds.filter((groupId) => !groupLocked(groupId));
     if (unlocked.length === 0) return Promise.resolve(null);
     let deletedAny = false;
+    /** Whether the Store refused the deletion of a group in the last part */
+    let groupRefused = false;
     const features = deletionWork(layer, () => {
       deletedAny = true;
     });
     return edits.start({ selection: true }, options, {
       writeFeatures: features.writeFeatures,
       end(stopped) {
-        if (!stopped) {
+        if (!stopped && !features.refused()) {
           // A group selected with no feature in it goes too (one that keeps locked ones stays)
           for (const groupId of unlocked) {
             if (!layer.getGroup(groupId) || groupLocked(groupId)) continue;
             if (layer.countGroupFeatures(groupId) > 0) continue;
             if (layer.deleteGroup(groupId)) deletedAny = true;
+            else {
+              groupRefused = true;
+              break;
+            }
           }
         }
         clearSelection(deletedAny);
         return 0;
       },
+      outcome: () =>
+        groupRefused || features.refused() ? (deletedAny ? 'stopped' : 'refused') : undefined,
     });
   }
 

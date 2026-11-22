@@ -13,7 +13,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from '../../store/built-in/create-store.js';
 import type { Store } from '../../store/built-in/types.js';
-import { createMapStub, readRowFeature } from '../../test-utils.js';
+import { createMapStub, createSyntheticInput, readRowFeature } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DocumentChange, DrawEvents } from '../events.js';
 import type { Feature } from '../model.js';
@@ -111,7 +111,7 @@ function instance() {
   const told: string[] = [];
   for (const name of EVENTS) draw.on(name, () => told.push(name));
   draw.document.subscribe(() => told.push('subscribe'));
-  return { ...host, draw, told };
+  return { ...host, draw, told, engine };
 }
 
 /** A point at a position */
@@ -414,6 +414,114 @@ describe('a write the Store refuses', () => {
     expect(readRowFeature(base, 'p')?.properties).toEqual({ name: 'p', n: 1 });
     expect(readRowFeature(base, 'r')?.properties).toEqual({});
     expect(readRowFeature(base, 'q')?.properties).toEqual({});
+    expectSameAsStore(draw, base);
+  });
+});
+
+describe('an operation of the selection or of a mode whose write the Store refuses', () => {
+  /** The selection, as its type and its IDs */
+  const selectionOf = (draw: Draw) => ({
+    type: draw.selection.get().type,
+    ids: draw.selection.get().ids.toArray(),
+  });
+
+  it('selection.delete: returns what read-only returns, tells nothing and keeps the selection', async () => {
+    const { draw, base, rules, told } = written();
+    draw.selection.set('feature', ['p']);
+    told.length = 0;
+    rules.set('writeRows', (values) => (values as { deleted?: unknown }).deleted !== undefined);
+    const deleted = draw.selection.delete();
+    await vi.runAllTimersAsync();
+    expect(await deleted).toBeNull();
+    expect(told).toEqual([]);
+    expect(selectionOf(draw)).toEqual({ type: 'feature', ids: ['p'] });
+    expect(draw.features.get('p')).toBeDefined();
+    expectSameAsStore(draw, base);
+    rules.clear();
+    draw.setReadOnly(true);
+    expect(await draw.selection.delete()).toBeNull();
+  });
+
+  it('selection.group: returns what read-only returns, tells nothing and keeps the selection', () => {
+    const { draw, base, rules, told } = written();
+    draw.features.create({ ...point(3, 3), id: 's', layerId: 'a' });
+    draw.selection.set('feature', ['p', 's']);
+    told.length = 0;
+    rules.set('createGroup', () => true);
+    expect(draw.selection.group()).toBeNull();
+    expect(told).toEqual([]);
+    expect(selectionOf(draw)).toEqual({ type: 'feature', ids: ['p', 's'] });
+    expect(draw.features.get('p')?.groupId).toBeUndefined();
+    expectSameAsStore(draw, base);
+    rules.clear();
+    draw.setReadOnly(true);
+    expect(draw.selection.group()).toBeNull();
+  });
+
+  it('selection.ungroup: returns what read-only returns, tells nothing and keeps the selection', () => {
+    const { draw, base, rules, told } = written();
+    // The features of a group dissolved are written to its place first
+    const places = (values: unknown) =>
+      (values as { fields: Map<string, unknown> }).fields.has('parent');
+    draw.selection.set('group', ['g']);
+    told.length = 0;
+    rules.set('writeRows', places);
+    expect(draw.selection.ungroup()).toBe(false);
+    expect(told).toEqual([]);
+    expect(selectionOf(draw)).toEqual({ type: 'group', ids: ['g'] });
+    expect(draw.groups.has('g')).toBe(true);
+    expectSameAsStore(draw, base);
+    // A feature of the group taken out of it
+    rules.clear();
+    draw.selection.set('feature', ['q']);
+    told.length = 0;
+    rules.set('writeRows', places);
+    expect(draw.selection.ungroup()).toBe(false);
+    expect(told).toEqual([]);
+    expect(selectionOf(draw)).toEqual({ type: 'feature', ids: ['q'] });
+    expect(draw.features.get('q')?.groupId).toBe('g');
+    expectSameAsStore(draw, base);
+    rules.clear();
+    draw.setReadOnly(true);
+    expect(draw.selection.ungroup()).toBe(false);
+  });
+
+  it('vertexSelection.delete: returns what read-only returns, tells nothing and keeps the vertices', () => {
+    const { draw, base, rules, told } = written();
+    draw.features.create({
+      id: 'line',
+      type: 'LineString',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 0],
+          [2, 0],
+        ],
+      },
+      layerId: 'a',
+    });
+    expect(draw.vertexSelection.set('line', [{ part: 0, ring: 0, index: 1 }])).toBe(true);
+    told.length = 0;
+    rules.set('writeRows', (values) => (values as { geometry?: unknown }).geometry !== undefined);
+    expect(draw.vertexSelection.delete()).toBe(false);
+    expect(told).toEqual([]);
+    expect(draw.vertexSelection.get()?.vertices).toEqual([{ part: 0, ring: 0, index: 1 }]);
+    expectSameAsStore(draw, base);
+    rules.clear();
+    draw.setReadOnly(true);
+    expect(draw.vertexSelection.delete()).toBe(false);
+  });
+
+  it('a point drawn: the point is not selected, and nothing is told', () => {
+    const { draw, base, rules, told, engine } = written();
+    draw.setMode('drawPoint');
+    told.length = 0;
+    rules.set('createRows', () => true);
+    createSyntheticInput(engine).click([0.5, 0.5]);
+    expect(told).toEqual([]);
+    expect(selectionOf(draw)).toEqual({ type: null, ids: [] });
+    expect(draw.features.count()).toBe(3);
     expectSameAsStore(draw, base);
   });
 });

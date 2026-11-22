@@ -16,6 +16,7 @@ import type { Feature, Group } from '../store/types.js';
  * Takes a feature out of its group: it stands just in front of the group in the layer, or in its
  * place when it was the last feature of the group, which goes then
  *
+ * @returns False when the Store refused the write
  * @internal
  */
 export function takeOutOfGroup(store: InstanceDocument, featureId: string): boolean {
@@ -81,7 +82,8 @@ export function groupSelection(
     visible: true,
   };
 
-  store.createGroupWith(group, selectedIds);
+  // A write the Store refused makes no group, as read-only does
+  if (!store.createGroupWith(group, selectedIds)) return null;
   return groupId;
 }
 
@@ -109,12 +111,14 @@ export function ungroupSelection(store: InstanceDocument): boolean {
   if (selection.type === 'group') {
     const groupIds = [...selection.ids.iterate()].filter((id) => store.getGroup(id) !== undefined);
     if (groupIds.length === 0) return false;
-    store.transact(() => {
+    // A write the Store refuses stops the operation, which returns what read-only returns
+    const done = store.transactUntilRefused(() => {
       for (const groupId of groupIds) {
-        if (store.getGroup(groupId)) store.deleteGroup(groupId);
+        if (store.getGroup(groupId) && !store.deleteGroup(groupId)) return false;
       }
+      return true;
     });
-    return true;
+    return done === true;
   }
 
   // A feature selection -> take only the selected members out of the group (do not dissolve)
@@ -126,11 +130,15 @@ export function ungroupSelection(store: InstanceDocument): boolean {
     const memberIds = selectedIds.filter((id) => store.getFeature(id)?.groupId !== undefined);
     if (memberIds.length === 0) return false;
 
-    // One at a time, each just in front of its group
-    store.transact(() => {
-      for (const id of memberIds) takeOutOfGroup(store, id);
+    // One at a time, each just in front of its group; a write the Store refuses stops them, and
+    // the operation returns what read-only returns
+    const done = store.transactUntilRefused(() => {
+      for (const id of memberIds) {
+        if (!takeOutOfGroup(store, id)) return false;
+      }
+      return true;
     });
-    return true;
+    return done === true;
   }
   return false;
 }

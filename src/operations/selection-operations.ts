@@ -83,14 +83,16 @@ export function deleteSelectedVertices(store: DocumentAccess, selection: VertexS
     }
   }
 
+  // A write the Store refuses deletes nothing and keeps the vertices selected, as read-only does
+  let written = false;
   if (deletedCount > 0) {
     store.transact(() => {
-      store.updateFeature(selection.featureId, {
+      written = store.updateFeature(selection.featureId, {
         geometry: geometryFromCoordinates(feature.type, coords),
       });
-      store.setSelectedVertices(null);
+      if (written) store.setSelectedVertices(null);
     });
   }
 
-  return deletedCount;
+  return written ? deletedCount : 0;
 }
