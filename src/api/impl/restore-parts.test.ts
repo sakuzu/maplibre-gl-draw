@@ -218,8 +218,8 @@ function objectsOf(value: unknown, seen = new Set<object>()): number {
 describe(WORK_SCENES.writeBack, () => {
   describe('the values of a move of every feature', () => {
     /**
-     * The values of a move of `size` features: one part, the clock of the tests standing still, and
-     * then in parts of about 1,000 rows
+     * The values of a move of `size` features: the clock of the tests standing still, a first part
+     * of a batch at most and one more with the rest, and then in parts of about 1,000 rows
      */
     const moveOf = async (size: number, slow: boolean): Promise<SharedValues[]> => {
       draw.destroy();
@@ -234,18 +234,20 @@ describe(WORK_SCENES.writeBack, () => {
       return valuesOf(changes, operationId).map((value) => sharedValuesOf(value) as SharedValues);
     };
 
-    /** The objects of values, maps, arrays and typed arrays, each once */
-    const objectsOfAll = (values: readonly SharedValues[]) =>
-      values.reduce((sum, shared) => sum + objectsOf(shared), 0);
+    /** The objects of the values of the part that holds the most, maps, arrays and typed arrays */
+    const objectsOfLargest = (values: readonly SharedValues[]) =>
+      Math.max(...values.map((shared) => objectsOf(shared)));
 
     it('hold the arrays of the geometries before, and no object per feature', async () => {
       const oneSmall = await moveOf(WORK_SIZES.small, false);
       const oneLarge = await moveOf(WORK_SIZES.large, false);
-      expect(oneLarge).toHaveLength(oneSmall.length);
+      expect(oneSmall).toHaveLength(1);
+      // The first part writes a batch at most: the rest is the second part
+      expect(oneLarge).toHaveLength(2);
       for (const shared of [...oneSmall, ...oneLarge]) expect(shared.tracked.size).toBe(0);
       const objects = new Map<number, number>([
-        [WORK_SIZES.small, objectsOfAll(oneSmall)],
-        [WORK_SIZES.large, objectsOfAll(oneLarge)],
+        [WORK_SIZES.small, objectsOfLargest(oneSmall)],
+        [WORK_SIZES.large, objectsOfLargest(oneLarge)],
       ]);
       expect(objects.get(WORK_SIZES.large)).toBe(objects.get(WORK_SIZES.small));
       expectNotProportional((size) => objects.get(size) as number, 'the objects of the values');
