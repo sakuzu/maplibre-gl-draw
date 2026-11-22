@@ -44,7 +44,11 @@ import {
 import type { QuadDrapeFrame } from '../terrain/drape/quad.js';
 import { type DrapeLight, resolveDrapeLight } from '../terrain/drape/renderer.js';
 import { setQuadDrapeFrame, setTerrainSurfacesFlattened } from '../terrain/state.js';
-import { getSelectedFeatureIdSet, type SelectedFeatureIds } from '../ui/helper.js';
+import {
+  getSelectedFeatureIdSet,
+  type SelectedFeatureIds,
+  type SelectionDocument,
+} from '../ui/helper.js';
 import { applyDrawBlendState } from './blend.js';
 import type { DisplayListCache } from './display-list.js';
 import {
@@ -396,8 +400,10 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   const rowsRead = useRows
     ? drawnRowsOf((store as DocumentAccess & Partial<DocumentTables>).getTables?.())
     : undefined;
+  // The selection of a group or a layer is read with the reads by position of the layer
+  const selectionStore = store as SelectionDocument;
   const manySelected =
-    rowsRead && r.bulkFramesRenderer.selection.countOf(store, rowsRead) > FEATURES_KEPT
+    rowsRead && r.bulkFramesRenderer.selection.countOf(selectionStore, rowsRead) > FEATURES_KEPT
       ? rowsRead
       : undefined;
 
@@ -406,7 +412,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   // feature / group / layer).
   const selectedIds: Pick<SelectedFeatureIds, 'has' | 'iterate'> = manySelected
     ? NO_FEATURE_IDS
-    : getSelectedFeatureIdSet(store);
+    : getSelectedFeatureIdSet(selectionStore);
 
   // The features for the selection UI are resolved directly from the selected ids. This keeps
   // them independent of the rendering path (retained / immediate mode), so the selection UI is

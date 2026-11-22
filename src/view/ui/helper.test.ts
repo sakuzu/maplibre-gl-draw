@@ -4,23 +4,31 @@
 import { describe, expect, it } from 'vitest';
 
 import { createIdSet } from '../../api/model.js';
-import type { DocumentAccess as Store } from '../../store/document-access.js';
-import { getSelectedFeatureIds } from './helper.js';
+import { getSelectedFeatureIds, type SelectionDocument } from './helper.js';
 
-// getSelectedFeatureIds uses only getSelection / getGroup / getLayer / getFeature, so it is
-// verified with a minimal stub that has those.
+// getSelectedFeatureIds uses only getSelection / getGroup / getLayer / getFeature and the reads of
+// the features of a group and of a layer, so it is verified with a minimal stub that has those.
 function makeStore(opts: {
   selection: { type: 'feature' | 'group' | 'layer' | null; ids: string[] };
   groups?: Record<string, { featureIds: string[] }>;
   layers?: Record<string, { items: string[] }>;
   features?: string[];
-}): Store {
+}): SelectionDocument {
+  const membersOf = (id: string) => opts.groups?.[id]?.featureIds ?? [];
   return {
     getSelection: () => ({ type: opts.selection.type, ids: createIdSet(opts.selection.ids) }),
-    getGroup: (id: string) => (opts.groups?.[id] ? { id, ...opts.groups[id] } : undefined),
-    getLayer: (id: string) => (opts.layers?.[id] ? { id, ...opts.layers[id] } : undefined),
+    getGroup: (id: string) => (opts.groups?.[id] ? { id } : undefined),
+    getLayer: (id: string) => (opts.layers?.[id] ? { id } : undefined),
     getFeature: (id: string) => (opts.features?.includes(id) ? { id } : undefined),
-  } as unknown as Store;
+    countGroupFeatures: (id: string) => membersOf(id).length,
+    listGroupFeatureIds: (id: string, start: number, end: number) =>
+      membersOf(id).slice(start, end),
+    iterateFeatures: ({ layerId }: { layerId: string }) =>
+      (opts.layers?.[layerId]?.items ?? [])
+        .flatMap((id) => (opts.groups?.[id] ? membersOf(id) : [id]))
+        .map((id) => ({ id }))
+        [Symbol.iterator](),
+  } as unknown as SelectionDocument;
 }
 
 describe('getSelectedFeatureIds', () => {
