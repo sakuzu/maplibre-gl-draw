@@ -11,7 +11,7 @@
 import type { DrawPropertyName } from '../../../shared/properties.js';
 import { setDrawProperty } from '../../../shared/properties.js';
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
-import type { DocumentAccess } from '../../../store/document-access.js';
+import type { InstanceDocument } from '../../../store/document-access.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../../store/types.js';
 import type { GeometryDeps } from './types.js';
 
@@ -40,15 +40,27 @@ interface ResultPlacement {
  * result is put just in front of that input.
  */
 function planPlacement(
-  store: DocumentAccess,
+  store: InstanceDocument,
   anchor: Feature,
   removedIds: ReadonlySet<string>,
 ): ResultPlacement {
   const group = anchor.groupId ? store.getGroup(anchor.groupId) : undefined;
-  const container = group ? group.featureIds : (store.getLayer(anchor.layerId)?.items ?? []);
-  const anchorIndex = container.indexOf(anchor.id);
-  const precedingIds = anchorIndex < 0 ? container : container.slice(0, anchorIndex);
-  const precedingCount = precedingIds.filter((id) => !removedIds.has(id)).length;
+  const containerId = group ? group.id : anchor.layerId;
+  // Read from the places of the input and of the inputs removed, not the order of the container
+  const at = store.getItemPosition(anchor.id);
+  const anchorIndex = at?.containerId === containerId ? at.index : -1;
+  let precedingCount =
+    anchorIndex >= 0
+      ? anchorIndex
+      : group
+        ? store.countGroupFeatures(group.id)
+        : store.countItems(anchor.layerId);
+  for (const id of removedIds) {
+    if (id === anchor.id) continue;
+    const place = store.getItemPosition(id);
+    if (place?.containerId !== containerId) continue;
+    if (anchorIndex < 0 || place.index < anchorIndex) precedingCount -= 1;
+  }
 
   return {
     layerId: anchor.layerId,
@@ -64,24 +76,26 @@ function planPlacement(
  * its placement.
  */
 function moveToPlacement(
-  store: DocumentAccess,
+  store: InstanceDocument,
   resultId: string,
   placement: ResultPlacement,
 ): void {
   if (placement.groupId) {
-    const group = store.getGroup(placement.groupId);
-    if (!group) return;
-    const featureIds = group.featureIds.filter((id) => id !== resultId);
-    featureIds.splice(placement.index, 0, resultId);
-    store.updateGroup(placement.groupId, { featureIds });
+    if (!store.getGroup(placement.groupId)) return;
+    store.moveFeatures([resultId], {
+      kind: 'group',
+      groupId: placement.groupId,
+      index: placement.index,
+    });
     return;
   }
 
-  const layer = store.getLayer(placement.layerId);
-  if (!layer) return;
-  const order = layer.items.filter((id) => id !== resultId);
-  order.splice(placement.index, 0, resultId);
-  store.updateLayer(placement.layerId, { items: order });
+  if (!store.getLayer(placement.layerId)) return;
+  store.moveFeatures([resultId], {
+    kind: 'layer',
+    layerId: placement.layerId,
+    index: placement.index,
+  });
 }
 
 /**

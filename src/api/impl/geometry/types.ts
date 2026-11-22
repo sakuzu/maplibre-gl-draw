@@ -5,7 +5,7 @@
  * The option and dependency types of the operations on areas of `draw.features`
  */
 
-import type { DocumentAccess } from '../../../store/document-access.js';
+import type { InstanceDocument } from '../../../store/document-access.js';
 
 /**
  * The options of `draw.features.buffer`
@@ -31,6 +31,6 @@ export interface BufferOptions {
  * @internal
  */
 export interface GeometryDeps {
-  store: DocumentAccess;
+  store: InstanceDocument;
   generateFeatureId: () => string;
 }
