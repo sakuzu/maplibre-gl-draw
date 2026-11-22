@@ -7,8 +7,17 @@
 
 import { getDrawProperty } from '../../../shared/properties.js';
 import type { DocumentAccess, InstanceDocument } from '../../../store/document-access.js';
-import type { Data, ExportOptions, FileData, Layer, LoadResult } from '../../../store/types.js';
+import type {
+  Data,
+  ExportOptions,
+  Feature,
+  FileData,
+  Group,
+  Layer,
+  LoadResult,
+} from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
+import type { DocumentGroup, DocumentLayer } from '../../model.js';
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
@@ -17,27 +26,29 @@ import type { PreparedLoad } from './types.js';
 /** The layer that survives the replacement (it is updated in place when the data has it) */
 const DEFAULT_LAYER_ID = 'default-layer';
 
-/** A layer of the document: its fields, with the items it lists after its opacity */
-function documentLayerOf(layer: Layer): Layer {
+/** A layer of the document: its fields, with the items it holds after its opacity */
+function documentLayerOf(store: InstanceDocument, layer: Layer): DocumentLayer {
+  const items = store.listItemIds(layer.id, 0, store.countItems(layer.id));
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(layer)) {
     out[key] = (layer as unknown as Record<string, unknown>)[key];
-    if (key === 'opacity') out.items = [...layer.items];
+    if (key === 'opacity') out.items = items;
   }
-  if (!('items' in out)) out.items = [...layer.items];
-  return out as unknown as Layer;
+  if (!('items' in out)) out.items = items;
+  return out as unknown as DocumentLayer;
 }
 
 /**
  * Exports the current data in the native format
  */
-export function exportNative(store: DocumentAccess, options?: ExportOptions): Data {
+export function exportNative(store: InstanceDocument, options?: ExportOptions): Data {
   let features = store.listFeatures();
-  const layers = store.listLayers().map(documentLayerOf);
+  const layers = store.listLayers().map((layer) => documentLayerOf(store, layer));
   // A group of the document lists its features, after its other fields
-  const groups = store
-    .listGroups()
-    .map((group) => ({ ...group, featureIds: [...group.featureIds] }));
+  const groups = store.listGroups().map((group) => ({
+    ...group,
+    featureIds: store.listGroupFeatureIds(group.id, 0, store.countGroupFeatures(group.id)),
+  }));
 
   if (options?.featureIds && options.featureIds.length > 0) {
     const featureIdSet = new Set(options.featureIds);
@@ -117,6 +128,7 @@ export async function prepareNative(
     );
   }
   const featureIds = features.map((f) => f.id);
+  const fileGroups = groups as unknown as DocumentGroup[];
   // A kept layer the data does not list goes to the back, where it stays when the data does
   // not mention it (every layer must be on the stacking order to be drawn)
   const retainedUnlisted = [...retainedLayerIds].filter((id) => !layerOrder.includes(id));
@@ -147,22 +159,21 @@ export async function prepareNative(
       store.deleteFile(file.id);
     }
 
-    // 2. Import the layers
+    // 2. Import the layers, with no item yet
     for (const layer of layers) {
+      const { items: _items, ...fields } = layer as unknown as DocumentLayer;
       if (store.getLayer(layer.id)) {
-        store.updateLayer(layer.id, layer);
+        store.updateLayer(layer.id, fields);
       } else {
-        store.createLayer(layer);
+        store.createLayer(fields as Layer);
       }
     }
 
-    // 3. Import the groups
-    for (const group of groups) {
-      store.createGroup(group);
-    }
-
-    // 4. Import the features, as few writes of the Store as their layers allow
-    document.createFeatures(features);
+    // 3. Import the groups and the features, in the order of the items of the layers from the
+    //    back: each group with no feature, then its features, and each feature at the front of
+    //    its container, the features that follow each other in as few writes as their layers
+    //    allow
+    placeItems(document, layers as unknown as DocumentLayer[], fileGroups, features);
 
     // 5. Import the files
     for (const file of files) {
@@ -185,4 +196,76 @@ export async function prepareNative(
     };
   };
   return { write };
+}
+
+/**
+ * Creates the groups and the features of a document read, in the order of the items of its
+ * layers, from the back: each item is put at the front of its layer as it comes, a group with no
+ * feature, then its features at the front of the group, in the order of the group. The features
+ * that follow each other are created at once, as few writes as their layers allow: the features
+ * of groups that follow each other, and the features in no group between them. The groups no
+ * layer lists come after the items of the layers, at the front of their layers, and the features
+ * no order lists last, at the front of their containers, in the order of the data
+ */
+function placeItems(
+  document: InstanceDocument,
+  layers: readonly DocumentLayer[],
+  groups: readonly DocumentGroup[],
+  features: readonly Feature[],
+): void {
+  const featureById = new Map(features.map((feature) => [feature.id, feature]));
+  const groupById = new Map(groups.map((group) => [group.id, group]));
+  const placed = new Set<string>();
+  const made = new Set<string>();
+  /** The features that follow each other, created at once: of groups, or in no group */
+  let run: Feature[] = [];
+  let runOfGroups = false;
+  const flush = (): void => {
+    if (run.length > 0) document.createFeatures(run);
+    run = [];
+  };
+  const take = (feature: Feature | undefined, ofGroup: boolean): void => {
+    if (!feature || placed.has(feature.id)) return;
+    // A feature in no group goes in front of the groups before it once they hold their features
+    if (ofGroup !== runOfGroups) flush();
+    runOfGroups = ofGroup;
+    placed.add(feature.id);
+    run.push(feature);
+  };
+  /** Creates a group with no feature at the front of a layer, then takes its features */
+  const makeGroup = (group: DocumentGroup, layerId: string): void => {
+    // The features in no group before it are created first, so that it stands in front of them
+    if (!runOfGroups) flush();
+    runOfGroups = true;
+    made.add(group.id);
+    const { featureIds, ...fields } = group;
+    document.createGroup({ ...fields, layerId, featureIds: [] } as Group);
+    for (const id of featureIds) {
+      const feature = featureById.get(id);
+      if (feature?.groupId === group.id) take(feature, true);
+    }
+  };
+  for (const layer of layers) {
+    for (const itemId of layer.items) {
+      const group = groupById.get(itemId);
+      if (group) {
+        if (!made.has(group.id)) makeGroup(group, layer.id);
+        continue;
+      }
+      const feature = featureById.get(itemId);
+      if (feature?.groupId === undefined && feature?.layerId === layer.id) take(feature, false);
+    }
+    flush();
+  }
+  for (const group of groups) {
+    if (!made.has(group.id)) makeGroup(group, group.layerId);
+  }
+  flush();
+  for (const feature of features) {
+    if (!placed.has(feature.id)) {
+      placed.add(feature.id);
+      run.push(feature);
+    }
+  }
+  flush();
 }
