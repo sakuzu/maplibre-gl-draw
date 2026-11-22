@@ -50,11 +50,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
-import {
-  type AnchorProjector,
-  type ScreenPoint,
-  setAnchorProjector,
-} from '../../shared/math/index.js';
+import type { AnchorProjector, ScreenPoint } from '../../shared/math/index.js';
 import { nearestLongitude } from '../../shared/math/longitude.js';
 import type { OffsetUniforms } from '../shaders/helpers.js';
 import { INACTIVE_ANCHOR_FRAME, type TerrainContext } from './context.js';
@@ -309,27 +305,20 @@ export function projectAnchorAt(
 }
 
 /**
- * Injects the anchor projection into the hit testing side (once when the layer is created)
+ * The anchor projection of a terrain state, for hit testing
  *
- * It is bound per map. When a page has several rendering instances (the screen + a thumbnail +
- * a preview + printing), keeping only one globally would make hit testing run against
- * the frame of the instance created last.
+ * It goes through {@link projectAnchor}, so hit testing uses the same elevation, matrices and
+ * branches as rendering, and returns null while the terrain state has no frame (no terrain, or
+ * the layer is off the map). The draw instance makes it once from its own terrain state and
+ * hands it to its hit testing; a page can have several draw instances (the screen, a
+ * thumbnail, a preview, printing), even on one map, and none uses another's frame.
  *
- * @param map The map to inject into
- * @param context That map's terrain state
+ * @param context The terrain state of the draw instance
  */
-export function installAnchorProjector(map: MapLibreMap, context: TerrainContext): void {
-  const projector: AnchorProjector = {
+export function createAnchorProjector(context: TerrainContext): AnchorProjector {
+  return {
     project: (lng, lat) => projectAnchor(context, lng, lat),
   };
-  setAnchorProjector(map, projector);
-}
-
-/**
- * Removes the injection (when the layer is destroyed)
- */
-export function uninstallAnchorProjector(map: MapLibreMap): void {
-  setAnchorProjector(map, null);
 }
 
 /**

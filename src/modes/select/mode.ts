@@ -171,7 +171,7 @@ export class SelectMode implements EngineModeHandler {
 
     const orderedFeatures = getDisplayFeatures(store);
     const selectedFeatures = getSelectedFeatures(store);
-    const transform = createCoordinateTransform(map);
+    const transform = createCoordinateTransform(map, this.#context.anchorProjector);
 
     // Test against the handles of the selected features / inside their bbox
     if (selectedFeatures.length > 0) {
@@ -281,7 +281,7 @@ export class SelectMode implements EngineModeHandler {
     // Group / layer selections are also resolved to their members (so dragging the selection box
     // moves a group as one). A feature selection is read as its set, without an array of its IDs
     const selectedIds = getSelectedFeatureIdSet(store);
-    const transform = createCoordinateTransform(map);
+    const transform = createCoordinateTransform(map, this.#context.anchorProjector);
     const dragStartPoint = event.dragStartPoint ?? event.point;
 
     // Shift+drag = box selection

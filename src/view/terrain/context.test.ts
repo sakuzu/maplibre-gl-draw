@@ -14,15 +14,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { createCoordinateTransform, setAnchorProjector } from '../../shared/math/index.js';
+import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { OffsetUniforms } from '../shaders/helpers.js';
 import {
   clearAnchorFrame,
+  createAnchorProjector,
   getAnchorElevationGeneration,
-  installAnchorProjector,
   projectAnchor,
   setAnchorFrame,
-  uninstallAnchorProjector,
 } from './anchor.js';
 import { releaseTerrainContext, TerrainContext, type TerrainRenderState } from './context.js';
 import type { TerrainLike } from './detect.js';
@@ -165,7 +164,7 @@ describe('per-instance separation of the terrain state', () => {
       unproject: () => ({ lng: 0, lat: 0 }),
     } as never;
 
-    installAnchorProjector(screenMap, screen);
+    const projector = createAnchorProjector(screen);
     applyFrame(screen, createTerrain(1000));
     const expected = projectAnchor(screen, 0, 0);
 
@@ -173,12 +172,10 @@ describe('per-instance separation of the terrain state', () => {
     applyFrame(thumbnail, createTerrain(0));
 
     // Even so, the screen's hit testing goes through the screen's frame
-    const transform = createCoordinateTransform(screenMap);
+    const transform = createCoordinateTransform(screenMap, projector);
     expect(transform.project([0, 0])).toEqual(expected);
     expect(projectAnchor(thumbnail, 0, 0)).not.toEqual(expected);
 
-    uninstallAnchorProjector(screenMap);
-    setAnchorProjector(screenMap, null);
     clearAnchorFrame(screen);
   });
 });

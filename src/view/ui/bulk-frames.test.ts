@@ -259,10 +259,13 @@ describe('many features selected', () => {
   });
 
   it('frame a row as the frame of its feature: the margin on the map plane', () => {
-    const transform = createCoordinateTransform({
-      project: () => ({ x: 0, y: 0 }),
-      unproject: () => ({ lng: 0, lat: 0 }),
-    } as unknown as MapLibreMap);
+    const transform = createCoordinateTransform(
+      {
+        project: () => ({ x: 0, y: 0 }),
+        unproject: () => ({ lng: 0, lat: 0 }),
+      } as unknown as MapLibreMap,
+      null,
+    );
     const features: Feature[] = [
       polygonAt([139.7, 35.6], 0.01),
       polygonAt([-70, -50], 0.3),

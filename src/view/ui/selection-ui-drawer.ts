@@ -10,7 +10,11 @@
 
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { THINNING_VIEWPORT_MARGIN_PX } from '../../shared/config/selection.js';
-import { type CoordinateTransform, createCoordinateTransform } from '../../shared/math/index.js';
+import {
+  type AnchorProjector,
+  type CoordinateTransform,
+  createCoordinateTransform,
+} from '../../shared/math/index.js';
 import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isGlobeProjection } from '../../shared/utils/map.js';
 import { isLocallyHidden, type LocalHiddenStore } from '../../store/local-visibility.js';
@@ -46,6 +50,8 @@ export interface SelectionUIDrawerDeps {
   map: MapLibreMap;
   /** The selection scope of the draw instance (extension points and thinned handle sets) */
   scope: SelectionScope;
+  /** The anchor projection of the draw instance (null for none) */
+  anchorProjector: AnchorProjector | null;
 }
 
 /**
@@ -79,7 +85,7 @@ export function renderSelectionUI(
 
   // Set the coordinate transform: the projection the markers are drawn with and the hit
   // testing uses (the anchor projection while the terrain is on, the map's otherwise)
-  const coordinateTransform = createCoordinateTransform(map);
+  const coordinateTransform = createCoordinateTransform(map, deps.anchorProjector);
 
   selectionUIRenderer.setTransform(coordinateTransform);
   selectionUIRenderer.setProjectionData(projectionData);
@@ -169,7 +175,7 @@ export function renderManySelectionUI(
   const { selectionUIRenderer, selectionHandlesRenderer, pointInstanceRenderer, map } = deps;
   if (!selectionUIRenderer || !selectionHandlesRenderer || !many.bbox) return;
   if (pointInstanceRenderer) pointInstanceRenderer.setProjectionData(projectionData);
-  const coordinateTransform = createCoordinateTransform(map);
+  const coordinateTransform = createCoordinateTransform(map, deps.anchorProjector);
   selectionUIRenderer.setTransform(coordinateTransform);
   selectionUIRenderer.setProjectionData(projectionData);
   selectionHandlesRenderer.setTransform(coordinateTransform);

@@ -12,17 +12,16 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createCoordinateTransform, setAnchorProjector } from '../../shared/math/index.js';
+import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { OffsetUniforms } from '../shaders/helpers.js';
 import {
   anchorElevationMeters,
   clearAnchorFrame,
+  createAnchorProjector,
   getAnchorElevationGeneration,
-  installAnchorProjector,
   isAnchorActive,
   projectAnchor,
   setAnchorFrame,
-  uninstallAnchorProjector,
 } from './anchor.js';
 import { TerrainContext } from './context.js';
 import type { TerrainLike } from './detect.js';
@@ -95,13 +94,8 @@ function applyFrame(terrain: TerrainLike, zToY = 4): void {
   });
 }
 
-/** A map stand-in used as the target of the anchor projector injection */
-const PROJECTOR_MAP = {} as never;
-
 afterEach(() => {
-  uninstallAnchorProjector(PROJECTOR_MAP);
   clearAnchorFrame(context);
-  setAnchorProjector(PROJECTOR_MAP, null);
 });
 
 describe('anchor position computation', () => {
@@ -189,7 +183,7 @@ describe('injection into hit testing', () => {
 
   it('uses MapLibre project when there is no injection (zero regression without terrain)', () => {
     const map = createMap();
-    const transform = createCoordinateTransform(map as never);
+    const transform = createCoordinateTransform(map as never, null);
 
     expect(transform.project([10, 20])).toEqual({ x: 111, y: 222 });
     expect(map.project).toHaveBeenCalledTimes(1);
@@ -197,10 +191,10 @@ describe('injection into hit testing', () => {
 
   it('goes through the same anchor projection as rendering when the terrain is enabled', () => {
     const map = createMap();
-    installAnchorProjector(map as never, context);
+    const projector = createAnchorProjector(context);
     applyFrame(createTerrain(1000));
 
-    const transform = createCoordinateTransform(map as never);
+    const transform = createCoordinateTransform(map as never, projector);
     const viaTransform = transform.project([0, 0]);
     const viaAnchor = projectAnchor(context, 0, 0);
 
@@ -213,11 +207,11 @@ describe('injection into hit testing', () => {
 
   it('falls back to MapLibre project once the terrain is removed', () => {
     const map = createMap();
-    installAnchorProjector(map as never, context);
+    const projector = createAnchorProjector(context);
     applyFrame(createTerrain(1000));
     clearAnchorFrame(context);
 
-    const transform = createCoordinateTransform(map as never);
+    const transform = createCoordinateTransform(map as never, projector);
     expect(transform.project([0, 0])).toEqual({ x: 111, y: 222 });
   });
 });

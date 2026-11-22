@@ -45,7 +45,7 @@ export function updateCursorForSelection(
   // shown over a group). A feature selection is read as its set, without an array of its IDs
   const selectedIds = getSelectedFeatureIdSet(store);
   const canvas = map.getCanvas();
-  const transform = createCoordinateTransform(map);
+  const transform = createCoordinateTransform(map, context.anchorProjector);
 
   // Handle hit test on the selected features
   // No operation cursor (move / resize, etc.) is shown for a selection whose editing operations

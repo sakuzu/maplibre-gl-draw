@@ -77,7 +77,5 @@ export {
   clampLatitude,
   createCoordinateTransform,
   expandQuad,
-  getAnchorProjector,
   lngLatToMercator,
-  setAnchorProjector,
 } from './transform.js';

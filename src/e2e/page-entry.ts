@@ -18,7 +18,6 @@ import * as maplibregl from 'maplibre-gl';
 import { geometryColumnOf, newRowFields } from '../api/impl/feature-rows.js';
 import type { Feature } from '../api/model.js';
 import { createDraw } from '../index.js';
-import { getAnchorProjector } from '../shared/math/index.js';
 import { createOrderKeyBetween, createStore, type Store } from '../store/index.js';
 import { prepareTable } from '../table/index.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
@@ -58,7 +57,6 @@ function writeFeatureRows(store: Store, features: readonly Feature[]): boolean {
     DemAtlas,
     createStore,
     writeFeatureRows,
-    getAnchorProjector,
     getMapTerrain,
     getRenderableTerrainTiles,
     getTerrainTileData,

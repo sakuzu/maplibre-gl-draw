@@ -70,6 +70,11 @@ export interface PluginInteractions {
 export interface EngineModeContext {
   /** The map the draw instance is attached to */
   map: MapLibreMap;
+  /**
+   * The anchor projection of the draw instance, which the hit testing of the selection projects
+   * through while the terrain is on (it returns null otherwise)
+   */
+  anchorProjector: import('../shared/math/transform.js').AnchorProjector;
   /** The Store of the document; a mode writes features through it */
   store: import('../store/document-access.js').DocumentAccess;
   /**

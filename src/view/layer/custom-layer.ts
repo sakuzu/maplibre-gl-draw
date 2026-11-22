@@ -45,6 +45,7 @@ import type { EngineOverlayRenderer, FeatureTypeHandler } from '../../extension/
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
+import type { AnchorProjector } from '../../shared/math/index.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import { drawnRowsOf } from '../../store/built-in/drawn-rows.js';
@@ -54,7 +55,7 @@ import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
-import { installAnchorProjector, uninstallAnchorProjector } from '../terrain/anchor.js';
+import { createAnchorProjector } from '../terrain/anchor.js';
 import {
   releaseTerrainContext,
   type TerrainContext,
@@ -184,6 +185,14 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    * The terrain state of this draw instance (the anchor projection of the plugins reads it)
    */
   getTerrainContext(): TerrainContext;
+  /**
+   * The anchor projection of this draw instance (the one of its terrain state), which its hit
+   * testing and its selection UI project through while the terrain is on
+   *
+   * It returns null while the terrain is off or the layer is off the map, and the project of
+   * MapLibre is used then.
+   */
+  readonly anchorProjector: AnchorProjector;
   /** The WebGL context of the map while the drawing is on it, or null */
   getGL(): WebGL2RenderingContext | null;
   /** What the drawing of this instance holds on the GPU, per part */
@@ -315,6 +324,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
    */
   const renderScope = createRenderScope(deps.selectionScope);
   const terrainContext = renderScope.terrain;
+  // The anchor projection of this instance. It only takes effect in the frames where the terrain
+  // is active (it returns null until setAnchorFrame is called, and again once the terrain state
+  // is released), and on a map without terrain the project of MapLibre is used as before
+  const anchorProjector = createAnchorProjector(terrainContext);
   const terrainResolver = new TerrainResolver(map, terrainContext, renderScope.gpu);
   const drape = new DrapePlanner({
     map,
@@ -356,11 +369,6 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     engine.gl = glContext;
     engine.mapInstance = mapInstance;
-
-    // Insert the anchor projection into the hit testing side. It only takes effect in the frames
-    // where the terrain is active (it returns null until setAnchorFrame is called), and on a map
-    // without terrain the project of MapLibre is used as before.
-    installAnchorProjector(mapInstance, terrainContext);
 
     // Subscribe to the Store changes to invalidate the earcut, style rule and retained batch
     // caches
@@ -450,10 +458,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     renderScope.earcut.clear();
     renderScope.styleRules.clear();
 
-    // Release the terrain state of this instance
+    // Release the terrain state of this instance (its anchor projection returns null again, and
+    // hit testing goes back to the project of MapLibre)
     releaseTerrainContext(terrainContext);
-    // Remove the inserted anchor projection (hit testing goes back to the project of MapLibre)
-    if (map) uninstallAnchorProjector(map);
   }
 
   // ---------------------------------------------------------------------------
@@ -723,6 +730,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       datasets,
       tableRetained: engine.tableRetained,
       selectionScope: renderScope.selection,
+      anchorProjector,
     };
     renderSegment(renderDeps, frame, index);
     frame.lastIndex = index;
@@ -847,6 +855,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     getTerrainContext(): TerrainContext {
       return terrainContext;
     },
+
+    anchorProjector,
 
     getGL(): WebGL2RenderingContext | null {
       return engine.renderers ? engine.gl : null;

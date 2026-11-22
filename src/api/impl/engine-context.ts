@@ -29,7 +29,7 @@ import type { TopologyConfig } from '../../shared/config/topology.js';
 import { DEFAULT_TOPOLOGY_CONFIG, mergeTopologyConfig } from '../../shared/config/topology.js';
 import type { TraceConfig, TraceOptions } from '../../shared/config/trace.js';
 import { DEFAULT_TRACE_CONFIG, mergeTraceConfig } from '../../shared/config/trace.js';
-import { getAnchorProjector } from '../../shared/math/index.js';
+import type { AnchorProjector } from '../../shared/math/index.js';
 import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import type { EventEmitter } from '../../shared/utils/event-emitter.js';
 import { EventEmitterImpl } from '../../shared/utils/event-emitter.js';
@@ -127,6 +127,17 @@ export interface Context {
   /** The spatial index, derived from the Store (it follows every Store change by itself) */
   spatialIndex: StoreSpatialIndex;
   hitTestService: HitTestService;
+  /**
+   * The anchor projection of this instance, which the hit testing, the modes and the selection
+   * UI project through while the terrain is on
+   *
+   * It projects through the projection the drawing layer of this instance attaches (the one of
+   * its own terrain state), and returns null while none is attached or the terrain is off. It
+   * belongs to the instance, so a second instance on the same map never uses it.
+   */
+  anchorProjector: AnchorProjector;
+  /** Attaches the anchor projection of the drawing layer of this instance (null detaches it) */
+  attachAnchorProjector(projector: AnchorProjector | null): void;
   eventEmitter: EventEmitter;
   modeManager: ModeManager;
   featureStyle: FeatureStyleConfig;
@@ -266,14 +277,23 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // Derived from the Store: it subscribes before any other component, so a listener that
   // queries it during a notification already sees the change
   const spatialIndex = new StoreSpatialIndex(store);
+  // The anchor projection of this instance. The drawing layer attaches the projection of its
+  // terrain state when it is made; until then, and while the terrain is off, it returns null
+  let attachedAnchorProjector: AnchorProjector | null = null;
+  const anchorProjector: AnchorProjector = {
+    project: (lng, lat) => attachedAnchorProjector?.project(lng, lat) ?? null,
+  };
+  const attachAnchorProjector = (projector: AnchorProjector | null): void => {
+    attachedAnchorProjector = projector;
+  };
   // Hit testing for symbols (points) is done in screen space while terrain is enabled.
-  // What is injected is the anchor projection of this map, identical to the one the rendering
-  // uses. When terrain is disabled, project returns null and the conventional longitude and
-  // latitude path keeps working as before.
+  // What is injected is the anchor projection of this instance, identical to the one the
+  // rendering uses. When terrain is disabled, project returns null and the conventional
+  // longitude and latitude path keeps working as before.
   const hitTestService: HitTestService = new HitTestServiceImpl(store, spatialIndex, {
     clickTolerancePx: opts.clickTolerancePx,
     anchorScreen: {
-      project: (coord) => getAnchorProjector(map)?.project(coord[0], coord[1]) ?? null,
+      project: (coord) => anchorProjector.project(coord[0], coord[1]),
     },
     // On the globe the edges are tested along the path they are drawn along
     drawnShape: createGlobeShapeResolver(map),
@@ -391,6 +411,8 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     exposedStore,
     spatialIndex,
     hitTestService,
+    anchorProjector,
+    attachAnchorProjector,
     eventEmitter,
     modeManager,
     featureStyle,

@@ -300,6 +300,10 @@ export function createEngine(
   // Runs after the layers are taken off the map (the releases run in the reverse order): what
   // the drawing still holds on the GPU is given back, and what a part forgot is counted
   teardown.add(() => customLayer.destroyGpu());
+  // The hit testing, the modes and the selection UI of this instance project through the anchor
+  // projection of its own terrain state
+  context.attachAnchorProjector(customLayer.anchorProjector);
+  teardown.add(() => context.attachAnchorProjector(null));
 
   // 3.5 Add the snapping indicator as a built-in overlay
   // (it comes in front of the selection UI because order: 'overlay')
@@ -365,6 +369,7 @@ export function createEngine(
   // 7. The context of the modes of the engine (select and image)
   const modeContext: EngineModeContext = {
     map,
+    anchorProjector: context.anchorProjector,
     store,
     bulkEdits: edits,
     spatialIndex,

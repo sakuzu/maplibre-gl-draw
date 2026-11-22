@@ -13,6 +13,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
+import type { AnchorProjector } from '../../shared/math/index.js';
 import { type DrawnRows, pageRowBox } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import { isInteractionBlocked } from '../../store/lock.js';
@@ -70,6 +71,8 @@ export interface FrameRenderDeps {
   /** The drawing of the layers from their rows (null when the Store does not hand out its rows) */
   tableRetained?: TableLayerRenderer | null;
   selectionScope: SelectionScope;
+  /** The anchor projection of this draw instance, which the selection UI projects through */
+  anchorProjector: AnchorProjector;
 }
 
 /** Makes the renderers draw on one copy of the world */
@@ -280,6 +283,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     pointInstanceRenderer: r.pointInstanceRenderer,
     map,
     scope: deps.selectionScope,
+    anchorProjector: deps.anchorProjector,
   };
   const tentative = store.getTentative();
   const boxSelection = store.getBoxSelection();

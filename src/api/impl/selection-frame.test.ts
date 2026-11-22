@@ -38,7 +38,7 @@ const screen = createScreenContext({
   pixelRatio: { resolve: () => 1 } as never,
   selectionExtensions: extensions,
 });
-const transform = createCoordinateTransform(map);
+const transform = createCoordinateTransform(map, null);
 
 /** A point type whose frame is a rectangle 60 by 20 px turned by 30 degrees */
 extensions.registerPointFrameOutline('Turned', (feature) => {
@@ -206,7 +206,7 @@ describe('the selection frame of a built-in point of a draw instance', () => {
       });
       const [x] = engineScreen.project([0.1, 0.1]);
       const { renderer, frames } = recordingRenderer(registry, (c) => engineScreen.project(c));
-      renderer.setTransform(createCoordinateTransform(engineMap));
+      renderer.setTransform(createCoordinateTransform(engineMap, null));
       renderer.draw([stored], ZOOM);
       const right = frames[0][1][0];
       return { outline: engineScreen.outline(stored)[1][0] - x, frame: right - x };

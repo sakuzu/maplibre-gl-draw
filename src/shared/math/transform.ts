@@ -98,8 +98,10 @@ export interface CoordinateTransform {
  * ground elevation) into screen coordinates. So that the rendering side (the vertex shader)
  * and the hit-testing side (this transformation) are structurally guaranteed to go through the
  * same elevation, the same matrices and the same branches, the implementation is owned by the
- * view layer (`view/terrain/anchor.ts`) and injected here. shared cannot depend on view, so
- * the direction is reversed into "shared opens a socket and view plugs into it".
+ * view layer (`view/terrain/anchor.ts`) and handed in here. shared cannot depend on view, so
+ * the direction is reversed into "shared opens a socket and view plugs into it". Each draw
+ * instance holds the projector of its own terrain state and passes it to
+ * `createCoordinateTransform`.
  *
  * When project returns null (terrain is disabled, or the frame state is not yet established),
  * it falls back to MapLibre's project. The path taken when there is no terrain is exactly the
@@ -114,30 +116,6 @@ export interface AnchorProjector {
 }
 
 /**
- * The injected anchor projection (per map)
- *
- * A single page can have several rendering instances (the screen + a thumbnail + a
- * preview + printing), so holding just one globally would make hit testing use the frame of
- * the instance that was created last. Keying by the map structurally rules out that mix-up.
- */
-const anchorProjectors = new WeakMap<object, AnchorProjector>();
-
-/**
- * Injects an anchor projection (the view layer calls this per map; null removes it)
- */
-export function setAnchorProjector(map: MapLibreMap, projector: AnchorProjector | null): void {
-  if (projector) anchorProjectors.set(map, projector);
-  else anchorProjectors.delete(map);
-}
-
-/**
- * Gets the anchor projection that is currently injected
- */
-export function getAnchorProjector(map: MapLibreMap): AnchorProjector | null {
-  return anchorProjectors.get(map) ?? null;
-}
-
-/**
  * Creates a CoordinateTransform from a MapLibre map
  *
  * When terrain is enabled, project goes through the anchor projection (elevation included, one
@@ -149,13 +127,22 @@ export function getAnchorProjector(map: MapLibreMap): AnchorProjector | null {
  * is. That is also because it has to solve the intersection with the terrain mesh by
  * raycasting, which cannot be obtained from matrices alone.
  *
+ * The anchor projection belongs to the draw instance (the projection of its own terrain state),
+ * so the caller always says which one: the projector of its instance, or null where there is
+ * none. A map can carry several draw instances, and the projection of one never serves the hit
+ * testing of another.
+ *
  * @param map MapLibre map instance
+ * @param projector The anchor projection of the draw instance, or null for none
  * @returns A CoordinateTransform instance
  */
-export function createCoordinateTransform(map: MapLibreMap): CoordinateTransform {
+export function createCoordinateTransform(
+  map: MapLibreMap,
+  projector: AnchorProjector | null,
+): CoordinateTransform {
   return {
     project: (coord: Coordinate) => {
-      const anchored = anchorProjectors.get(map)?.project(coord[0], coord[1]);
+      const anchored = projector?.project(coord[0], coord[1]);
       if (anchored) return anchored;
       const p = map.project([coord[0], coord[1]]);
       return { x: p.x, y: p.y };

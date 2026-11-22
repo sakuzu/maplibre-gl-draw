@@ -141,7 +141,7 @@ function handleVertexClick(
   // to vertex selection
   if (!feature || !supportsVertexEditing(feature.type)) return false;
 
-  const transform = createCoordinateTransform(map);
+  const transform = createCoordinateTransform(map, context.anchorProjector);
   const zoom = map.getZoom();
   const handleHit = hitTestHandles(
     event.point,
