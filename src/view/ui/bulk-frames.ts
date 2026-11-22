@@ -29,9 +29,11 @@
  *   point (the color given to the alpha)
  *
  * The rows drawn one at a time in the frame (the images, the custom types, the features with
- * companions, the rows of a chunk drawn at once, the points drawn at once in the band of the
- * analytic drape of the terrain) get no instance here: their frames are drawn from their features,
- * as before, so that a frame fades with its point where the terrain fades it.
+ * companions, the rows of a chunk drawn at once) get no instance here: their frames are drawn from
+ * their features, as before, so that a frame fades with its point where the terrain fades it. On a
+ * frame the analytic drape paints, the frame of a point the terrain hides from the camera fades
+ * with it here too: the vertex shader makes the test the points drawn from their rows make
+ * (`rows-occlusion.ts`), and the frame is drawn as faint as the frame of its feature.
  *
  * The instances of a group are made from its rows when it is first drawn, and again when the rows
  * of the Store change; the instances of the groups not drawn in a frame are released at its end,
@@ -58,6 +60,10 @@ import {
   ROW_STATE_SELECTED_GLSL,
   RowStateUniforms,
 } from '../renderers/row-state.js';
+import {
+  TERRAIN_OCCLUSION_GLSL,
+  TerrainOcclusionUniforms,
+} from '../renderers/rows/rows-occlusion.js';
 import {
   createProgram,
   getProjectionTransitionUniform,
@@ -167,6 +173,11 @@ export interface BulkFramesView {
   readonly config: SelectionUIConfig;
   /** The terrain state of the instance */
   readonly terrain: TerrainContext;
+  /**
+   * Whether the frames of the points take the test of the terrain hiding them (a frame the analytic
+   * drape paints; none when omitted)
+   */
+  readonly ghosts?: boolean;
 }
 
 /** The instances of the framed rows of a group */
@@ -320,6 +331,7 @@ export class BulkFramesRenderer {
   private failed = '';
   private projection: ProjectionUniformManager;
   private rowState: RowStateUniforms | null = null;
+  private ghosts: TerrainOcclusionUniforms | null = null;
   private locations: Partial<Record<UniformName, WebGLUniformLocation | null>> = {};
   private readonly frames = new Map<RowGroup, GroupFrames>();
   /** The groups drawn since the last end of a frame */
@@ -374,6 +386,7 @@ export class BulkFramesRenderer {
       const gl = this.gl;
       const camera = view.offsetUniforms;
       this.projection.setUniforms(view.projectionData, view.zoom, camera, this.noShift);
+      this.ghosts?.write(view.ghosts === true, view.terrain, camera);
       const loc = this.locations;
       // The two origins from the camera (in 64 bits, then given to Float32), and their latitudes
       const cx = camera ? camera.centerLngLat[0] : 0;
@@ -419,6 +432,7 @@ export class BulkFramesRenderer {
     }
     this.variantName = '';
     this.rowState = null;
+    this.ghosts = null;
     this.locations = {};
   }
 
@@ -501,6 +515,7 @@ export class BulkFramesRenderer {
     this.projection = new ProjectionUniformManager(gl);
     this.projection.getLocations(program);
     this.rowState = new RowStateUniforms(gl, program);
+    this.ghosts = new TerrainOcclusionUniforms(gl, program);
     const locations: Partial<Record<UniformName, WebGLUniformLocation | null>> = {};
     for (const name of UNIFORMS) locations[name] = gl.getUniformLocation(program, name);
     this.locations = locations;
@@ -627,7 +642,7 @@ export function buildBulkFramesVertexSource(prelude: string, define: string): st
   return `#version 300 es
 ${prelude}
 ${define}
-${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}${ROW_STATE_SELECTED_GLSL}
+${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}${ROW_STATE_SELECTED_GLSL}${TERRAIN_OCCLUSION_GLSL}
 
 // The box of the row from the origin of its group: west, south, east, north
 layout(location = 0) in vec4 a_bounds;
@@ -661,6 +676,8 @@ out float v_dist;
 out float v_width;
 out float v_distance;
 out float v_point;
+// The faintness of the frame of a point the terrain hides (1 for every other frame)
+flat out float v_ghost;
 
 // The corners of the outline: from the origin of the group (a frame with an extent) or on the
 // screen around the point (CSS px, y down); top left, top right, bottom right, bottom left
@@ -720,6 +737,7 @@ float pathDistance(int i) {
 void main() {
     v_dist = 0.0;
     v_distance = 0.0;
+    v_ghost = 1.0;
     bool second = a_meta.w > 1.5;
     float point = second ? a_meta.w - 2.0 : a_meta.w;
     v_point = point;
@@ -774,6 +792,12 @@ void main() {
         if (centerClip.w <= 0.0) {
             gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
             return;
+        }
+        // Hidden by the terrain from the camera: as faint as the point (its ground read from the
+        // atlas, as the frame stands on it)
+        if (u_ghost_on > 0.5) {
+            vec2 anchor = shade_mercator_offset(a_bounds.xy + g_shift);
+            v_ghost = terrainGhostOpacity(anchor, dem_elevation_meters(anchor) * u_elevation_params.x);
         }
         gl_Position = vec4(
             centerClip.xy / centerClip.w + vec2(offset.x, -offset.y) * u_pixel_to_clip,
@@ -881,6 +905,7 @@ in float v_dist;
 in float v_width;
 in float v_distance;
 in float v_point;
+flat in float v_ghost;
 
 out vec4 fragColor;
 
@@ -894,7 +919,7 @@ void main() {
         if (patternLength > 0.0 && mod(v_distance, patternLength) > u_dash_array.x) discard;
     }
     float coverage = pixelLine(v_dist + v_width) - pixelLine(v_dist - v_width);
-    fragColor = v_point > 0.5 ? vec4(u_color.rgb, u_color.a * coverage) : u_color * coverage;
+    fragColor = v_point > 0.5 ? vec4(u_color.rgb, u_color.a * coverage * v_ghost) : u_color * coverage;
 }`;
 
 /**

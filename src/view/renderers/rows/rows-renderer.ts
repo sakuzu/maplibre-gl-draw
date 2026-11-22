@@ -29,7 +29,13 @@
  *
  * Everything it holds on the GPU is in the ledger of its instance, under the part of the rows
  * (`rows`): the chunks, the values of the styles of each layer, the corners of the strip and the
- * program.
+ * program. A chunk can be made under a part that gives way instead (the chunks of the points of
+ * the frames the analytic drape paints, under `drape`): it is written only when it fits in the
+ * share of the parts that give way (`fits`), and is refused otherwise (`refused`), drawing nothing;
+ * the side that draws the rows draws them another way then.
+ *
+ * On a frame the drape paints, the points of a chunk packed for the surface take the test of the
+ * terrain hiding them from the camera (`rows-occlusion.ts`; `drawRange` with `ghosts`).
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -65,6 +71,7 @@ import {
   type RowsPalette,
   writeCollapsedInstance,
 } from './rows-format.js';
+import { TerrainOcclusionUniforms } from './rows-occlusion.js';
 import { buildRowsFragmentSource, buildRowsVertexSource } from './rows-shader.js';
 import { TexelWrites } from './rows-writes.js';
 
@@ -75,6 +82,13 @@ const UNIT_STYLES = 3;
 
 /** The part the GPU memory of this renderer is recorded under in the ledger (row data) */
 export const ROWS_PART = 'rows';
+
+/**
+ * The part that gives way the chunks of the points of the frames the analytic drape paints are
+ * recorded under: they are the work of the drape (with them, its frames draw the points from their
+ * rows) and are held in the share of the parts that give way
+ */
+export const DRAPED_ROWS_PART = 'drape';
 
 /**
  * The vertices of the strip every instance is drawn with: as many as the most stations of a
@@ -112,6 +126,13 @@ export interface RowsChunk {
   /** The writes in place since the last upload (null before the first) */
   writes: RowsChunkWrites | null;
   disposed: boolean;
+  /** The part it is recorded under in the ledger (`rows`, or a part that gives way) */
+  readonly part: string;
+  /**
+   * The bytes it was refused for, when it did not fit in the share of the parts that give way (it
+   * is not written and draws nothing); 0 otherwise
+   */
+  refused: number;
 }
 
 /**
@@ -155,6 +176,7 @@ interface RowsProgram {
   readonly locations: RowsUniformLocations;
   readonly projection: ProjectionUniformManager;
   readonly rowState: RowStateUniforms;
+  readonly ghosts: TerrainOcclusionUniforms;
   /** The values written to the uniforms, and the frame they were written in */
   readonly memo: RowsUniformMemo;
 }
@@ -259,6 +281,7 @@ export class RowsRenderer {
             return manager;
           })(),
           rowState: new RowStateUniforms(this.gl, program),
+          ghosts: new TerrainOcclusionUniforms(this.gl, program),
           memo: emptyMemo(),
         };
       } catch (error) {
@@ -289,9 +312,14 @@ export class RowsRenderer {
   /**
    * Makes a chunk of packed rows; it is written to the GPU by the next `flushUploads` and can be
    * drawn after that
+   *
+   * @param part The part it is recorded under: the rows, or `DRAPED_ROWS_PART`, a part that gives
+   *   way (written only when it fits, refused otherwise)
    */
-  createChunk(data: RowsChunkData): RowsChunk {
+  createChunk(data: RowsChunkData, part: string = ROWS_PART): RowsChunk {
     const chunk: RowsChunk = {
+      part,
+      refused: 0,
       data: layoutOf(data),
       packed: data,
       uploaded: false,
@@ -534,6 +562,8 @@ export class RowsRenderer {
    *
    * @param rowState The state of the rows of the group of the chunk
    * @param factors The factors of the drawing (the opacity of the layer)
+   * @param ghosts Whether its points take the test of the terrain hiding them (a frame the
+   *   analytic drape paints)
    * @returns Whether it was drawn (false for a chunk not written yet, or without a program)
    */
   drawRange(
@@ -544,6 +574,7 @@ export class RowsRenderer {
     projectionData: ProjectionData,
     rowState: RowStateTexture,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+    ghosts = false,
   ): boolean {
     const program = this.program;
     if (!chunk.uploaded || !program) return false;
@@ -557,19 +588,22 @@ export class RowsRenderer {
     const gl = this.gl;
     gl.useProgram(program.program);
     const camera = this.offsetUniforms;
+    let center: OffsetUniforms;
     if (camera) {
+      center = camera;
       this.originShift[0] = data.origin[0] - camera.centerLngLat[0];
       this.originShift[1] = data.origin[1] - camera.centerLngLat[1];
       program.projection.setUniforms(projectionData, zoom, camera, this.originShift);
     } else {
-      program.projection.setUniforms(
-        projectionData,
-        zoom,
-        calculateOffsetUniforms(data.origin, projectionData.mainMatrix as unknown as Float32Array),
+      center = calculateOffsetUniforms(
+        data.origin,
+        projectionData.mainMatrix as unknown as Float32Array,
       );
+      program.projection.setUniforms(projectionData, zoom, center);
     }
     const stations = this.stationsOf(chunk);
     this.writeUniforms(program, chunk, zoom, factors, stations);
+    program.ghosts.write(ghosts && data.lines.surface, this.terrain, center);
     program.rowState.bind(rowState);
     this.bindTextures(chunk);
     // The faces of the fills are told apart by their winding on the screen (counterclockwise is
@@ -780,19 +814,32 @@ export class RowsRenderer {
     palette.gpu = null;
   }
 
-  /** Writes a chunk: its buffer, its textures and its vertex array */
+  /**
+   * Writes a chunk: its buffer, its textures and its vertex array. A chunk of a part that gives way
+   * is written only when what it holds fits in the share of the parts that give way; it is refused
+   * otherwise (it keeps nothing, and draws nothing)
+   */
   private uploadChunk(chunk: RowsChunk): void {
     const data = chunk.packed;
     if (chunk.disposed || !data) return;
     const gl = this.gl;
+    if (chunk.part !== ROWS_PART) {
+      const bytes = chunkBytesOf(data);
+      if (!this.ledger.fits(bytes)) {
+        chunk.refused = bytes;
+        chunk.packed = null;
+        return;
+      }
+    }
+    const part = chunk.part;
 
     const instances = data.instances.subarray(0, data.instanceCount * ROWS_INSTANCE_FLOATS);
     const instanceBuffer = gl.createBuffer();
     if (!instanceBuffer) return;
-    this.ledger.record(instanceBuffer, ROWS_PART, 'buffer');
+    this.ledger.record(instanceBuffer, part, 'buffer');
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instances, gl.STATIC_DRAW);
-    this.ledger.record(instanceBuffer, ROWS_PART, 'buffer', instances.byteLength);
+    this.ledger.record(instanceBuffer, part, 'buffer', instances.byteLength);
     this.uploadedBytes += instances.byteLength;
     chunk.instanceBuffer = instanceBuffer;
 
@@ -803,6 +850,7 @@ export class RowsRenderer {
       data.coords,
       data.coordCount,
       ROWS_COORD_WIDTH,
+      part,
     );
     chunk.rowStyles = this.uploadTexture(
       gl.RGBA32F,
@@ -811,10 +859,11 @@ export class RowsRenderer {
       data.rowStyles,
       data.rows,
       ROWS_ROW_STYLE_WIDTH,
+      part,
     );
 
     const vao = gl.createVertexArray();
-    if (vao) this.ledger.record(vao, ROWS_PART, 'vertex-array');
+    if (vao) this.ledger.record(vao, part, 'vertex-array');
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.cornerBuffer);
     gl.enableVertexAttribArray(0);
@@ -835,16 +884,17 @@ export class RowsRenderer {
     width: number,
     height: number,
     bytesPerTexel: number,
+    part: string = ROWS_PART,
   ): WebGLTexture | null {
     const gl = this.gl;
     const texture = gl.createTexture();
     if (!texture) return null;
-    this.ledger.record(texture, ROWS_PART, 'texture');
+    this.ledger.record(texture, part, 'texture');
     gl.bindTexture(gl.TEXTURE_2D, texture);
     giveStorage(gl, this.ledger, texture, () =>
       gl.texStorage2D(gl.TEXTURE_2D, 1, internalFormat, width, height),
     );
-    this.ledger.record(texture, ROWS_PART, 'texture', textureBytes(width, height, bytesPerTexel));
+    this.ledger.record(texture, part, 'texture', textureBytes(width, height, bytesPerTexel));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -860,11 +910,11 @@ export class RowsRenderer {
     values: Float32Array,
     count: number,
     widest: number,
+    part: string,
   ): SizedTexture | null {
     const gl = this.gl;
-    const width = Math.max(1, Math.min(widest, count));
-    const height = Math.max(1, Math.ceil(count / width));
-    const texture = this.createFloatTexture(internalFormat, width, height, floats * 4);
+    const { width, height } = textureSizeOf(count, widest);
+    const texture = this.createFloatTexture(internalFormat, width, height, floats * 4, part);
     if (!texture) return null;
     this.uploadedBytes += width * height * floats * 4;
     gl.texSubImage2D(
@@ -946,6 +996,26 @@ function emptyMemo(): RowsUniformMemo {
     surfacesFlat: Number.NaN,
     fillCull: Number.NaN,
   };
+}
+
+/** The size of a texture of `count` texels, `widest` texels wide at most */
+function textureSizeOf(count: number, widest: number): { width: number; height: number } {
+  const width = Math.max(1, Math.min(widest, count));
+  return { width, height: Math.max(1, Math.ceil(count / width)) };
+}
+
+/**
+ * The bytes a chunk holds on the GPU once written: its instances, and the textures of its
+ * coordinates and of the styles of its rows
+ */
+function chunkBytesOf(data: RowsChunkData): number {
+  const coords = textureSizeOf(data.coordCount, ROWS_COORD_WIDTH);
+  const styles = textureSizeOf(data.rows, ROWS_ROW_STYLE_WIDTH);
+  return (
+    data.instanceCount * ROWS_INSTANCE_BYTES +
+    textureBytes(coords.width, coords.height, 2 * 4) +
+    textureBytes(styles.width, styles.height, ROWS_ROW_STYLE_FLOATS * 4)
+  );
 }
 
 /** What a chunk keeps of its packed arrays (not the arrays written to the GPU) */

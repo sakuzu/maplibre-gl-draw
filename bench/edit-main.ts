@@ -18,6 +18,7 @@
  *   - `n`: the number of features (default 1000; 1000, 10000 and 100000 are linked)
  *   - `run`: the time a scene may run once it is prepared (ms; the preparation still has the 20
  *     seconds). With `run=0`, an edit written in parts is stopped at its second part
+ *   - `terrain`: `1` puts hills made in the page under the features (`edit-terrain.ts`)
  *
  * On window:
  *   - `window.editReady`: a Promise that settles once the map is loaded
@@ -38,6 +39,7 @@ import {
   makeEmptyDocument,
   makeFeatureCollection,
   runLimitFromSearch,
+  terrainFromSearch,
 } from './edit-document';
 import {
   longTasksObserved,
@@ -48,6 +50,7 @@ import {
   startRecording,
 } from './edit-measure';
 import { recordCustomLayers, SCENES, type Scene, type SceneContext } from './edit-scenes';
+import { addHillTerrain, installHillTerrain } from './edit-terrain';
 
 // Worker URL setup for v6 (side effect). Required before the Map is created.
 import './maplibre-setup';
@@ -125,6 +128,10 @@ const n = 'n' in requested ? requested.n : 0;
 const runRequested = runLimitFromSearch(location.search);
 /** The time a scene may run once it is prepared (null: the limit of the page, preparation included) */
 const runLimitMs = 'runMs' in runRequested ? runRequested.runMs : null;
+const terrainRequested = terrainFromSearch(location.search);
+/** Whether the map has the terrain of the page */
+const terrain = 'terrain' in terrainRequested && terrainRequested.terrain;
+if (terrain) installHillTerrain(maplibregl);
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -135,6 +142,7 @@ const map = new maplibregl.Map({
   },
   center: GRID_CENTER,
   zoom: 12,
+  maxPitch: 85,
   attributionControl: false,
   fadeDuration: 0,
 });
@@ -149,7 +157,7 @@ const grid = gridOf(Math.max(1, n));
 // The links to the numbers of features, from the fewest
 for (const count of EDIT_COUNTS) {
   const link = document.createElement('a');
-  link.href = `?n=${count}`;
+  link.href = `?n=${count}${terrain ? '&terrain=1' : ''}`;
   link.textContent = count.toLocaleString('en');
   if (count === n) link.className = 'current';
   countsEl.append(link, ' ');
@@ -229,6 +237,7 @@ async function runScene(scene: Scene): Promise<SceneResult> {
     customLayerIds,
     draw,
     n,
+    terrain,
     featureIds,
     async openDocument() {
       if (opened) return;
@@ -256,7 +265,8 @@ async function runScene(scene: Scene): Promise<SceneResult> {
           [grid.west, grid.south],
           [grid.east, grid.north],
         ],
-        { padding: HOME_PADDING_PX, animate: false },
+        // Flat and north up, as the pan over the terrain leaves it pitched
+        { padding: HOME_PADDING_PX, animate: false, pitch: 0, bearing: 0 },
       );
     },
     input<T>(run: () => T): T {
@@ -404,10 +414,12 @@ for (const scene of SCENES) {
 window.editReady = (async (): Promise<EditInfo> => {
   if ('error' in requested) throw new Error(requested.error);
   if ('error' in runRequested) throw new Error(runRequested.error);
+  if ('error' in terrainRequested) throw new Error(terrainRequested.error);
   await new Promise<void>((resolve) => {
     if (map.loaded()) resolve();
     else map.once('load', () => resolve());
   });
+  if (terrain) addHillTerrain(map);
   const t0 = performance.now();
   makeDocument(n);
   const makeMs = performance.now() - t0;
@@ -418,7 +430,7 @@ window.editReady = (async (): Promise<EditInfo> => {
     longTasksObserved: longTasksObserved(),
   };
   readyText =
-    `n=${n.toLocaleString('en')}: ready\n` +
+    `n=${n.toLocaleString('en')}${terrain ? ' on the terrain' : ''}: ready\n` +
     `a document made in ${fmt(makeMs)} ms; long tasks ` +
     `${info.longTasksObserved ? 'reported' : 'not reported by this browser'}`;
   statusEl.textContent = readyText;

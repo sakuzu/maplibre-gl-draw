@@ -12,7 +12,9 @@
  * a run of rows in the order of the layer, so drawing the chunks in order and skipping the ones
  * out of view keeps the order. A chunk ends only between two rows.
  *
- * A row without a geometry draws nothing and joins the run it is in.
+ * A row without a geometry draws nothing and joins the run it is in. On a frame the analytic drape
+ * paints, a row the drape paints (`draped`) joins a run of rows drawn in one draw as well (it is
+ * packed there without its geometry), and otherwise makes a run of its own, which no chunk draws.
  */
 
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
@@ -40,11 +42,12 @@ const CIRCLE_VERTICES = 65;
 /**
  * The kind of a chunk of rows: `rows`, a chunk of the drawing in one draw that holds rows of every
  * kind; the kinds of the drawing by kind, each drawn by the renderer of its kind (`polygon`,
- * `line`, `point-<shape>`); or `immediate`, rows drawn one at a time
+ * `line`, `point-<shape>`); `immediate`, rows drawn one at a time; or `draped`, on a frame the
+ * analytic drape paints, rows the drape paints, which no chunk draws
  *
  * @internal
  */
-export type TableRunKind = 'rows' | 'polygon' | 'line' | `point-${string}` | 'immediate';
+export type TableRunKind = 'rows' | 'polygon' | 'line' | `point-${string}` | 'immediate' | 'draped';
 
 /**
  * What the classification of a row reads besides the row
@@ -202,8 +205,11 @@ export function partitionRowGroup(
   };
 
   for (let row = 0; row < group.data.length; row++) {
-    const rowKind = classify(row);
-    const rowVertices = rowVertexCount(rows, group, row);
+    let rowKind = classify(row);
+    // A row the drape paints joins a run drawn in one draw, without its coordinates or its box
+    const joined = rowKind === 'draped' && kind === 'rows';
+    if (joined) rowKind = null;
+    const rowVertices = joined || rowKind === 'draped' ? 0 : rowVertexCount(rows, group, row);
     if (rowKind !== null && kind !== null && rowKind !== kind) close(row);
     else if (
       rowKind !== null &&
@@ -215,7 +221,7 @@ export function partitionRowGroup(
     }
     if (rowKind !== null) kind = rowKind;
     vertices += rowVertices;
-    if (drawnRowBox(rows, group, row, b)) {
+    if (!joined && rowKind !== 'draped' && drawnRowBox(rows, group, row, b)) {
       if (!box) box = [b[0], b[1], b[2], b[3]];
       else {
         if (b[0] < box[0]) box[0] = b[0];

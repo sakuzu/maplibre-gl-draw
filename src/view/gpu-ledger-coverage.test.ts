@@ -55,8 +55,10 @@ import {
   HELD_PART_CEILINGS,
   mipmappedTextureBytes,
 } from './gpu-ledger.js';
+import { DrapePlanner } from './layer/drape-planner.js';
 import { createRenderScope } from './layer/render-scope.js';
 import { disposeRenderers, initRenderers } from './layer/renderers.js';
+import { DRAPED_ROWS_PART, type RowsChunk, RowsRenderer } from './renderers/rows/rows-renderer.js';
 import { createProgram } from './shaders/helpers.js';
 import { computeAtlasLayout, DemAtlas } from './terrain/dem-atlas.js';
 import { terrainMeshBytes } from './terrain/drape/mesh.js';
@@ -840,6 +842,58 @@ describe('the ledger of an instance holds everything its drawing allocates', () 
     (map.map as unknown as { terrain: unknown }).terrain = undefined;
     map.render();
     expectLedgerMatches(mock, ledger);
+  });
+});
+
+describe('the points of the frames the drape paints', () => {
+  it('are held under the part that gives way, with the rows of the other frames, within the limit, and given back', async () => {
+    const instance = ledgerInstance({ terrain: true });
+    const { mock, map, draw, ledger } = instance;
+    const watch = watchLimits(mock, ledger);
+    // The chunks made, with the part they are recorded under
+    const made: RowsChunk[] = [];
+    const createChunk = RowsRenderer.prototype.createChunk;
+    vi.spyOn(RowsRenderer.prototype, 'createChunk').mockImplementation(function (
+      this: RowsRenderer,
+      ...args: Parameters<RowsRenderer['createChunk']>
+    ) {
+      const chunk = createChunk.apply(this, args);
+      made.push(chunk);
+      return chunk;
+    });
+    // The drape paints the frames, or not
+    let off = false;
+    const planFrame = DrapePlanner.prototype.planFrame;
+    vi.spyOn(DrapePlanner.prototype, 'planFrame').mockImplementation(function (
+      this: DrapePlanner,
+      ...args: Parameters<DrapePlanner['planFrame']>
+    ) {
+      return off ? false : planFrame.apply(this, args);
+    });
+    fillDocument(instance);
+    draw.features.createMany(gridPoints(500) as never);
+    for (let frame = 0; frame < 4; frame++) map.render();
+    await decodeImages();
+    renderSettled(instance);
+    expect(getTerrainDrapeDebug(instance.engine.customLayer.getTerrainContext()).used).toBe(true);
+    const draped = made.filter((chunk) => chunk.part === DRAPED_ROWS_PART && chunk.uploaded);
+    expect(draped.length).toBeGreaterThan(0);
+    for (const chunk of draped) expect(ledger.partOf(chunk.instanceBuffer)).toBe(DRAPED_ROWS_PART);
+    expectLedgerMatches(mock, ledger);
+    // The frames the drape does not paint, and those it paints again: both kinds held
+    for (const state of [true, false, true]) {
+      off = state;
+      renderSettled(instance);
+      expectLedgerMatches(mock, ledger);
+    }
+    expect(made.filter((chunk) => chunk.part === 'rows' && chunk.uploaded).length).toBeGreaterThan(
+      0,
+    );
+    for (const chunk of draped) expect(ledger.holds(chunk.instanceBuffer)).toBe(true);
+    expect(watch.broken).toEqual([]);
+    draw.destroy();
+    expectNothingHeld(mock, ledger);
+    expect(ledger.snapshot()).toMatchObject({ leakedBytes: 0, leakedObjects: 0 });
   });
 });
 

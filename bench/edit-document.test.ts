@@ -39,6 +39,7 @@ describe('the scenes', () => {
       'open',
       'pan',
       'panInterleaved',
+      'panTerrain',
       'selectAll',
       'selectOne',
       'hideOne',

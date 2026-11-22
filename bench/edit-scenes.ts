@@ -36,6 +36,8 @@ export interface SceneContext {
   readonly draw: Draw;
   /** The number of features of the page */
   readonly n: number;
+  /** Whether the map has the terrain of the page (`terrain=1`) */
+  readonly terrain: boolean;
   /** The IDs of the features of the document, in its order */
   readonly featureIds: readonly string[];
   /** Opens the document of `n` features, unless it is open and unchanged */
@@ -118,6 +120,18 @@ function mouse(
 const PAN_FRAMES = 90;
 /** How far a pan moves the map in a frame (CSS px) */
 const PAN_STEP_PX = 6;
+
+/**
+ * The camera of the pan over the terrain: pitched over the middle of the grid, at a zoom the drape
+ * paints the polygons and the lines at
+ */
+const TERRAIN_CAMERA = { zoom: 13, pitch: 60, bearing: 0 } as const;
+
+/** Notes whether the drape paints the frame, and why not when it does not */
+function noteDrape(ctx: SceneContext, key: string): void {
+  const drape = ctx.draw.debug.terrain().drape;
+  ctx.note(key, drape.used ? 'used' : `not used (${drape.reason})`);
+}
 
 /** The moves of the pointer of a box or a drag, one per frame */
 const DRAG_MOVES = 10;
@@ -572,6 +586,35 @@ export const SCENES: readonly Scene[] = [
         map.panBy([dx, 0], { animate: false });
         await ctx.frame();
       }
+      await ctx.settle();
+    },
+  }),
+  scene({
+    name: 'panTerrain',
+    label:
+      'Pan the map right and back, a step per frame, over the terrain (terrain=1) with the camera ' +
+      'pitched, the drape painting the polygons and the lines',
+    async prepare(ctx) {
+      if (!ctx.terrain) throw new Error('the page has no terrain: open it with terrain=1');
+      await ctx.openDocument();
+      ctx.draw.selection.clear();
+      const grid = gridOf(ctx.n);
+      ctx.map.jumpTo({
+        center: [(grid.west + grid.east) / 2, (grid.south + grid.north) / 2],
+        ...TERRAIN_CAMERA,
+      });
+      await ctx.settle();
+      noteDrape(ctx, 'drapeBefore');
+    },
+    async run(ctx) {
+      const { map } = ctx;
+      for (let i = 0; i < PAN_FRAMES * 2; i++) {
+        if (ctx.expired()) break;
+        const dx = i < PAN_FRAMES ? PAN_STEP_PX : -PAN_STEP_PX;
+        map.panBy([dx, 0], { animate: false });
+        await ctx.frame();
+      }
+      noteDrape(ctx, 'drapeAfter');
       await ctx.settle();
     },
   }),

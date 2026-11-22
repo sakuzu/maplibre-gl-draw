@@ -30,8 +30,18 @@
  * their places once all of them are packed (it draws as it was until then); a row that does not
  * fit its place makes the chunk build again (drawn as it was until then). When the layers go onto
  * the terrain or the globe or leave them, every chunk is cut again, the chunks of the cut before
- * drawn until the new ones are built in view. In the band of the analytic drape the polygons and
- * the lines are on the drape and the other rows are drawn at once.
+ * drawn until the new ones are built in view.
+ *
+ * In the band of the analytic drape the polygons, the lines and the images are on the drape, and
+ * the rows are cut for it on their own (`draped`): the points drawn in one draw are in chunks of
+ * their own (the rows the drape paints join them and draw nothing there), the rows drawn at once
+ * elsewhere are drawn at once, and the runs of rows the drape paints are not drawn. Those chunks
+ * are held under a part that gives way (`DRAPED_ROWS_PART`): a chunk that does not fit is drawn
+ * at once, as are the rows of a chunk not built yet. Their points the terrain hides from the
+ * camera are drawn faint (the test in the vertex shader, `rows-occlusion.ts`). A group keeps the
+ * chunks of the frames the drape paints and those of the other frames apart, so going from one to
+ * the other cuts nothing again; the chunks of the frames the drape paints not used in a frame are
+ * let go when the share of the parts that give way runs short.
  *
  * The chunks are built over the frames within a budget (`view/retained/chunk-scheduler.ts`), and
  * a chunk invalidated keeps drawing until the new one is built. The next versions of the row
@@ -97,7 +107,11 @@ import {
   uploadRowState,
 } from '../renderers/row-state.js';
 import { RowsPalette } from '../renderers/rows/rows-format.js';
-import type { RowsChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js';
+import {
+  DRAPED_ROWS_PART,
+  type RowsChunk,
+  type RowsRenderer,
+} from '../renderers/rows/rows-renderer.js';
 import {
   advanceChunkBuild,
   type ChunkBuildBudget,
@@ -111,6 +125,7 @@ import {
 } from '../retained/chunk-scheduler.js';
 import { getAnchorElevationGeneration } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
+import { getTerrainDrapeDebug } from '../terrain/state.js';
 import type { TessellationStep } from '../terrain/tessellation.js';
 import {
   collectRow,
@@ -287,6 +302,11 @@ export interface TableLayerRendererOptions {
 interface RowsChunkState extends RetainedChunkState<RowsChunk> {
   readonly type: 'rows';
   readonly range: OrderedChunkRange;
+  /**
+   * Whether its rows were drawn at once the last time it was drawn (a chunk of the frames the drape
+   * paints not built yet, or refused)
+   */
+  atOnce?: boolean;
 }
 
 /** A chunk of rows of one kind (the drawing by kind) */
@@ -337,9 +357,16 @@ type TableChunk = RowsChunkState | KindChunkState | AtOnceChunk;
 
 /**
  * The ways the rows are drawn: in one draw, by kind, or draped (on the terrain, in the band of the
- * analytic drape: the polygons and the lines are on the drape, the other rows drawn at once)
+ * analytic drape: the polygons, the lines and the images are on the drape, the points drawn in one
+ * draw, the other rows at once; `draped-at-once` where the program of the drawing in one draw
+ * cannot be made, the points at once too)
  */
-type Drawing = 'one-draw' | 'by-kind' | 'draped';
+type Drawing = 'one-draw' | 'by-kind' | 'draped' | 'draped-at-once';
+
+/** Whether a drawing is one of the frames the analytic drape paints */
+function isDraped(drawing: Drawing | null): boolean {
+  return drawing === 'draped' || drawing === 'draped-at-once';
+}
 
 /** The types of the rows the analytic drape draws, and the pictures it pastes on the ground */
 const DRAPED_TYPES: ReadonlySet<string> = new Set([
@@ -362,8 +389,22 @@ export interface TableLayerSurface {
   readonly draped: boolean;
 }
 
+/**
+ * The chunks of a group for the frames the drape paints or for the others, and how they were cut:
+ * a group draws with the fields of one side, and keeps the other side apart (`other`)
+ */
+interface GroupSide {
+  chunks: TableChunk[] | null;
+  drawing: Drawing | null;
+  surfaceKind: TableLayerSurface['kind'];
+  generation: number;
+  retiring: TableChunk[] | null;
+  styleGeneration: number;
+  shown: boolean;
+}
+
 /** What is kept for a row group (or a part of the delta) */
-interface GroupCache {
+interface GroupCache extends GroupSide {
   readonly group: RowGroup;
   /** The chunks of the drawing (null until it is used) */
   chunks: TableChunk[] | null;
@@ -395,6 +436,11 @@ interface GroupCache {
   readonly part: DeltaPart | null;
   /** The rows of its part marked gone when its bytes were made */
   marks: number;
+  /**
+   * The chunks of the side not drawn now: those of the frames the drape paints while the others
+   * are drawn, or the other way round (null for none)
+   */
+  other: GroupSide | null;
 }
 
 /** What is kept for a layer */
@@ -544,6 +590,14 @@ export class TableLayerRenderer {
   /** The frame the features not drawn in it were let go in last */
   private atOnceTrimmed = -1;
   /**
+   * Advances whenever which rows are drawn at once may have changed without a new classification
+   * (a group drawn from its other side, a chunk of the frames the drape paints drawn at once or
+   * from its rows again): the frames of a selection of many features read them again
+   */
+  private atOnceRevision = 0;
+  /** The rows as the chunks of the frames the drape paints are packed from them */
+  private readonly drapedRows: DrawnRows;
+  /**
    * The layers whose parts of the delta are to be packed or released: a part came or left, or the
    * rows are to be packed again (a new classification, new styles, a row written that did not fit)
    */
@@ -594,6 +648,7 @@ export class TableLayerRenderer {
     this.reader = options.reader;
     this.store = options.store;
     const reader = this.reader;
+    this.drapedRows = withoutDrapedRows(reader);
     this.detach.push(reader.attachReceiver(this.receiver));
     this.detach.push(reader.onPendingWork(() => options.requestRepaint()));
     this.detach.push(reader.onRowsWritten((layerId, writes) => this.rowsWritten(layerId, writes)));
@@ -614,7 +669,7 @@ export class TableLayerRenderer {
       startJob: (state, origin) => {
         const cache = pass.cache as LayerCache;
         const groupCache = pass.groupCache as GroupCache;
-        return this.rowsJob(cache, groupCache.group, state.range, origin);
+        return this.rowsJob(cache, groupCache, state.range, origin);
       },
       adoptJob: () => {},
       disposeBatches: (chunk) => {
@@ -657,6 +712,15 @@ export class TableLayerRenderer {
   setSurface(surface: TableLayerSurface): void {
     this.surface = surface;
     const terrain = this.options.terrain;
+    // The drape did not fit in the share of the parts that give way: the chunks of its frames,
+    // not used in this one, are let go for it
+    if (
+      !surface.draped &&
+      terrain &&
+      getTerrainDrapeDebug(terrain).reason.startsWith('gpu-limit')
+    ) {
+      this.releaseDrapedSides(true);
+    }
     const key =
       surface.kind === 'flat' || !terrain
         ? surface.kind
@@ -956,10 +1020,12 @@ export class TableLayerRenderer {
    * its hidden rows out); a chunk drawn in one draw reads the byte as it is
    */
   private stateChanged(groupCache: GroupCache, row: number): void {
-    if (groupCache.drawing !== 'by-kind' || !groupCache.chunks) return;
-    for (const chunk of groupCache.chunks) {
-      if (chunk.type !== 'retained' || row < chunk.range.from || row >= chunk.range.to) continue;
-      this.invalidate(chunk, true);
+    for (const side of [groupCache, groupCache.other]) {
+      if (side?.drawing !== 'by-kind' || !side.chunks) continue;
+      for (const chunk of side.chunks) {
+        if (chunk.type !== 'retained' || row < chunk.range.from || row >= chunk.range.to) continue;
+        this.invalidate(chunk, true);
+      }
     }
   }
 
@@ -977,7 +1043,7 @@ export class TableLayerRenderer {
       groupCache.bytes[row] = byte;
       this.stats.stateRowsWritten++;
       changed = true;
-      if (groupCache.drawing === 'by-kind') this.stateChanged(groupCache, row);
+      this.stateChanged(groupCache, row);
     }
     groupCache.stateVersion = group.stateVersion;
     groupCache.clientGeneration = this.clientGeneration;
@@ -1149,7 +1215,7 @@ export class TableLayerRenderer {
           layerId,
           group: groupCache.group,
           texture: groupCache.texture,
-          generation: cache.generation,
+          generation: cache.generation + this.atOnceRevision,
           drawnAtOnce: (row) => this.drawnAtOnceIn(groupCache, row),
         });
       }
@@ -1170,14 +1236,16 @@ export class TableLayerRenderer {
    * type the analytic drape draws
    */
   private drawnAtOnceIn(groupCache: GroupCache, row: number): boolean {
-    if (groupCache.drawing === 'draped') {
-      const group = groupCache.group;
-      return (
-        this.reader.hasGeometry(group, row) && !DRAPED_TYPES.has(this.reader.typeOf(group, row))
-      );
-    }
     for (const chunk of groupCache.chunks ?? []) {
-      if (row >= chunk.range.from && row < chunk.range.to) return chunk.type === 'immediate';
+      if (row < chunk.range.from || row >= chunk.range.to) continue;
+      if (chunk.type === 'immediate') return true;
+      // A chunk of the frames the drape paints drawn at once: its points, not the rows the drape
+      // paints that join it
+      return (
+        chunk.type === 'rows' &&
+        chunk.atOnce === true &&
+        this.drapedRows.hasGeometry(groupCache.group, row)
+      );
     }
     return false;
   }
@@ -1239,7 +1307,13 @@ export class TableLayerRenderer {
     this.rows = deps.rows;
     const surface = this.surface;
     const oneDraw = deps.rows.ready && !this.byKind;
-    const drawing: Drawing = surface.draped ? 'draped' : oneDraw ? 'one-draw' : 'by-kind';
+    const drawing: Drawing = surface.draped
+      ? oneDraw
+        ? 'draped'
+        : 'draped-at-once'
+      : oneDraw
+        ? 'one-draw'
+        : 'by-kind';
     if (deps.rows.failed && !this.byKind) this.options.drawnByKind?.();
     const cache = this.layerCache(layerId, table, layer, deps, drawing);
     cache.bounds = frame.bounds ?? world();
@@ -1347,9 +1421,10 @@ export class TableLayerRenderer {
       cache.styleGeneration++;
       this.deltaStale.add(layerId);
     }
+    // Another drawing: the groups draw the side of it (their other side is kept, cut as it was),
+    // and the parts of the delta are packed for it
     if (cache.drawing !== drawing) {
       cache.drawing = drawing;
-      cache.generation++;
       this.deltaStale.add(layerId);
     }
     // Onto the terrain or the globe, or off them: the rows are classified and packed for it
@@ -1394,9 +1469,13 @@ export class TableLayerRenderer {
    *
    * @param surface The surface they are packed for (none on a flat map)
    */
-  private packContext(cache: LayerCache, surface: RowsSurface | null = null): RowsPackContext {
+  private packContext(
+    cache: LayerCache,
+    surface: RowsSurface | null = null,
+    draped = false,
+  ): RowsPackContext {
     return {
-      rows: this.reader,
+      rows: draped ? this.drapedRows : this.reader,
       slots: cache.slots as RowStyleSlots,
       rowsStyles: cache.rowsStyles as RowsStyles,
       surface,
@@ -1425,9 +1504,11 @@ export class TableLayerRenderer {
    */
   private checkCut(cache: LayerCache, groupCache: GroupCache, chunk: RowsChunkState): void {
     const gpu = chunk.batches;
-    if (!gpu || chunk.job || chunk.stale) return;
+    if (!gpu || gpu.refused > 0 || chunk.job || chunk.stale) return;
     const cut = this.cuts.get(gpu);
     if (!cut || cut.kind !== this.surface.kind) return;
+    // A chunk of the frames the drape paints holds nothing of the rows the drape paints
+    const draped = gpu.part === DRAPED_ROWS_PART;
     const terrain = this.options.terrain as TerrainContext;
     const generation = this.surfaceGeneration;
     const anchor = getAnchorElevationGeneration(terrain);
@@ -1460,7 +1541,7 @@ export class TableLayerRenderer {
       const base = this.baseFillStep();
       if (check.step === undefined) {
         // The cells of the fills of the chunk, for the coarsening of the step of the new surface
-        const context = this.packContext(cache);
+        const context = this.packContext(cache, null, draped);
         while (check.at < data.rows) {
           if (base) check.cells += rowFillCells(group, data.rowBase + check.at, context, base);
           check.at++;
@@ -1469,7 +1550,7 @@ export class TableLayerRenderer {
         check.step = base ? surfaceFillStep(terrain, base, check.cells) : null;
         check.at = 0;
       }
-      const context = this.packContext(cache, this.surfaceOf(check.step));
+      const context = this.packContext(cache, this.surfaceOf(check.step), draped);
       // The fingerprints of the polygons follow the surface, those of the points the elevations
       const polygons = cut.generation !== generation;
       const points = cut.anchor !== anchor;
@@ -1553,29 +1634,52 @@ export class TableLayerRenderer {
     return this.cutGroup(cache, groupCache);
   }
 
+  /**
+   * The kind of the run of a row for a drawing (null for a row without a geometry): in a frame the
+   * drape paints, `draped` for a row the drape paints, the kind the drawing in one draw gives a
+   * point it draws (with that drawing), and at once for every other row; else the kind of
+   * `classifyRow`
+   */
+  private kindOfRow(
+    cache: LayerCache,
+    drawing: Drawing,
+    surfaceKind: TableLayerSurface['kind'],
+    group: RowGroup,
+    row: number,
+  ): TableRunKind | null {
+    const reader = this.reader;
+    const deps = cache.deps as TableDrawDeps;
+    const classify = (oneDraw: boolean): TableRunKind | null =>
+      classifyRow(group, row, {
+        rows: reader,
+        slots: cache.slots as RowStyleSlots,
+        customTypes: deps.customRenderers,
+        companions: deps.companions,
+        featureOf: (g, r) => this.featureOfRow(g, r),
+        layer: cache.layer ?? undefined,
+        oneDraw,
+        onSurface: surfaceKind !== 'flat',
+      });
+    if (!isDraped(drawing)) return classify(drawing === 'one-draw');
+    if (!reader.hasGeometry(group, row)) return null;
+    const type = reader.typeOf(group, row);
+    if (DRAPED_TYPES.has(type)) return 'draped';
+    if (drawing === 'draped' && (type === 'Point' || type === 'MultiPoint')) {
+      return classify(true) === 'rows' ? 'rows' : 'immediate';
+    }
+    return 'immediate';
+  }
+
   /** Cuts the rows of a group into chunks for the drawing of its layer */
   private cutGroup(cache: LayerCache, groupCache: GroupCache): TableChunk[] {
     const group = groupCache.group;
-    const oneDraw = cache.drawing === 'one-draw';
-    const deps = cache.deps as TableDrawDeps;
-    // Draped, every row is drawn at once (the ones the drape draws are passed over then)
-    const draped = cache.drawing === 'draped';
+    const drawing = cache.drawing;
+    const surfaceKind = cache.surfaceKind;
     const ranges = partitionRowGroup(this.reader, group, (row) =>
-      draped
-        ? this.reader.hasGeometry(group, row)
-          ? 'immediate'
-          : null
-        : classifyRow(group, row, {
-            rows: this.reader,
-            slots: cache.slots as RowStyleSlots,
-            customTypes: deps.customRenderers,
-            companions: deps.companions,
-            featureOf: (g, r) => this.featureOfRow(g, r),
-            layer: cache.layer ?? undefined,
-            oneDraw,
-            onSurface: cache.surfaceKind !== 'flat',
-          }),
+      this.kindOfRow(cache, drawing, surfaceKind, group, row),
     );
+    // Which rows are drawn at once may change with the cut
+    this.atOnceRevision++;
     const chunks = ranges.flatMap((range) => makeChunk(range));
     const drawn = groupCache.chunks;
     // The chunks of the cut before keep drawing until the new ones are built in view, when they
@@ -1640,10 +1744,12 @@ export class TableLayerRenderer {
     groupCache: GroupCache,
     inserts: readonly DeltaInsert[],
   ): void {
+    this.useSide(groupCache, isDraped(cache.drawing));
     const chunks = this.chunksOf(cache, groupCache);
     // The chunks of the new cut are built; until they are built in view, the group draws the
-    // chunks of the cut before
-    this.buildChunks(groupCache, !groupCache.shown);
+    // chunks of the cut before. The chunks of the frames the drape paints are built within the
+    // budget whatever: their rows are drawn at once until then
+    this.buildChunks(groupCache, !groupCache.shown && !isDraped(groupCache.drawing));
     // The chunks in view cut for an older surface check their rows against this one
     for (const chunk of chunks) {
       if (chunk.type === 'rows') this.checkCut(cache, groupCache, chunk);
@@ -1695,17 +1801,27 @@ export class TableLayerRenderer {
       return;
     }
     if (!meets(chunk.bounds, frame.bounds ?? world())) return;
+    // A chunk of the frames the drape paints that cannot be drawn from its rows (not built yet,
+    // or refused for the share of the parts that give way) draws them at once
+    const draped = chunk.type === 'rows' && isDraped(groupCache.drawing);
     if (!chunk.batches) {
       this.pending = true;
+      if (draped) this.drawChunkAtOnce(cache, groupCache, chunk as RowsChunkState, from, to);
       return;
     }
     // A group drawn for the first time, and a chunk built in this frame, are written now (in the
     // pass before the main one otherwise), so that what the frame before drew is drawn in it
     if (!groupCache.texture) this.uploadState(this.options.gl, cache.layerId, groupCache);
     if (chunk.type === 'rows' && !chunk.batches.uploaded) this.rows?.flushUploads();
+    if (chunk.type === 'rows' && chunk.batches.refused > 0) {
+      this.refusedChunk(chunk);
+      this.drawChunkAtOnce(cache, groupCache, chunk, from, to);
+      return;
+    }
     const texture = groupCache.texture;
     if (!texture || (chunk.type === 'rows' && !chunk.batches.uploaded)) {
       this.pending = true;
+      if (draped) this.drawChunkAtOnce(cache, groupCache, chunk as RowsChunkState, from, to);
       return;
     }
     if (chunk.type === 'rows') {
@@ -1718,7 +1834,9 @@ export class TableLayerRenderer {
         frame.projectionData,
         texture,
         this.pass.factors,
+        draped,
       );
+      this.drawnAtOnceAs(chunk, false);
     } else {
       drawKindBatch(
         chunk.batches,
@@ -1731,6 +1849,133 @@ export class TableLayerRenderer {
     this.recordRange(cache, groupCache, chunk.range.kind, from, to);
   }
 
+  /**
+   * Draws the rows of a chunk of the frames the drape paints at once (its points, not the rows the
+   * drape paints that join it)
+   */
+  private drawChunkAtOnce(
+    cache: LayerCache,
+    groupCache: GroupCache,
+    chunk: RowsChunkState,
+    from: number,
+    to: number,
+  ): void {
+    this.drawAtOnce(cache, groupCache, from, to, false, true);
+    this.recordRange(cache, groupCache, 'immediate', from, to);
+    this.drawnAtOnceAs(chunk, true);
+  }
+
+  /** Notes how the rows of a chunk were drawn (the frames of a selection of many read it) */
+  private drawnAtOnceAs(chunk: RowsChunkState, atOnce: boolean): void {
+    if ((chunk.atOnce === true) === atOnce) return;
+    chunk.atOnce = atOnce;
+    this.atOnceRevision++;
+  }
+
+  /**
+   * A chunk of the frames the drape paints was refused for the share of the parts that give way:
+   * the chunks of those frames not used in this one are let go, and the chunk is built again once
+   * what it holds fits (its rows are drawn at once until then)
+   */
+  private refusedChunk(chunk: RowsChunkState): void {
+    const gpu = chunk.batches as RowsChunk;
+    if (!gpu.disposed) {
+      this.dropCheck(gpu);
+      this.rows?.disposeChunk(gpu);
+      this.releaseDrapedSides(false);
+    }
+    if (this.options.ledger.fits(gpu.refused)) {
+      this.invalidate(chunk, false);
+      this.pending = true;
+    }
+  }
+
+  /**
+   * Lets go of the chunks of the frames the drape paints that are not drawn now: the sides kept
+   * apart, and with `all`, those of the layers not drawn in the last frame too. Their groups cut
+   * them again when they are drawn
+   */
+  private releaseDrapedSides(all: boolean): void {
+    const drop = (side: GroupSide): void => {
+      for (const chunk of side.chunks ?? []) this.invalidate(chunk, false);
+      for (const chunk of side.retiring ?? []) this.invalidate(chunk, false);
+      side.chunks = null;
+      side.retiring = null;
+      side.drawing = null;
+      side.generation = -1;
+      side.shown = false;
+    };
+    for (const cache of this.layers.values()) {
+      const drawn = cache.drawnFrame === this.frameCount;
+      for (const groupCache of [...cache.groups.values(), ...cache.extras.values()]) {
+        if (groupCache.other && isDraped(groupCache.other.drawing)) {
+          drop(groupCache.other);
+          groupCache.other = null;
+        }
+        if (all && !drawn && isDraped(groupCache.drawing)) drop(groupCache);
+      }
+    }
+    this.atOnceRevision++;
+  }
+
+  /**
+   * Makes a group draw the side of a drawing: the chunks of the frames the drape paints, or those
+   * of the others; the side drawn until now is kept apart, cut as it is
+   */
+  private useSide(groupCache: GroupCache, draped: boolean): void {
+    if (groupCache.drawing === null || isDraped(groupCache.drawing) === draped) return;
+    const kept: GroupSide = {
+      chunks: groupCache.chunks,
+      drawing: groupCache.drawing,
+      surfaceKind: groupCache.surfaceKind,
+      generation: groupCache.generation,
+      // The chunks of a cut before are not kept apart
+      retiring: null,
+      styleGeneration: groupCache.styleGeneration,
+      shown: groupCache.shown,
+    };
+    for (const chunk of groupCache.retiring ?? []) this.invalidate(chunk, false);
+    const other = groupCache.other;
+    groupCache.other = kept;
+    groupCache.chunks = other?.chunks ?? null;
+    groupCache.drawing = other?.drawing ?? null;
+    groupCache.surfaceKind = other?.surfaceKind ?? 'flat';
+    groupCache.generation = other?.generation ?? -1;
+    groupCache.retiring = null;
+    groupCache.styleGeneration = other?.styleGeneration ?? groupCache.styleGeneration;
+    groupCache.shown = other?.shown ?? false;
+    this.atOnceRevision++;
+  }
+
+  /** Runs `fn` with the other side of a group drawn, and draws its side again afterwards */
+  private onOtherSide<T>(groupCache: GroupCache, fn: () => T): T {
+    const other = groupCache.other as GroupSide;
+    const kept: GroupSide = {
+      chunks: groupCache.chunks,
+      drawing: groupCache.drawing,
+      surfaceKind: groupCache.surfaceKind,
+      generation: groupCache.generation,
+      retiring: groupCache.retiring,
+      styleGeneration: groupCache.styleGeneration,
+      shown: groupCache.shown,
+    };
+    Object.assign(groupCache, other);
+    try {
+      return fn();
+    } finally {
+      Object.assign(other, {
+        chunks: groupCache.chunks,
+        drawing: groupCache.drawing,
+        surfaceKind: groupCache.surfaceKind,
+        generation: groupCache.generation,
+        retiring: groupCache.retiring,
+        styleGeneration: groupCache.styleGeneration,
+        shown: groupCache.shown,
+      });
+      Object.assign(groupCache, kept);
+    }
+  }
+
   /** Draws rows read outside the row groups at their place */
   private drawInsert(cache: LayerCache, insert: DeltaInsert): void {
     const partCache = cache.extras.get(insert.rows);
@@ -1738,7 +1983,7 @@ export class TableLayerRenderer {
       // Not packed yet (it is before the next frame): drawn at once
       this.pending = true;
       const part = newGroupCache(insert.rows, cache.styleGeneration);
-      this.drawAtOnce(cache, part, insert.from, insert.to, true);
+      this.drawAtOnce(cache, part, insert.from, insert.to, true, isDraped(cache.drawing));
       return;
     }
     const pass = this.pass;
@@ -1752,7 +1997,7 @@ export class TableLayerRenderer {
         const b = Math.min(insert.to, chunk.range.to);
         if (b <= a) continue;
         if (chunk.type !== 'immediate' && !chunk.batches) {
-          this.drawAtOnce(cache, partCache, a, b, true);
+          this.drawAtOnce(cache, partCache, a, b, true, isDraped(cache.drawing));
           this.recordRange(cache, partCache, 'immediate', a, b);
           continue;
         }
@@ -1769,6 +2014,9 @@ export class TableLayerRenderer {
    * features in view)
    *
    * @param byCopy Whether the state of the rows is read from their copies (a part not packed)
+   * @param skipDraped Whether the rows the drape paints are passed over (rows not cut for a frame
+   *   the drape paints, or the rows that join the points of a chunk of it); the rows of a chunk
+   *   drawn at once of such a frame are none of them
    */
   private drawAtOnce(
     cache: LayerCache,
@@ -1776,6 +2024,7 @@ export class TableLayerRenderer {
     from: number,
     to: number,
     byCopy = false,
+    skipDraped = false,
   ): void {
     const deps = cache.deps as TableDrawDeps;
     const frame = this.pass.frame as TableLayerFrame;
@@ -1783,10 +2032,8 @@ export class TableLayerRenderer {
     const visible = frame.bounds !== undefined ? deps.getVisibleIds?.() : undefined;
     const { batchManager, customRenderers, customRendererContext } = deps;
     let begun = false;
-    // Draped, the rows the drape draws are passed over
-    const draped = cache.drawing === 'draped';
     for (let row = from; row < to; row++) {
-      if (draped && DRAPED_TYPES.has(this.reader.typeOf(groupCache.group, row))) continue;
+      if (skipDraped && DRAPED_TYPES.has(this.reader.typeOf(groupCache.group, row))) continue;
       const fresh = byCopy || groupCache.stateVersion < 0;
       const hidden = fresh
         ? (this.byteOf(cache.layerId, groupCache, row) & ROW_STATE_HIDDEN) !== 0
@@ -1886,14 +2133,19 @@ export class TableLayerRenderer {
 
   // === The builds ===
 
-  /** A build of a chunk drawn in one draw: the rows packed a slice at a time */
+  /**
+   * A build of a chunk drawn in one draw: the rows packed a slice at a time (for a frame the drape
+   * paints, without the rows the drape paints, under the part that gives way)
+   */
   private rowsJob(
     cache: LayerCache,
-    group: RowGroup,
+    groupCache: GroupCache,
     range: OrderedChunkRange,
     origin: [number, number],
   ): RetainedChunkJob<RowsChunk> {
     const rows = this.rows as RowsRenderer;
+    const group = groupCache.group;
+    const draped = isDraped(groupCache.drawing);
     // On the terrain or the globe the rows are packed for the surface of the frame the build
     // starts in: its fills with the step of the surface coarsened for the cells of the chunk
     const kind = this.surface.kind;
@@ -1904,7 +2156,7 @@ export class TableLayerRenderer {
     const base = onSurface ? this.baseFillStep() : null;
     let cells = 0;
     let counted = !base;
-    let context = this.packContext(cache, onSurface ? this.surfaceOf(null) : null);
+    let context = this.packContext(cache, onSurface ? this.surfaceOf(null) : null, draped);
     const palette = context.rowsStyles.palette;
     const roundedOrigin: [number, number] = [Math.fround(origin[0]), Math.fround(origin[1])];
     const draft = new RowsDraft(range.to - range.from, range.from, range.vertices, palette);
@@ -1925,6 +2177,7 @@ export class TableLayerRenderer {
               this.surfaceOf(
                 surfaceFillStep(terrain as TerrainContext, base as TessellationStep, cells),
               ),
+              draped,
             );
           } else if (now() >= deadline) {
             return false;
@@ -1940,7 +2193,10 @@ export class TableLayerRenderer {
         if (at < range.to) return false;
         this.stats.chunksBuilt++;
         if (onSurface) draft.spreadRuns();
-        result = rows.createChunk(draft.finish(roundedOrigin, palette));
+        result = rows.createChunk(
+          draft.finish(roundedOrigin, palette),
+          draped ? DRAPED_ROWS_PART : undefined,
+        );
         if (onSurface) {
           this.cuts.set(result, {
             kind,
@@ -2012,6 +2268,8 @@ export class TableLayerRenderer {
   private disposeGroup(groupCache: GroupCache): void {
     for (const chunk of groupCache.chunks ?? []) this.invalidate(chunk, false);
     for (const chunk of groupCache.retiring ?? []) this.invalidate(chunk, false);
+    for (const chunk of groupCache.other?.chunks ?? []) this.invalidate(chunk, false);
+    groupCache.other = null;
     groupCache.chunks = null;
     groupCache.retiring = null;
     if (groupCache.texture) {
@@ -2058,6 +2316,8 @@ export class TableLayerRenderer {
       const group = part.group;
       alive.add(group);
       const held = cache.extras.get(group);
+      // The side of the drawing of the layer (the other side is kept, cut as it was)
+      if (held) this.useSide(held, isDraped(cache.drawing));
       if (
         held?.chunks &&
         held.generation === cache.generation &&
@@ -2093,7 +2353,7 @@ export class TableLayerRenderer {
         const origin = chunkOriginOf(chunk.bounds);
         const job =
           chunk.type === 'rows'
-            ? this.rowsJob(cache, partCache.group, chunk.range, origin)
+            ? this.rowsJob(cache, partCache, chunk.range, origin)
             : this.kindJob(cache, partCache, chunk.range, origin);
         job.step(Number.POSITIVE_INFINITY, chunkClock);
         const built = job.take();
@@ -2131,7 +2391,14 @@ export class TableLayerRenderer {
           if ((write.what & ROW_WRITE_STATE) !== 0 && groupCache.stateVersion >= 0) {
             this.writeByte(groupCache, row);
           }
-          if (this.applyWrite(cache, groupCache, row, write)) continue;
+          let fits = this.applyWrite(cache, groupCache, row, write);
+          // The chunks of the other side are written too, to be drawn as written when it is
+          if (groupCache.other) {
+            fits =
+              this.onOtherSide(groupCache, () => this.applyWrite(cache, groupCache, row, write)) &&
+              fits;
+          }
+          if (fits) continue;
           if (part) {
             // Packed again before the next frame
             cache.extras.delete(part.group);
@@ -2164,26 +2431,27 @@ export class TableLayerRenderer {
       (write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STYLE)) !== 0 ||
       this.ruleKeyWritten(cache, write.keys);
     const chunk = groupCache.chunks?.find((c) => row >= c.range.from && row < c.range.to);
-    if (!chunk) return true;
-    // Draped, every row is drawn at once from its feature as it is now
-    if (groupCache.drawing === 'draped') return true;
+    const drawing = groupCache.drawing;
     // The classification of the row may have changed (its type, its style, what an extension reads)
-    if (drawn || this.extensionReads(cache, write)) {
-      const deps = cache.deps;
-      const slots = cache.slots;
-      if (deps && slots) {
-        const now = classifyRow(group, row, {
-          rows: this.reader,
-          slots,
-          customTypes: deps.customRenderers,
-          companions: deps.companions,
-          featureOf: (g, r) => this.featureOfRow(g, r),
-          layer: cache.layer ?? undefined,
-          oneDraw: groupCache.drawing === 'one-draw',
-          onSurface: groupCache.surfaceKind !== 'flat',
-        });
-        if (now !== null && now !== chunk.range.kind) return false;
-      }
+    const classified =
+      drawing !== null &&
+      cache.deps !== null &&
+      cache.slots !== null &&
+      (drawn || this.extensionReads(cache, write));
+    const now = classified
+      ? this.kindOfRow(cache, drawing, groupCache.surfaceKind, group, row)
+      : null;
+    if (!chunk) {
+      // In a run of rows the drape paints, a row that is no longer one of them
+      return !(isDraped(drawing) && now !== null && now !== 'draped');
+    }
+    // A row the drape paints joins a chunk of points, and draws nothing there
+    if (
+      now !== null &&
+      now !== chunk.range.kind &&
+      !(now === 'draped' && chunk.range.kind === 'rows')
+    ) {
+      return false;
     }
     if ((write.what & ROW_WRITE_GEOMETRY) !== 0 && chunk.type !== 'immediate') {
       // The extent of the chunk only widens, so a row moved out of it is not culled with it
@@ -2213,6 +2481,8 @@ export class TableLayerRenderer {
     const rows = this.rows;
     const rowsStyles = cache.rowsStyles;
     if (!gpu || !rows || !rowsStyles || !cache.slots) return true;
+    // Refused: its rows are drawn at once from their features as they are now
+    if (gpu.refused > 0) return true;
     if (gpu.data.palette !== rowsStyles.palette) {
       this.invalidate(chunk, true);
       return true;
@@ -2221,7 +2491,11 @@ export class TableLayerRenderer {
     // in progress starts again from the rows as written
     const cut = this.cuts.get(gpu);
     if (cut) this.dropCheck(gpu);
-    const context = this.packContext(cache, cut ? this.surfaceOf(cut.step) : null);
+    const context = this.packContext(
+      cache,
+      cut ? this.surfaceOf(cut.step) : null,
+      gpu.part === DRAPED_ROWS_PART,
+    );
     const local = row - chunk.range.from;
     const held = gpu.data.rowStyle[local];
     const styleWritten =
@@ -2326,6 +2600,8 @@ export interface DrawnRowGroup {
 /** A chunk for a range of rows (none for a range of a chunk without a box) */
 function makeChunk(range: OrderedChunkRange): TableChunk[] {
   if (range.kind === 'immediate') return [{ type: 'immediate', range }];
+  // A run of rows the drape paints is drawn by no chunk
+  if (range.kind === 'draped') return [];
   if (!range.bounds) return [];
   const state = {
     range,
@@ -2365,6 +2641,7 @@ function newGroupCache(
     shown: false,
     part,
     marks: 0,
+    other: null,
   };
 }
 
@@ -2413,4 +2690,27 @@ function changedIds(a: ReadonlySet<string>, b: ReadonlySet<string>): string[] {
   for (const value of a) if (!b.has(value)) out.push(value);
   for (const value of b) if (!a.has(value)) out.push(value);
   return out;
+}
+
+/**
+ * The rows as a chunk of the points of the frames the drape paints is packed from them: the rows
+ * the drape paints have no geometry there (they join the chunk and draw nothing in it)
+ */
+function withoutDrapedRows(reader: DrawnRows): DrawnRows {
+  const bound = new Map<PropertyKey, unknown>();
+  const hasGeometry = (group: RowGroup, row: number): boolean =>
+    reader.hasGeometry(group, row) && !DRAPED_TYPES.has(reader.typeOf(group, row));
+  return new Proxy(reader, {
+    get(target, property) {
+      if (property === 'hasGeometry') return hasGeometry;
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== 'function') return value;
+      let method = bound.get(property);
+      if (!method) {
+        method = (value as (...args: unknown[]) => unknown).bind(target);
+        bound.set(property, method);
+      }
+      return method;
+    },
+  });
 }

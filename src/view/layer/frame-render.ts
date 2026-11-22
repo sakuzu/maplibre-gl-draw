@@ -303,6 +303,8 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
           zoom: f.zoom,
           config: r.selectionUIRenderer.config,
           terrain: terrainContext,
+          // The frames of the points the terrain hides fade with them on a frame the drape paints
+          ghosts: f.drapeUsable,
         },
         many.rows,
         many.groups,

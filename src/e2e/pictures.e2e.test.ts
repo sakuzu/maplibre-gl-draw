@@ -21,6 +21,7 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DrawDocument } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
+import { TERRAIN_GHOST_OPACITY } from '../view/terrain/occlusion.js';
 import { computeBoundingBox } from '../view/ui/selection-ui/bounding-box.js';
 import {
   compareSets,
@@ -36,6 +37,10 @@ import {
   DATELINE_CAMERA,
   DATELINE_SCENES,
   FRAME_COLOR,
+  GHOST_CAMERA,
+  GHOST_POINTS,
+  GHOST_SCENES,
+  ghostPointId,
   imageWarmUp,
   KINDS,
   MANY_COUNTS,
@@ -512,5 +517,106 @@ describe('the pictures of a selection of many features across the antimeridian',
     expect(changed).toBeGreaterThan(0);
     expect(x1 - x0).toBeLessThanOrEqual(40);
     expect(y1 - y0).toBeLessThanOrEqual(40);
+  });
+});
+
+// ============================================================================
+// The points behind the peak
+// ============================================================================
+
+/** The alpha of the line of a frame drawn faint, where it covers its pixels whole */
+const FAINT_ALPHA = Math.round(255 * TERRAIN_GHOST_OPACITY);
+
+/**
+ * The pixels of the color of the frames in a box of the drawing buffer that a line of a frame
+ * covers whole: those of a faint frame, and those of a frame drawn in full (the frame of all the
+ * features selected can pass by the box); and the sum of the alpha of the pixels of the color of
+ * the frames (it stays when a line moves by a part of a pixel)
+ */
+function frameLinesIn(
+  picture: Picture,
+  box: PixelBox,
+): { faint: number; full: number; ink: number } {
+  const pixels = pixelsIn(picture, box);
+  const [r, g, b] = FRAME_COLOR;
+  let faint = 0;
+  let full = 0;
+  let ink = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const alpha = pixels[i + 3];
+    const scale = alpha / 255;
+    if (
+      Math.abs(pixels[i] - r * scale) >= 4 ||
+      Math.abs(pixels[i + 1] - g * scale) >= 4 ||
+      Math.abs(pixels[i + 2] - b * scale) >= 4
+    ) {
+      continue;
+    }
+    ink += alpha;
+    if (Math.abs(alpha - FAINT_ALPHA) <= 4) faint++;
+    else if (alpha >= 240) full++;
+  }
+  return { faint, full, ink };
+}
+
+describe('the pictures of the points behind the peak', () => {
+  const taken = new Map<string, Picture>();
+  let page: Page;
+
+  beforeAll(async () => {
+    page = await openMapPage(browser, bundle, GHOST_CAMERA);
+    await page.evaluate(async (exaggeration) => {
+      const w = window as unknown as PicturesWindow;
+      await w.e2e.terrain.addTestTerrain(w.map, exaggeration);
+    }, TERRAIN_EXAGGERATION);
+  }, browserTimeout(90_000));
+
+  afterAll(async () => {
+    await page?.close();
+  });
+
+  for (const scene of GHOST_SCENES) {
+    it(scene.name, async () => {
+      const picture = await take(page, scene);
+      taken.set(scene.name, picture);
+      if (OUT) await writePicture(OUT, scene.name, picture);
+    });
+  }
+
+  it('frame a point behind the peak as faint at both counts, and fainter than one in front', async () => {
+    const few = taken.get('ghost/few');
+    const many = taken.get('ghost/many');
+    if (!few || !many) throw new Error('the pictures of the two counts were not taken');
+    // The box of the frame of a point: its marker and the margin around it, and the line
+    const boxes = await page.evaluate(
+      (points) => {
+        const { map } = window as unknown as E2EWindow;
+        const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+        const ratio = gl.drawingBufferWidth / map.getCanvas().clientWidth;
+        return points.map((at) => {
+          const p = map.project(at as [number, number]);
+          const reach = 24 * ratio;
+          return {
+            x0: Math.max(0, Math.floor(p.x * ratio - reach)),
+            y0: Math.max(0, Math.floor(p.y * ratio - reach)),
+            x1: Math.min(gl.drawingBufferWidth, Math.ceil(p.x * ratio + reach)),
+            y1: Math.min(gl.drawingBufferHeight, Math.ceil(p.y * ratio + reach)),
+          };
+        });
+      },
+      [...GHOST_POINTS.hidden, ...GHOST_POINTS.seen] as unknown as number[][],
+    );
+    const hidden = GHOST_POINTS.hidden.length;
+    for (const [i, box] of boxes.entries()) {
+      const behind = i < hidden;
+      const id = behind ? ghostPointId('hidden', i) : ghostPointId('seen', i - hidden);
+      const [one, other] = [frameLinesIn(few, box), frameLinesIn(many, box)];
+      for (const lines of [one, other]) {
+        if (behind) expect(lines.faint, id).toBeGreaterThan(lines.full);
+        else expect(lines.full, id).toBeGreaterThan(lines.faint);
+      }
+      // As faint at both counts
+      expect(Math.abs(other.ink - one.ink), id).toBeLessThanOrEqual(one.ink * 0.15);
+    }
   });
 });

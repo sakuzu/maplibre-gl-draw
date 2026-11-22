@@ -31,7 +31,10 @@
  * points are drawn with the depth test off: it is drawn at the near plane, which the depth test
  * of the frame always passes); a fill drops the faces turned away from the camera while the
  * terrain is drawn (`terrain-cull.ts`); and on a frame that draws the polygons and the lines flat
- * (`surfacesFlattened`), they get no elevation while the points keep theirs.
+ * (`surfacesFlattened`), they get no elevation while the points keep theirs. On a frame the
+ * analytic drape paints, a point the terrain hides from the camera is drawn faint, as the points
+ * drawn one at a time are there (`rows-occlusion.ts`, once per vertex, the same for every vertex
+ * of the point).
  *
  * The blending is the one of the layer, so the branches differ only in what they emit. The
  * shaders never read `gl_InstanceID`: a range of rows is drawn by pointing the instance
@@ -49,6 +52,7 @@ import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance
 import { POINT_SDF_GLSL } from '../point/point-sdf.js';
 import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
 import { ROWS_KIND, ROWS_KIND_SHIFT, ROWS_ROW_MASK, ROWS_STYLE_TEXELS } from './rows-format.js';
+import { TERRAIN_OCCLUSION_GLSL } from './rows-occlusion.js';
 
 /** A float literal of GLSL */
 function glslFloat(value: number): string {
@@ -75,7 +79,7 @@ export function buildRowsVertexSource(prelude: string, define: string): string {
   return `#version 300 es
 ${prelude}
 ${define}
-${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}
+${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}${TERRAIN_OCCLUSION_GLSL}
 
 // The vertex of the strip: a corner (0 to 3) for every kind, and for a segment the side (its
 // lowest bit) and the station along it (the rest)
@@ -294,6 +298,13 @@ void drawPoint(int style) {
     gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, depth, 1.0);
     v_color = rowsStyle(style, 0);
     v_color2 = rowsStyle(style, 1);
+    // Hidden by the terrain on a frame the drape paints: faint, its fill and its stroke (the
+    // vertices past the fourth repeat it, and draw nothing)
+    if (u_ghost_on > 0.5 && u_surface > 0.5 && g_vertex < 4) {
+        float ghost = terrain_occlusion_opacity(offset, a_tail.w);
+        v_color.a *= ghost;
+        v_color2.a *= ghost;
+    }
     v_params = vec4(radius, outer, ink, size.z);
     v_geom = vec4(offsetPx, 0.0, 0.0);
 }

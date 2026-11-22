@@ -711,6 +711,173 @@ export const DATELINE_SCENES: readonly ManyScene[] = MANY_COUNTS.map((count) =>
   datelineSceneOf(count),
 );
 
+// ============================================================================
+// The scenes of the points behind the peak
+// ============================================================================
+
+/**
+ * The camera of the scenes of the points behind the peak: low in the south of the peak of the
+ * test terrain, looking north at it, so that its north side is out of sight
+ */
+export const GHOST_CAMERA: Camera = {
+  center: [138.728, 35.33],
+  zoom: 12.6,
+  pitch: 70,
+  bearing: 10,
+};
+
+/**
+ * The points of the scenes of the points behind the peak that are drawn well away from the others:
+ * three far behind the peak (the terrain rises kilometers above the line of sight to them), and
+ * three on the plain in front of it (the line of sight passes a hundred meters or more above the
+ * ground)
+ */
+export const GHOST_POINTS = {
+  hidden: [
+    [138.725, 35.39],
+    [138.7379, 35.39],
+    [138.755, 35.39],
+  ],
+  seen: [
+    [138.7293, 35.334],
+    [138.7421, 35.334],
+    [138.755, 35.334],
+  ],
+} as const satisfies Record<string, ReadonlyArray<readonly [number, number]>>;
+
+/**
+ * The grid of the scenes of the points behind the peak: 20 x 20 points over the west shoulder of
+ * the peak, from the slope in front of it to the slope behind it, which the line of sight crosses
+ */
+export const GHOST_GRID = {
+  west: 138.695,
+  east: 138.7135,
+  south: 35.352,
+  north: 35.372,
+  side: 20,
+} as const;
+
+/** The ID of a point of the grid of the scenes of the points behind the peak, by its place */
+export function ghostGridId(column: number, row: number): string {
+  return `grid-${row * GHOST_GRID.side + column}`;
+}
+
+/** The ID of a point of the scenes of the points behind the peak drawn away from the others */
+export function ghostPointId(kind: keyof typeof GHOST_POINTS, i: number): string {
+  return `${kind}-${i}`;
+}
+
+/** The number of points of the block a selection of many of the points behind the peak holds */
+const GHOST_FILLERS = FEW_SELECTED - 2 * 3 + 1;
+
+/**
+ * A scene of the points behind the peak: its name, the document and the calls after it
+ *
+ * - `ghost/grid`: the points away from the others and the grid, none selected
+ * - `ghost/few`: the points away from the others, selected (their frames drawn one by one)
+ * - `ghost/many`: the same points selected with a block of small points in front of the camera,
+ *   off the screen, so that more than a few are selected
+ */
+export interface GhostScene {
+  /** `ghost/<grid, few or many>` */
+  readonly name: string;
+  readonly document: DrawDocument;
+  readonly calls: readonly Call[];
+}
+
+/** A point of the scenes of the points behind the peak */
+function ghostPoint(id: string, at: readonly [number, number], radius: number): Feature {
+  return {
+    id,
+    type: 'Point',
+    geometry: { type: 'Point', coordinates: [at[0], at[1]] },
+    layerId: LAYER,
+    groupId: undefined,
+    visible: true,
+    locked: false,
+    properties: {},
+    style: {
+      pointColor: '#ff0000',
+      pointRadius: radius,
+      pointShape: 'circle',
+      pointStrokeWidth: 0,
+    },
+  };
+}
+
+/** The scene of the points behind the peak of a name */
+function ghostSceneOf(name: 'grid' | 'few' | 'many'): GhostScene {
+  // A solid line on the plain, away from the points: the drape paints the frame
+  const line: Feature = {
+    id: 'line',
+    type: 'LineString',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [138.765, 35.338],
+        [138.775, 35.34],
+      ],
+    },
+    layerId: LAYER,
+    groupId: undefined,
+    visible: true,
+    locked: false,
+    properties: { 'maplibre-gl-draw:createdZoom': 13 },
+    style: { strokeColor: '#00aa00', strokeWidth: 3 },
+  };
+  const points: Feature[] = [];
+  for (const kind of ['hidden', 'seen'] as const) {
+    GHOST_POINTS[kind].forEach((at, i) => {
+      points.push(ghostPoint(ghostPointId(kind, i), at, 6));
+    });
+  }
+  const features: Feature[] = [line, ...points];
+  if (name === 'grid') {
+    const { west, east, south, north, side } = GHOST_GRID;
+    for (let row = 0; row < side; row++) {
+      for (let column = 0; column < side; column++) {
+        const lng = west + ((east - west) * column) / (side - 1);
+        const lat = south + ((north - south) * row) / (side - 1);
+        features.push(ghostPoint(ghostGridId(column, row), [lng, lat], 2));
+      }
+    }
+  }
+  if (name === 'many') {
+    for (let i = 0; i < GHOST_FILLERS; i++) {
+      const at: [number, number] = [138.7 + 0.0005 * (i % 40), 35.29 + 0.0005 * Math.floor(i / 40)];
+      features.push(ghostPoint(`filler-${i}`, at, 1));
+    }
+  }
+  const selected = features.filter((f) => f.id !== 'line' && !f.id.startsWith('grid-'));
+  return {
+    name: `ghost/${name}`,
+    document: {
+      version: '3.0.0',
+      metadata: { title: 'pictures' },
+      layerOrder: [LAYER],
+      layers: [
+        {
+          id: LAYER,
+          name: 'Pictures',
+          visible: true,
+          locked: false,
+          opacity: 1,
+          styleRule: undefined,
+          metadata: undefined,
+          items: features.map((f) => f.id),
+        },
+      ],
+      features,
+    },
+    calls: name === 'grid' ? [] : [['selection.set', 'feature', selected.map((f) => f.id)]],
+  };
+}
+
+/** The scenes of the points behind the peak */
+export const GHOST_SCENES: readonly GhostScene[] = (['grid', 'few', 'many'] as const).map((name) =>
+  ghostSceneOf(name),
+);
+
 /**
  * A document with one image at the center of the camera of a map, which the page loads once
  * before the scenes, so that every scene finds the image decoded

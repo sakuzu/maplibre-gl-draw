@@ -71,6 +71,7 @@ layer.
 | --- | --- | --- |
 | `n` | Number of features (1 to 250,000) | `1000` |
 | `run` | Time a scene may run once it is prepared (ms) | none |
+| `terrain` | `1` puts hills made in the page under the features | `0` |
 
 The page links to 1,000, 10,000 and 100,000 features; start with the
 fewest. Nothing runs until a scene is asked for. A button, or
@@ -91,6 +92,7 @@ first part and is stopped at the next.
 | `open` | `draw.document.load` of a document of the library |
 | `pan` | Pans the map 6 px a frame, 90 frames right and 90 back |
 | `panInterleaved` | The same, over polygons, lines and points interleaved |
+| `panTerrain` | The same over the terrain (`terrain=1`), pitched |
 | `selectAll` | Selects every feature with `draw.selection.set` |
 | `boxSelect` | Draws a box over the view with Shift, a move a frame |
 | `drag` | Drags every feature selected, a move a frame |
@@ -107,6 +109,13 @@ first part and is stopped at the next.
 | `import` | `draw.document.load` of a GeoJSON `File` into the layer |
 | `export` | `draw.document.toJSON` and `JSON.stringify` of the document |
 | `gpuMemory` | Reads what the drawing holds on the GPU, per part, once open |
+
+With `terrain=1` the map has hills from 0 m to 3,000 m over the whole
+grid, made in the page (no network). `panTerrain` needs them: it puts the
+camera over the middle of the grid at zoom 13, pitched 60 degrees, where
+the drape paints the polygons and the lines, and notes whether the drape
+painted the frames before and after the pan (`drapeBefore`,
+`drapeAfter`).
 
 `open` and `import` start from a document with the layer and no
 features. The box and the drag are made with the events of the mouse sent

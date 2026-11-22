@@ -34,11 +34,27 @@ import { mercatorX, mercatorY } from './tessellation.js';
  */
 export const TERRAIN_GHOST_OPACITY = 0.35;
 
-/** Upper bound on the number of samples along the segment */
-const MAX_SAMPLES = 24;
+/**
+ * Upper bound on the number of samples along the segment
+ *
+ * @internal
+ */
+export const MAX_SAMPLES = 24;
 
-/** Lower bound on the number of samples along the segment */
-const MIN_SAMPLES = 6;
+/**
+ * Lower bound on the number of samples along the segment
+ *
+ * @internal
+ */
+export const MIN_SAMPLES = 6;
+
+/**
+ * The number of samples when the step of the terrain mesh is not known: the horizontal distance
+ * divided into this many nodes
+ *
+ * @internal
+ */
+export const NODES_WITHOUT_STEP = 16;
 
 /**
  * Margin discarded on the camera side
@@ -47,16 +63,20 @@ const MIN_SAMPLES = 6;
  * above the ground, but the line of sight points downward, so it grazes the ground just past
  * the starting point). Looking there would make everything occluded, so the first few percent
  * on the start side are skipped.
+ *
+ * @internal
  */
-const NEAR_SKIP = 0.08;
+export const NEAR_SKIP = 0.08;
 
 /**
  * Margin discarded on the anchor side (counted in terrain mesh nodes)
  *
  * The anchor sits on top of the ground, so the ground just in front of it is necessarily at
  * the same height. To keep it from hiding itself, two nodes' worth is skipped.
+ *
+ * @internal
  */
-const SELF_SKIP_NODES = 2;
+export const SELF_SKIP_NODES = 2;
 
 /**
  * Converts a Mercator y back into a latitude
@@ -137,7 +157,10 @@ function computeOccluded(
 
   // The sample spacing matches the node spacing of the terrain mesh (sampling any finer only
   // goes beyond the resolution of the bilinear interpolation and adds no information)
-  const node = context.renderState.stepGrid > 0 ? context.renderState.stepGrid : horizontal / 16;
+  const node =
+    context.renderState.stepGrid > 0
+      ? context.renderState.stepGrid
+      : horizontal / NODES_WITHOUT_STEP;
   const samples = Math.min(MAX_SAMPLES, Math.max(MIN_SAMPLES, Math.ceil(horizontal / node)));
 
   // The ground just in front of the anchor is the anchor's own ground, so it is skipped

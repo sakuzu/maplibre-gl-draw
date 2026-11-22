@@ -69,6 +69,19 @@ export function runLimitFromSearch(search: string): { runMs: number | null } | {
   return { runMs };
 }
 
+/**
+ * Reads from the address whether the map has the terrain of the page (`terrain`: `1` with it,
+ * `0` or nothing without it)
+ *
+ * @returns Whether it has, or an error to show for another value
+ */
+export function terrainFromSearch(search: string): { terrain: boolean } | { error: string } {
+  const value = new URLSearchParams(search).get('terrain');
+  if (value === null || value === '' || value === '0') return { terrain: false };
+  if (value === '1') return { terrain: true };
+  return { error: `terrain=${value} is neither 1 nor 0` };
+}
+
 /** The extent of the grid of `n` features */
 export interface GridExtent {
   readonly columns: number;

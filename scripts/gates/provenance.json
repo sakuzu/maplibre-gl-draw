@@ -385,6 +385,13 @@
       "from": "src/view/ui/selection-ui-drawer.ts",
       "to": "src/view/ui/selection-ui-drawer.ts",
       "note": "only the frame of every feature of a selection of many features drawn from the box of all of them, with its resize and rotate handles when one has an area and none is locked (renderManySelectionUI); the box is read from the rows selected and the selection held as a set, and the move of the frame while the rows are dragged is not brought"
+    },
+    {
+      "branch": "rebuild/text-draw",
+      "commit": "929ecfa5a410bd7bbffccdb8becfdb2b69d7f0cf",
+      "from": "src/view/terrain/occlusion.ts",
+      "to": "src/view/renderers/rows/rows-occlusion.ts",
+      "note": "only the test in the vertex shader (TERRAIN_OCCLUSION_GLSL) and the writer of its uniforms (TerrainOcclusionUniforms), with the constants taken from the test on the CPU of this branch; a sample off the DEM atlas is passed over as ground that hides nothing, and the uniforms are written from the terrain state of the instance (no render context of an extension)"
     }
   ]
 }
