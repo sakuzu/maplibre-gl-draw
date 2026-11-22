@@ -112,7 +112,7 @@ export function createDocument(
         (id) => store.getFeature(id)?.layerId === first.layerId,
       );
       // The group stands where the frontmost of them stood
-      store.createGroupWith({ ...group, layerId: first.layerId, featureIds: [] }, featureIds);
+      store.createGroupWith({ ...group, layerId: first.layerId }, featureIds);
       result.groupId = group.id;
     }
     return result;

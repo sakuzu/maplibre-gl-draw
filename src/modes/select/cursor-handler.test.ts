@@ -83,7 +83,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });

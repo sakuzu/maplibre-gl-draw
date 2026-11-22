@@ -13,9 +13,9 @@
 
 import { readDrawProperty, setDrawProperty } from '../../../shared/properties.js';
 import { createId } from '../../../shared/utils/id.js';
-import type { Feature, FileData, Group } from '../../../store/types.js';
+import type { Feature, FileData } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
-import type { GroupInput, LayerInput, ParsedDocument } from '../../model.js';
+import type { DocumentGroup, GroupInput, LayerInput, ParsedDocument } from '../../model.js';
 import { invalidInput, isRecord, onlyKeys, optionalBoolean, requireId } from '../shared.js';
 import { isNativeFormat, toFeatureCollection } from './format-detection.js';
 import { convertGeoJSONFeatures, decodeEmbeddedImages } from './geojson-import.js';
@@ -260,7 +260,7 @@ export function parseNativeInput(input: unknown, options?: unknown): Promise<Par
  * whose members were all left out is left out too.
  */
 function parseGroups(
-  groups: readonly Group[],
+  groups: readonly DocumentGroup[],
   features: readonly Feature[],
   groupIds: ReadonlyMap<string, string>,
   featureIds: ReadonlyMap<string, string>,

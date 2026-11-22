@@ -91,7 +91,6 @@ function createLayer(id: string): void {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -404,7 +403,6 @@ describe('the z order and the consumption of the companions (feature companion)'
       visible: false,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });

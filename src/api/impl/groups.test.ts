@@ -35,7 +35,6 @@ function layer(id: string): void {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -56,7 +55,7 @@ function addPoint(id: string, layerId = 'l1'): void {
 }
 
 function itemsOf(layerId: string): readonly string[] {
-  return store.getLayer(layerId)?.items ?? [];
+  return store.listItemIds(layerId, 0, store.countItems(layerId)) ?? [];
 }
 
 beforeEach(() => {

@@ -24,7 +24,6 @@ const layer = (id: string, visible = true): Layer => ({
   visible,
   locked: false,
   opacity: 1,
-  items: [],
   styleRule: undefined,
   metadata: undefined,
 });
@@ -175,14 +174,16 @@ beforeEach(() => {
       'l1',
     ),
   );
-  store.createGroup({
-    id: 'g1',
-    layerId: 'l1',
-    name: 'g1',
-    featureIds: ['polygon'],
-    visible: true,
-    locked: false,
-  });
+  store.createGroupWith(
+    {
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g1',
+      visible: true,
+      locked: false,
+    },
+    ['polygon'],
+  );
   store.setLocallyHidden('locally-hidden', true);
   doc = createDocument(createResourceDeps(store));
 });

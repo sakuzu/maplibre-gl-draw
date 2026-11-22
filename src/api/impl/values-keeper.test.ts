@@ -229,7 +229,6 @@ describe('the place of a group', () => {
       id: 'g',
       layerId,
       name: 'the group',
-      featureIds: [],
       visible: false,
       locked: true,
     };

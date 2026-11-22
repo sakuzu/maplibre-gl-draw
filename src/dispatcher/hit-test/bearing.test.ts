@@ -83,7 +83,6 @@ function serviceWith(features: Feature[]): HitTestServiceImpl {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });

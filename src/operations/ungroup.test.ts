@@ -45,7 +45,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -75,7 +74,7 @@ describe('ungroupSelection', () => {
     expect(store.getFeature('f1')?.groupId).toBeUndefined();
     expect(store.getFeature('f2')?.groupId).toBeUndefined();
     // f1 and f2 are expanded at the position the group had (the front, where f1,f2 were)
-    expect(store.getLayer('l1')?.items).toEqual(['f1', 'f2', 'f3']);
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toEqual(['f1', 'f2', 'f3']);
   });
 
   it('lets only that feature leave and keeps the group for a member feature selection', () => {
@@ -85,11 +84,11 @@ describe('ungroupSelection', () => {
     ungroupSelection(store);
 
     // The group survives (with f2 as the remaining member)
-    expect(store.getGroup(gid)?.featureIds).toEqual(['f2']);
+    expect(store.listGroupFeatureIds(gid, 0, store.countGroupFeatures(gid))).toEqual(['f2']);
     expect(store.getFeature('f2')?.groupId).toBe(gid);
     // The departed f1 loses its groupId and is placed right after the group
     expect(store.getFeature('f1')?.groupId).toBeUndefined();
-    expect(store.getLayer('l1')?.items).toEqual([gid, 'f1', 'f3']);
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toEqual([gid, 'f1', 'f3']);
   });
 
   it('keeps the group even when a member selection leaves only one member', () => {
@@ -98,7 +97,7 @@ describe('ungroupSelection', () => {
     ungroupSelection(store);
 
     // The group is not removed even with only one member (f2)
-    expect(store.getGroup(gid)?.featureIds).toEqual(['f2']);
+    expect(store.listGroupFeatureIds(gid, 0, store.countGroupFeatures(gid))).toEqual(['f2']);
   });
 
   it('empties the group and deletes it automatically when every member is removed', () => {
@@ -114,12 +113,12 @@ describe('ungroupSelection', () => {
 
   it('does nothing for a selection of a feature that belongs to no group', () => {
     makeGroup();
-    const before = store.getLayer('l1')?.items;
+    const before = store.listItemIds('l1', 0, store.countItems('l1'));
     store.setSelection('feature', ['f3']); // f3 belongs to no group
 
     ungroupSelection(store);
 
-    expect(store.getLayer('l1')?.items).toEqual(before);
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toEqual(before);
     expect(store.getFeature('f3')?.groupId).toBeUndefined();
   });
 

@@ -678,7 +678,6 @@ describe('BatchManager style rules of a layer', () => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: rule,
   };
 

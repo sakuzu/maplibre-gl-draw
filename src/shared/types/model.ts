@@ -9,7 +9,7 @@
  */
 
 import type { Geometry, Position } from 'geojson';
-import type { IdSet } from '../../api/model.js';
+import type { DocumentGroup, DocumentLayer, IdSet } from '../../api/model.js';
 
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON
@@ -310,8 +310,8 @@ export interface FileData {
  * The draw instance returns features from `draw.features` and the events, and creates them
  * from an input. What the instance returns is read-only: a change stores a new object.
  *
- * The stacking order of the features is not a property of the feature: it is the position of
- * its ID in `Layer.items`, or in `Group.featureIds` when it belongs to a group.
+ * The stacking order of the features is not a property of the feature: it is its position among
+ * the items of its layer, or among the features of its group when it belongs to one.
  */
 export interface Feature {
   /** The ID of the feature, unique within the document (a ULID when core generates it) */
@@ -331,7 +331,7 @@ export interface Feature {
   /**
    * The ID of the group the feature belongs to, when it belongs to one
    *
-   * A feature in a group is listed in `Group.featureIds` instead of `Layer.items`.
+   * A feature in a group is one of the features of the group instead of an item of the layer.
    */
   groupId: string | undefined;
   /**
@@ -435,8 +435,8 @@ export type StyleRule =
  * lock and style rule
  *
  * Every feature belongs to one layer. The layers are stacked in the order of
- * `getLayerOrder()`, and within a layer the items are stacked in the order of `items`. New
- * features are drawn into the active layer.
+ * `getLayerOrder()`, and within a layer the items (the features in no group, and the groups)
+ * are stacked in their order, read by position. New features are drawn into the active layer.
  */
 export interface Layer {
   /** The ID of the layer, unique within the document */
@@ -467,13 +467,6 @@ export interface Layer {
    * layer at opacity 0 can still be selected.
    */
   opacity: number;
-  /**
-   * The IDs of the standalone features and of the groups in the layer, back to front (the
-   * last is the frontmost)
-   *
-   * A feature in a group is listed in `Group.featureIds` instead.
-   */
-  items: readonly string[];
   /** Free-form data of the host, saved and exported with the layer */
   metadata: Record<string, unknown> | undefined;
   /**
@@ -488,23 +481,20 @@ export interface Layer {
 /**
  * A group of features within one layer, selected, moved and stacked as a unit
  *
- * A group is listed in `Layer.items` of its layer like a feature, and its members are listed
- * in `featureIds` (each member has `groupId` set).
+ * A group is an item of its layer like a feature, at the place of its members, which are in
+ * their order (each member has `groupId` set).
  */
 export interface Group {
   /** The ID of the group, unique within the document */
   id: string;
   /**
-   * The ID of the layer the group is in: the layer whose `items` list it
+   * The ID of the layer the group is in
    *
-   * The Store keeps it: a group takes the layer that lists it when it is created, and a write
-   * that lists it in the items of another layer moves it to that layer.
+   * The Store keeps it: a move of the group to another layer writes it.
    */
   layerId: string;
   /** The display name */
   name: string;
-  /** The IDs of the members, back to front (the last is the frontmost) */
-  featureIds: readonly string[];
   /**
    * Whether the group is locked (every member is then locked, see {@link isFeatureLocked})
    */
@@ -786,15 +776,15 @@ export interface Data {
   /** The metadata of the document */
   metadata?: Metadata;
   /** The layers, with their order of items (the order of this array has no meaning) */
-  layers?: Layer[];
+  layers?: DocumentLayer[];
   /**
    * The stacking order, from the back: every layer of `layers` once, and the entries of the
    * application that are not layers (see the stacking order of StoreContract) at their
    * positions
    */
   layerOrder: string[];
-  /** The groups */
-  groups?: Group[];
+  /** The groups, with the order of their features */
+  groups?: DocumentGroup[];
   /** The features */
   features: Feature[];
   /** The embedded files the features use, by ID */

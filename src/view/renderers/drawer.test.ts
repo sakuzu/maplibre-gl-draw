@@ -283,7 +283,6 @@ describe('FeatureDrawer evaluation of style rules', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule,
     };
   }

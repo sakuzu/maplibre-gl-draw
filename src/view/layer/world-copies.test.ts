@@ -215,7 +215,6 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });

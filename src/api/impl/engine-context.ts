@@ -370,7 +370,6 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
       visible: true,
       locked: false,
       opacity: 1.0,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     };

@@ -20,7 +20,6 @@ function layer(id: string): void {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -41,7 +40,7 @@ function point(id: string, layerId = 'l1', groupId?: string): Feature {
 }
 
 function group(id: string, layerId = 'l1') {
-  return { id, layerId, name: id, featureIds: [], visible: true, locked: false };
+  return { id, layerId, name: id, visible: true, locked: false };
 }
 
 /** The items of a layer, from the back, with the features of each group after it in brackets */

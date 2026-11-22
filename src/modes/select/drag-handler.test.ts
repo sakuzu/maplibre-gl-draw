@@ -169,7 +169,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -461,7 +460,6 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       visible: true,
       locked: true,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -477,7 +475,6 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       id: 'g1',
       layerId: 'l1',
       name: 'g1',
-      featureIds: [],
       visible: true,
       locked: true,
     });
@@ -509,7 +506,6 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       visible: false,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });

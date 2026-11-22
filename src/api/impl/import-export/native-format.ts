@@ -12,7 +12,6 @@ import type {
   ExportOptions,
   Feature,
   FileData,
-  Group,
   Layer,
   LoadResult,
 } from '../../../store/types.js';
@@ -128,7 +127,6 @@ export async function prepareNative(
     );
   }
   const featureIds = features.map((f) => f.id);
-  const fileGroups = groups as unknown as DocumentGroup[];
   // A kept layer the data does not list goes to the back, where it stays when the data does
   // not mention it (every layer must be on the stacking order to be drawn)
   const retainedUnlisted = [...retainedLayerIds].filter((id) => !layerOrder.includes(id));
@@ -161,11 +159,11 @@ export async function prepareNative(
 
     // 2. Import the layers, with no item yet
     for (const layer of layers) {
-      const { items: _items, ...fields } = layer as unknown as DocumentLayer;
+      const { items: _items, ...fields } = layer;
       if (store.getLayer(layer.id)) {
         store.updateLayer(layer.id, fields);
       } else {
-        store.createLayer(fields as Layer);
+        store.createLayer(fields);
       }
     }
 
@@ -173,7 +171,7 @@ export async function prepareNative(
     //    back: each group with no feature, then its features, and each feature at the front of
     //    its container, the features that follow each other in as few writes as their layers
     //    allow
-    placeItems(document, layers as unknown as DocumentLayer[], fileGroups, features);
+    placeItems(document, layers, groups, features);
 
     // 5. Import the files
     for (const file of files) {
@@ -239,7 +237,7 @@ function placeItems(
     runOfGroups = true;
     made.add(group.id);
     const { featureIds, ...fields } = group;
-    document.createGroup({ ...fields, layerId, featureIds: [] } as Group);
+    document.createGroup({ ...fields, layerId });
     for (const id of featureIds) {
       const feature = featureById.get(id);
       if (feature?.groupId === group.id) take(feature, true);

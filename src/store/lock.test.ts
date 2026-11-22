@@ -22,7 +22,6 @@ function makeStore(): InstanceDocument {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   };
@@ -32,7 +31,6 @@ function makeStore(): InstanceDocument {
     visible: true,
     locked: true,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   };
@@ -75,11 +73,10 @@ describe('isFeatureLocked', () => {
       id: 'g1',
       layerId: 'l1',
       name: 'g',
-      featureIds: ['f1'],
       locked: true,
       visible: true,
     };
-    store.createGroup(group);
+    store.createGroupWith(group, ['f1']);
     expect(isFeatureLocked(store.getFeature('f1') as Feature, store)).toBe(true);
   });
 
@@ -90,11 +87,10 @@ describe('isFeatureLocked', () => {
       id: 'g1',
       layerId: 'l1',
       name: 'g',
-      featureIds: ['f1'],
       locked: false,
       visible: true,
     };
-    store.createGroup(group);
+    store.createGroupWith(group, ['f1']);
     expect(isFeatureLocked(store.getFeature('f1') as Feature, store)).toBe(false);
   });
 });
@@ -141,7 +137,6 @@ describe('isGroupLocked', () => {
       id: 'g1',
       layerId: 'l1',
       name: 'g',
-      featureIds: [],
       locked: true,
       visible: true,
     };
@@ -154,7 +149,6 @@ describe('isGroupLocked', () => {
       id: 'g1',
       layerId: 'lLocked',
       name: 'g',
-      featureIds: [],
       locked: false,
       visible: true,
     };
@@ -168,7 +162,6 @@ describe('isGroupLocked', () => {
       id: 'g1',
       layerId: 'l1',
       name: 'g',
-      featureIds: [],
       locked: false,
       visible: true,
     };

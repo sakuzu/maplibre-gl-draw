@@ -73,7 +73,6 @@ export function createDuplicateWork(deps: DuplicateDeps): BulkBatchWork {
             id,
             layerId: group.layerId,
             name: group.name,
-            featureIds: [],
             locked: group.locked,
             visible: group.visible,
           },

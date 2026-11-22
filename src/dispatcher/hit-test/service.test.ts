@@ -81,7 +81,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -411,7 +410,6 @@ describe('the visibility lookup of HitTestService', () => {
       id: 'g1',
       layerId: 'l1',
       name: 'g1',
-      featureIds: [],
       locked: false,
       visible: true,
     });

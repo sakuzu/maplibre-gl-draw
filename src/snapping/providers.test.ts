@@ -61,7 +61,6 @@ function makeLayer(id: string, visible = true): Layer {
     visible,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   };
@@ -87,8 +86,8 @@ function putFeature(
   };
   store.createFeature(feature);
   const layer = store.getLayer(feature.layerId);
-  if (layer) {
-    store.updateLayer(layer.id, { items: [...layer.items, feature.id] });
+  if (layer && feature.groupId === undefined) {
+    store.moveFeatures([feature.id], { kind: 'layer', layerId: layer.id });
   }
   spatialIndex.insert(feature);
   return feature;
@@ -306,7 +305,6 @@ describe('the built-in vertex provider', () => {
       id: 'g1',
       layerId: 'l1',
       name: 'g1',
-      featureIds: ['inHiddenGroup'],
       locked: false,
       visible: false,
     });

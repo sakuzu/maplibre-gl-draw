@@ -42,7 +42,6 @@ describe('queryFeaturesInBox filtering', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -52,7 +51,6 @@ describe('queryFeaturesInBox filtering', () => {
       visible: true,
       locked: true,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -62,7 +60,6 @@ describe('queryFeaturesInBox filtering', () => {
       visible: false,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -95,7 +92,6 @@ describe('queryFeaturesInBox filtering', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -103,14 +99,16 @@ describe('queryFeaturesInBox filtering', () => {
     store.createFeature(point('f1', 'l1', [0, 0])); // selectable
     store.createFeature({ ...point('f2', 'l1', [1, 1]), locked: true }); // locked feature
     store.createFeature(point('f3', 'l1', [2, 2])); // belongs to a locked group
-    store.createGroup({
-      id: 'g1',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['f3'],
-      locked: true,
-      visible: true,
-    });
+    store.createGroupWith(
+      {
+        id: 'g1',
+        layerId: 'l1',
+        name: 'g',
+        locked: true,
+        visible: true,
+      },
+      ['f3'],
+    );
 
     const context = {
       store,
@@ -159,7 +157,6 @@ describe('boxRects across the antimeridian', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });

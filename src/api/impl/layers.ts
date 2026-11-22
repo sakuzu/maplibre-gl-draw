@@ -321,7 +321,6 @@ export function prepareLayer(
       visible: input.visible ?? true,
       locked: input.locked ?? false,
       opacity: input.opacity ?? 1,
-      items: [],
       styleRule: input.styleRule as StyleRule | undefined,
       metadata: input.metadata,
     },

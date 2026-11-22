@@ -40,7 +40,6 @@ function makeStore(): InstanceDocument {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   };
@@ -149,7 +148,6 @@ describe('local visibility', () => {
       id: 'g1',
       layerId: 'l1',
       name: 'g',
-      featureIds: [],
       locked: false,
       visible: true,
     };
@@ -157,7 +155,7 @@ describe('local visibility', () => {
     store.createFeature(makeFeature('f1', 'l1', 'g1'));
     store.createFeature(makeFeature('f2', 'l1'));
     // Arrange the group g1 and the feature f2 in the layer order.
-    store.updateLayer('l1', { items: ['g1', 'f2'] });
+    store.moveFeatures(['f2'], { kind: 'layer', layerId: 'l1' });
 
     store.setLocallyHidden('g1', true);
     const displayed = getDisplayFeatures(store).map((f) => f.id);
@@ -208,7 +206,6 @@ describe('listShownFeatures', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -222,14 +219,16 @@ describe('listShownFeatures', () => {
     const store = makeStore();
     store.createFeature(makeFeature('f1', 'l1'));
     store.createFeature(makeFeature('f2', 'l1'));
-    store.createGroup({
-      id: 'g1',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['f2'],
-      locked: false,
-      visible: false,
-    });
+    store.createGroupWith(
+      {
+        id: 'g1',
+        layerId: 'l1',
+        name: 'g',
+        locked: false,
+        visible: false,
+      },
+      ['f2'],
+    );
     expect(listShownFeatures(store).map((f) => f.id)).toEqual(['f1']);
     expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f1', 'f2']);
   });

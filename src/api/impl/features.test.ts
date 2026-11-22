@@ -32,7 +32,6 @@ function layer(id: string, extra: { locked?: boolean; visible?: boolean } = {}) 
     visible: extra.visible ?? true,
     locked: extra.locked ?? false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -74,7 +73,7 @@ function codeOf(fn: () => unknown): string | undefined {
 
 /** The IDs of the items of a layer */
 function itemsOf(layerId: string): readonly string[] {
-  return store.getLayer(layerId)?.items ?? [];
+  return store.listItemIds(layerId, 0, store.countItems(layerId)) ?? [];
 }
 
 beforeEach(() => {
@@ -121,14 +120,16 @@ describe('reading', () => {
   it('keeps the features shown by themselves, their group and their layer with shown', () => {
     layer('l3', { visible: false });
     features.createMany([point('d', { layerId: 'l3' }), point('e'), point('f')]);
-    store.createGroup({
-      id: 'g',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['e'],
-      visible: false,
-      locked: false,
-    });
+    store.createGroupWith(
+      {
+        id: 'g',
+        layerId: 'l1',
+        name: 'g',
+        visible: false,
+        locked: false,
+      },
+      ['e'],
+    );
     // f is hidden on this client only, which shown does not consult
     store.setLocallyHidden('f', true);
     expect(features.list({ shown: true }).map((f) => f.id)).toEqual(['a', 'c', 'f']);
@@ -162,17 +163,19 @@ describe('create', () => {
 
   it('puts a feature into a group and its layer', () => {
     features.create(point('m', { layerId: 'l2' }));
-    store.createGroup({
-      id: 'g',
-      layerId: 'l2',
-      name: 'g',
-      featureIds: ['m'],
-      visible: true,
-      locked: false,
-    });
+    store.createGroupWith(
+      {
+        id: 'g',
+        layerId: 'l2',
+        name: 'g',
+        visible: true,
+        locked: false,
+      },
+      ['m'],
+    );
     const created = features.create(point('n', { groupId: 'g' }));
     expect(created?.layerId).toBe('l2');
-    expect(store.getGroup('g')?.featureIds).toEqual(['m', 'n']);
+    expect(store.listGroupFeatureIds('g', 0, store.countGroupFeatures('g'))).toEqual(['m', 'n']);
   });
 
   it('throws the codes of the contract and stores nothing', () => {
@@ -197,14 +200,16 @@ describe('create', () => {
 
   it('throws invalidInput when the group is not in the layer given', () => {
     features.create(point('m'));
-    store.createGroup({
-      id: 'g',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['m'],
-      visible: true,
-      locked: false,
-    });
+    store.createGroupWith(
+      {
+        id: 'g',
+        layerId: 'l1',
+        name: 'g',
+        visible: true,
+        locked: false,
+      },
+      ['m'],
+    );
     expect(codeOf(() => features.create(point('n', { groupId: 'g', layerId: 'l2' })))).toBe(
       'invalidInput',
     );
@@ -369,14 +374,16 @@ describe('delete and deleteMany', () => {
 describe('move and moveMany', () => {
   beforeEach(() => {
     features.createMany([point('a'), point('b'), point('c'), point('d', { layerId: 'l2' })]);
-    store.createGroup({
-      id: 'g',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['b', 'c'],
-      visible: true,
-      locked: false,
-    });
+    store.createGroupWith(
+      {
+        id: 'g',
+        layerId: 'l1',
+        name: 'g',
+        visible: true,
+        locked: false,
+      },
+      ['b', 'c'],
+    );
   });
 
   it('moves a feature to another layer, at the index or at the front', () => {
@@ -390,13 +397,17 @@ describe('move and moveMany', () => {
   it('moves a feature out of its group into a layer', () => {
     features.move('b', { layerId: 'l2' });
     expect(features.get('b')?.groupId).toBeUndefined();
-    expect(store.getGroup('g')?.featureIds).toEqual(['c']);
+    expect(store.listGroupFeatureIds('g', 0, store.countGroupFeatures('g'))).toEqual(['c']);
     expect(itemsOf('l2')).toEqual(['d', 'b']);
   });
 
   it('moves a feature into a group at the index', () => {
     features.move('d', { groupId: 'g', index: 1 });
-    expect(store.getGroup('g')?.featureIds).toEqual(['b', 'd', 'c']);
+    expect(store.listGroupFeatureIds('g', 0, store.countGroupFeatures('g'))).toEqual([
+      'b',
+      'd',
+      'c',
+    ]);
     expect(features.get('d')).toMatchObject({ groupId: 'g', layerId: 'l1' });
     expect(itemsOf('l2')).toEqual([]);
   });
@@ -423,7 +434,12 @@ describe('move and moveMany', () => {
     notifications.length = 0;
     features.moveMany(['a', 'd'], { groupId: 'g' });
     expect(notifications).toHaveLength(1);
-    expect(store.getGroup('g')?.featureIds).toEqual(['b', 'c', 'a', 'd']);
+    expect(store.listGroupFeatureIds('g', 0, store.countGroupFeatures('g'))).toEqual([
+      'b',
+      'c',
+      'a',
+      'd',
+    ]);
   });
 
   it('throws for a missing feature or target and a wrong target, moving nothing', () => {
@@ -454,7 +470,6 @@ describe('isEditable', () => {
       id: 'g',
       layerId: 'l1',
       name: 'g',
-      featureIds: [],
       visible: true,
       locked: false,
     });

@@ -105,7 +105,6 @@ function createTestContext() {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -279,7 +278,7 @@ describe('loading native data of version 2', () => {
       },
       style: {},
     });
-    expect(store.getLayer('l1')?.items).toEqual([
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toEqual([
       'p',
       'c',
       'i',

@@ -10,8 +10,9 @@
  * native format described in docs/reference/data-format.md.
  */
 
-import type { Data, Feature, FileData, Group, Layer } from '../../../store/types.js';
+import type { Data, Feature, FileData, Layer } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
+import type { DocumentGroup, DocumentLayer } from '../../model.js';
 import { NATIVE_VERSION } from './constants.js';
 import type { EmbeddedFileProblem } from './embedded-file.js';
 import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
@@ -30,7 +31,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
 }
 
-function validateLayer(layer: unknown, index: number): Layer {
+function validateLayer(layer: unknown, index: number): DocumentLayer {
   if (!isRecord(layer)) fail(`layers[${index}] is not an object`);
   const where = `layer "${String(layer.id)}"`;
   if (!isNonEmptyString(layer.id)) fail(`layers[${index}] has no valid string id`);
@@ -49,10 +50,10 @@ function validateLayer(layer: unknown, index: number): Layer {
   if (layer.styleRule !== undefined && !isRecord(layer.styleRule)) {
     fail(`${where} has a styleRule that is not an object`);
   }
-  return layer as unknown as Layer;
+  return layer as unknown as DocumentLayer;
 }
 
-function validateGroup(group: unknown, index: number): Group {
+function validateGroup(group: unknown, index: number): DocumentGroup {
   if (!isRecord(group)) fail(`groups[${index}] is not an object`);
   const where = `group "${String(group.id)}"`;
   if (!isNonEmptyString(group.id)) fail(`groups[${index}] has no valid string id`);
@@ -63,7 +64,7 @@ function validateGroup(group: unknown, index: number): Group {
   if (!Array.isArray(group.featureIds) || !group.featureIds.every((id) => typeof id === 'string')) {
     fail(`${where} has no featureIds array of strings`);
   }
-  return group as unknown as Group;
+  return group as unknown as DocumentGroup;
 }
 
 /** Parses a semantic version (major.minor.patch, with an optional pre-release or build) */
@@ -187,10 +188,10 @@ function validateLayerOrder(value: unknown, layers: readonly Layer[]): string[] 
 
 /** Native data that passed validation, with the files normalized */
 export interface ValidatedNativeData {
-  layers: Layer[];
+  layers: DocumentLayer[];
   /** The stacking order, from the back */
   layerOrder: string[];
-  groups: Group[];
+  groups: DocumentGroup[];
   /** The features in data order, each style reduced to its usable keys */
   features: Feature[];
   /** The files whose image could be imported, normalized */

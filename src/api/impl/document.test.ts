@@ -26,7 +26,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -170,7 +169,6 @@ describe('draw.document', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -202,14 +200,16 @@ describe('draw.document', () => {
       visible: true,
       locked: false,
     });
-    store.createGroup({
-      id: 'g',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['a', 'b'],
-      visible: true,
-      locked: false,
-    });
+    store.createGroupWith(
+      {
+        id: 'g',
+        layerId: 'l1',
+        name: 'g',
+        visible: true,
+        locked: false,
+      },
+      ['a', 'b'],
+    );
     const notifications: Array<string | undefined> = [];
     store.subscribe((change) => notifications.push(change.source));
     // The file reuses the ID of a feature it replaces
@@ -231,7 +231,7 @@ describe('draw.document', () => {
     expect(store.getFeature('a')?.geometry).toEqual({ type: 'Point', coordinates: [5, 6] });
     expect(store.listGroups()).toEqual([]);
     expect(store.listLayers().map((l) => l.id)).toEqual(['l1']);
-    expect(store.getLayer('l1')?.items).toEqual(['a']);
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toEqual(['a']);
   });
 
   it('loads a document of the library in one transaction', async () => {
@@ -319,16 +319,18 @@ describe('document.loadMany', () => {
     expect(second).toMatchObject({ featureIds: ['q', 'r'], layerId: expect.any(String) });
     const firstLayer = store.getLayer(first?.layerId ?? '');
     const secondLayer = store.getLayer(second?.layerId ?? '');
-    expect(firstLayer).toMatchObject({ name: 'first', items: ['p'] });
+    expect(firstLayer).toMatchObject({ name: 'first' });
+    expect(store.listItemIds(firstLayer?.id ?? '', 0, 10)).toEqual(['p']);
     expect(store.getFeature('p')?.layerId).toBe(firstLayer?.id);
     // The group stands in the new layer where its features landed
     const group = store.getGroup(second?.groupId ?? '');
     expect(group).toMatchObject({
       name: 'folder',
       layerId: secondLayer?.id,
-      featureIds: ['q', 'r'],
     });
-    expect(secondLayer).toMatchObject({ name: 'second', items: [group?.id] });
+    expect(store.listGroupFeatureIds(group?.id ?? '', 0, 10)).toEqual(['q', 'r']);
+    expect(secondLayer).toMatchObject({ name: 'second' });
+    expect(store.listItemIds(secondLayer?.id ?? '', 0, 10)).toEqual([group?.id]);
     expect(store.getFeature('q')).toMatchObject({ layerId: secondLayer?.id, groupId: group?.id });
     expect(store.getLayerOrder()).toEqual(['l1', firstLayer?.id, secondLayer?.id]);
   });
@@ -342,9 +344,10 @@ describe('document.loadMany', () => {
     ]);
     expect(notifications).toEqual(['load']);
     const group = store.getGroup(results?.[1]?.groupId ?? '');
-    expect(group).toMatchObject({ name: 'folder', layerId: 'L', featureIds: ['q'] });
+    expect(group).toMatchObject({ name: 'folder', layerId: 'L' });
+    expect(store.listGroupFeatureIds(group?.id ?? '', 0, 10)).toEqual(['q']);
     expect(store.getFeature('q')).toMatchObject({ layerId: 'L', groupId: group?.id });
-    expect(store.getLayer('L')?.items).toEqual(['p', group?.id]);
+    expect(store.listItemIds('L', 0, store.countItems('L'))).toEqual(['p', group?.id]);
     // A layer no item creates is still not found, and nothing is written
     await expect(
       doc.loadMany([

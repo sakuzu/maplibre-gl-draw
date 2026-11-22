@@ -44,7 +44,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -64,7 +63,7 @@ describe('groupSelection', () => {
     expect(groupId).toBe('grp-1');
     expect(store.getFeature('f1')?.groupId).toBe('grp-1');
     expect(store.getFeature('f2')?.groupId).toBe('grp-1');
-    expect(store.getLayer('l1')?.items).toContain('grp-1');
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toContain('grp-1');
   });
 
   it('rejects regrouping a feature that belongs to a group that really exists', () => {
@@ -92,20 +91,19 @@ describe('groupSelection', () => {
     expect(groupId).toBe('grp-1');
     expect(store.getFeature('f1')?.groupId).toBe('grp-1');
     expect(store.getFeature('f2')?.groupId).toBe('grp-1');
-    expect(store.getLayer('l1')?.items).toContain('grp-1');
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toContain('grp-1');
   });
 
   it('adds the group to order even for a stale feature missing from order (orphan)', () => {
     // Set a stale groupId and also drop it from layer.order to create the orphan state
     store.updateFeature('f1', { groupId: 'ghost-group' });
     store.updateFeature('f2', { groupId: 'ghost-group' });
-    store.updateLayer('l1', { items: [] });
 
     store.setSelection('feature', ['f1', 'f2']);
     const groupId = groupSelection(store, generateId, nameGen);
 
     expect(groupId).toBe('grp-1');
     // The group is not missing from order even when no selected feature is in order
-    expect(store.getLayer('l1')?.items).toEqual(['grp-1']);
+    expect(store.listItemIds('l1', 0, store.countItems('l1'))).toEqual(['grp-1']);
   });
 });

@@ -77,7 +77,6 @@ export function groupSelection(
     id: groupId,
     layerId,
     name: groupName,
-    featureIds: [],
     locked: false,
     visible: true,
   };

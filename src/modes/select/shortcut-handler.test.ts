@@ -85,20 +85,21 @@ describe('handleDeleteShortcut with a group selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
     store.createFeature(feature('f1', 'l1'));
     store.createFeature(feature('f2', 'l1'));
-    store.createGroup({
-      id: 'g1',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['f1', 'f2'],
-      locked: false,
-      visible: true,
-    });
+    store.createGroupWith(
+      {
+        id: 'g1',
+        layerId: 'l1',
+        name: 'g',
+        locked: false,
+        visible: true,
+      },
+      ['f1', 'f2'],
+    );
 
     store.setSelection('group', ['g1']);
     await pressDelete();
@@ -119,7 +120,6 @@ describe('handleDeleteShortcut with a layer selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -129,7 +129,6 @@ describe('handleDeleteShortcut with a layer selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -153,7 +152,6 @@ describe('handleDeleteShortcut with a layer selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -173,7 +171,6 @@ describe('suppression of handleDeleteShortcut (interaction lock / readOnly)', ()
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -183,7 +180,6 @@ describe('suppression of handleDeleteShortcut (interaction lock / readOnly)', ()
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -238,7 +234,6 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
         visible: true,
         locked: false,
         opacity: 1,
-        items: [],
         styleRule: undefined,
         metadata: undefined,
       });
@@ -248,34 +243,38 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
   it('a group loses only its unlocked members and stays with the locked one', async () => {
     store.createFeature(feature('f1', 'l1'));
     store.createFeature({ ...feature('f2', 'l1'), locked: true });
-    store.createGroup({
-      id: 'g1',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['f1', 'f2'],
-      locked: false,
-      visible: true,
-    });
+    store.createGroupWith(
+      {
+        id: 'g1',
+        layerId: 'l1',
+        name: 'g',
+        locked: false,
+        visible: true,
+      },
+      ['f1', 'f2'],
+    );
 
     store.setSelection('group', ['g1']);
     await pressDelete();
 
     expect(store.getFeature('f1')).toBeUndefined();
     expect(store.getFeature('f2')).toBeDefined();
-    expect(store.getGroup('g1')?.featureIds).toEqual(['f2']);
+    expect(store.listGroupFeatureIds('g1', 0, store.countGroupFeatures('g1'))).toEqual(['f2']);
   });
 
   it('a layer holding a locked feature or a locked group is not deleted', async () => {
     store.createFeature({ ...feature('f1', 'l1'), locked: true });
     store.createFeature(feature('f2', 'l2'));
-    store.createGroup({
-      id: 'g2',
-      layerId: 'l1',
-      name: 'g',
-      featureIds: ['f2'],
-      locked: true,
-      visible: true,
-    });
+    store.createGroupWith(
+      {
+        id: 'g2',
+        layerId: 'l2',
+        name: 'g',
+        locked: true,
+        visible: true,
+      },
+      ['f2'],
+    );
 
     store.setSelection('layer', ['l1']);
     await pressDelete();
@@ -302,7 +301,6 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
         visible: true,
         locked: false,
         opacity: 1,
-        items: [],
         styleRule: undefined,
         metadata: undefined,
       });
@@ -350,7 +348,6 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -385,7 +382,6 @@ describe('deleteSelection runs the same deletion as the Delete key', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -422,7 +418,6 @@ describe('the group shortcut places the group where groupSelection does', () => 
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -442,7 +437,11 @@ describe('the group shortcut places the group where groupSelection does', () => 
     const viaApi = build();
     groupSelection(viaApi, () => 'g', new AutoNameGenerator(viaApi));
 
-    expect(viaKey.getLayer('l1')?.items).toEqual(viaApi.getLayer('l1')?.items);
-    expect(viaKey.getGroup('g')?.featureIds).toEqual(viaApi.getGroup('g')?.featureIds);
+    expect(viaKey.listItemIds('l1', 0, viaKey.countItems('l1'))).toEqual(
+      viaApi.listItemIds('l1', 0, viaApi.countItems('l1')),
+    );
+    expect(viaKey.listGroupFeatureIds('g', 0, viaKey.countGroupFeatures('g'))).toEqual(
+      viaApi.listGroupFeatureIds('g', 0, viaApi.countGroupFeatures('g')),
+    );
   });
 });

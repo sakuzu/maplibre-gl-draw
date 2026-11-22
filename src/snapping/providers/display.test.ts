@@ -49,7 +49,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -89,7 +88,7 @@ function addStoreFeature(id: string, type: string, coordinates: FeatureCoordinat
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer(layer.id, { items: [...layer.items, id] });
+  if (layer) store.moveFeatures([id], { kind: 'layer', layerId: layer.id });
   spatialIndex.insert(feature);
   return feature;
 }

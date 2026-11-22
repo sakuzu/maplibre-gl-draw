@@ -209,7 +209,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
 }
 
 /** The fields of a group that do not depend on its features */
-export type GroupShell = Omit<StoredGroup, 'layerId' | 'featureIds'>;
+export type GroupShell = Omit<StoredGroup, 'layerId'>;
 
 /**
  * Checks the fields of a group input other than its features and builds them: its ID, taken
@@ -286,7 +286,7 @@ function prepareGroup(
   }
   const shell = prepareGroupShell(deps, input, INPUT_KEYS, pending);
   return {
-    group: { ...shell, layerId, featureIds: [] },
+    group: { ...shell, layerId },
     featureIds: store.sortInStackingOrder(ids),
   };
 }

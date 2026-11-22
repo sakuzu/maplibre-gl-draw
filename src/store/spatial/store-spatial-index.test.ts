@@ -143,7 +143,7 @@ describe('StoreSpatialIndex', () => {
   it('drops the features of a deleted layer', () => {
     const store = documentOf();
     const index = new StoreSpatialIndex(store);
-    store.createLayer({ ...layer('m'), items: [] });
+    store.createLayer(layer('m'));
     store.createFeature({ ...point('a', 1, 1), layerId: 'm' });
 
     store.deleteLayer('m');

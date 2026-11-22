@@ -37,7 +37,6 @@ function layer(id: string): void {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -163,7 +162,7 @@ describe('draw.selection', () => {
     expect(store.getFeature('a')?.layerId).toBe('l2');
     selection.set('group', ['g']);
     expect(selection.move({ layerId: 'l2', index: 0 })).toBe(true);
-    expect(store.getLayer('l2')?.items).toEqual(['g', 'a']);
+    expect(store.listItemIds('l2', 0, store.countItems('l2'))).toEqual(['g', 'a']);
     expect(codeOf(() => selection.move({ layerId: 'x' }))).toBe('notFound');
     selection.clear();
     expect(selection.move({ layerId: 'l1' })).toBe(false);

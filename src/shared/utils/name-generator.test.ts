@@ -56,7 +56,6 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    items: [],
     styleRule: undefined,
     metadata: undefined,
   });
@@ -179,7 +178,6 @@ describe('AutoNameGenerator.generateLayerName / generateGroupName', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -187,7 +185,6 @@ describe('AutoNameGenerator.generateLayerName / generateGroupName', () => {
       id: 'g5',
       layerId: 'l1',
       name: 'Group 5',
-      featureIds: [],
       locked: false,
       visible: true,
     });
@@ -240,7 +237,6 @@ describe('the incremental following of AutoNameGenerator', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      items: [],
       styleRule: undefined,
       metadata: undefined,
     });
@@ -248,7 +244,6 @@ describe('the incremental following of AutoNameGenerator', () => {
       id: 'g30',
       layerId: 'l1',
       name: 'Group 30',
-      featureIds: [],
       locked: false,
       visible: true,
     });
