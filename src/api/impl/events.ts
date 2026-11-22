@@ -540,20 +540,10 @@ function groupMoves(
       id,
       group,
       from: withIndex({ layerId: before.layerId }, store.getOrderBefore(before.layerId), id),
-      to: withIndex({ layerId: group.layerId }, itemsOf(store, group.layerId), id),
+      to: atPositionNow(store, { layerId: group.layerId }, group.layerId, id),
     });
   }
   return out;
-}
-
-/** The IDs of the items of a layer, in order */
-function itemsOf(store: InstanceDocument, layerId: string): readonly string[] {
-  return store.listItemIds(layerId, 0, store.countItems(layerId));
-}
-
-/** The IDs of the features of a group, in order */
-function membersOf(store: InstanceDocument, groupId: string): readonly string[] {
-  return store.listGroupFeatureIds(groupId, 0, store.countGroupFeatures(groupId));
 }
 
 /**
@@ -574,12 +564,12 @@ function describeMove(
 
   let to: MoveTarget;
   if (feature.groupId) {
-    to = withIndex({ groupId: feature.groupId }, membersOf(store, feature.groupId), feature.id);
+    to = atPositionNow(store, { groupId: feature.groupId }, feature.groupId, feature.id);
   } else if (previous.groupId && previous.layerId === feature.layerId) {
     // Out of its group, in the same layer
-    to = withIndex({ groupId: null }, itemsOf(store, feature.layerId), feature.id);
+    to = atPositionNow(store, { groupId: null }, feature.layerId, feature.id);
   } else {
-    to = withIndex({ layerId: feature.layerId }, itemsOf(store, feature.layerId), feature.id);
+    to = atPositionNow(store, { layerId: feature.layerId }, feature.layerId, feature.id);
   }
   return { from, to };
 }
@@ -593,14 +583,28 @@ function describeMoveWithin(
     const { groupId } = feature;
     return {
       from: withIndex({ groupId }, store.getOrderBefore(groupId), feature.id),
-      to: withIndex({ groupId }, membersOf(store, groupId), feature.id),
+      to: atPositionNow(store, { groupId }, groupId, feature.id),
     };
   }
   const { layerId } = feature;
   return {
     from: withIndex({ layerId }, store.getOrderBefore(layerId), feature.id),
-    to: withIndex({ layerId }, itemsOf(store, layerId), feature.id),
+    to: atPositionNow(store, { layerId }, layerId, feature.id),
   };
+}
+
+/**
+ * A target with the position the item has now in a container, read from its place alone, when
+ * it is in that container
+ */
+function atPositionNow<T extends MoveTarget>(
+  store: InstanceDocument,
+  target: T,
+  containerId: string,
+  id: string,
+): T {
+  const at = store.getItemPosition(id);
+  return at?.containerId === containerId ? { ...target, index: at.index } : target;
 }
 
 /** A target with the position of the ID in the list, when the list holds it */
