@@ -154,10 +154,8 @@ export function renderSelectionUI(
  * feature selected and its resize and rotate handles, as for a selection of several features
  *
  * @param framed The features framed from their features, on this copy of the world
- * @param many What the frame of every feature selected is drawn with
+ * @param many What the frame of the features selected on this copy of the world is drawn with
  * @param isLocked Whether the selection cannot be edited: no handle is drawn then
- * @param withFrame Whether the frame of every feature selected and its handles are drawn on this
- *   copy of the world
  */
 export function renderManySelectionUI(
   framed: readonly Feature[],
@@ -167,7 +165,6 @@ export function renderManySelectionUI(
   deps: SelectionUIDrawerDeps,
   dragState: DragState | null,
   isLocked: boolean,
-  withFrame: boolean,
 ): void {
   const { selectionUIRenderer, selectionHandlesRenderer, pointInstanceRenderer, map } = deps;
   if (!selectionUIRenderer || !selectionHandlesRenderer || !many.bbox) return;
@@ -177,10 +174,6 @@ export function renderManySelectionUI(
   selectionUIRenderer.setProjectionData(projectionData);
   selectionHandlesRenderer.setTransform(coordinateTransform);
   selectionHandlesRenderer.setProjectionData(projectionData);
-  if (!withFrame) {
-    selectionUIRenderer.drawMany(framed, null, zoom, dragState);
-    return;
-  }
   selectionUIRenderer.drawMany(framed, many.bbox, zoom, dragState);
   if (isLocked || !many.hasArea) return;
   const operation = dragState?.operation ?? null;

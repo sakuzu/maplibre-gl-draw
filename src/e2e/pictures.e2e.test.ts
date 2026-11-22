@@ -464,6 +464,7 @@ for (const map of MAPS) {
 }
 
 describe('the pictures of a selection of many features across the antimeridian', () => {
+  const taken = new Map<number, Picture>();
   let page: Page;
 
   beforeAll(async () => {
@@ -474,13 +475,42 @@ describe('the pictures of a selection of many features across the antimeridian',
     await page?.close();
   });
 
-  // The pictures are taken for the comparison of a change; the two counts are not held to each
-  // other here (the frame of all of them is drawn on the stored copy only past the count of a few)
   for (const scene of DATELINE_SCENES) {
     it(scene.name, async () => {
       const picture = await take(page, scene);
-      expect(picture.pixels.length).toBe(picture.width * picture.height * 4);
+      taken.set(scene.count, picture);
       if (OUT) await writePicture(OUT, scene.name, picture);
     });
   }
+
+  it('frame the features of each copy of the world with their handles the same way at both counts', () => {
+    const [few, many] = MANY_COUNTS.map((count) => taken.get(count));
+    if (!few || !many) throw new Error('the pictures of the two counts were not taken');
+    // Past a few, the frames are drawn from the rows: their lines may differ by a few levels at
+    // their edges. Beyond that, the pictures differ by the point added and its frame only, in a
+    // box of a few tens of pixels: the frames of all of them and their handles, one set on each
+    // copy of the world, are where they are at both counts
+    let x0 = Number.POSITIVE_INFINITY;
+    let y0 = Number.POSITIVE_INFINITY;
+    let x1 = Number.NEGATIVE_INFINITY;
+    let y1 = Number.NEGATIVE_INFINITY;
+    let changed = 0;
+    for (let i = 0; i < few.pixels.length; i += 4) {
+      let largest = 0;
+      for (let c = 0; c < 4; c++) {
+        largest = Math.max(largest, Math.abs(few.pixels[i + c] - many.pixels[i + c]));
+      }
+      if (largest <= 8) continue;
+      changed++;
+      const x = (i / 4) % few.width;
+      const y = Math.floor(i / 4 / few.width);
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+    expect(changed).toBeGreaterThan(0);
+    expect(x1 - x0).toBeLessThanOrEqual(40);
+    expect(y1 - y0).toBeLessThanOrEqual(40);
+  });
 });

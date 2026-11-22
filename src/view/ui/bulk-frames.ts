@@ -72,7 +72,10 @@ import { SelectedRows } from './bulk-selection.js';
 /** The part the frames record what they hold on the GPU under (a part of the rows) */
 const FRAMES_PART = 'frames';
 
-/** The floats of the instance of a row: its box from the origin, its row and its marker */
+/**
+ * The floats of the instance of a row: its box from the origin of its group, its row, its marker,
+ * and its kind (bit 0: a row of one position; bit 1: its box is taken from the second origin)
+ */
 const FLOATS_PER_ROW = 8;
 const STRIDE = FLOATS_PER_ROW * 4;
 /** The vertices of a side of a frame (two triangles) */
@@ -172,6 +175,8 @@ interface GroupFrames {
   readonly buffer: WebGLBuffer | null;
   readonly vao: WebGLVertexArrayObject | null;
   readonly origin: [number, number];
+  /** The second origin, of the rows more than 180 degrees of longitude away from the first */
+  readonly second: [number, number];
   readonly count: number;
   /** The longest side of the box of a row framed, in Mercator units */
   readonly longest: number;
@@ -184,7 +189,8 @@ type UniformName =
   | 'u_miter_limit'
   | 'u_margin'
   | 'u_deg_per_px'
-  | 'u_origin_lat'
+  | 'u_origins'
+  | 'u_shifts'
   | 'u_segments'
   | 'u_segment_length'
   | 'u_world'
@@ -202,7 +208,8 @@ const UNIFORMS: readonly UniformName[] = [
   'u_miter_limit',
   'u_margin',
   'u_deg_per_px',
-  'u_origin_lat',
+  'u_origins',
+  'u_shifts',
   'u_segments',
   'u_segment_length',
   'u_world',
@@ -218,19 +225,30 @@ const UNIFORMS: readonly UniformName[] = [
  * The instance data of the rows of a group: the box of each framed row from the origin of the
  * group, its row, and the half extent of the marker of a row of one position (none for a box)
  *
- * @returns The data, the origin and the number of rows framed
+ * The box of a row more than 180 degrees of longitude away from the first origin (a group on both
+ * sides of the antimeridian) is taken from a second origin, its own box, so that no offset of a
+ * row holds the whole turn of the world, which Float32 holds to about a pixel only
+ *
+ * @returns The data, the two origins and the number of rows framed
  * @internal
  */
 export function buildFrameInstances(
   group: RowGroup,
   rows: BulkFrameRows,
   drawnAtOnce: (row: number) => boolean,
-): { data: Float32Array; origin: [number, number]; count: number; longest: number } {
+): {
+  data: Float32Array;
+  origin: [number, number];
+  second: [number, number];
+  count: number;
+  longest: number;
+} {
   const reader = rows.reader;
   const n = group.data.length;
   const box = new Float64Array(4);
   const values = new Float32Array(n * FLOATS_PER_ROW);
   let origin: [number, number] | null = null;
+  let second: [number, number] | null = null;
   let count = 0;
   let longest = 0;
   /** The extents of the markers by type and style, made once per group */
@@ -245,12 +263,20 @@ export function buildFrameInstances(
       continue;
     }
     if (!origin) origin = [Math.fround(box[0]), Math.fround(box[1])];
+    let from = origin;
+    let kind = 0;
+    if (Math.abs(box[0] - origin[0]) > 180) {
+      second ??= [Math.fround(box[0]), Math.fround(box[1])];
+      from = second;
+      kind = 2;
+    }
     const at = count * FLOATS_PER_ROW;
-    values[at] = box[0] - origin[0];
-    values[at + 1] = box[1] - origin[1];
-    values[at + 2] = box[2] - origin[0];
-    values[at + 3] = box[3] - origin[1];
+    values[at] = box[0] - from[0];
+    values[at + 1] = box[1] - from[1];
+    values[at + 2] = box[2] - from[0];
+    values[at + 3] = box[3] - from[1];
     values[at + 4] = row;
+    values[at + 7] = kind;
     if (box[0] === box[2] && box[1] === box[3]) {
       const style = reader.styleNumberOf(group, row);
       const key = `${type}\u0000${style}`;
@@ -261,7 +287,7 @@ export function buildFrameInstances(
       }
       values[at + 5] = extent[0];
       values[at + 6] = extent[1];
-      values[at + 7] = 1;
+      values[at + 7] = kind + 1;
     } else {
       const width = (box[2] - box[0]) / 360;
       const height = Math.abs(mercatorY(box[3]) - mercatorY(box[1]));
@@ -272,6 +298,7 @@ export function buildFrameInstances(
   return {
     data: values.subarray(0, count * FLOATS_PER_ROW),
     origin: origin ?? [0, 0],
+    second: second ?? origin ?? [0, 0],
     count,
     longest,
   };
@@ -297,7 +324,8 @@ export class BulkFramesRenderer {
   private readonly frames = new Map<RowGroup, GroupFrames>();
   /** The groups drawn since the last end of a frame */
   private readonly drawn = new Set<RowGroup>();
-  private readonly originShift: [number, number] = [0, 0];
+  /** The projection takes the offsets from the camera as they are given (the shifts are added) */
+  private readonly noShift: [number, number] = [0, 0];
   /** The draw calls made, counted for the tests */
   draws = 0;
 
@@ -345,11 +373,16 @@ export class BulkFramesRenderer {
       }
       const gl = this.gl;
       const camera = view.offsetUniforms;
-      this.originShift[0] = camera ? frames.origin[0] - camera.centerLngLat[0] : 0;
-      this.originShift[1] = camera ? frames.origin[1] - camera.centerLngLat[1] : 0;
-      this.projection.setUniforms(view.projectionData, view.zoom, camera, this.originShift);
+      this.projection.setUniforms(view.projectionData, view.zoom, camera, this.noShift);
       const loc = this.locations;
-      if (loc.u_origin_lat) gl.uniform1f(loc.u_origin_lat, frames.origin[1]);
+      // The two origins from the camera (in 64 bits, then given to Float32), and their latitudes
+      const cx = camera ? camera.centerLngLat[0] : 0;
+      const cy = camera ? camera.centerLngLat[1] : 0;
+      const { origin, second } = frames;
+      if (loc.u_shifts) {
+        gl.uniform4f(loc.u_shifts, origin[0] - cx, origin[1] - cy, second[0] - cx, second[1] - cy);
+      }
+      if (loc.u_origins) gl.uniform2f(loc.u_origins, origin[1], second[1]);
       const segments = segmentsOfGroup(frames.longest, segmentLength, view);
       if (loc.u_segments) gl.uniform1i(loc.u_segments, segments);
       this.rowState?.bind(entry.texture);
@@ -516,6 +549,7 @@ export class BulkFramesRenderer {
       buffer,
       vao,
       origin: built.origin,
+      second: built.second,
       count: built.count,
       longest: built.longest,
     };
@@ -598,7 +632,7 @@ ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}${
 // The box of the row from the origin of its group: west, south, east, north
 layout(location = 0) in vec4 a_bounds;
 // x: the row in its group; y and z: the half extent of the marker of a row of one position
-// (CSS px); w: 1 for a row of one position
+// (CSS px); w: its kind (bit 0: a row of one position; bit 1: its box is from the second origin)
 layout(location = 1) in vec4 a_meta;
 
 uniform vec2 u_viewport;
@@ -608,8 +642,9 @@ uniform float u_miter_limit;
 uniform float u_margin;
 // The degrees of longitude of a CSS px at the zoom of the frame (on the map plane)
 uniform float u_deg_per_px;
-// The latitude of the origin of the group
-uniform float u_origin_lat;
+// The latitudes of the two origins of the group, and the two origins from the camera
+uniform vec2 u_origins;
+uniform vec4 u_shifts;
 // The most segments a side of a frame of the group is cut into, and the longest segment of the
 // surface (Mercator; 0 on a flat map)
 uniform int u_segments;
@@ -632,6 +667,14 @@ out float v_point;
 vec2 g_corners[4];
 // The segments of a side
 int g_per_side = 1;
+// The latitude of the origin of the row, and the origin from the camera
+float g_origin_lat = 0.0;
+vec2 g_shift = vec2(0.0);
+
+// Projects a position from the origin of the row
+vec4 projectFromOrigin(vec2 offset) {
+    return project_position_to_clipspace_from_offset(offset + g_shift, u_projection_matrix);
+}
 
 vec2 clipToScreen(vec4 clip) {
     vec2 ndc = clip.xy / clip.w;
@@ -658,7 +701,7 @@ vec2 pathPoint(int i) {
 // The CSS px between two points of the map plane (from the origin), as the dashes measure them
 float planeDistance(vec2 a, vec2 b) {
     float dx = (b.x - a.x) / 360.0 * u_world;
-    float dy = (mercatorYOf(b.y + u_origin_lat) - mercatorYOf(a.y + u_origin_lat)) * u_world;
+    float dy = (mercatorYOf(b.y + g_origin_lat) - mercatorYOf(a.y + g_origin_lat)) * u_world;
     return sqrt(dx * dx + dy * dy);
 }
 
@@ -677,7 +720,11 @@ float pathDistance(int i) {
 void main() {
     v_dist = 0.0;
     v_distance = 0.0;
-    v_point = a_meta.w;
+    bool second = a_meta.w > 1.5;
+    float point = second ? a_meta.w - 2.0 : a_meta.w;
+    v_point = point;
+    g_origin_lat = second ? u_origins.y : u_origins.x;
+    g_shift = second ? u_shifts.zw : u_shifts.xy;
     float halfWidth = u_width / 2.0;
     float expanded = halfWidth + 1.0;
     v_width = halfWidth;
@@ -693,7 +740,7 @@ void main() {
     int k = quad + (atEnd ? 1 : 0);
     v_dist = across * expanded;
 
-    if (a_meta.w > 0.5) {
+    if (point > 0.5) {
         // A row of one position: the rectangle of its marker and the margin around the point
         if (quad >= 4) {
             gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
@@ -723,7 +770,7 @@ void main() {
             }
         }
         vec2 offset = corner * u_ratio + normal * across * expanded * scale;
-        vec4 centerClip = project_position_to_clipspace_from_offset(a_bounds.xy, u_projection_matrix);
+        vec4 centerClip = projectFromOrigin(a_bounds.xy);
         if (centerClip.w <= 0.0) {
             gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
             return;
@@ -744,7 +791,7 @@ void main() {
 
     // A row with an extent: its box widened by the margin on the map plane, in the pixels of the
     // latitude of its center
-    float latitude = u_origin_lat + (a_bounds.y + a_bounds.w) * 0.5;
+    float latitude = g_origin_lat + (a_bounds.y + a_bounds.w) * 0.5;
     vec2 margin = vec2(u_deg_per_px, u_deg_per_px * cos(radians(latitude))) * u_margin;
     g_corners[0] = vec2(a_bounds.x - margin.x, a_bounds.w + margin.y);
     g_corners[1] = vec2(a_bounds.z + margin.x, a_bounds.w + margin.y);
@@ -754,7 +801,7 @@ void main() {
     // the surface
     if (u_segment_length > 0.0 && u_segments > 1) {
         float width = (g_corners[1].x - g_corners[0].x) / 360.0;
-        float height = abs(mercatorYOf(g_corners[0].y + u_origin_lat) - mercatorYOf(g_corners[3].y + u_origin_lat));
+        float height = abs(mercatorYOf(g_corners[0].y + g_origin_lat) - mercatorYOf(g_corners[3].y + g_origin_lat));
         g_per_side = clamp(int(ceil(max(width, height) / u_segment_length)), 1, u_segments);
     }
     int n = 4 * g_per_side;
@@ -770,9 +817,9 @@ void main() {
         g_anchor_elevation_m = 0.0;
         g_anchor_elevation_on = 1.0;
     }
-    vec4 currentClip = project_position_to_clipspace_from_offset(position, u_projection_matrix);
-    vec4 prevClip = project_position_to_clipspace_from_offset(previous, u_projection_matrix);
-    vec4 nextClip = project_position_to_clipspace_from_offset(next, u_projection_matrix);
+    vec4 currentClip = projectFromOrigin(position);
+    vec4 prevClip = projectFromOrigin(previous);
+    vec4 nextClip = projectFromOrigin(next);
     vec2 currentScreen = clipToScreen(currentClip);
     vec2 prevScreen = clipToScreen(prevClip);
     vec2 nextScreen = clipToScreen(nextClip);

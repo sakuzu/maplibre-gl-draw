@@ -13,7 +13,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
-import type { DrawnRows } from '../../store/built-in/drawn-rows.js';
+import { type DrawnRows, pageRowBox } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Feature } from '../../store/types.js';
@@ -29,6 +29,7 @@ import {
 import { type BulkFrameRows, boxedByFeature } from '../ui/bulk-frames.js';
 import type { ManySelection } from '../ui/bulk-selection.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
+import { computeBoundingBox, hasZeroArea } from '../ui/selection-ui/index.js';
 import {
   renderFollowedVertices,
   renderGlobalAuxiliaryHandles,
@@ -304,21 +305,21 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
         many.selection.groups,
       );
       f.restoreBlendState();
-      // The features framed from their features, on the copy they are drawn on; the frame of
-      // all of them on the stored copy
-      const framed =
-        f.copies.length === 1 || !copy.view
-          ? many.framed
-          : many.framed.filter((feature) => copy.view?.getVisibleIds().has(feature.id));
+      // On one copy of the world, the frame of every feature selected; on each of two, the frame
+      // of the features selected in its range, with the features framed from their features
+      // drawn on it, as for a few selected
+      const view = f.copies.length === 1 ? undefined : copy.view;
+      const framed = view
+        ? many.framed.filter((feature) => view.getVisibleIds().has(feature.id))
+        : many.framed;
       renderManySelectionUI(
         framed,
-        many.selection,
+        view ? selectedInView(deps, many, view.getVisibleIds()) : many.selection,
         f.zoom,
         copy.projectionData,
         selectionUIDeps,
         store.getDragState(),
         selectionLocked,
-        copy.lngShift === 0,
       );
     } else {
       renderSelectionUI(
@@ -502,4 +503,65 @@ function selectedIn(selection: ReturnType<DocumentAccess['getSelection']>, featu
     default:
       return false;
   }
+}
+
+/**
+ * The box of the features selected in the range of one copy of the world, and whether one of them
+ * has an area: read in every frame that draws two copies, from the rows in the range the copy
+ * reads (the box of a row, or of its feature for a row whose box is that of its feature), as the
+ * selection UI of a few features takes the features in the range of the copy
+ */
+function selectedInView(
+  deps: FrameRenderDeps,
+  many: ManySelectionFrame,
+  ids: ReadonlySet<string>,
+): Pick<ManySelection, 'bbox' | 'hasArea'> {
+  const table = deps.tableRetained;
+  const reader = many.rows.reader;
+  const extensions = deps.selectionScope.extensions;
+  const box = new Float64Array(4);
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let hasArea = false;
+  const widen = (x0: number, y0: number, x1: number, y1: number): void => {
+    minX = Math.min(minX, x0);
+    minY = Math.min(minY, y0);
+    maxX = Math.max(maxX, x1);
+    maxY = Math.max(maxY, y1);
+  };
+  for (const id of ids) {
+    const ref = reader.refOfId(id);
+    const place = ref === undefined ? undefined : reader.placeOf(ref);
+    if (!place || !table?.rowSelected(place.group, place.row)) continue;
+    const { group, row } = place;
+    if (!reader.hasGeometry(group, row)) continue;
+    const type = reader.typeOf(group, row);
+    if (boxedByFeature(many.rows, type)) {
+      const feature = deps.store.getFeature(id);
+      const bbox = feature ? computeBoundingBox(feature, extensions) : null;
+      if (!bbox) continue;
+      for (const [x, y] of [bbox.topLeft, bbox.topRight, bbox.bottomRight, bbox.bottomLeft]) {
+        widen(x, y, x, y);
+      }
+      if (!hasZeroArea(bbox)) hasArea = true;
+      continue;
+    }
+    if (!pageRowBox(group.data, row, box)) continue;
+    if (type !== 'Point' && type !== 'Circle' && box.every((value) => value === 0)) continue;
+    widen(box[0], box[1], box[2], box[3]);
+    if (box[0] !== box[2] || box[1] !== box[3]) hasArea = true;
+  }
+  if (!Number.isFinite(minX)) return { bbox: null, hasArea: false };
+  return {
+    bbox: {
+      topLeft: [minX, maxY],
+      topRight: [maxX, maxY],
+      bottomRight: [maxX, minY],
+      bottomLeft: [minX, minY],
+      center: [(minX + maxX) / 2, (minY + maxY) / 2],
+    },
+    hasArea,
+  };
 }

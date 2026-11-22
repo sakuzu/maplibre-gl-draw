@@ -52,8 +52,9 @@
  * its work (`stats`).
  *
  * The frames of a selection of many features (`ui/bulk-frames.ts`) read what it drew in a frame
- * (`forEachDrawnGroup`, `forEachDrawnAtOnce`, `rowDrawnAtOnce`): the row groups with the textures
- * of the state of their rows, and the features drawn at once. These reads change nothing.
+ * (`forEachDrawnGroup`, `forEachDrawnAtOnce`, `rowDrawnAtOnce`, `rowSelected`): the row groups with
+ * the textures of the state of their rows, the features drawn at once, and the mark of a row
+ * selected. These reads change nothing.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -1179,6 +1180,17 @@ export class TableLayerRenderer {
       if (row >= chunk.range.from && row < chunk.range.to) return chunk.type === 'immediate';
     }
     return false;
+  }
+
+  /**
+   * Whether the byte of the state of a row, as it is written, marks it as selected and not hidden
+   * (false for a row of a group not drawn)
+   */
+  rowSelected(group: RowGroup, row: number): boolean {
+    const groupCache = this.cacheOfGroup(group);
+    if (!groupCache || groupCache.stateVersion < 0 || row >= groupCache.bytes.length) return false;
+    const byte = groupCache.bytes[row];
+    return (byte & ROW_STATE_SELECTED) !== 0 && (byte & ROW_STATE_HIDDEN) === 0;
   }
 
   /**
