@@ -556,13 +556,9 @@ function createShownLookup(
   };
 }
 
-/** The layer of a group: the one of its members, or the layer that lists an empty group */
-function groupLayerId(document: ClientDocument, group: Group): string | undefined {
-  for (const featureId of group.featureIds) {
-    const feature = document.getFeature(featureId);
-    if (feature) return feature.layerId;
-  }
-  return document.listLayers().find((layer) => layer.items.includes(group.id))?.id;
+/** The layer of a group, which the group records */
+function groupLayerId(_document: ClientDocument, group: Group): string | undefined {
+  return group.layerId;
 }
 
 /** Whether two coordinate values are equal, position by position */
