@@ -423,9 +423,12 @@ export interface DocumentMoves {
    * that are locked (themselves, their group or their layer; a deleted row by the lock it was
    * kept with) are left out unless `ignoreLocks` is given, and the edit being written in parts is
    * applied first to the others. A row whose group is not there goes into the layer, at its front.
-   * The rows brought back are told as created
+   * The rows brought back are told as created. A new `parent` puts a row in another layer (that
+   * of the parent, or of its group), as the Store writes it: the rows of one call are in one layer
+   * and go into the layer given
    *
-   * @param layerId - The layer of the rows
+   * @param layerId - The layer the rows are written in: the one they are in, or the one their new
+   *   `parent` puts them in (where a row whose group is not there goes, at its front)
    * @returns The rows written (none when the Store refused the write)
    */
   writeRowValues(

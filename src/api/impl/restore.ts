@@ -14,6 +14,10 @@
  *   the first: the values of its fields key by key (the first value given wins for a key two of
  *   them wrote), its deletion, and its geometry, whole, or vertex by vertex on the geometry the
  *   later values left, the diff followed to it first.
+ * - A row written back with its parent goes into the layer of that parent, whichever layer it is
+ *   in now: the parent itself when it is a layer, the layer of the group when the group is there,
+ *   and the layer the group was in when the change was told when the group is gone (at the front
+ *   of that layer). A parent before whose layer is gone refuses the values (`notFound`).
  * - The groups are written back the first time the edit writes (or at its end when it has no
  *   row), for every value from the last to the first: the groups deleted come back where they
  *   were, those moved go back, and those whose values changed take them back. The groups the
@@ -51,6 +55,7 @@ import {
   restoreMarksOf,
   type SharedValues,
   sharedValuesOf,
+  type ValueRows,
 } from './feature-values.js';
 import {
   groupLocked,
@@ -188,13 +193,44 @@ function checkValues(
   }
   for (const { shared, marks } of given) {
     for (const rows of shared.rows) {
-      if (layer.getLayer(rows.layerId)) continue;
+      const gone = layer.getLayer(rows.layerId) ? layerGoneBefore(layer, rows) : rows.layerId;
+      if (gone === undefined) continue;
       const written = marks.written;
       let left = written === null;
       for (let s = 0; !left && s < rows.rows.length; s++) left = written?.[rows.start + s] === 0;
-      if (left) throw notFound('layer', rows.layerId);
+      if (left) throw notFound('layer', gone);
     }
   }
+}
+
+/**
+ * The layer a parent the rows had before their change puts them back into, when it is not there:
+ * the parent itself when it was a layer, or the layer its group was in when the group is gone
+ * (undefined when every parent before is there, or puts them into a layer that is)
+ */
+function layerGoneBefore(layer: InstanceDocument, rows: ValueRows): string | undefined {
+  if (!rows.placesBefore) return undefined;
+  for (const [parent, layerThen] of rows.placesBefore) {
+    if (layer.getLayer(parent) || layer.getGroup(parent)) continue;
+    if (layerThen !== undefined && !layer.getLayer(layerThen)) return layerThen;
+  }
+  return undefined;
+}
+
+/**
+ * The layer a row goes back into when it is written back with a parent: the parent when it is a
+ * layer, the layer of the group when the group is there, and the layer the group was in when the
+ * change was told when it is gone (undefined when that is not known)
+ */
+function layerOfParent(
+  layer: InstanceDocument,
+  parent: string,
+  rows: ValueRows,
+): string | undefined {
+  if (layer.getLayer(parent)) return parent;
+  const group = layer.getGroup(parent);
+  if (group) return group.layerId;
+  return rows.placesBefore?.get(parent);
 }
 
 /**
@@ -372,9 +408,13 @@ function restoreWork(
     const holders = new Int32Array(rows.length * valueCount);
     const slots = new Int32Array(rows.length * valueCount);
     const holderCount = new Int32Array(rows.length);
-    /** The layer each row is written in: by its index in `layers` */
+    /**
+     * The layers the rows are in and go into, by their index in `layers`: a write of the Store
+     * takes the rows of one layer, which a new parent may put in another
+     */
     const layers: string[] = [];
     const layerOf = new Int32Array(rows.length).fill(-1);
+    const targetOf = new Int32Array(rows.length).fill(-1);
     const deletedNow = new Uint8Array(rows.length);
     /** The rows deleted now, by the layer of the values, whose parents are read at once */
     const deletedRows = new Map<string, number[]>();
@@ -405,8 +445,8 @@ function restoreWork(
         list.push(k);
       }
     }
-    // A deleted row goes back to the layer of its parent: a layer, or the layer of its group; a row
-    // whose group is gone goes back into the layer it was in (the layer gives it a place there)
+    // A deleted row is in the layer of its parent: a layer, or the layer of its group; a row whose
+    // group is gone goes back into the layer it was in (the layer gives it a place there)
     for (const [layerId, list] of deletedRows) {
       const parents = parentsOf(
         tables,
@@ -429,14 +469,53 @@ function restoreWork(
         }
       });
     }
-    countWork(deps.counts, 'objectsCreated', 6);
+    // A row written back with a parent goes into the layer of that parent, whichever layer it is
+    // in now; the others stay in theirs
+    for (let k = 0; k < rows.length; k++) {
+      if (layerOf[k] < 0) continue;
+      const h = parentHolderOf(k);
+      if (h < 0) {
+        targetOf[k] = layerOf[k];
+        continue;
+      }
+      const slot = slots[k * valueCount + h];
+      const part = given[holders[k * valueCount + h]].shared.rowsOf(slot);
+      const parent = part.before?.fields.get('parent')?.[slot - part.start] as string;
+      const target = layerOfParent(layer, parent, part);
+      targetOf[k] = target === undefined ? layerOf[k] : indexOf(layers, target);
+    }
+    // The rows by the layer they are in and the one they go into, one write for each
+    const writes = new Map<number, number[]>();
+    for (let k = 0; k < rows.length; k++) {
+      if (targetOf[k] < 0) continue;
+      const key = layerOf[k] * layers.length + targetOf[k];
+      let list = writes.get(key);
+      if (!list) {
+        list = [];
+        writes.set(key, list);
+      }
+      list.push(k);
+    }
+    countWork(deps.counts, 'objectsCreated', 8);
 
-    for (let l = 0; l < layers.length; l++) {
-      const layerId = layers[l];
-      const inLayer: number[] = [];
-      for (let k = 0; k < rows.length; k++) if (layerOf[k] === l) inLayer.push(k);
-      if (layer.getLayer(layerId)) writeLayer(layerId, inLayer);
+    for (const [key, inLayer] of writes) {
+      const target = layers[key % layers.length];
+      if (layer.getLayer(target)) writeLayer(target, inLayer);
       else for (const k of inLayer) markWritten(k);
+    }
+
+    /**
+     * The holder of a row whose value gives the parent it is written back with (the first value
+     * given wins, as for any key): -1 when no value writes its parent
+     */
+    function parentHolderOf(k: number): number {
+      let out = -1;
+      for (let h = 0; h < holderCount[k]; h++) {
+        const slot = slots[k * valueCount + h];
+        const part = given[holders[k * valueCount + h]].shared.rowsOf(slot);
+        if (typeof part.before?.fields.get('parent')?.[slot - part.start] === 'string') out = h;
+      }
+      return out;
     }
 
     /** Marks the slots of a row written in every value that holds it */

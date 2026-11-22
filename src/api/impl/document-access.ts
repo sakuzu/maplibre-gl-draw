@@ -3409,6 +3409,16 @@ export function createDocumentAccess(
     // The rows there, and those a deleted row kept: the locked ones are left out. A deleted row
     // whose group is gone is read alone (its parent names no layer the others are in)
     const now = readPlaces(rows);
+    // A row a new parent takes out of another layer is written to that layer as well
+    const parentsNow = now.get('parent') ?? [];
+    let lastParent: unknown;
+    for (let i = 0; i < parentsNow.length; i++) {
+      const parent = parentsNow[i];
+      if (i > 0 && parent === lastParent) continue;
+      lastParent = parent;
+      if (typeof parent !== 'string' || parent === layerId) continue;
+      refuseInDeletion(store.getLayer(parent) ? parent : layerOfGroup(parent));
+    }
     const keep: number[] = [];
     for (let i = 0; i < rows.length; i++) {
       if (tables.getRowId(rows[i]) === undefined) continue;

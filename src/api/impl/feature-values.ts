@@ -64,6 +64,13 @@ export interface ValueRows {
    * `GEOMETRY_VERTICES`); undefined when the change wrote no geometry of these rows
    */
   readonly geometryKinds: Uint8Array | undefined;
+  /**
+   * The parents the rows had before the change (their layers and their groups), each once, with
+   * the layer each one was or was in when the change was told: what a row whose group is gone by
+   * the time it is written back goes back into. Undefined when the change wrote no parent of these
+   * rows; a group whose layer could not be read then (one with no row in it) has none
+   */
+  readonly placesBefore: ReadonlyMap<string, string | undefined> | undefined;
 }
 
 /**
@@ -493,7 +500,8 @@ export function valuesOfChange(input: {
       );
       input.made?.(3);
     }
-    rows.push({ layerId, rows: before.rows, before, start, geometryKinds });
+    const placesBefore = placesBeforeOf(before, input);
+    rows.push({ layerId, rows: before.rows, before, start, geometryKinds, placesBefore });
   }
   // The rows created, by the layer they are in
   if (input.created.length > 0) {
@@ -517,7 +525,14 @@ export function valuesOfChange(input: {
       const start = ids.length;
       const refs = Int32Array.from(list);
       for (let i = 0; i < refs.length; i++) ids.push(tables.getRowId(refs[i]) ?? '');
-      rows.push({ layerId, rows: refs, before: undefined, start, geometryKinds: undefined });
+      rows.push({
+        layerId,
+        rows: refs,
+        before: undefined,
+        start,
+        geometryKinds: undefined,
+        placesBefore: undefined,
+      });
     }
     input.made?.(2 * byLayer.size + 1);
   }
@@ -527,6 +542,55 @@ export function valuesOfChange(input: {
   if (ids.length === 0 && groupCount === 0) return null;
   input.made?.(3);
   return new SharedValues(input.before ?? new Map(), { rows, ids, tracked, groups });
+}
+
+/**
+ * The parents rows had before a change, each once, with the layer each one was or was in when the
+ * change is told (see `ValueRows.placesBefore`): a layer is its own; a group there is in the layer
+ * that holds its rows, and a group the change deleted in the layer it was deleted from. Undefined
+ * when the change wrote no parent of the rows
+ */
+function placesBeforeOf(
+  before: RowValues,
+  input: {
+    readonly tables: FeatureTables;
+    readonly layerIds: () => readonly string[];
+    readonly groups: GroupChanges;
+    readonly made?: (count: number) => void;
+  },
+): ReadonlyMap<string, string | undefined> | undefined {
+  const parents = before.fields.get('parent');
+  if (!parents || parents.length === 0) return undefined;
+  const { tables } = input;
+  const places = new Map<string, string | undefined>();
+  let layers: ReadonlySet<string> | undefined;
+  let last: unknown;
+  for (let i = 0; i < parents.length; i++) {
+    const parent = parents[i];
+    // The rows of one parent mostly follow each other: each is looked up once
+    if (i > 0 && parent === last) continue;
+    last = parent;
+    if (typeof parent !== 'string' || places.has(parent)) continue;
+    layers ??= new Set(input.layerIds());
+    if (layers.has(parent)) {
+      places.set(parent, parent);
+      continue;
+    }
+    const groupRef = tables.findGroup(parent);
+    let layerId: string | undefined;
+    if (groupRef !== undefined) {
+      for (const id of layers) {
+        if ((tables.get(id)?.countGroupMembers(groupRef) ?? 0) > 0) {
+          layerId = id;
+          break;
+        }
+      }
+    }
+    layerId ??= input.groups.deleted.find(({ group }) => group.id === parent)?.layerId;
+    places.set(parent, layerId);
+  }
+  input.made?.(layers ? 2 : 1);
+  return places;
 }
 
 /**
