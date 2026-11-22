@@ -24,7 +24,6 @@ import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { countWork, type WorkCounts } from '../../shared/work-counts.js';
 import type { DocumentAccess, FeatureMatch } from '../../store/document-access.js';
 import { isFeatureLocked } from '../../store/lock.js';
-import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type {
   Feature as StoredFeature,
   FeatureStyle as StoredFeatureStyle,
@@ -225,10 +224,12 @@ export function createFeatures(deps: ResourceDeps, bulk?: FeatureBulkDeps): Feat
   };
   const requireAllToWrite = (ids: unknown): StoredFeature[] => requireIds(ids).map(requireToWrite);
 
-  /** The features in stacking order, from the back */
+  /** The features in stacking order, from the back, sorted from their own places */
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] => {
     if (features.length < 2) return features;
-    const position = new Map(listEveryFeatureInOrder(store).map((f, index) => [f.id, index]));
+    const position = new Map(
+      store.sortInStackingOrder(features.map((f) => f.id)).map((id, index) => [id, index]),
+    );
     return [...features].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
   };
 
