@@ -377,7 +377,7 @@ describe('the rows on a frame the drape paints', () => {
     expect(renderer.stats.chunksBuilt).toBe(built);
   });
 
-  it('draw the points at once while their chunk does not fit, and from it once it fits', () => {
+  it('draw the points from the chunks of the other frames while their chunk does not fit, and from it once it fits', () => {
     const instance = instanceOf();
     const ledger = instance.engine.customLayer.getGpuLedger();
     let room = false;
@@ -414,18 +414,27 @@ describe('the rows on a frame the drape paints', () => {
     settle(instance);
     expect(drapeUsed(instance)).toBe(true);
     const processed = vi.spyOn(BatchManager.prototype, 'processFeature');
+    const ranges = vi.spyOn(RowsRenderer.prototype, 'drawRange');
     const refused = drawsOf(instance);
-    expect(refused.map((draw) => draw.kind)).toEqual(['immediate']);
-    expect(processed).toHaveBeenCalledTimes(100);
+    // No point one at a time: their rows are drawn from the chunk of the other frames, its points
+    // only, tested against the terrain
+    expect(refused.map((draw) => [draw.kind, draw.from, draw.to])).toEqual([['rows', 0, 300]]);
+    expect(processed).not.toHaveBeenCalled();
+    expect(ranges.mock.calls.map((call) => [call[0].part, call[7], call[8]])).toEqual([
+      ['rows', true, true],
+    ]);
     // The chunk refused holds nothing on the GPU
     const [chunk] = rowsChunks(rendererOf(instance));
     expect(chunk.refused).toBeGreaterThan(0);
     expect(chunk.instanceBuffer).toBeNull();
     room = true;
     settle(instance);
-    processed.mockClear();
+    ranges.mockClear();
     const drawn = drawsOf(instance);
     expect(drawn.map((draw) => draw.kind)).toEqual(['rows']);
+    expect(ranges.mock.calls.map((call) => [call[0].part, call[7], call[8] ?? false])).toEqual([
+      [DRAPED_ROWS_PART, true, false],
+    ]);
     expect(processed).not.toHaveBeenCalled();
   });
 
@@ -530,4 +539,103 @@ describe('the work of a frame the drape paints', () => {
       }
     });
   }
+});
+
+describe('a layer of many points beside the polygons, the lines, an image and a Circle, the terrain put on', () => {
+  /**
+   * The rows drawn at once and the features drawn one at a time, from the frame the terrain is put
+   * on until the drawing has nothing left to do, for a document of `size` points beside a layer of
+   * the other kinds (as the playground holds them)
+   */
+  function terrainOnWork(size: number): { atOnce: number; features: number; frames: number } {
+    const instance = countedInstance();
+    instances.push(instance);
+    (instance.map.map as unknown as { getZoom: () => number }).getZoom = () => 13;
+    const { draw } = instance;
+    draw.features.createMany([
+      { type: 'Polygon', geometry: { type: 'Polygon', coordinates: [square(-0.6, -0.6, 0.3)] } },
+      { type: 'Polygon', geometry: { type: 'Polygon', coordinates: [square(0.2, 0.2, 0.3)] } },
+      {
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-0.7, 0.5],
+            [0.7, 0.6],
+          ],
+        },
+      },
+      {
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-0.7, -0.5],
+            [0.7, -0.4],
+          ],
+        },
+        style: { lineStyle: 'dashed' },
+      },
+      {
+        type: 'Image',
+        geometry: { type: 'Point', coordinates: [0.5, -0.5] },
+        properties: {
+          'maplibre-gl-draw:imageWidth': 100,
+          'maplibre-gl-draw:imageHeight': 50,
+        },
+      },
+      {
+        type: 'Circle',
+        geometry: { type: 'Point', coordinates: [0, 0] },
+        properties: { 'maplibre-gl-draw:radiusMeters': 500 },
+      },
+    ] as never);
+    const big = draw.layers.create({ name: 'points' }) as unknown as { id: string } | string;
+    const layerId = typeof big === 'string' ? big : big.id;
+    const side = Math.ceil(Math.sqrt(size));
+    draw.features.createMany(
+      Array.from({ length: size }, (_, i) => ({
+        type: 'Point',
+        layerId,
+        geometry: {
+          type: 'Point',
+          coordinates: [
+            -0.9 + (1.8 * (i % side)) / side,
+            -0.9 + (1.8 * Math.floor(i / side)) / side,
+          ],
+        },
+      })) as never,
+    );
+    settle(instance);
+    // The terrain comes
+    Object.assign(instance.map.map as object, {
+      terrain: demTerrain(),
+      queryTerrainElevation: ([lng, lat]: [number, number]) => 100 + 40 * lng + 25 * lat,
+    });
+    const renderer = rendererOf(instance);
+    const processed = vi.spyOn(BatchManager.prototype, 'processFeature');
+    let atOnce = 0;
+    let frames = 0;
+    for (; frames < 60; frames++) {
+      const record = drawsOf(instance);
+      for (const draw of record) if (draw.kind === 'immediate') atOnce += draw.to - draw.from;
+      if (frames > 2 && !draw.hasPendingWork()) break;
+    }
+    expect(drapeUsed(instance)).toBe(true);
+    const features = processed.mock.calls.length;
+    processed.mockRestore();
+    void renderer;
+    instance.draw.destroy();
+    instances.splice(instances.indexOf(instance), 1);
+    return { atOnce, features, frames };
+  }
+
+  it('draws a few rows at once, whatever the number of the points', () => {
+    for (const what of ['atOnce', 'features'] as const) {
+      const comparison = compareWork((size) => terrainOnWork(size)[what]);
+      expect(comparison.ratio, what).toBeLessThan(2);
+      // The Circle, in each frame
+      expect(comparison.large, what).toBeLessThan(200);
+    }
+  });
 });

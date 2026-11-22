@@ -167,6 +167,7 @@ interface RowsUniformLocations {
   readonly stationMercator: WebGLUniformLocation | null;
   readonly surface: WebGLUniformLocation | null;
   readonly surfacesFlat: WebGLUniformLocation | null;
+  readonly pointsOnly: WebGLUniformLocation | null;
   readonly fillCull: WebGLUniformLocation | null;
 }
 
@@ -196,6 +197,7 @@ interface RowsUniformMemo {
   stationMercator: number;
   surface: number;
   surfacesFlat: number;
+  pointsOnly: number;
   fillCull: number;
 }
 
@@ -564,6 +566,8 @@ export class RowsRenderer {
    * @param factors The factors of the drawing (the opacity of the layer)
    * @param ghosts Whether its points take the test of the terrain hiding them (a frame the
    *   analytic drape paints)
+   * @param pointsOnly Whether only its points are drawn (a chunk of the other frames drawn on a
+   *   frame the drape paints, which paints the rest of it)
    * @returns Whether it was drawn (false for a chunk not written yet, or without a program)
    */
   drawRange(
@@ -575,6 +579,7 @@ export class RowsRenderer {
     rowState: RowStateTexture,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
     ghosts = false,
+    pointsOnly = false,
   ): boolean {
     const program = this.program;
     if (!chunk.uploaded || !program) return false;
@@ -602,7 +607,7 @@ export class RowsRenderer {
       program.projection.setUniforms(projectionData, zoom, center);
     }
     const stations = this.stationsOf(chunk);
-    this.writeUniforms(program, chunk, zoom, factors, stations);
+    this.writeUniforms(program, chunk, zoom, factors, stations, pointsOnly);
     program.ghosts.write(ghosts && data.lines.surface, this.terrain, center);
     program.rowState.bind(rowState);
     this.bindTextures(chunk);
@@ -666,6 +671,7 @@ export class RowsRenderer {
     zoom: number,
     factors: RetainedDrawFactors,
     stations: number,
+    pointsOnly: boolean,
   ): void {
     const gl = this.gl;
     const locations = program.locations;
@@ -736,6 +742,7 @@ export class RowsRenderer {
         terrain.renderState.active && terrain.surfacesFlattened ? 1 : 0,
       ],
       [locations.fillCull, 'fillCull', terrain.renderState.active ? 1 : 0],
+      [locations.pointsOnly, 'pointsOnly', pointsOnly ? 1 : 0],
     ];
     for (const [location, key, value] of values) {
       if (location && (stale || memo[key] !== value)) {
@@ -994,6 +1001,7 @@ function emptyMemo(): RowsUniformMemo {
     stationMercator: Number.NaN,
     surface: Number.NaN,
     surfacesFlat: Number.NaN,
+    pointsOnly: Number.NaN,
     fillCull: Number.NaN,
   };
 }
@@ -1078,6 +1086,7 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     stationMercator: at('u_station_mercator'),
     surface: at('u_surface'),
     surfacesFlat: at('u_surfaces_flat'),
+    pointsOnly: at('u_points_only'),
     fillCull: at('u_fill_cull'),
   };
 }

@@ -34,7 +34,8 @@
  * (`surfacesFlattened`), they get no elevation while the points keep theirs. On a frame the
  * analytic drape paints, a point the terrain hides from the camera is drawn faint, as the points
  * drawn one at a time are there (`rows-occlusion.ts`, once per vertex, the same for every vertex
- * of the point).
+ * of the point). Those frames can draw the points of a chunk of the other frames only
+ * (`u_points_only`): the drape paints the rest of it.
  *
  * The blending is the one of the layer, so the branches differ only in what they emit. The
  * shaders never read `gl_InstanceID`: a range of rows is drawn by pointing the instance
@@ -125,6 +126,8 @@ uniform float u_station_mercator;
 uniform float u_surface;
 // 1 on a frame that draws the polygons and the lines flat (the points keep their elevations)
 uniform float u_surfaces_flat;
+// 1 when only the points of the rows are drawn (the drape paints the rest of the chunk)
+uniform float u_points_only;
 
 flat out int v_kind;
 // The color (the fill of a point)
@@ -554,8 +557,9 @@ void main() {
     v_dash_next = vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
     v_geom = vec4(0.0);
 
-    // The state of the row: a hidden row draws nothing
-    if (rowStateHidden(readRowState(row))) {
+    // The state of the row: a hidden row draws nothing; nor does a row that is not a point when
+    // only the points are drawn
+    if (rowStateHidden(readRowState(row)) || (u_points_only > 0.5 && kind != ${ROWS_KIND.point})) {
         emitShadeOffset(vec2(0.0));
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;

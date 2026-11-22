@@ -36,8 +36,12 @@
  * the rows are cut for it on their own (`draped`): the points drawn in one draw are in chunks of
  * their own (the rows the drape paints join them and draw nothing there), the rows drawn at once
  * elsewhere are drawn at once, and the runs of rows the drape paints are not drawn. Those chunks
- * are held under a part that gives way (`DRAPED_ROWS_PART`): a chunk that does not fit is drawn
- * at once, as are the rows of a chunk not built yet. Their points the terrain hides from the
+ * are held under a part that gives way (`DRAPED_ROWS_PART`). No point of them is drawn at once:
+ * they are built in view in the frame they are first drawn in, as the chunks of the other frames
+ * are; a chunk that does not fit draws its points from the chunks of the other frames, which hold
+ * them too (cut and built for it when they are not), its points only; a chunk not built yet does
+ * so when those are built for the surface, and waits for its build otherwise. Their points the
+ * terrain hides from the
  * camera are drawn faint (the test in the vertex shader, `rows-occlusion.ts`). A group keeps the
  * chunks of the frames the drape paints and those of the other frames apart, so going from one to
  * the other cuts nothing again; the chunks of the frames the drape paints not used in a frame are
@@ -302,11 +306,6 @@ export interface TableLayerRendererOptions {
 interface RowsChunkState extends RetainedChunkState<RowsChunk> {
   readonly type: 'rows';
   readonly range: OrderedChunkRange;
-  /**
-   * Whether its rows were drawn at once the last time it was drawn (a chunk of the frames the drape
-   * paints not built yet, or refused)
-   */
-  atOnce?: boolean;
 }
 
 /** A chunk of rows of one kind (the drawing by kind) */
@@ -1237,15 +1236,7 @@ export class TableLayerRenderer {
    */
   private drawnAtOnceIn(groupCache: GroupCache, row: number): boolean {
     for (const chunk of groupCache.chunks ?? []) {
-      if (row < chunk.range.from || row >= chunk.range.to) continue;
-      if (chunk.type === 'immediate') return true;
-      // A chunk of the frames the drape paints drawn at once: its points, not the rows the drape
-      // paints that join it
-      return (
-        chunk.type === 'rows' &&
-        chunk.atOnce === true &&
-        this.drapedRows.hasGeometry(groupCache.group, row)
-      );
+      if (row >= chunk.range.from && row < chunk.range.to) return chunk.type === 'immediate';
     }
     return false;
   }
@@ -1747,9 +1738,8 @@ export class TableLayerRenderer {
     this.useSide(groupCache, isDraped(cache.drawing));
     const chunks = this.chunksOf(cache, groupCache);
     // The chunks of the new cut are built; until they are built in view, the group draws the
-    // chunks of the cut before. The chunks of the frames the drape paints are built within the
-    // budget whatever: their rows are drawn at once until then
-    this.buildChunks(groupCache, !groupCache.shown && !isDraped(groupCache.drawing));
+    // chunks of the cut before
+    this.buildChunks(groupCache, !groupCache.shown);
     // The chunks in view cut for an older surface check their rows against this one
     for (const chunk of chunks) {
       if (chunk.type === 'rows') this.checkCut(cache, groupCache, chunk);
@@ -1801,12 +1791,13 @@ export class TableLayerRenderer {
       return;
     }
     if (!meets(chunk.bounds, frame.bounds ?? world())) return;
-    // A chunk of the frames the drape paints that cannot be drawn from its rows (not built yet,
-    // or refused for the share of the parts that give way) draws them at once
+    // A chunk of the frames the drape paints that cannot be drawn (not built yet, or refused for
+    // the share of the parts that give way) draws its points from the chunks of the other frames,
+    // or waits for them
     const draped = chunk.type === 'rows' && isDraped(groupCache.drawing);
     if (!chunk.batches) {
       this.pending = true;
-      if (draped) this.drawChunkAtOnce(cache, groupCache, chunk as RowsChunkState, from, to);
+      if (draped) this.drawFromOtherSide(cache, groupCache, from, to, false);
       return;
     }
     // A group drawn for the first time, and a chunk built in this frame, are written now (in the
@@ -1815,13 +1806,13 @@ export class TableLayerRenderer {
     if (chunk.type === 'rows' && !chunk.batches.uploaded) this.rows?.flushUploads();
     if (chunk.type === 'rows' && chunk.batches.refused > 0) {
       this.refusedChunk(chunk);
-      this.drawChunkAtOnce(cache, groupCache, chunk, from, to);
+      this.drawFromOtherSide(cache, groupCache, from, to, true);
       return;
     }
     const texture = groupCache.texture;
     if (!texture || (chunk.type === 'rows' && !chunk.batches.uploaded)) {
       this.pending = true;
-      if (draped) this.drawChunkAtOnce(cache, groupCache, chunk as RowsChunkState, from, to);
+      if (draped) this.drawFromOtherSide(cache, groupCache, from, to, false);
       return;
     }
     if (chunk.type === 'rows') {
@@ -1836,7 +1827,6 @@ export class TableLayerRenderer {
         this.pass.factors,
         draped,
       );
-      this.drawnAtOnceAs(chunk, false);
     } else {
       drawKindBatch(
         chunk.batches,
@@ -1850,32 +1840,114 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Draws the rows of a chunk of the frames the drape paints at once (its points, not the rows the
-   * drape paints that join it)
+   * Draws the points of the rows `[from, to)` of a chunk of the frames the drape paints from the
+   * chunks of the other frames of their group, which hold them as well (only their points, tested
+   * against the terrain: the drape paints the rest). With `build`, the chunks of the other frames
+   * are cut and built for it when they are not (as the other frames would); else only those built
+   * for the surface of the frame are drawn. The rows not drawn wait for a later frame
    */
-  private drawChunkAtOnce(
+  private drawFromOtherSide(
     cache: LayerCache,
     groupCache: GroupCache,
-    chunk: RowsChunkState,
     from: number,
     to: number,
+    build: boolean,
   ): void {
-    this.drawAtOnce(cache, groupCache, from, to, false, true);
-    this.recordRange(cache, groupCache, 'immediate', from, to);
-    this.drawnAtOnceAs(chunk, true);
+    if (cache.drawing !== 'draped') return;
+    const chunks = build
+      ? this.builtOtherSide(cache, groupCache)
+      : this.otherSideReady(cache, groupCache);
+    if (!chunks) {
+      this.pending = true;
+      return;
+    }
+    const frame = this.pass.frame as TableLayerFrame;
+    const texture = groupCache.texture;
+    const rows = this.rows as RowsRenderer;
+    for (const chunk of chunks) {
+      if (chunk.type !== 'rows') continue;
+      const a = Math.max(from, chunk.range.from);
+      const b = Math.min(to, chunk.range.to);
+      if (b <= a || !meets(chunk.bounds, frame.bounds ?? world())) continue;
+      const gpu = chunk.batches;
+      if (gpu && !gpu.uploaded) rows.flushUploads();
+      if (!gpu?.uploaded || !texture) {
+        this.pending = true;
+        continue;
+      }
+      const base = chunk.range.from;
+      rows.drawRange(
+        gpu,
+        a - base,
+        b - base,
+        frame.zoom,
+        frame.projectionData,
+        texture,
+        this.pass.factors,
+        true,
+        true,
+      );
+      this.recordRange(cache, groupCache, 'rows', a, b);
+    }
   }
 
-  /** Notes how the rows of a chunk were drawn (the frames of a selection of many read it) */
-  private drawnAtOnceAs(chunk: RowsChunkState, atOnce: boolean): void {
-    if ((chunk.atOnce === true) === atOnce) return;
-    chunk.atOnce = atOnce;
-    this.atOnceRevision++;
+  /**
+   * The chunks of the other frames of a group when they are cut for the surface of the frame (null
+   * otherwise)
+   */
+  private otherSideReady(cache: LayerCache, groupCache: GroupCache): TableChunk[] | null {
+    const other = groupCache.other;
+    if (
+      !other?.chunks ||
+      other.drawing !== 'one-draw' ||
+      other.generation !== cache.generation ||
+      other.surfaceKind !== cache.surfaceKind
+    ) {
+      return null;
+    }
+    return other.chunks;
+  }
+
+  /**
+   * The chunks of the other frames of a group, cut and built for the surface of the frame as the
+   * other frames would cut and build them (within the budget, but whatever it when the group was
+   * never drawn on them): the chunks of the cut before while those of the new cut are not built
+   */
+  private builtOtherSide(cache: LayerCache, groupCache: GroupCache): TableChunk[] | null {
+    groupCache.other ??= {
+      chunks: null,
+      drawing: null,
+      surfaceKind: 'flat',
+      generation: -1,
+      retiring: null,
+      styleGeneration: groupCache.styleGeneration,
+      shown: false,
+    };
+    const drawing = cache.drawing;
+    return this.onOtherSide(groupCache, () => {
+      cache.drawing = 'one-draw';
+      try {
+        const chunks = this.chunksOf(cache, groupCache);
+        this.buildChunks(groupCache, !groupCache.shown);
+        for (const chunk of chunks) {
+          if (chunk.type === 'rows') this.checkCut(cache, groupCache, chunk);
+        }
+        if (builtInView(chunks, cache.bounds)) {
+          groupCache.shown = true;
+          return chunks;
+        }
+        this.pending = true;
+        return groupCache.retiring ?? chunks;
+      } finally {
+        cache.drawing = drawing;
+      }
+    });
   }
 
   /**
    * A chunk of the frames the drape paints was refused for the share of the parts that give way:
    * the chunks of those frames not used in this one are let go, and the chunk is built again once
-   * what it holds fits (its rows are drawn at once until then)
+   * what it holds fits (its points are drawn from the chunks of the other frames until then)
    */
   private refusedChunk(chunk: RowsChunkState): void {
     const gpu = chunk.batches as RowsChunk;
