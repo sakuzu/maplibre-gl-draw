@@ -18,6 +18,7 @@ import {
   expectNotProportional,
   expectPartsWithin,
   runInParts,
+  WORK_SCENES,
   WORK_SIZES,
 } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
@@ -214,72 +215,74 @@ function objectsOf(value: unknown, seen = new Set<object>()): number {
   return count;
 }
 
-describe('the values of a move of every feature', () => {
-  /**
-   * The values of a move of `size` features: one part, the clock of the tests standing still, and
-   * then in parts of about 1,000 rows
-   */
-  const moveOf = async (size: number, slow: boolean): Promise<SharedValues[]> => {
-    draw.destroy();
-    open(slow);
-    manyPoints(size);
-    const changes = record();
-    const run = settled(
-      draw.features.translate({ layerIds: ['many'] }, { from: [139, 35], to: [139.01, 35] }),
-    );
-    await vi.runAllTimersAsync();
-    const operationId = (run.value as EditCounts).operationId;
-    return valuesOf(changes, operationId).map((value) => sharedValuesOf(value) as SharedValues);
-  };
-
-  /** The objects of values, maps, arrays and typed arrays, each once */
-  const objectsOfAll = (values: readonly SharedValues[]) =>
-    values.reduce((sum, shared) => sum + objectsOf(shared), 0);
-
-  it('hold the arrays of the geometries before, and no object per feature', async () => {
-    const oneSmall = await moveOf(WORK_SIZES.small, false);
-    const oneLarge = await moveOf(WORK_SIZES.large, false);
-    expect(oneLarge).toHaveLength(oneSmall.length);
-    for (const shared of [...oneSmall, ...oneLarge]) expect(shared.tracked.size).toBe(0);
-    const objects = new Map<number, number>([
-      [WORK_SIZES.small, objectsOfAll(oneSmall)],
-      [WORK_SIZES.large, objectsOfAll(oneLarge)],
-    ]);
-    expect(objects.get(WORK_SIZES.large)).toBe(objects.get(WORK_SIZES.small));
-    expectNotProportional((size) => objects.get(size) as number, 'the objects of the values');
-    // In parts, the values of each part have as many objects
-    const parts = await moveOf(WORK_SIZES.large, true);
-    expect(parts.length).toBeGreaterThan(1);
-    const each = parts.map((shared) => objectsOf(shared));
-    expect(Math.max(...each)).toBe(objectsOf(oneSmall[oneSmall.length - 1]));
-  });
-});
-
-describe('the writing back of a move of every feature', () => {
-  it('writes no more rows in a part for 10,000 features than for 1,000', async () => {
-    const largest: number[] = [];
-    for (const size of [WORK_SIZES.small, WORK_SIZES.large]) {
+describe(WORK_SCENES.writeBack, () => {
+  describe('the values of a move of every feature', () => {
+    /**
+     * The values of a move of `size` features: one part, the clock of the tests standing still, and
+     * then in parts of about 1,000 rows
+     */
+    const moveOf = async (size: number, slow: boolean): Promise<SharedValues[]> => {
       draw.destroy();
-      open();
+      open(slow);
       manyPoints(size);
       const changes = record();
-      const move = settled(
+      const run = settled(
         draw.features.translate({ layerIds: ['many'] }, { from: [139, 35], to: [139.01, 35] }),
       );
       await vi.runAllTimersAsync();
-      const values = valuesOf(changes, (move.value as EditCounts).operationId);
-      const parts = await runInParts({
-        counts: countsOf(base),
-        run: () => draw.features.restore(values),
-      });
-      // 0.05 ms a row: about 1,000 rows in a part of 50 ms
-      expectPartsWithin(parts, 1_100);
-      largest.push(Math.max(...parts.parts));
-      expect(draw.features.get('p0')?.geometry).toEqual({
-        type: 'Point',
-        coordinates: [139, 35],
-      });
-    }
-    expect(largest[1]).toBeLessThanOrEqual(1_100);
+      const operationId = (run.value as EditCounts).operationId;
+      return valuesOf(changes, operationId).map((value) => sharedValuesOf(value) as SharedValues);
+    };
+
+    /** The objects of values, maps, arrays and typed arrays, each once */
+    const objectsOfAll = (values: readonly SharedValues[]) =>
+      values.reduce((sum, shared) => sum + objectsOf(shared), 0);
+
+    it('hold the arrays of the geometries before, and no object per feature', async () => {
+      const oneSmall = await moveOf(WORK_SIZES.small, false);
+      const oneLarge = await moveOf(WORK_SIZES.large, false);
+      expect(oneLarge).toHaveLength(oneSmall.length);
+      for (const shared of [...oneSmall, ...oneLarge]) expect(shared.tracked.size).toBe(0);
+      const objects = new Map<number, number>([
+        [WORK_SIZES.small, objectsOfAll(oneSmall)],
+        [WORK_SIZES.large, objectsOfAll(oneLarge)],
+      ]);
+      expect(objects.get(WORK_SIZES.large)).toBe(objects.get(WORK_SIZES.small));
+      expectNotProportional((size) => objects.get(size) as number, 'the objects of the values');
+      // In parts, the values of each part have as many objects
+      const parts = await moveOf(WORK_SIZES.large, true);
+      expect(parts.length).toBeGreaterThan(1);
+      const each = parts.map((shared) => objectsOf(shared));
+      expect(Math.max(...each)).toBe(objectsOf(oneSmall[oneSmall.length - 1]));
+    });
+  });
+
+  describe('the writing back of a move of every feature', () => {
+    it('writes no more rows in a part for 10,000 features than for 1,000', async () => {
+      const largest: number[] = [];
+      for (const size of [WORK_SIZES.small, WORK_SIZES.large]) {
+        draw.destroy();
+        open();
+        manyPoints(size);
+        const changes = record();
+        const move = settled(
+          draw.features.translate({ layerIds: ['many'] }, { from: [139, 35], to: [139.01, 35] }),
+        );
+        await vi.runAllTimersAsync();
+        const values = valuesOf(changes, (move.value as EditCounts).operationId);
+        const parts = await runInParts({
+          counts: countsOf(base),
+          run: () => draw.features.restore(values),
+        });
+        // 0.05 ms a row: about 1,000 rows in a part of 50 ms
+        expectPartsWithin(parts, 1_100);
+        largest.push(Math.max(...parts.parts));
+        expect(draw.features.get('p0')?.geometry).toEqual({
+          type: 'Point',
+          coordinates: [139, 35],
+        });
+      }
+      expect(largest[1]).toBeLessThanOrEqual(1_100);
+    });
   });
 });
