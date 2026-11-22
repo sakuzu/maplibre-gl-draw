@@ -9,6 +9,8 @@
  * editing behavior only when enabled.
  */
 
+import { deepFreeze } from '../utils/deep-freeze.js';
+
 /**
  * Settings that keep a boundary shared by adjacent features intact while it is edited
  *
@@ -31,9 +33,9 @@ export interface TopologyConfig {
 /**
  * Default topology configuration (everything disabled)
  */
-export const DEFAULT_TOPOLOGY_CONFIG: TopologyConfig = {
+export const DEFAULT_TOPOLOGY_CONFIG: TopologyConfig = deepFreeze({
   sharedVertexDrag: false,
-};
+});
 
 /**
  * Helper function that merges configurations

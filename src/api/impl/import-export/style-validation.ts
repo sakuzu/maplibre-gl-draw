@@ -16,6 +16,7 @@
  */
 
 import { isColor } from '../../../shared/color.js';
+import { deepFreeze } from '../../../shared/utils/deep-freeze.js';
 import type { FeatureStyle } from '../../../store/types.js';
 import { setOwnProperty } from './own-property.js';
 
@@ -34,7 +35,7 @@ const oneOf =
     typeof value === 'string' && values.includes(value);
 
 /** The check of every key of FeatureStyle */
-const STYLE_CHECK_TABLE: Readonly<Record<keyof FeatureStyle, Check>> = {
+const STYLE_CHECK_TABLE: Readonly<Record<keyof FeatureStyle, Check>> = deepFreeze({
   fillColor: isCssColor,
   fillOpacity: isOpacity,
   strokeColor: isCssColor,
@@ -48,7 +49,7 @@ const STYLE_CHECK_TABLE: Readonly<Record<keyof FeatureStyle, Check>> = {
   pointStrokeColor: isCssColor,
   pointStrokeWidth: isNonNegative,
   imageOpacity: isOpacity,
-};
+});
 
 const STYLE_CHECKS: ReadonlyMap<string, Check> = new Map(Object.entries(STYLE_CHECK_TABLE));
 

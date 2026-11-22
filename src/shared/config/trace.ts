@@ -13,6 +13,8 @@
  * value from the next click or move onward.
  */
 
+import { deepFreeze } from '../utils/deep-freeze.js';
+
 /**
  * The setting of edge tracing: following the boundary of an existing feature while drawing
  *
@@ -39,9 +41,9 @@ export interface TraceConfig {
 /**
  * Default trace configuration (enabled)
  */
-export const DEFAULT_TRACE_CONFIG: TraceConfig = {
+export const DEFAULT_TRACE_CONFIG: TraceConfig = deepFreeze({
   enabled: true,
-};
+});
 
 /**
  * Helper function that merges configurations

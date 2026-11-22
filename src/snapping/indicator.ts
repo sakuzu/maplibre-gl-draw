@@ -23,6 +23,7 @@
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type { EngineOverlayRenderer, FrameDrawContext } from '../extension/index.js';
 import type { PointStyle } from '../shared/types/style.js';
+import { deepFreeze } from '../shared/utils/deep-freeze.js';
 import type { SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
 import type { SnapService, SnapTargetKind } from './types.js';
 
@@ -32,9 +33,9 @@ import type { SnapService, SnapTargetKind } from './types.js';
 export type SnapIndicatorStyles = Record<SnapTargetKind, PointStyle>;
 
 /** The snapping color (#00C7BE) */
-const SNAP_COLOR: [number, number, number, number] = [0.0, 0.78, 0.745, 1.0];
+const SNAP_COLOR: [number, number, number, number] = deepFreeze([0.0, 0.78, 0.745, 1.0]);
 
-const VERTEX_STYLE: PointStyle = {
+const VERTEX_STYLE: PointStyle = deepFreeze({
   shape: 'circle',
   size: 14,
   fillColor: SNAP_COLOR,
@@ -42,9 +43,9 @@ const VERTEX_STYLE: PointStyle = {
   strokeColor: SNAP_COLOR,
   strokeWidth: 2,
   strokeOpacity: 1.0,
-};
+});
 
-const EDGE_STYLE: PointStyle = {
+const EDGE_STYLE: PointStyle = deepFreeze({
   shape: 'square',
   size: 12,
   fillColor: SNAP_COLOR,
@@ -52,7 +53,7 @@ const EDGE_STYLE: PointStyle = {
   strokeColor: SNAP_COLOR,
   strokeWidth: 2,
   strokeOpacity: 1.0,
-};
+});
 
 /**
  * The symbol of an intersection
@@ -61,7 +62,7 @@ const EDGE_STYLE: PointStyle = {
  * smaller filled circle. The shapes PointShapeRenderer can actually draw are the
  * circle and the square, so a diamond cannot be used.
  */
-const INTERSECTION_STYLE: PointStyle = {
+const INTERSECTION_STYLE: PointStyle = deepFreeze({
   shape: 'circle',
   size: 8,
   fillColor: SNAP_COLOR,
@@ -69,7 +70,7 @@ const INTERSECTION_STYLE: PointStyle = {
   strokeColor: SNAP_COLOR,
   strokeWidth: 0,
   strokeOpacity: 0,
-};
+});
 
 /**
  * The symbol of a guide
@@ -77,7 +78,7 @@ const INTERSECTION_STYLE: PointStyle = {
  * It appears together with the guide line (dashed), so the point is a smallish circle
  * with an outline.
  */
-const GUIDE_STYLE: PointStyle = {
+const GUIDE_STYLE: PointStyle = deepFreeze({
   shape: 'circle',
   size: 10,
   fillColor: SNAP_COLOR,
@@ -85,37 +86,37 @@ const GUIDE_STYLE: PointStyle = {
   strokeColor: SNAP_COLOR,
   strokeWidth: 2,
   strokeOpacity: 1.0,
-};
+});
 
 /**
  * The dash pattern of a guide line (told apart from the [8, 6] of Tentative)
  */
-const GUIDE_DASH_ARRAY: [number, number] = [4, 4];
+const GUIDE_DASH_ARRAY: [number, number] = deepFreeze([4, 4]);
 
 /**
  * The style of the guide line drawn under the symbol while a guide is snapped to: 1 px, the
  * snap color `#00C7BE`, dashed `[4, 4]` (distinct from the `[8, 6]` of the drawing in
  * progress).
  */
-export const DEFAULT_SNAP_GUIDE_LINE_STYLE: SDFStrokeStyle = {
+export const DEFAULT_SNAP_GUIDE_LINE_STYLE: SDFStrokeStyle = deepFreeze({
   width: 1,
   color: SNAP_COLOR,
   opacity: 1.0,
   lineStyle: 'dashed',
   dashArray: GUIDE_DASH_ARRAY,
-};
+});
 
 /**
  * The symbols drawn at the snapped point, all in the snap color `#00C7BE`: `vertex` an
  * outlined circle of 14 px, `edge` an outlined square of 12 px, `intersection` a filled
  * circle of 8 px and `guide` an outlined circle of 10 px.
  */
-export const DEFAULT_SNAP_INDICATOR_STYLES: SnapIndicatorStyles = {
+export const DEFAULT_SNAP_INDICATOR_STYLES: SnapIndicatorStyles = deepFreeze({
   vertex: VERTEX_STYLE,
   edge: EDGE_STYLE,
   intersection: INTERSECTION_STYLE,
   guide: GUIDE_STYLE,
-};
+});
 
 /**
  * The look of the indicator: the mark of each kind and the guide line. The renderer reads it

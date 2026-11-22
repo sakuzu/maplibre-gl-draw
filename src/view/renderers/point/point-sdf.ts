@@ -20,16 +20,18 @@
  * with a tip pointing up. +y is up on the screen for both renderers.
  */
 
+import { deepFreeze } from '../../../shared/utils/deep-freeze.js';
+
 /** The shapes the built-in renderers draw */
 export type SdfPointShape = 'circle' | 'square' | 'triangle' | 'star';
 
 /** Value of the `u_shape` uniform for each shape */
-export const POINT_SHAPE_CODE: Readonly<Record<SdfPointShape, number>> = {
+export const POINT_SHAPE_CODE: Readonly<Record<SdfPointShape, number>> = deepFreeze({
   circle: 0,
   square: 1,
   triangle: 2,
   star: 3,
-};
+});
 
 /**
  * Ratio of the inner vertices of the star to its tips ((3 - √5) / 2, a regular pentagram)

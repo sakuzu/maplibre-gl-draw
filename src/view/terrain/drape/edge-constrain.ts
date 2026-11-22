@@ -14,6 +14,7 @@
  * "the polygons close but the image cracks" at the same boundary.
  */
 
+import { deepFreeze } from '../../../shared/utils/deep-freeze.js';
 import { TILE_EXTENT } from './mesh.js';
 import type { DrapeTerrainTexture, UniformSet } from './shared.js';
 import { toFloat32Matrix } from './shared.js';
@@ -33,7 +34,12 @@ export type EdgeName = (typeof EDGE_NAMES)[number];
  * texture and fly off screen. 1 to 4 are used by the data textures (renderer.ts) and the
  * contents of the quads (quad.ts).
  */
-export const EDGE_UNITS: Record<EdgeName, number> = { top: 5, bottom: 7, left: 8, right: 9 };
+export const EDGE_UNITS: Record<EdgeName, number> = deepFreeze({
+  top: 5,
+  bottom: 7,
+  left: 8,
+  right: 9,
+});
 
 /** The mapping put into an edge with no coarse neighbor (unit scale, no translation) */
 const IDENTITY_EDGE_TRANSFORM: readonly [number, number, number] = [1, 0, 0];

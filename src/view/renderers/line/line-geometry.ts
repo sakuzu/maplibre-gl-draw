@@ -59,6 +59,9 @@ export const LINE_STATION_BUDGET = 500_000;
  *
  * With u_stations = 1, drawing only 4 vertices gives stations 0,0,1,1, which is exactly the
  * same triangle strip as before terrain was introduced.
+ *
+ * Nothing writes it after it is made; it is only handed to `gl.bufferData` (a typed array cannot
+ * be frozen).
  */
 // biome-ignore format: an array of vertex data
 export const STATION_VERTICES = (() => {

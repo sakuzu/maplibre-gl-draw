@@ -51,14 +51,14 @@ export interface TableBuilder {
 }
 
 /** The number of offset arrays of each geometry type */
-const OFFSET_LEVELS: Readonly<Record<GeometryType, number>> = {
+const OFFSET_LEVELS: Readonly<Record<GeometryType, number>> = Object.freeze({
   Point: 0,
   LineString: 1,
   MultiPoint: 1,
   Polygon: 2,
   MultiLineString: 2,
   MultiPolygon: 3,
-};
+});
 
 /** The initial number of rows when no capacity is given */
 const DEFAULT_CAPACITY = 64;

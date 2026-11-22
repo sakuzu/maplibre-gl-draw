@@ -27,14 +27,14 @@ import type {
 } from './types.js';
 
 /** The number of offset arrays of each geometry type */
-const OFFSET_LEVELS: Readonly<Record<GeometryType, number>> = {
+const OFFSET_LEVELS: Readonly<Record<GeometryType, number>> = Object.freeze({
   Point: 0,
   LineString: 1,
   MultiPoint: 1,
   Polygon: 2,
   MultiLineString: 2,
   MultiPolygon: 3,
-};
+});
 
 /**
  * Whether a column is a dictionary

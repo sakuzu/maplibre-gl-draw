@@ -30,6 +30,7 @@ import { DEFAULT_TOPOLOGY_CONFIG, mergeTopologyConfig } from '../../shared/confi
 import type { TraceConfig, TraceOptions } from '../../shared/config/trace.js';
 import { DEFAULT_TRACE_CONFIG, mergeTraceConfig } from '../../shared/config/trace.js';
 import { getAnchorProjector } from '../../shared/math/index.js';
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import type { EventEmitter } from '../../shared/utils/event-emitter.js';
 import { EventEmitterImpl } from '../../shared/utils/event-emitter.js';
 import { createId } from '../../shared/utils/id.js';
@@ -102,13 +103,13 @@ export interface EngineOptions {
   messages?: Partial<Messages>;
 }
 
-export const DEFAULT_OPTIONS = {
+export const DEFAULT_OPTIONS = deepFreeze({
   defaultMode: 'select' as Mode,
   // One default for the hit test and the topmost hit (see DEFAULT_HIT_TEST_OPTIONS)
   clickTolerancePx: DEFAULT_HIT_TEST_OPTIONS.clickTolerancePx,
   dragThresholdPx: 3,
   scaleWithZoom: true,
-};
+});
 
 /**
  * Context
@@ -229,20 +230,22 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     scaleWithZoom: options.scaleWithZoom ?? DEFAULT_OPTIONS.scaleWithZoom,
   };
 
-  // Merge the style configuration
-  const featureStyle = options.style
-    ? mergeFeatureStyleConfig(DEFAULT_FEATURE_STYLE_CONFIG, options.style)
-    : DEFAULT_FEATURE_STYLE_CONFIG;
+  // Merge the style configurations. They are the actual objects the runtime options change in
+  // place, so each is a copy even without options (the defaults are frozen and every instance
+  // reads them)
+  const featureStyle = mergeFeatureStyleConfig(DEFAULT_FEATURE_STYLE_CONFIG, options.style ?? {});
 
   // Merge the selection UI style configuration
-  const selectionStyle = options.selectionStyle
-    ? mergeSelectionUIConfig(DEFAULT_SELECTION_CONFIG, options.selectionStyle)
-    : DEFAULT_SELECTION_CONFIG;
+  const selectionStyle = mergeSelectionUIConfig(
+    DEFAULT_SELECTION_CONFIG,
+    options.selectionStyle ?? {},
+  );
 
   // Merge the rendering configuration
-  const renderingConfig = options.renderingStyle
-    ? mergeRenderingConfig(DEFAULT_RENDERING_CONFIG, options.renderingStyle)
-    : DEFAULT_RENDERING_CONFIG;
+  const renderingConfig = mergeRenderingConfig(
+    DEFAULT_RENDERING_CONFIG,
+    options.renderingStyle ?? {},
+  );
 
   // Merge the topology configuration (everything is disabled by default). It is the actual
   // object the runtime options change, so always copy it so that the default is not shared

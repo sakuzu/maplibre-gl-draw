@@ -11,6 +11,7 @@
  * name is checked by the collection itself.
  */
 
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import { DrawError } from '../errors.js';
 
 /**
@@ -72,7 +73,7 @@ const INTERACTION_HOOKS = [
 /** What each kind requires and allows, besides its name */
 const SHAPES: Readonly<
   Record<Exclude<ExtensionKind, 'mode'>, { required: string[]; optional: string[] }>
-> = {
+> = deepFreeze({
   plugin: { required: ['onAdd'], optional: ['onRemove'] },
   'feature type': {
     required: [],
@@ -100,7 +101,7 @@ const SHAPES: Readonly<
     optional: ['globalHandles', 'onDragStart', 'onDragEnd'],
   },
   'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
-};
+});
 
 /** The error for a value of the wrong shape */
 function wrongShape(kind: CheckedKind, message: string, member?: string): DrawError {

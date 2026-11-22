@@ -8,6 +8,7 @@
  */
 
 import type { PointStyle, StrokeStyle } from '../types/style.js';
+import { deepFreeze } from '../utils/deep-freeze.js';
 
 /**
  * How the box around the selection looks (part of {@link SelectionUIConfig})
@@ -214,7 +215,7 @@ export interface SelectionUIConfig {
 /**
  * Default selection UI configuration
  */
-export const DEFAULT_SELECTION_CONFIG: SelectionUIConfig = {
+export const DEFAULT_SELECTION_CONFIG: SelectionUIConfig = deepFreeze({
   boundingBox: {
     stroke: {
       // 2px for better visibility (the documented specification is 1px, but that is too thin
@@ -337,7 +338,7 @@ export const DEFAULT_SELECTION_CONFIG: SelectionUIConfig = {
       dashArray: [3, 3],
     },
   },
-};
+});
 
 /**
  * Threshold at which handle thinning kicks in

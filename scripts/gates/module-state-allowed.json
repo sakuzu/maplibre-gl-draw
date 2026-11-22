@@ -1,395 +1,281 @@
 {
-  "description": "The module state the published version has: every top-level let and var, and every top-level const that makes a container that can be changed (a Map, a Set, a WeakMap, a typed array, an array, an object of a class) without a read-only type annotation. A row that no longer matches fails the gate, so the list only gets shorter. No row is added.",
+  "description": "The module state of the library, each value with the reason it may be at the top level of its file. Counted are every top-level let and var, every top-level const whose value is an object literal, an array literal, a new expression, a regular expression with the flag g or y, or the result of a call whose value can be an object, and every static field of a class that is not a function; not counted are the values made by Object.freeze or deepFreeze, the literals written as const, the consts typed ReadonlySet, ReadonlyMap, ReadonlyArray or readonly T[], and the calls whose value is not an object. The reason is one of scratch (written and read only inside one synchronous call), pure-cache (a cache whose values follow from the key and the input alone), instance-key (a WeakMap keyed by objects each instance makes), shared (shared on purpose, as the head of the file or a note above the declaration says) and fixed (a typed array nothing writes, which cannot be frozen, as a note above the declaration says). A row without one of the reasons and a row that no longer matches fail the gate. What none of the reasons fits is not added: it is taken out of the top level.",
   "state": [
-    {
-      "file": "src/api/impl/datasets.ts",
-      "name": "OPTION_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/document.ts",
-      "name": "GROUP_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/features.ts",
-      "name": "INPUT_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/features.ts",
-      "name": "PATCH_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/features.ts",
-      "name": "FILTER_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/groups.ts",
-      "name": "INPUT_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/groups.ts",
-      "name": "PATCH_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/groups.ts",
-      "name": "FILTER_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/import-export/legacy-image-style.ts",
-      "name": "LEGACY_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/layers.ts",
-      "name": "INPUT_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/layers.ts",
-      "name": "PATCH_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/layers.ts",
-      "name": "FILTER_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/options.ts",
-      "name": "CREATION_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/options.ts",
-      "name": "RUNTIME_KEYS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/options.ts",
-      "name": "STORE_METHODS",
-      "kind": "array"
-    },
     {
       "file": "src/api/impl/render-context.ts",
       "name": "anchorsByTerrain",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "instance-key"
     },
     {
       "file": "src/api/impl/render-context.ts",
       "name": "offsetsByMatrix",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "pure-cache"
     },
     {
       "file": "src/api/impl/shared.ts",
       "name": "lockBypassDepth",
-      "kind": "new WeakMap"
-    },
-    {
-      "file": "src/api/impl/validate-extension.ts",
-      "name": "INPUT_HANDLERS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/impl/validate-extension.ts",
-      "name": "INTERACTION_HOOKS",
-      "kind": "array"
-    },
-    {
-      "file": "src/api/state.ts",
-      "name": "MODES",
-      "kind": "array"
+      "kind": "new WeakMap",
+      "reason": "instance-key"
     },
     {
       "file": "src/dataset/triangulation.ts",
       "name": "globalTriangulationScheduler",
-      "kind": "new TriangulationScheduler"
-    },
-    {
-      "file": "src/dispatcher/hit-test/service.ts",
-      "name": "SCREEN_SPACE_TYPES",
-      "kind": "new Set"
-    },
-    {
-      "file": "src/geometry/geojson.ts",
-      "name": "COORDINATE_TYPES",
-      "kind": "new Set"
+      "kind": "new TriangulationScheduler",
+      "reason": "shared"
     },
     {
       "file": "src/shared/color.ts",
       "name": "namedColors",
-      "kind": "let"
+      "kind": "let",
+      "reason": "pure-cache"
     },
     {
       "file": "src/shared/color.ts",
       "name": "cache",
-      "kind": "new Map"
+      "kind": "new Map",
+      "reason": "pure-cache"
     },
     {
       "file": "src/shared/color.ts",
       "name": "hexCache",
-      "kind": "new Map"
+      "kind": "new Map",
+      "reason": "pure-cache"
     },
     {
       "file": "src/shared/math/segment-grid.ts",
       "name": "gridCache",
-      "kind": "new WeakMap"
-    },
-    {
-      "file": "src/shared/math/transform.ts",
-      "name": "anchorProjectors",
-      "kind": "new WeakMap"
-    },
-    {
-      "file": "src/shared/utils/coordinates.ts",
-      "name": "MULTI_FEATURE_TYPES",
-      "kind": "array"
-    },
-    {
-      "file": "src/shared/utils/embedded-image.ts",
-      "name": "EMBEDDED_IMAGE_MIME_TYPES",
-      "kind": "array"
+      "kind": "new WeakMap",
+      "reason": "pure-cache"
     },
     {
       "file": "src/shared/utils/feature-bbox.ts",
       "name": "coordinateBoundingBoxCache",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "pure-cache"
     },
     {
       "file": "src/shared/utils/id.ts",
       "name": "pool",
-      "kind": "let"
+      "kind": "let",
+      "reason": "shared"
     },
     {
       "file": "src/shared/utils/id.ts",
       "name": "cursor",
-      "kind": "let"
-    },
-    {
-      "file": "src/snapping/indicator.ts",
-      "name": "SNAP_COLOR",
-      "kind": "array"
-    },
-    {
-      "file": "src/snapping/indicator.ts",
-      "name": "GUIDE_DASH_ARRAY",
-      "kind": "array"
-    },
-    {
-      "file": "src/snapping/providers/guide.ts",
-      "name": "GUIDE_MODES",
-      "kind": "new Set"
+      "kind": "let",
+      "reason": "shared"
     },
     {
       "file": "src/view/layer/depth-state.ts",
       "name": "depthTestState",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "shared"
     },
     {
-      "file": "src/view/layer/renderers.ts",
-      "name": "GPU_OWNERS",
-      "kind": "array"
+      "file": "src/view/renderers/line/line-geometry.ts",
+      "name": "STATION_VERTICES",
+      "kind": "call",
+      "reason": "fixed"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "steiners",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "EMPTY_STEINERS",
-      "kind": "new Set"
+      "kind": "new Set",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "filteredOut",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "indexActive",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "blockBBox",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "numBlocks",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "blockHead",
-      "kind": "array"
+      "kind": "array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "blockStop",
-      "kind": "array"
+      "kind": "array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "sortArr",
-      "kind": "array"
+      "kind": "array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "sortBuf",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "zArr",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "zBuf",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/renderers/polygon/earcut-sliced.ts",
       "name": "counts",
-      "kind": "new Uint32Array"
+      "kind": "new Uint32Array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/shaders/frame.ts",
       "name": "renderFrame",
-      "kind": "let"
+      "kind": "let",
+      "reason": "shared"
     },
     {
       "file": "src/view/terrain/binding.ts",
       "name": "terrainByHandle",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "instance-key"
     },
     {
       "file": "src/view/terrain/dem-atlas.ts",
       "name": "QUAD",
-      "kind": "new Float32Array"
+      "kind": "new Float32Array",
+      "reason": "fixed"
     },
     {
-      "file": "src/view/terrain/drape/edge-constrain.ts",
-      "name": "EDGE_NAMES",
-      "kind": "array"
+      "file": "src/view/terrain/detect.ts",
+      "name": "elevationQuery",
+      "kind": "object",
+      "reason": "scratch"
+    },
+    {
+      "file": "src/view/terrain/drape/bin-store.ts",
+      "name": "DrapePackBuilder.nextId",
+      "kind": "static",
+      "reason": "shared"
     },
     {
       "file": "src/view/terrain/drape/geometry.ts",
       "name": "cache",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "pure-cache"
     },
     {
       "file": "src/view/terrain/drape/geometry.ts",
       "name": "boundsCache",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "pure-cache"
     },
     {
       "file": "src/view/terrain/drape/geometry.ts",
       "name": "quantizedCache",
-      "kind": "new WeakMap"
+      "kind": "new WeakMap",
+      "reason": "pure-cache"
     },
     {
       "file": "src/view/terrain/drape/geometry.ts",
       "name": "startsCache",
-      "kind": "new WeakMap"
-    },
-    {
-      "file": "src/view/terrain/drape/pass.ts",
-      "name": "DRAPEABLE_TYPES",
-      "kind": "new Set"
-    },
-    {
-      "file": "src/view/terrain/drape/quad.ts",
-      "name": "IMAGE_UNIFORMS",
-      "kind": "array"
-    },
-    {
-      "file": "src/view/terrain/drape/quad.ts",
-      "name": "SURFACE_UNIFORMS",
-      "kind": "array"
-    },
-    {
-      "file": "src/view/terrain/drape/quad.ts",
-      "name": "QUAD_COMMON_UNIFORMS",
-      "kind": "array"
-    },
-    {
-      "file": "src/view/terrain/drape/shared.ts",
-      "name": "DRAPE_PROJECTION_UNIFORMS",
-      "kind": "array"
-    },
-    {
-      "file": "src/view/terrain/drape/shared.ts",
-      "name": "DRAPE_TERRAIN_UNIFORMS",
-      "kind": "array"
+      "kind": "new WeakMap",
+      "reason": "pure-cache"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "pieceOverflowed",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "pieceOverflowFactor",
-      "kind": "let"
+      "kind": "let",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "regionBuffer",
-      "kind": "new Int32Array"
+      "kind": "new Int32Array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "tileBufferA",
-      "kind": "new Int32Array"
+      "kind": "new Int32Array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "tileBufferB",
-      "kind": "new Int32Array"
+      "kind": "new Int32Array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "regionScratch",
-      "kind": "new Int32Array"
+      "kind": "new Int32Array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "outsideBuffer",
-      "kind": "new Int32Array"
+      "kind": "new Int32Array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "bandRange",
-      "kind": "array"
+      "kind": "array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "nodeRows",
-      "kind": "array"
+      "kind": "array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "clipBufferA",
-      "kind": "new Int32Array"
+      "kind": "new Int32Array",
+      "reason": "scratch"
     },
     {
       "file": "src/view/terrain/tessellation.ts",
       "name": "clipBufferB",
-      "kind": "new Int32Array"
-    },
-    {
-      "file": "src/view/ui/tentative.ts",
-      "name": "TENTATIVE_DASH_ARRAY",
-      "kind": "array"
+      "kind": "new Int32Array",
+      "reason": "scratch"
     }
   ]
 }

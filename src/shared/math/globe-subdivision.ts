@@ -16,6 +16,7 @@
  */
 
 import type { Coordinate } from '../types/model.js';
+import { deepFreeze } from '../utils/deep-freeze.js';
 import { fromPlane, toPlane } from './mercator-plane.js';
 
 /** What is being cut: the fills (and their outlines) or the lines */
@@ -25,10 +26,10 @@ export type GlobeSubdivisionKind = 'fill' | 'line';
  * maplibre's granularity on the globe: the number of cells along the side of a tile of zoom 0,
  * halved at each zoom level, and the least it goes down to (`vertical_perspective_projection.ts`)
  */
-const GRANULARITY: Record<GlobeSubdivisionKind, { base: number; min: number }> = {
+const GRANULARITY: Record<GlobeSubdivisionKind, { base: number; min: number }> = deepFreeze({
   fill: { base: 128, min: 2 },
   line: { base: 512, min: 1 },
-};
+});
 
 /**
  * The side of a subdivision cell on the globe, in Mercator world units (1 = the world)

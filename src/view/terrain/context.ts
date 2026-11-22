@@ -28,6 +28,7 @@
  * instance, never "the instance drawn last".
  */
 
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import { TerrainFillCache } from '../cache/terrain-fill.js';
 import type { OffsetUniforms } from '../shaders/helpers.js';
 import type { TerrainLike } from './detect.js';
@@ -96,7 +97,7 @@ export interface TerrainRenderState {
 }
 
 /** The state when the terrain is disabled */
-export const INACTIVE_TERRAIN_STATE: TerrainRenderState = {
+export const INACTIVE_TERRAIN_STATE: TerrainRenderState = deepFreeze({
   active: false,
   atlasTexture: null,
   atlasRect: [0, 0, 1, 1],
@@ -108,7 +109,7 @@ export const INACTIVE_TERRAIN_STATE: TerrainRenderState = {
   tessellationRegion: null,
   tessellationTiling: null,
   generation: 0,
-};
+});
 
 /**
  * The sides of the cells the globe cuts the geometry into, in Mercator world units
@@ -160,7 +161,7 @@ export interface TerrainDrapeDebug {
 }
 
 /** The initial diagnostic values */
-export const INITIAL_DRAPE_DEBUG: TerrainDrapeDebug = {
+export const INITIAL_DRAPE_DEBUG: TerrainDrapeDebug = deepFreeze({
   used: false,
   reason: 'not-evaluated',
   featureCount: 0,
@@ -174,7 +175,7 @@ export const INITIAL_DRAPE_DEBUG: TerrainDrapeDebug = {
   insideRuns: 0,
   excluded: 0,
   immediate: 0,
-};
+});
 
 /**
  * The values needed for this frame's anchor projection
@@ -211,7 +212,7 @@ export interface AnchorFrame {
 }
 
 /** The frame used when the anchor projection is unavailable */
-export const INACTIVE_ANCHOR_FRAME: AnchorFrame = {
+export const INACTIVE_ANCHOR_FRAME: AnchorFrame = deepFreeze({
   terrain: null,
   elevationQuery: null,
   tileZoom: 0,
@@ -222,7 +223,7 @@ export const INACTIVE_ANCHOR_FRAME: AnchorFrame = {
   width: 0,
   height: 0,
   cameraMercator: null,
-};
+});
 
 /**
  * The terrain state of one draw instance.

@@ -59,11 +59,11 @@ function snap(parts: MultiPolygonCoordinates): MultiPolygonCoordinates {
 const OPERATIONS: Record<
   GeometryOperation,
   (first: MultiPolygonCoordinates, ...rest: MultiPolygonCoordinates[]) => MultiPolygonCoordinates
-> = {
+> = Object.freeze({
   union: polygonClipping.union,
   difference: polygonClipping.difference,
   intersection: polygonClipping.intersection,
-};
+});
 
 /**
  * Calls polygon-clipping and, only when it fails, rounds the coordinates and retries

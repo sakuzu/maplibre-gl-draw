@@ -33,7 +33,7 @@ export type AreaInput = Polygon | MultiPolygon | { readonly geometry: Geometry }
 export type LineInput = LineString | MultiLineString | { readonly geometry: Geometry };
 
 /** The geometry types that carry `coordinates` */
-const COORDINATE_TYPES = new Set([
+const COORDINATE_TYPES: ReadonlySet<string> = new Set([
   'Point',
   'MultiPoint',
   'LineString',

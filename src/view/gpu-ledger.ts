@@ -35,6 +35,7 @@
  * out. The rows (what is drawn of the features, in proportion to them) are not held under it.
  */
 
+import { deepFreeze } from '../shared/utils/deep-freeze.js';
 import { QUAD_GRID_MAX_CELLS, QUAD_GRID_MAX_DIVISIONS } from './shaders/quad-grid.js';
 
 /**
@@ -461,7 +462,7 @@ export function giveStorage(
 /** The call that deletes each kind of object */
 const DELETE: Readonly<
   Record<GpuObjectKind, (gl: WebGL2RenderingContext, object: GpuObject) => void>
-> = {
+> = deepFreeze({
   buffer: (gl, object) => gl.deleteBuffer(object as WebGLBuffer),
   texture: (gl, object) => gl.deleteTexture(object as WebGLTexture),
   renderbuffer: (gl, object) => gl.deleteRenderbuffer(object as WebGLRenderbuffer),
@@ -470,7 +471,7 @@ const DELETE: Readonly<
   'transform-feedback': (gl, object) =>
     gl.deleteTransformFeedback(object as WebGLTransformFeedback),
   program: (gl, object) => gl.deleteProgram(object as WebGLProgram),
-};
+});
 
 /**
  * Deletes a GL object

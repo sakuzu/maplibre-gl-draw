@@ -13,6 +13,7 @@
  */
 
 import type { Feature, FeatureType, Group, Layer, StoreChange } from '../types/model.js';
+import { deepFreeze } from './deep-freeze.js';
 
 /**
  * What the generator reads from the Store: the current contents and the change notifications,
@@ -87,14 +88,14 @@ export interface AutoNameConfig {
 /**
  * Default mapping of type names
  */
-const DEFAULT_TYPE_NAMES: Record<string, string> = {
+const DEFAULT_TYPE_NAMES: Record<string, string> = deepFreeze({
   Point: 'Point',
   LineString: 'LineString',
   Polygon: 'Polygon',
   Circle: 'Circle',
   Freehand: 'Freehand',
   Image: 'Image',
-};
+});
 
 /**
  * Default Layer/Group names

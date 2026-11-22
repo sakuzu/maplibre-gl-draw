@@ -14,6 +14,7 @@ import {
   geometryFromCoordinates,
   mapCoordinatesDeep,
 } from '../../shared/utils/coordinates.js';
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
@@ -24,12 +25,12 @@ const NUDGE_SMALL = 1;
 const NUDGE_LARGE = 10;
 
 /** Screen direction of each arrow key */
-const ARROW_DIRECTIONS: Readonly<Record<string, readonly [number, number]>> = {
+const ARROW_DIRECTIONS: Readonly<Record<string, readonly [number, number]>> = deepFreeze({
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
   ArrowUp: [0, -1],
   ArrowDown: [0, 1],
-};
+});
 
 /**
  * Handling of the group shortcut (Cmd+G / Ctrl+G).

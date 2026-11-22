@@ -26,6 +26,7 @@
 import type { ModifierKeys } from '../dispatcher/types.js';
 import type { ScreenPoint } from '../shared/math/index.js';
 import type { SnapLngLat, SnapResult, SnapTargetKind } from '../shared/types/events.js';
+import { deepFreeze } from '../shared/utils/deep-freeze.js';
 import type { BoundingBox, Coordinate, Feature, VertexRef } from '../store/types.js';
 
 // The result types of snapping are defined in shared/ because draw.snap.change carries them
@@ -42,12 +43,12 @@ export type {
  *
  * @internal
  */
-export const SNAP_KIND_PRIORITY: Record<SnapTargetKind, number> = {
+export const SNAP_KIND_PRIORITY: Record<SnapTargetKind, number> = deepFreeze({
   vertex: 0,
   intersection: 1,
   edge: 2,
   guide: 3,
-};
+});
 
 /**
  * A single vertex to leave out of the snapping candidates.
@@ -298,12 +299,12 @@ export type ResolvedSnapOptions = Required<Omit<SnapOptions, 'kinds'>> & {
  *
  * @internal
  */
-export const DEFAULT_SNAP_KINDS: Record<SnapTargetKind, boolean> = {
+export const DEFAULT_SNAP_KINDS: Record<SnapTargetKind, boolean> = deepFreeze({
   vertex: true,
   edge: true,
   intersection: true,
   guide: true,
-};
+});
 
 /**
  * The defaults of the snapping options
@@ -312,14 +313,14 @@ export const DEFAULT_SNAP_KINDS: Record<SnapTargetKind, boolean> = {
  *
  * @internal
  */
-export const DEFAULT_SNAP_OPTIONS: ResolvedSnapOptions = {
+export const DEFAULT_SNAP_OPTIONS: ResolvedSnapOptions = deepFreeze({
   enabled: true,
   tolerancePx: 10,
   disableKey: 'alt',
   kinds: DEFAULT_SNAP_KINDS,
   datasets: true,
   guideStepDegrees: 45,
-};
+});
 
 /**
  * Normalizes the step angle of the north-based guides: a value of 0 or less, or a non-finite

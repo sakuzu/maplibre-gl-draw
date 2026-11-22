@@ -19,6 +19,7 @@ import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from '../../shared/config/renderin
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { Color, PointStyle, StrokeStyle } from '../../shared/types/style.js';
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
 import type { Store } from '../../store/built-in/types.js';
 import type { DrawEvents } from '../events.js';
@@ -150,7 +151,7 @@ const MARK = record({
   strokeOpacity: opacity,
 });
 
-const SELECTION_STYLE_CHECKS = {
+const SELECTION_STYLE_CHECKS = deepFreeze({
   boundingBox: record({ stroke: STROKE, margin: nonNegative }),
   resizeHandle: record({ point: POINT }),
   rotateHandle: record({ point: POINT, distance: nonNegative, connector: STROKE }),
@@ -165,64 +166,66 @@ const SELECTION_STYLE_CHECKS = {
     strokeColor: color,
     strokeWidth: nonNegative,
   }),
-};
+});
 
-const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => void>> = {
-  messages(value, what) {
-    if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
-    onlyKeys(value, Object.keys(MESSAGES_EN), what);
-    for (const [key, entry] of Object.entries(value)) {
-      const expected = typeof MESSAGES_EN[key as keyof typeof MESSAGES_EN];
-      if (entry !== undefined && typeof entry !== expected) {
-        throw invalidInput(`${what}.${key} must be a ${expected}`);
-      }
-    }
-  },
-  autoName(value, what) {
-    if (value === false) return;
-    if (!isRecord(value)) throw invalidInput(`${what} must be false or an object`);
-    checkFields(value, what, {
-      typeNames(names, where) {
-        if (!isRecord(names)) throw invalidInput(`${where} must be an object`);
-        for (const [key, name] of Object.entries(names)) {
-          if (name !== undefined) string(name, `${where}.${key}`);
+const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => void>> = deepFreeze(
+  {
+    messages(value, what) {
+      if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
+      onlyKeys(value, Object.keys(MESSAGES_EN), what);
+      for (const [key, entry] of Object.entries(value)) {
+        const expected = typeof MESSAGES_EN[key as keyof typeof MESSAGES_EN];
+        if (entry !== undefined && typeof entry !== expected) {
+          throw invalidInput(`${what}.${key} must be a ${expected}`);
         }
-      },
-      formatter: func,
-    });
+      }
+    },
+    autoName(value, what) {
+      if (value === false) return;
+      if (!isRecord(value)) throw invalidInput(`${what} must be false or an object`);
+      checkFields(value, what, {
+        typeNames(names, where) {
+          if (!isRecord(names)) throw invalidInput(`${where} must be an object`);
+          for (const [key, name] of Object.entries(names)) {
+            if (name !== undefined) string(name, `${where}.${key}`);
+          }
+        },
+        formatter: func,
+      });
+    },
+    style: record({
+      point: featureStyle,
+      line: featureStyle,
+      polygon: featureStyle,
+      circle: featureStyle,
+      image: featureStyle,
+    }),
+    previewStyle: featureStyle,
+    selectionStyle: record(SELECTION_STYLE_CHECKS),
+    scaleWithZoom: bool,
+    snapping: record({
+      enabled: bool,
+      tolerancePx: nonNegative,
+      disableKey: oneOf('alt', 'shift', 'ctrl', 'meta', 'none'),
+      kinds: record({ vertex: bool, edge: bool, intersection: bool, guide: bool }),
+      datasets: bool,
+      guideStepDegrees: positive,
+      indicator: record({ vertex: MARK, edge: MARK, intersection: MARK, guide: MARK }),
+      guideLine: STROKE,
+    }),
+    tracing: record({ enabled: bool }),
+    topology: record({ sharedVertexDrag: bool }),
+    clickTolerancePx: nonNegative,
+    dragThresholdPx: nonNegative,
+    rendering: record({
+      renderScale: positive,
+      pixelRatio: positive,
+      cacheGeometry: bool,
+      timeSlicing: bool,
+    }),
+    isExternalEntry: func,
   },
-  style: record({
-    point: featureStyle,
-    line: featureStyle,
-    polygon: featureStyle,
-    circle: featureStyle,
-    image: featureStyle,
-  }),
-  previewStyle: featureStyle,
-  selectionStyle: record(SELECTION_STYLE_CHECKS),
-  scaleWithZoom: bool,
-  snapping: record({
-    enabled: bool,
-    tolerancePx: nonNegative,
-    disableKey: oneOf('alt', 'shift', 'ctrl', 'meta', 'none'),
-    kinds: record({ vertex: bool, edge: bool, intersection: bool, guide: bool }),
-    datasets: bool,
-    guideStepDegrees: positive,
-    indicator: record({ vertex: MARK, edge: MARK, intersection: MARK, guide: MARK }),
-    guideLine: STROKE,
-  }),
-  tracing: record({ enabled: bool }),
-  topology: record({ sharedVertexDrag: bool }),
-  clickTolerancePx: nonNegative,
-  dragThresholdPx: nonNegative,
-  rendering: record({
-    renderScale: positive,
-    pixelRatio: positive,
-    cacheGeometry: bool,
-    timeSlicing: bool,
-  }),
-  isExternalEntry: func,
-};
+);
 
 /** The members of the Store the instance calls */
 const STORE_METHODS = [

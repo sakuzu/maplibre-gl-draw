@@ -77,6 +77,11 @@ export interface DrapeTileEntry {
  * that were added (the renderer remembers the position it has transferred up to).
  */
 export class DrapePackBuilder {
+  /**
+   * The id of the next version, shared on purpose by every instance on the page: the ids only
+   * have to differ from one version to the next, and a number running through all of them
+   * never gives two versions the same id
+   */
   private static nextId = 1;
 
   /** The identity of this version (with which the renderer tells whether it has been

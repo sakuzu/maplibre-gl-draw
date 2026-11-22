@@ -24,6 +24,7 @@
 import { MESSAGES_EN, type Messages, resolveMessages } from '../messages.js';
 import { toHexColor } from '../shared/color.js';
 import { interpolateHexColor } from '../shared/utils/color.js';
+import { deepFreeze } from '../shared/utils/deep-freeze.js';
 import type { Feature, FeatureStyle, FeatureType, StyleRule } from '../store/types.js';
 
 /**
@@ -51,11 +52,11 @@ export type StyleRuleChannel = 'point' | 'stroke' | 'fill';
 
 /** The name of the FeatureStyle color property corresponding to each channel */
 const CHANNEL_COLOR_PROPERTY: Record<StyleRuleChannel, 'pointColor' | 'strokeColor' | 'fillColor'> =
-  {
+  deepFreeze({
     point: 'pointColor',
     stroke: 'strokeColor',
     fill: 'fillColor',
-  };
+  });
 
 /**
  * Returns the channel that carries the rule color for a feature type.

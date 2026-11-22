@@ -7,6 +7,7 @@
  * Interface for the precise test logic of each geometry type.
  */
 
+import { deepFreeze } from '../../../shared/utils/deep-freeze.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
 
 /**
@@ -56,11 +57,11 @@ export interface HitTestOptions {
  * The only default of the click tolerance: the `clickTolerancePx` option of a draw instance
  * falls back to it too.
  */
-export const DEFAULT_HIT_TEST_OPTIONS: HitTestOptions = {
+export const DEFAULT_HIT_TEST_OPTIONS: HitTestOptions = deepFreeze({
   clickTolerancePx: 6,
   vertexTolerance: 8,
   midpointTolerance: 6,
-};
+});
 
 /**
  * The precise hit test of one feature type, as registered through the `hitTest` of a

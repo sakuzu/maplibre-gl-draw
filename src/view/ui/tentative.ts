@@ -11,6 +11,7 @@ import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { destinationPoint } from '../../geometry/distance.js';
 import type { TentativeStyle } from '../../shared/config/feature-style.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import type { Coordinate, TentativeState } from '../../store/types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import type { SDFLineRenderer, SDFStrokeStyle } from '../renderers/line/sdf-line.js';
@@ -39,7 +40,7 @@ export interface TentativeRendererDeps {
 /**
  * The dotted pattern: an 8px line and a 6px gap
  */
-const TENTATIVE_DASH_ARRAY: [number, number] = [8, 6];
+const TENTATIVE_DASH_ARRAY: [number, number] = deepFreeze([8, 6]);
 
 /**
  * The Tentative rendering class

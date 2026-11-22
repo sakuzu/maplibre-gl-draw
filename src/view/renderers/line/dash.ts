@@ -9,6 +9,7 @@
 
 import { DEFAULT_TILE_SIZE } from '../../../shared/math/index.js';
 import type { Coordinate } from '../../../shared/types/model.js';
+import { deepFreeze } from '../../../shared/utils/deep-freeze.js';
 
 export type { Coordinate };
 
@@ -186,10 +187,11 @@ export interface DashCoefficients {
  * Dashed: dashes 4 times the width (12 px at least) and gaps twice the width. Dotted: short,
  * nearly round dots and gaps about the width.
  */
-export const DASH_COEFFICIENTS: Readonly<Record<'dashed' | 'dotted', DashCoefficients>> = {
-  dashed: { a: 12, b: 4, c: 2 },
-  dotted: { a: 1, b: 0.5, c: 1.2 },
-};
+export const DASH_COEFFICIENTS: Readonly<Record<'dashed' | 'dotted', DashCoefficients>> =
+  deepFreeze({
+    dashed: { a: 12, b: 4, c: 2 },
+    dotted: { a: 1, b: 0.5, c: 1.2 },
+  });
 
 /**
  * The coefficients of a line style, or null for a solid line

@@ -10,6 +10,8 @@
  * literals, so that the keys are spelled in one place.
  */
 
+import { deepFreeze } from './utils/deep-freeze.js';
+
 /** The prefix of the keys of `properties` that hold the values of the library. */
 export const DRAW_PROPERTY_PREFIX = 'maplibre-gl-draw:' as const;
 
@@ -70,7 +72,7 @@ export const DRAW_PROPERTY_NAMES: readonly DrawPropertyName[] = Object.keys(
 ) as DrawPropertyName[];
 
 /** The type each value must have to be read */
-const VALUE_TYPES: Readonly<Record<DrawPropertyName, 'number' | 'string'>> = {
+const VALUE_TYPES: Readonly<Record<DrawPropertyName, 'number' | 'string'>> = deepFreeze({
   createdZoom: 'number',
   rotation: 'number',
   scale: 'number',
@@ -79,7 +81,7 @@ const VALUE_TYPES: Readonly<Record<DrawPropertyName, 'number' | 'string'>> = {
   imageFileId: 'string',
   imageWidth: 'number',
   imageHeight: 'number',
-};
+});
 
 /**
  * Whether a key of `properties` holds a value of the library, so that an attribute panel can

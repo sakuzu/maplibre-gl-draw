@@ -16,6 +16,9 @@ import { ulid } from 'ulid';
 /** The number of random bytes taken at once (256 ids) */
 const POOL_SIZE = 4096;
 
+// Shared on purpose by every instance on the page: the pool is only a store of random bytes
+// handed out in turn, so whichever instance takes the next byte, each id is as random as one
+// made from the crypto source directly
 let pool = new Uint8Array(POOL_SIZE);
 let cursor = POOL_SIZE;
 

@@ -8,6 +8,7 @@
  */
 
 import type { Color } from '../types/style.js';
+import { deepFreeze } from '../utils/deep-freeze.js';
 
 /**
  * How the rectangle of a box selection (a Shift-drag in the select mode) looks (part of
@@ -103,22 +104,22 @@ export interface RenderingConfig {
 /**
  * Default style configuration for the box selection UI
  */
-export const DEFAULT_BOX_SELECTION_STYLE_CONFIG: BoxSelectionStyleConfig = {
+export const DEFAULT_BOX_SELECTION_STYLE_CONFIG: BoxSelectionStyleConfig = deepFreeze({
   fillColor: [1.0, 0.0, 0.6, 0.2],
   strokeColor: [1.0, 0.0, 0.6, 1.0],
   strokeWidth: 2,
   strokeOpacity: 1.0,
   dashArray: [6, 4],
-};
+});
 
 /**
  * Default rendering configuration
  */
-export const DEFAULT_RENDERING_CONFIG: RenderingConfig = {
+export const DEFAULT_RENDERING_CONFIG: RenderingConfig = deepFreeze({
   boxSelectionStyle: DEFAULT_BOX_SELECTION_STYLE_CONFIG,
   storeRetained: true,
   timeSlicing: true,
-};
+});
 
 /**
  * Helper function that merges configurations

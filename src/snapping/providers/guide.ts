@@ -44,7 +44,7 @@ import {
 } from '../types.js';
 
 /** The drawing modes that produce guides */
-const GUIDE_MODES = new Set(['drawLine', 'drawPolygon']);
+const GUIDE_MODES: ReadonlySet<string> = new Set(['drawLine', 'drawPolygon']);
 
 /** The length of a guide (pixels). The cut-off that keeps it from being an infinite line */
 const GUIDE_LENGTH_PIXELS = 4096;

@@ -17,6 +17,7 @@ import type {
   NormalizedEvent,
 } from '../../dispatcher/types.js';
 import type { EngineModeHandler, SnapInputKind } from '../../modes/handler.js';
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 import type { SnapResult as StoredSnapResult } from '../../snapping/types.js';
 import type {
   DrawKeyEvent,
@@ -107,13 +108,14 @@ export function deliver(
 }
 
 /** The receiver of the contract each snapped input of the engine goes to */
-const SNAP_RECEIVERS: Record<SnapInputKind, NonNullable<SnapPreference['unsnapped']>[number]> = {
-  click: 'onClick',
-  mousemove: 'onPointerMove',
-  dragstart: 'onDragStart',
-  dragmove: 'onDrag',
-  dragend: 'onDragEnd',
-};
+const SNAP_RECEIVERS: Record<SnapInputKind, NonNullable<SnapPreference['unsnapped']>[number]> =
+  deepFreeze({
+    click: 'onClick',
+    mousemove: 'onPointerMove',
+    dragstart: 'onDragStart',
+    dragmove: 'onDrag',
+    dragend: 'onDragEnd',
+  });
 
 /** Marks the handlers of the engine that run a mode of the contract */
 const BRIDGED = Symbol('extension mode');

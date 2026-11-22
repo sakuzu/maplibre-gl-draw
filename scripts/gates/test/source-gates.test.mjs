@@ -12,7 +12,7 @@ describe('the gate of the module state', () => {
   const base = () =>
     tree({
       'scripts/gates/module-state-allowed.json': {
-        state: [{ file: 'src/shared/utils/id.ts', name: 'pool', kind: 'let' }],
+        state: [{ file: 'src/shared/utils/id.ts', name: 'pool', kind: 'let', reason: 'shared' }],
       },
       'src/shared/utils/id.ts': 'let pool = 0;\nexport const next = () => ++pool;\n',
       'src/view/draw.ts':
@@ -46,7 +46,7 @@ describe('the gate of the module state', () => {
     expect(e).toContain('module state new Set instances');
   });
 
-  it('fails on a top-level array, also one written as const, but not on an object or a string', () => {
+  it('fails on a top-level array and an object, but not on a literal written as const or a string', () => {
     const root = base();
     write(root, {
       'src/modes/order.ts':
@@ -54,8 +54,8 @@ describe('the gate of the module state', () => {
     });
     const e = checkState({ root }).errors.join('\n');
     expect(e).toContain('src/modes/order.ts:1: module state array order');
-    expect(e).toContain('src/modes/order.ts:2: module state array NAMES');
-    expect(e).not.toContain('LOOK');
+    expect(e).not.toContain('NAMES');
+    expect(e).toContain('src/modes/order.ts:3: module state object LOOK');
     expect(e).not.toMatch(/ NAME$/m);
   });
 
@@ -84,6 +84,109 @@ describe('the gate of the module state', () => {
     expect(e).toContain('module state let KINDS');
     expect(e).toContain('module state new Map SIZES');
     expect(e).toContain('module state new Set SEEN');
+  });
+
+  it('fails on an object, the result of a call, a regular expression with g, a static field and a let in an if', () => {
+    const root = base();
+    write(root, {
+      'src/view/memory.ts': [
+        'const leaked = { bytes: 0, objects: 0 };',
+        'function makeTable(): { count: number } {',
+        '  return { count: 0 };',
+        '}',
+        'const table = makeTable();',
+        'const WORDS = /\\w+/g;',
+        'const STICKY = /a/y;',
+        'export class Builder {',
+        '  private static nextId = 1;',
+        '  static readonly make = () => new Builder();',
+        '  readonly id = Builder.nextId++;',
+        '}',
+        "if (typeof window !== 'undefined') {",
+        '  let seen = 0;',
+        '  seen++;',
+        '}',
+        'try {',
+        '  var tried = 1;',
+        '} catch {}',
+        'for (let round = 0; round < 1; round++) {}',
+        'export { leaked, table, WORDS, STICKY, tried };',
+        '',
+      ].join('\n'),
+    });
+    const e = checkState({ root }).errors.join('\n');
+    expect(e).toContain('src/view/memory.ts:1: module state object leaked');
+    expect(e).toContain('src/view/memory.ts:5: module state call table');
+    expect(e).toContain('src/view/memory.ts:6: module state regex WORDS');
+    expect(e).toContain('src/view/memory.ts:7: module state regex STICKY');
+    expect(e).toContain('src/view/memory.ts:9: module state static Builder.nextId');
+    expect(e).not.toContain('Builder.make');
+    expect(e).toContain('src/view/memory.ts:14: module state let seen');
+    expect(e).toContain('src/view/memory.ts:18: module state var tried');
+    expect(e).toContain('src/view/memory.ts:20: module state let round');
+  });
+
+  it('passes on frozen tables, literals written as const, read-only types, plain expressions and calls that make no object', () => {
+    const root = base();
+    write(root, {
+      'src/shared/utils/deep-freeze.ts':
+        'export function deepFreeze<T>(value: T): T {\n  return Object.freeze(value);\n}\n',
+      'src/view/tables.ts': [
+        "import { deepFreeze } from '../shared/utils/deep-freeze.js';",
+        'const FROZEN = Object.freeze({ width: 1 });',
+        'const DEEP = deepFreeze({ line: { width: 1 }, dash: [4, 2] });',
+        'const LOOK = { width: 1 } as const;',
+        "const KINDS: ReadonlySet<string> = new Set(['a']);",
+        'const SIZES: ReadonlyMap<string, number> = new Map();',
+        "const EDGES: readonly string[] = ['top'];",
+        'const DATA_URL = /^data:([^;,]+)/i;',
+        "const PREFIX: string = String('a');",
+        'const LIMIT = Math.max(1, 2);',
+        "const KEY = Symbol('key');",
+        'const make = (n: number) => () => n;',
+        'const next = make(1);',
+        'export { FROZEN, DEEP, LOOK, KINDS, SIZES, EDGES, DATA_URL, PREFIX, LIMIT, KEY, next };',
+        '',
+      ].join('\n'),
+    });
+    expect(checkState({ root }).errors).toEqual([]);
+  });
+
+  it('still fails on a Readonly<...> annotation, which makes only the first level read-only', () => {
+    const root = base();
+    write(root, {
+      'src/view/look.ts':
+        'const LOOK: Readonly<{ dash: number[] }> = { dash: [] };\nexport { LOOK };\n',
+    });
+    expect(checkState({ root }).errors.join('\n')).toContain(
+      'src/view/look.ts:1: module state object LOOK',
+    );
+  });
+
+  it('fails on a row without a reason and on a row with another reason, and passes on the five reasons', () => {
+    const rows = (reasons) =>
+      reasons.map((reason, i) => ({
+        file: 'src/view/state.ts',
+        name: `v${i}`,
+        kind: 'let',
+        ...(reason === undefined ? {} : { reason }),
+      }));
+    const file = (n) => `${Array.from({ length: n }, (_, i) => `let v${i} = 0;`).join('\n')}\n`;
+    const five = ['scratch', 'pure-cache', 'instance-key', 'shared', 'fixed'];
+    const ok = tree({
+      'scripts/gates/module-state-allowed.json': { state: rows(five) },
+      'src/view/state.ts': file(5),
+    });
+    expect(checkState({ root: ok }).errors).toEqual([]);
+
+    const bad = tree({
+      'scripts/gates/module-state-allowed.json': { state: rows([undefined, 'cache']) },
+      'src/view/state.ts': file(2),
+    });
+    const e = checkState({ root: bad }).errors.join('\n');
+    expect(e).toContain('without one of the reasons');
+    expect(e).toContain('src/view/state.ts v0 null');
+    expect(e).toContain('src/view/state.ts v1 "cache"');
   });
 
   it('fails on an allowed row that is no longer there', () => {

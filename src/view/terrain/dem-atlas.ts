@@ -81,6 +81,7 @@ export interface DemAtlasResult {
   demDim: number;
 }
 
+/** The corners of the unit square; nothing writes them (a typed array cannot be frozen) */
 const QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
 
 /** The part the atlas and its quad are recorded under in the GPU ledger */

@@ -26,6 +26,8 @@
  *   Store (the drawn features)
  */
 
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
+
 /**
  * Factors multiplied in at draw time
  */
@@ -42,7 +44,7 @@ export interface RetainedDrawFactors {
 /**
  * No factors (the former look)
  */
-export const NEUTRAL_DRAW_FACTORS: RetainedDrawFactors = { scale: 1, opacity: 1 };
+export const NEUTRAL_DRAW_FACTORS: RetainedDrawFactors = deepFreeze({ scale: 1, opacity: 1 });
 
 /**
  * Round factors that came from outside into a safe range

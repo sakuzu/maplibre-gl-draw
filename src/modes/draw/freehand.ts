@@ -11,6 +11,7 @@
 import type { Position } from 'geojson';
 import type { ModeFactory } from '../../api/extension/mode.js';
 import type { SnapPreference } from '../../api/state.js';
+import { deepFreeze } from '../../shared/utils/deep-freeze.js';
 
 /** Minimum distance for adding a position (in degrees) */
 const MIN_DISTANCE_DEGREES = 0.00001;
@@ -29,7 +30,7 @@ const MIN_DISTANCE_DEGREES = 0.00001;
  * The start and the end of the drag remain snapped, which keeps "start drawing exactly from a
  * corner of a boundary and end at a corner".
  */
-const SNAP_PREFERENCE: SnapPreference = { unsnapped: ['onDrag'] };
+const SNAP_PREFERENCE: SnapPreference = deepFreeze({ unsnapped: ['onDrag'] });
 
 /** Whether a position is far enough from the last one to be added */
 function farEnough(last: Position | undefined, next: Position): boolean {

@@ -39,7 +39,7 @@ import { DRAPE_MAX_SOURCES } from './renderer.js';
 export type { DrapeQuadBreak };
 
 /** The feature types the drape can handle */
-const DRAPEABLE_TYPES = new Set([
+const DRAPEABLE_TYPES: ReadonlySet<string> = new Set([
   'Polygon',
   'MultiPolygon',
   'LineString',

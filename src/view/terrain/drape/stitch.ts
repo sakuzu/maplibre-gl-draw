@@ -38,6 +38,7 @@
  * shader (drape_constrain in renderer.ts).
  */
 
+import { deepFreeze } from '../../../shared/utils/deep-freeze.js';
 import { TILE_EXTENT } from './mesh.js';
 
 /** Tile identity (the minimum) */
@@ -85,15 +86,15 @@ export interface TileEdgeStitch {
 }
 
 /** No constraint */
-export const NO_EDGE_STEPS: TileEdgeSteps = { top: 0, bottom: 0, left: 0, right: 0 };
+export const NO_EDGE_STEPS: TileEdgeSteps = deepFreeze({ top: 0, bottom: 0, left: 0, right: 0 });
 
 /** Four edges with no constraint */
-export const NO_EDGE_STITCH: TileEdgeStitch = {
+export const NO_EDGE_STITCH: TileEdgeStitch = deepFreeze({
   top: { step: 0, tile: null },
   bottom: { step: 0, tile: null },
   left: { step: 0, tile: null },
   right: { step: 0, tile: null },
-};
+});
 
 /**
  * The key of a tile (folding the wrap in the longitude direction)
@@ -267,12 +268,12 @@ export interface ResolvedTileEdges<T> {
 }
 
 /** No edge is constrained */
-export const NO_RESOLVED_EDGES: ResolvedTileEdges<never> = {
+export const NO_RESOLVED_EDGES: ResolvedTileEdges<never> = deepFreeze({
   top: null,
   bottom: null,
   left: null,
   right: null,
-};
+});
 
 /**
  * Derive the constraints of the four edges of this tile wholly from the current

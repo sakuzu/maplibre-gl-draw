@@ -30,6 +30,7 @@
 
 import type { Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from 'maplibre-gl';
 import { nearestLongitude } from '../shared/math/longitude.js';
+import { deepFreeze } from '../shared/utils/deep-freeze.js';
 import type {
   DragNormalizedEvent,
   KeyNormalizedEvent,
@@ -52,10 +53,10 @@ export interface InputNormalizerOptions {
   clickTimeThreshold: number;
 }
 
-const DEFAULT_OPTIONS: InputNormalizerOptions = {
+const DEFAULT_OPTIONS: InputNormalizerOptions = deepFreeze({
   dragThresholdPx: 3,
   clickTimeThreshold: 300,
-};
+});
 
 /**
  * The thresholds that depend on the kind of pointer

@@ -10,6 +10,7 @@
  */
 
 import type { Color, PointStyle, StrokeStyle } from '../types/style.js';
+import { deepFreeze } from '../utils/deep-freeze.js';
 
 /**
  * The fill of a polygon (part of {@link PolygonFeatureStyle})
@@ -160,7 +161,7 @@ export interface FeatureStyleConfig {
 /**
  * Default feature rendering style configuration
  */
-export const DEFAULT_FEATURE_STYLE_CONFIG: FeatureStyleConfig = {
+export const DEFAULT_FEATURE_STYLE_CONFIG: FeatureStyleConfig = deepFreeze({
   point: {
     point: {
       shape: 'circle',
@@ -245,7 +246,7 @@ export const DEFAULT_FEATURE_STYLE_CONFIG: FeatureStyleConfig = {
       strokeOpacity: 1.0,
     },
   },
-};
+});
 
 /**
  * Helper function that merges configurations

@@ -10,6 +10,7 @@
  */
 
 import { builtInGeometryKind } from '../../../shared/utils/coordinates.js';
+import { deepFreeze } from '../../../shared/utils/deep-freeze.js';
 import type { Coordinate } from '../../../store/types.js';
 
 /**
@@ -17,7 +18,7 @@ import type { Coordinate } from '../../../store/types.js';
  * (0 = a single position, 1 = a sequence of positions, and so on).
  * Custom types are accepted at any depth as long as the nesting is regular.
  */
-export const COORDINATE_DEPTH: Readonly<Record<string, number>> = {
+export const COORDINATE_DEPTH: Readonly<Record<string, number>> = deepFreeze({
   Point: 0,
   Image: 0,
   Circle: 0,
@@ -27,7 +28,7 @@ export const COORDINATE_DEPTH: Readonly<Record<string, number>> = {
   Polygon: 2,
   MultiLineString: 2,
   MultiPolygon: 3,
-};
+});
 
 /** Whether the value is a position of two finite numbers */
 function isPosition(value: unknown): value is Coordinate {

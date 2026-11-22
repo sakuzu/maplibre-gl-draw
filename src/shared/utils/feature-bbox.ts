@@ -12,6 +12,7 @@ import { circleBoundingBox } from '../../geometry/circle.js';
 import { pixelsToDegreesLat, pixelsToDegreesLng, rotateCoordinateOnSphere } from '../math/index.js';
 import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../types/model.js';
 import { coordinatesOf, forEachCoordinateDeep } from './coordinates.js';
+import { deepFreeze } from './deep-freeze.js';
 import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.js';
 
 /**
@@ -73,7 +74,7 @@ function computeBoundingBox(feature: Feature, tileSize: number): BoundingBox {
 }
 
 /** The bounding box for empty or unreadable coordinates (the origin) */
-const EMPTY_BOUNDING_BOX: BoundingBox = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+const EMPTY_BOUNDING_BOX: BoundingBox = deepFreeze({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
 
 /**
  * A cache of AABBs determined by the coordinates alone (the key is the coordinate array

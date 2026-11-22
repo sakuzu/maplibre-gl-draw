@@ -65,7 +65,7 @@ export interface AnchorScreenProjector {
  * Polygons, lines, circles and images are draped onto the ground surface and are occluded
  * correctly by depth, so the longitude/latitude path remains the correct one for them.
  */
-const SCREEN_SPACE_TYPES = new Set(['Point', 'MultiPoint']);
+const SCREEN_SPACE_TYPES: ReadonlySet<string> = new Set(['Point', 'MultiPoint']);
 
 /**
  * The two-stage hit test of the features of the Store: candidates from the spatial index,
@@ -488,7 +488,7 @@ export class HitTestServiceImpl implements HitTestService {
     tolerancePx: number,
     degPerPx: number,
     selectable: VisibilityLookup,
-  ): { results: HitTestResult[]; handledTypes: Set<string> } | null {
+  ): { results: HitTestResult[]; handledTypes: ReadonlySet<string> } | null {
     const projector = this.anchorScreen;
     if (!projector) return null;
 

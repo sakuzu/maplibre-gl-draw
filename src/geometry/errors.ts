@@ -98,10 +98,10 @@ function classify(error: unknown): GeometryErrorCode {
 }
 
 /** The message of each reason of a boolean operation */
-const MESSAGES: Record<GeometryErrorCode, string> = {
+const MESSAGES: Record<GeometryErrorCode, string> = Object.freeze({
   invalidInput: 'the input is not a valid polygon',
   engineFailure: 'the boolean operation failed',
-};
+});
 
 /**
  * Wraps an error thrown by polygon-clipping into a GeometryError
