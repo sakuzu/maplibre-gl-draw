@@ -6,6 +6,7 @@
  */
 
 import { getDrawProperty } from '../../../shared/properties.js';
+import { createOrderKeyBetween } from '../../../store/built-in/order-keys.js';
 import type { DocumentAccess, InstanceDocument } from '../../../store/document-access.js';
 import type {
   Data,
@@ -167,22 +168,19 @@ export async function prepareNative(
       }
     }
 
-    // 3. Import the groups and the features, in the order of the items of the layers from the
-    //    back: each group with no feature, then its features, and each feature at the front of
-    //    its container, the features that follow each other in as few writes as their layers
-    //    allow
+    // 3. Import the groups and the features at the places the orders of the data give them
     placeItems(document, layers, groups, features);
 
-    // 5. Import the files
+    // 4. Import the files
     for (const file of files) {
       store.createFile(file);
     }
 
-    // 6. Replace the whole stacking order. Entries that are not layers are replaced too, so
+    // 5. Replace the whole stacking order. Entries that are not layers are replaced too, so
     //    nothing of the previous document is left on it
     store.setLayerOrder([...retainedUnlisted, ...layerOrder]);
 
-    // 7. Import the metadata
+    // 6. Import the metadata
     if (upgraded.metadata) {
       store.setMetadata(upgraded.metadata);
     }
@@ -197,13 +195,13 @@ export async function prepareNative(
 }
 
 /**
- * Creates the groups and the features of a document read, in the order of the items of its
- * layers, from the back: each item is put at the front of its layer as it comes, a group with no
- * feature, then its features at the front of the group, in the order of the group. The features
- * that follow each other are created at once, as few writes as their layers allow: the features
- * of groups that follow each other, and the features in no group between them. The groups no
- * layer lists come after the items of the layers, at the front of their layers, and the features
- * no order lists last, at the front of their containers, in the order of the data
+ * Creates the groups and the features of a document read at the places its orders give them:
+ * the keys of the order are made from the orders of the document, from the back of each
+ * container. The items of a layer are those its order lists, then the groups no layer lists and
+ * the features in no group no order lists, in front of them in the order of the data; the
+ * features of a group are those it lists, then the others that name it, in the order of the
+ * data. The groups are created with their keys and no feature, then the features in the order of
+ * the data, at their keys: one write per layer
  */
 function placeItems(
   document: InstanceDocument,
@@ -213,57 +211,57 @@ function placeItems(
 ): void {
   const featureById = new Map(features.map((feature) => [feature.id, feature]));
   const groupById = new Map(groups.map((group) => [group.id, group]));
-  const placed = new Set<string>();
-  const made = new Set<string>();
-  /** The features that follow each other, created at once: of groups, or in no group */
-  let run: Feature[] = [];
-  let runOfGroups = false;
-  const flush = (): void => {
-    if (run.length > 0) document.createFeatures(run);
-    run = [];
+  /** The key given last in each container */
+  const lastKeys = new Map<string, string>();
+  const nextKey = (container: string): string => {
+    const key = createOrderKeyBetween(lastKeys.get(container), undefined);
+    lastKeys.set(container, key);
+    return key;
   };
-  const take = (feature: Feature | undefined, ofGroup: boolean): void => {
-    if (!feature || placed.has(feature.id)) return;
-    // A feature in no group goes in front of the groups before it once they hold their features
-    if (ofGroup !== runOfGroups) flush();
-    runOfGroups = ofGroup;
-    placed.add(feature.id);
-    run.push(feature);
+  /** The layer and the key of each group */
+  const groupPlaces = new Map<string, { layerId: string; key: string }>();
+  const featureKeys = new Map<string, string>();
+  const placeGroupIn = (group: DocumentGroup, layerId: string): void => {
+    if (!groupPlaces.has(group.id)) groupPlaces.set(group.id, { layerId, key: nextKey(layerId) });
   };
-  /** Creates a group with no feature at the front of a layer, then takes its features */
-  const makeGroup = (group: DocumentGroup, layerId: string): void => {
-    // The features in no group before it are created first, so that it stands in front of them
-    if (!runOfGroups) flush();
-    runOfGroups = true;
-    made.add(group.id);
-    const { featureIds, ...fields } = group;
-    document.createGroup({ ...fields, layerId });
-    for (const id of featureIds) {
-      const feature = featureById.get(id);
-      if (feature?.groupId === group.id) take(feature, true);
-    }
+  const placeFeatureIn = (feature: Feature, container: string): void => {
+    if (!featureKeys.has(feature.id)) featureKeys.set(feature.id, nextKey(container));
   };
+  // The items the orders of the layers list, from the back
   for (const layer of layers) {
     for (const itemId of layer.items) {
       const group = groupById.get(itemId);
       if (group) {
-        if (!made.has(group.id)) makeGroup(group, layer.id);
+        placeGroupIn(group, layer.id);
         continue;
       }
       const feature = featureById.get(itemId);
-      if (feature?.groupId === undefined && feature?.layerId === layer.id) take(feature, false);
+      if (feature?.groupId === undefined && feature?.layerId === layer.id) {
+        placeFeatureIn(feature, layer.id);
+      }
     }
-    flush();
   }
-  for (const group of groups) {
-    if (!made.has(group.id)) makeGroup(group, group.layerId);
-  }
-  flush();
+  // In front of them, the groups no layer lists, then the features in no group no order lists
+  for (const group of groups) placeGroupIn(group, group.layerId);
   for (const feature of features) {
-    if (!placed.has(feature.id)) {
-      placed.add(feature.id);
-      run.push(feature);
+    if (feature.groupId === undefined) placeFeatureIn(feature, feature.layerId);
+  }
+  // The features of each group in its order, then the others that name it
+  for (const group of groups) {
+    for (const id of group.featureIds) {
+      const feature = featureById.get(id);
+      if (feature?.groupId === group.id) placeFeatureIn(feature, group.id);
     }
   }
-  flush();
+  for (const feature of features) placeFeatureIn(feature, feature.groupId ?? feature.layerId);
+
+  for (const group of groups) {
+    const { featureIds: _featureIds, ...fields } = group;
+    const place = groupPlaces.get(group.id) as { layerId: string; key: string };
+    document.placeGroup({ ...fields, layerId: place.layerId }, place.layerId, place.key);
+  }
+  document.createFeaturesAt(
+    features,
+    features.map((feature) => ({ key: featureKeys.get(feature.id) as string })),
+  );
 }

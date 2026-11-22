@@ -97,11 +97,11 @@ describe('features taken out of their group at once', () => {
     expect(itemsOf(draw)).toEqual(['x', 'g[a]', 'c', 'b', 'y']);
   });
 
-  it('the three: the group goes, and the last taken out goes to the back of the layer', () => {
+  it('the three: the group goes, and the last taken out stands where it was', () => {
     const draw = withGroup();
     draw.selection.set('feature', ['a', 'b', 'c']);
     expect(draw.selection.ungroup()).toBe(true);
-    expect(itemsOf(draw)).toEqual(['c', 'x', 'b', 'a', 'y']);
+    expect(itemsOf(draw)).toEqual(['x', 'c', 'b', 'a', 'y']);
     expect(draw.groups.has('g')).toBe(false);
   });
 
@@ -323,7 +323,7 @@ describe('a document of the library loaded', () => {
     });
   });
 
-  it('with features its orders do not list', async () => {
+  it('with features its orders do not list: at the front, in the order of the data', async () => {
     const draw = instance();
     const data = documentOf(
       draw,
@@ -332,17 +332,17 @@ describe('a document of the library loaded', () => {
       [{ id: 'a' }, { id: 'e', groupId: 'g' }, { id: 'b' }, { id: 'x' }, { id: 'f', groupId: 'g' }],
     );
     await draw.document.load(data);
-    expect(itemsOf(draw)).toEqual(['a', 'g[e,f]', 'x', 'b']);
+    expect(itemsOf(draw)).toEqual(['a', 'g[e,f]', 'b', 'x']);
     expect(writtenOrders(draw)).toEqual({
       layers: [
         ['default-layer', []],
-        ['l', ['a', 'g', 'x', 'b']],
+        ['l', ['a', 'g', 'b', 'x']],
       ],
       groups: [['g', ['e', 'f']]],
     });
   });
 
-  it('with a group the order of no layer lists', async () => {
+  it('with a group the order of no layer lists: at the front', async () => {
     const draw = instance();
     const data = documentOf(
       draw,
@@ -351,13 +351,35 @@ describe('a document of the library loaded', () => {
       [{ id: 'a' }, { id: 'b' }, { id: 'e', groupId: 'g' }, { id: 'f', groupId: 'g' }],
     );
     await draw.document.load(data);
-    expect(itemsOf(draw)).toEqual(['a', 'g[e,f]', 'b']);
+    expect(itemsOf(draw)).toEqual(['a', 'b', 'g[e,f]']);
     expect(writtenOrders(draw)).toEqual({
       layers: [
         ['default-layer', []],
-        ['l', ['a', 'g', 'b']],
+        ['l', ['a', 'b', 'g']],
       ],
       groups: [['g', ['e', 'f']]],
     });
+  });
+
+  it('with groups and features the orders do not list: the groups, then the features, in the order of the data', async () => {
+    const draw = instance();
+    const data = documentOf(
+      draw,
+      ['a', 'b'],
+      [
+        { id: 'k', featureIds: ['m'] },
+        { id: 'h', featureIds: ['n'] },
+      ],
+      [
+        { id: 'z' },
+        { id: 'a' },
+        { id: 'n', groupId: 'h' },
+        { id: 'y' },
+        { id: 'm', groupId: 'k' },
+        { id: 'b' },
+      ],
+    );
+    await draw.document.load(data);
+    expect(itemsOf(draw)).toEqual(['a', 'b', 'k[m]', 'h[n]', 'z', 'y']);
   });
 });

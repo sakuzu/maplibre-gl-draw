@@ -11,7 +11,7 @@
  * kept.
  */
 
-import { afterEach, describe, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   createCountedInstance,
   expectNotProportional,
@@ -19,7 +19,7 @@ import {
   storeWorkDuring,
   WORK_SIZES,
 } from '../../test-utils.js';
-import type { Feature, Group } from '../model.js';
+import type { DrawDocument, Feature, Group } from '../model.js';
 
 const instances: ReturnType<typeof createCountedInstance>[] = [];
 
@@ -219,4 +219,115 @@ describe('an operation on the items of a layer', () => {
       'the rows read per move',
     );
   });
+});
+
+/** The writes of a Store */
+const WRITES = [
+  'createRows',
+  'writeRows',
+  'createLayer',
+  'updateLayer',
+  'deleteLayer',
+  'setLayerOrder',
+  'createGroup',
+  'updateGroup',
+  'deleteGroup',
+  'createFile',
+  'deleteFile',
+  'setMetadata',
+];
+
+/**
+ * A document of the library with one layer of `pairs` groups of one feature each and, when they
+ * alternate, a feature in no group after each group
+ */
+function documentOf(pairs: number, alternate: boolean): DrawDocument {
+  const at = (i: number): [number, number] => [(i % 100) / 50 - 1, Math.floor(i / 100) / 50 - 1];
+  const point = (id: string, i: number, groupId?: string): Feature => ({
+    id,
+    type: 'Point',
+    geometry: { type: 'Point', coordinates: at(i) },
+    layerId: 'l',
+    groupId,
+    properties: {},
+    style: {},
+    visible: true,
+    locked: false,
+  });
+  const ids = Array.from({ length: pairs }, (_, i) => i);
+  return {
+    version: '3.0.0',
+    layerOrder: ['l'],
+    layers: [
+      {
+        id: 'l',
+        name: 'L',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        items: ids.flatMap((i) => (alternate ? [`g${i}`, `s${i}`] : [`g${i}`])),
+        styleRule: undefined,
+        metadata: undefined,
+      },
+    ],
+    groups: ids.map((i) => ({
+      id: `g${i}`,
+      layerId: 'l',
+      name: `G ${i}`,
+      featureIds: [`m${i}`],
+      visible: true,
+      locked: false,
+    })),
+    features: ids.flatMap((i) => [
+      point(`m${i}`, 2 * i, `g${i}`),
+      ...(alternate ? [point(`s${i}`, 2 * i + 1)] : []),
+    ]),
+  };
+}
+
+describe('a document of the library loaded', () => {
+  /** The pairs of the two sizes compared */
+  const SIZES = [1_000, 4_000] as const;
+
+  /** What the calls of the writes of the Store counted, in all */
+  const writesOf = (instance: Instance, names: readonly string[]): number =>
+    names.reduce((n, name) => n + (instance.storeWork.calls.get(name) ?? 0), 0);
+
+  /**
+   * The writes of the Store and the rows read per pair, and the writes of rows of the whole load,
+   * at a size
+   */
+  async function loadWork(pairs: number, alternate: boolean) {
+    const instance = createCountedInstance();
+    instances.push(instance);
+    const data = documentOf(pairs, alternate);
+    const writes = writesOf(instance, WRITES);
+    const rowWrites = writesOf(instance, ['createRows', 'writeRows']);
+    const touched = instance.counts.rowsTouched;
+    const read = instance.storeWork.featuresRead;
+    const result = await instance.draw.document.load(data);
+    if (!result) throw new Error('not loaded');
+    const rows = instance.storeWork.featuresRead - read + instance.counts.rowsTouched - touched;
+    return {
+      writes: (writesOf(instance, WRITES) - writes) / pairs,
+      rows: rows / pairs,
+      rowWrites: writesOf(instance, ['createRows', 'writeRows']) - rowWrites,
+    };
+  }
+
+  it.each([
+    { what: 'groups and features one after another', alternate: true },
+    { what: 'groups one after another', alternate: false },
+  ])(
+    'with $what writes and reads as much per item at both sizes',
+    async ({ alternate }) => {
+      const small = await loadWork(SIZES[0], alternate);
+      const large = await loadWork(SIZES[1], alternate);
+      expect(large.writes / small.writes).toBeLessThan(2);
+      expect(large.rows / small.rows).toBeLessThan(2);
+      // The features of a layer are written at once, however many groups part them
+      expect(large.rowWrites / small.rowWrites).toBeLessThan(2);
+    },
+    60_000,
+  );
 });
