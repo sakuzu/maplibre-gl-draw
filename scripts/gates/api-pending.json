@@ -74,6 +74,15 @@
       "main:doc:DrawEvents.feature.updated": "a6c2a6184be3f3293608ede5898aa5fa009ee51f8bfce2bfd4d4937badc754a1",
       "main:removed:DrawEvents.feature.updated.intermediate": "7a206dc4ca10db38dd404e389c3037c3cb36bdf295f14bd17a370b9084f0a2cc"
     },
+    "63": {
+      "main:doc:DocumentChange.groups.moved": "c1d6458c0877b066732abb4ef0cf624d16343c168fddcd8eb0708d862f79c817"
+    },
+    "65": {
+      "main:doc:DrawEvents.feature.moved": "8d3678afbba7b7a2777359b2096cd26a432cef9bd3827e828c06d5ba51e2a4e0"
+    },
+    "67": {
+      "main:doc:DrawEvents.group.moved": "176d59e91483aa6eb4c33e018e3e4e4940af0d43e7082f9dacea25566761b365"
+    },
     "70": {
       "main:added:DrawEvents.drag.started.operationId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:DrawEvents.drag.started.selection": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
