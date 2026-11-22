@@ -1180,6 +1180,11 @@
       "path": "src/store/built-in/store-before.test.ts",
       "change": "a test of a deleted row whose group is gone, brought back under the parent given and refused without one, is added",
       "unit": "the values before a change and writing them back"
+    },
+    {
+      "path": "src/view/shaders/compile.test.ts",
+      "change": "the program of the frames of the rows of a selection of many features is built with the others, and the call sites and the programs are counted up by it",
+      "unit": "the work that draws the frames and the handles of a selection from the rows"
     }
   ]
 }
