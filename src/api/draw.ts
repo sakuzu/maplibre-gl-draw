@@ -234,11 +234,13 @@ export interface Draw {
  * again: added again after a full replacement, and moved above the layers of the new style after
  * a diff. A layer added to the map later goes above them and stays there until the style changes.
  * Unless `initDefaultLayer: false` is given, the document starts with one empty layer. Several
- * instances can share a page, each on its own map.
+ * instances can be shown at once, each on its own map: a map takes one instance at a time, and
+ * takes another once the first is destroyed.
  *
  * @param map - The map to draw on
  * @param options - The options; every one can be omitted
  * @returns The draw instance
+ * @throws `DrawError` with the code `invalidState` when the map already has a draw instance
  */
 export function createDraw(map: MaplibreMap, options?: DrawOptions): Draw {
   return createDrawInstance(map, options);

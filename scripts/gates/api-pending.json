@@ -10,9 +10,6 @@
     "1": {
       "main:doc:(entry)": "29ab2e4c690b728af274dcf08e697cc5c316c80bf2097c54be702b0b5b4ecb06"
     },
-    "2": {
-      "main:doc:createDraw": "fe951a5ea03201a46fc150c6079c9d0a0ed99c46a0c07b985b5fb29ee006ef5e"
-    },
     "4": {
       "main:added:DrawOptions.acceptsId": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },

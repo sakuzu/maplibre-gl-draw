@@ -4,13 +4,10 @@
 /**
  * Tests that the anchor projection belongs to the draw instance
  *
- * Two draw instances on one map each project through the projection of their own terrain state:
- * the projection of one never serves the hit testing of the other, and taking one off the map
- * leaves the projection of the other as it was.
- *
- * The drawing layers of two instances have the same id, so the map stub keeps only the layer of
- * the first; the layer of the second is put on the map and taken off it by hand (its `onAdd`
- * and `onRemove`), as the map calls them.
+ * Two draw instances on the page, each on its own map (a map takes one instance at a time),
+ * each project through the projection of their own terrain state: the projection of one never
+ * serves the hit testing of the other, and taking one off its map leaves the projection of the
+ * other as it was.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -24,11 +21,8 @@ import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 
 const engines: Engine[] = [];
-/** The layers put on the map by hand, taken off before the instances are destroyed */
-const removing: (() => void)[] = [];
 
 afterEach(() => {
-  for (const remove of removing.splice(0)) remove();
   for (const engine of engines.splice(0)) engine.destroy();
 });
 
@@ -72,28 +66,25 @@ function applyFrame(context: TerrainContext, elevation: number): void {
   });
 }
 
-/** Two draw instances on one map that draws on a GL, both of their layers on the map */
-function twoOnOneMap() {
+/** A draw instance on a map of its own that draws on a GL (its layer on the map) */
+function onItsOwnMap() {
   const gl = createCountingGL();
-  const stub = createDrawingMapStub(gl.gl);
-  const map = stub.map as unknown as MapLibreMap;
-  const make = () => {
-    const engine = createEngine(map, {});
-    engines.push(engine);
-    return engine;
-  };
-  const first = make();
-  const second = make();
-  second.customLayer.onAdd?.(map, gl.gl);
-  // Takes the layer of the second off the map, as the map does when it removes the layer
-  const removeSecond = () => second.customLayer.onRemove?.(map, gl.gl);
-  removing.push(removeSecond);
-  return { map, first, second, removeSecond };
+  const map = createDrawingMapStub(gl.gl).map as unknown as MapLibreMap;
+  const engine = createEngine(map, {});
+  engines.push(engine);
+  return { map, engine };
+}
+
+/** Two draw instances, each on its own map */
+function twoOnTwoMaps() {
+  const one = onItsOwnMap();
+  const two = onItsOwnMap();
+  return { firstMap: one.map, first: one.engine, secondMap: two.map, second: two.engine };
 }
 
 describe('the anchor projection of a draw instance', () => {
-  it('is the projection of its own terrain state, with two instances on one map', () => {
-    const { map, first, second } = twoOnOneMap();
+  it('is the projection of its own terrain state, with two instances on the page', () => {
+    const { firstMap, first, secondMap, second } = twoOnTwoMaps();
     const firstTerrain = first.customLayer.getTerrainContext();
     const secondTerrain = second.customLayer.getTerrainContext();
     applyFrame(firstTerrain, 1000);
@@ -109,35 +100,36 @@ describe('the anchor projection of a draw instance', () => {
     // projector) projects through its own frame, whichever instance was added last
     expect(first.context.anchorProjector.project(0, 0)).toEqual(firstExpected);
     expect(second.context.anchorProjector.project(0, 0)).toEqual(secondExpected);
-    expect(createCoordinateTransform(map, first.context.anchorProjector).project([0, 0])).toEqual(
-      firstExpected,
-    );
-    expect(createCoordinateTransform(map, second.context.anchorProjector).project([0, 0])).toEqual(
-      secondExpected,
-    );
+    expect(
+      createCoordinateTransform(firstMap, first.context.anchorProjector).project([0, 0]),
+    ).toEqual(firstExpected);
+    expect(
+      createCoordinateTransform(secondMap, second.context.anchorProjector).project([0, 0]),
+    ).toEqual(secondExpected);
   });
 
-  it('stays the projection of the instance left on the map when the other is removed', () => {
-    const { map, first, second, removeSecond } = twoOnOneMap();
+  it('stays the projection of the instance left on its map when the other is destroyed', () => {
+    const { firstMap: map, first, second } = twoOnTwoMaps();
     const firstTerrain = first.customLayer.getTerrainContext();
     applyFrame(firstTerrain, 1000);
     applyFrame(second.customLayer.getTerrainContext(), 0);
     const expected = projectAnchor(firstTerrain, 0, 0);
     expect(expected).not.toBeNull();
 
-    removeSecond();
-    removing.splice(removing.indexOf(removeSecond), 1);
+    // Destroying the second takes its layer off its map and releases its terrain state
+    second.destroy();
+    engines.splice(engines.indexOf(second), 1);
 
     expect(first.context.anchorProjector.project(0, 0)).toEqual(expected);
     expect(createCoordinateTransform(map, first.context.anchorProjector).project([0, 0])).toEqual(
       expected,
     );
-    // The instance taken off the map projects through nothing any more
+    // The destroyed instance projects through nothing any more
     expect(second.context.anchorProjector.project(0, 0)).toBeNull();
   });
 
   it('is null without a terrain, and the project of the map is used then', () => {
-    const { map, first } = twoOnOneMap();
+    const { map, engine: first } = onItsOwnMap();
 
     expect(first.context.anchorProjector.project(0, 0)).toBeNull();
     const point = map.project([10, 20]);

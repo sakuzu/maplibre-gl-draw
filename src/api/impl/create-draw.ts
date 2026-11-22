@@ -38,12 +38,14 @@ const ASYNC_MEMBERS: ReadonlySet<string> = new Set(['document.load', 'document.l
  * @param options - The options the instance was created with
  * @param setExternalEntry - Replaces the function that tells the entries from outside the
  *   document, which the engine asks
+ * @param onDestroyed - Called once `destroy` has run (the map can then take another instance)
  * @internal
  */
 export function createDrawOnEngine(
   engine: Engine,
   options: DrawOptions = {},
   setExternalEntry: (fn: ((id: string) => boolean) | undefined) => void = () => {},
+  onDestroyed: () => void = () => {},
 ): Draw {
   const drawOptions = createOptions(engine, options, setExternalEntry, (payload) =>
     engine.events.emit('options.changed', payload),
@@ -184,6 +186,7 @@ export function createDrawOnEngine(
         engine.destroy();
       } finally {
         destroyed = true;
+        onDestroyed();
       }
     },
   };
@@ -206,12 +209,28 @@ function nestedSourceError(source: UpdateSource, outer: UpdateSource): DrawError
 }
 
 /**
+ * The maps that have a draw instance
+ *
+ * Shared on purpose by every instance on the page: a map is one object of the page, and it takes
+ * one draw instance at a time (the layers of an instance have fixed ids, so a second one on the
+ * same map would collide with the first). The entry goes when the instance is destroyed.
+ */
+const mapsWithInstance = new WeakSet<object>();
+
+/**
  * Puts a draw instance on a map and returns it.
  *
+ * @throws `DrawError` with the code `invalidState` when the map already has a draw instance
  * @internal
  */
 export function createDraw(map: MaplibreMap, options: DrawOptions = {}): Draw {
   checkDrawOptions(options);
+  if (mapsWithInstance.has(map)) {
+    throw new DrawError(
+      'invalidState',
+      'createDraw: the map already has a draw instance; destroy it before putting another on the map',
+    );
+  }
   // The engine asks this function, so that the option can change while the instance runs
   let isExternalEntry = options.isExternalEntry;
   const engine = createEngine(
@@ -219,9 +238,15 @@ export function createDraw(map: MaplibreMap, options: DrawOptions = {}): Draw {
     toEngineOptions(options, (id) => isExternalEntry?.(id) === true),
     { deferDefaultMode: true },
   );
-  const draw = createDrawOnEngine(engine, options, (fn) => {
-    isExternalEntry = fn;
-  });
+  const draw = createDrawOnEngine(
+    engine,
+    options,
+    (fn) => {
+      isExternalEntry = fn;
+    },
+    () => mapsWithInstance.delete(map),
+  );
+  mapsWithInstance.add(map);
   engine.enterDefaultMode();
   return draw;
 }

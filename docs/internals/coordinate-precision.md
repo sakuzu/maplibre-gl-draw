@@ -283,7 +283,8 @@ same point to well under a pixel, so a handle is hit where it is drawn at
 every zoom.
 
 With terrain, `project` goes through the anchor projection of the frame
-(`setAnchorProjector`, implemented by `src/view/terrain/anchor.ts`), the
+(the `AnchorProjector` of the draw instance, made by
+`createAnchorProjector` in `src/view/terrain/anchor.ts`), the
 same projection, elevation and matrix the vertex shader uses for points and
 handles. The drawn position and the hit region then agree by construction,
 and hit testing does not call `map.project` per vertex (which is fast inside

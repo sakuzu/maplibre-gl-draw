@@ -22,8 +22,8 @@
  * module-level "current" context: every reader (state.ts / anchor.ts / occlusion.ts /
  * polygon.ts) takes the context explicitly. The renderers of a CustomLayer receive their
  * instance's context at construction, extension renderers receive it in the draw context
- * (`FrameDrawContext.terrain`), hit testing uses the anchor projection bound per map
- * (`installAnchorProjector`), and plugins use the projection bound to their instance
+ * (`FrameDrawContext.terrain`), hit testing uses the anchor projection the instance makes from
+ * its context (`createAnchorProjector`), and plugins use the projection bound to their instance
  * (`PluginContext.projectAnchor`). A read from outside rendering therefore always sees its own
  * instance, never "the instance drawn last".
  */

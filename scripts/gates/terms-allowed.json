@@ -559,14 +559,6 @@
       "hits": 1
     },
     {
-      "where": "declarations/main/createDraw",
-      "term": "\\bpages?\\b",
-      "reason": "a page of the browser (several instances can share a page); not a page of rows",
-      "hits": 1,
-      "why": "a declaration that waits; the main entry words of the rows are not meant",
-      "lines": [null]
-    },
-    {
       "where": "declarations/main/DocumentResource.loadMany",
       "term": "\\bsend",
       "reason": "the published version describes what an application or an extension does with the changes (an import is one change to send)",

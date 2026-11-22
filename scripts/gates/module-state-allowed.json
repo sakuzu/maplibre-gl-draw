@@ -2,6 +2,12 @@
   "description": "The module state of the library, each value with the reason it may be at the top level of its file. Counted are every top-level let and var, every top-level const whose value is an object literal, an array literal, a new expression, a regular expression with the flag g or y, or the result of a call whose value can be an object, and every static field of a class that is not a function; not counted are the values made by Object.freeze or deepFreeze, the literals written as const, the consts typed ReadonlySet, ReadonlyMap, ReadonlyArray or readonly T[], and the calls whose value is not an object. The reason is one of scratch (written and read only inside one synchronous call), pure-cache (a cache whose values follow from the key and the input alone), instance-key (a WeakMap keyed by objects each instance makes), shared (shared on purpose, as the head of the file or a note above the declaration says) and fixed (a typed array nothing writes, which cannot be frozen, as a note above the declaration says). A row without one of the reasons and a row that no longer matches fail the gate. What none of the reasons fits is not added: it is taken out of the top level.",
   "state": [
     {
+      "file": "src/api/impl/create-draw.ts",
+      "name": "mapsWithInstance",
+      "kind": "new WeakSet",
+      "reason": "shared"
+    },
+    {
       "file": "src/api/impl/render-context.ts",
       "name": "anchorsByTerrain",
       "kind": "new WeakMap",

@@ -140,7 +140,6 @@ leaves out the terrain and the drape.
 function engineAdd(mapInstance, glContext) {
   if (!slots.attach()) return; // only the first slot builds it
   engine.gl = glContext;
-  installAnchorProjector(mapInstance, renderScope.terrain);
   engine.unsubscribeStore = store.subscribe((changes) => {
     engine.storeRetainedCache?.applyChanges(changes); // and caches
   });
@@ -171,8 +170,9 @@ The layer itself has the id `maplibre-gl-draw-layer`, `renderingMode: '3d'`,
 `onAdd: engineAdd`, `render` calling `renderSlot(0, ...)`, and a
 `prerender` that resolves the terrain state of the frame before maplibre's
 main pass. `onRemove` tears the engine down only when the last slot leaves:
-it unsubscribes, releases the GPU resources and the terrain context, and
-uninstalls the anchor projector.
+it unsubscribes and releases the GPU resources and the terrain context
+(the anchor projector of the instance then returns null until a frame of
+terrain comes again).
 
 `beginFrame` reads the style zoom and the terrain state, then
 `buildFrameState` sets up the shaders and the projection (through the

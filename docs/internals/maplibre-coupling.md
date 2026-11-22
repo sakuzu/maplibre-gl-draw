@@ -313,8 +313,9 @@ Each item has the same five parts.
   terrain surface and is called for one point at a time.
 - What we rely on — avoidance. `createCoordinateTransform` in
   `src/shared/math/transform.ts` routes `project` to our own anchor
-  projection through `setAnchorProjector` / `getAnchorProjector` (the
-  dependency is inverted because `shared` cannot depend on `view`). It is
+  projection through the `AnchorProjector` it is given, which each draw
+  instance makes from its own terrain state with `createAnchorProjector`
+  (the dependency is inverted because `shared` cannot depend on `view`). It is
   the CPU copy of the vertex shader's projection with the elevation of item
   8, so hit testing follows what is drawn, and it costs 5 to 7 ms per
   10,000 points on the first lookup of a frame (1.5 ms from the cache of the
@@ -571,8 +572,8 @@ Each item has the same five parts.
   per-feature triangulation and style caches. No reader looks up "the
   instance drawn last": renderers receive their context at construction,
   an extension renderer gets its anchors as `RenderContext.terrain`, a
-  plugin projects through `ExtensionContext.terrain.project`, and hit testing is
-  bound per map with `setAnchorProjector(map, ...)`. The registries of the
+  plugin projects through `ExtensionContext.terrain.project`, and hit testing
+  projects through the anchor projector the instance holds. The registries of the
   extension points belong to the draw instance as well (see
   [architecture](./architecture.md)). The depth-test record is kept per
   WebGL context, which owns the state it mirrors. `onRemove` and `destroy`
