@@ -397,7 +397,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     ? drawnRowsOf((store as DocumentAccess & Partial<DocumentTables>).getTables?.())
     : undefined;
   const manySelected =
-    rowsRead && r.boxSelectionRenderer.bulkFrames.selection.countOf(store, rowsRead) > FEATURES_KEPT
+    rowsRead && r.bulkFramesRenderer.selection.countOf(store, rowsRead) > FEATURES_KEPT
       ? rowsRead
       : undefined;
 

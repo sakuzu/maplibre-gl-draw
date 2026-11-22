@@ -40,6 +40,7 @@ import { StrokeRenderer } from '../renderers/stroke.js';
 import { DemAtlas } from '../terrain/dem-atlas.js';
 import { QuadDrapeRenderer } from '../terrain/drape/quad.js';
 import { DrapeRenderer } from '../terrain/drape/renderer.js';
+import { BulkFramesRenderer } from '../ui/bulk-frames.js';
 import { SAMPLER_PRECISION_GLSL, type ShaderData } from './helpers.js';
 import { QuadShader } from './quad.js';
 
@@ -196,6 +197,9 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
   withLabel('DemAtlas', () => {
     expect(new DemAtlas(gl).ensureProgram()).toBe(true);
   });
+  withLabel('BulkFramesRenderer', () => {
+    expect(new BulkFramesRenderer(gl).ensureProgram(shaderData)).toBe(true);
+  });
 
   return programs;
 }
@@ -345,18 +349,18 @@ describe('shader programs on a real WebGL2', () => {
         () => file,
       ),
     );
-    // 11 renderers with one program each and the drape of a quad with two (image and paper);
+    // 12 renderers with one program each and the drape of a quad with two (image and paper);
     // the image and the paper share one call site
-    expect(sites).toHaveLength(12);
+    expect(sites).toHaveLength(13);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(13);
+    expect(programs).toHaveLength(14);
   });
 
   it(
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(26);
+      expect(programs.length).toBe(28);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

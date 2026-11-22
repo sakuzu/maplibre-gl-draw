@@ -26,7 +26,7 @@ import {
   setTerrainShadeLight,
   setTerrainSurfacesFlattened,
 } from '../terrain/state.js';
-import { type BulkFrameRows, framedByFeature } from '../ui/bulk-frames.js';
+import { type BulkFrameRows, boxedByFeature } from '../ui/bulk-frames.js';
 import type { ManySelection } from '../ui/bulk-selection.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 import {
@@ -290,7 +290,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   for (const copy of f.copies) {
     applyCopy(deps, copy);
     if (many) {
-      r.boxSelectionRenderer.bulkFrames.drawGroups(
+      r.bulkFramesRenderer.drawGroups(
         {
           shaderData: f.shaderData,
           projectionData: copy.projectionData,
@@ -298,7 +298,6 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
           zoom: f.zoom,
           config: r.selectionUIRenderer.config,
           terrain: terrainContext,
-          longestSide: many.selection.longestSide,
         },
         many.rows,
         many.groups,
@@ -386,8 +385,8 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   }
   applyCopy(deps, f.baseCopy);
   // The frames of the rows of the groups not drawn go; everything goes with no selection of many
-  if (many) r.boxSelectionRenderer.bulkFrames.endFrame();
-  else r.boxSelectionRenderer.bulkFrames.releaseAll();
+  if (many) r.bulkFramesRenderer.endFrame();
+  else r.bulkFramesRenderer.releaseAll();
 
   restoreSegmentGlState(gl, f);
 
@@ -420,8 +419,8 @@ interface ManySelectionFrame {
 /**
  * Reads what the selection UI of a selection of many features is drawn with: the row groups
  * drawn, the rows selected (read again only when something they come from changed) and the
- * features drawn in the frame that are framed from their features (null without the drawing of
- * the rows)
+ * features selected drawn one at a time in the frame, which are framed from their features (null
+ * without the drawing of the rows)
  */
 function manySelectionOf(
   deps: FrameRenderDeps,
@@ -452,7 +451,6 @@ function manySelectionOf(
       type === 'Image' ||
       customRenderers.has(type) ||
       extensions.getBoundingBoxCalculator(type) !== undefined,
-    companions: featureCompanions.any(),
     pointExtent: (type, style, at) => {
       // The extent of the marker is read from the type and the style alone, as the frame of a
       // point reads it from its feature
@@ -470,20 +468,18 @@ function manySelectionOf(
       return [extent.halfWidth, extent.halfHeight];
     },
   };
-  const selection = deps.renderers.boxSelectionRenderer.bulkFrames.selection.read(store, {
+  const selection = deps.renderers.bulkFramesRenderer.selection.read(store, {
     reader,
-    framedByFeature: (type, group, row) =>
-      framedByFeature(rows, type, () => table.rowDrawnAtOnce(group, row)),
+    boxedByFeature: (type) => boxedByFeature(rows, type),
     layerOf: (group) => layerOf.get(group),
     classification,
     extensions,
   });
+  // Every row drawn one at a time in the frame is framed from its feature, as it is drawn (a point
+  // the terrain fades gets its frame faded with it)
   const framed: Feature[] = [];
-  table.forEachDrawnAtOnce((feature, group, row, selected) => {
-    if (!selected) return;
-    if (framedByFeature(rows, feature.type, () => table.rowDrawnAtOnce(group, row))) {
-      framed.push(feature);
-    }
+  table.forEachDrawnAtOnce((feature, _group, _row, selected) => {
+    if (selected) framed.push(feature);
   });
   // The images the analytic drape draws are not drawn at once: their features are those of the
   // drape

@@ -31,6 +31,7 @@ import { StrokeRenderer } from '../renderers/stroke.js';
 import { ShaderInitializer } from '../shaders/initializer.js';
 import { QuadShader } from '../shaders/quad.js';
 import { BoxSelectionRenderer } from '../ui/box-selection.js';
+import { BulkFramesRenderer } from '../ui/bulk-frames.js';
 import { SelectionHandlesRenderer, SelectionUIRenderer } from '../ui/index.js';
 import { TentativeRenderer } from '../ui/tentative.js';
 import { ViewportFilter } from '../viewport.js';
@@ -59,6 +60,8 @@ export interface Renderers {
   featureDrawer: FeatureDrawer;
   tentativeRenderer: TentativeRenderer;
   boxSelectionRenderer: BoxSelectionRenderer;
+  /** The frames of the rows of a selection of many features */
+  bulkFramesRenderer: BulkFramesRenderer;
   viewportFilter: ViewportFilter;
   shaderInitializer: ShaderInitializer;
   batchManager: BatchManager;
@@ -191,6 +194,8 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     gpu,
   );
 
+  const bulkFramesRenderer = new BulkFramesRenderer(gl, gpu, pixelRatio);
+
   const viewportFilter = new ViewportFilter({ map: mapInstance, spatialIndex });
 
   const shaderInitializer = new ShaderInitializer({
@@ -236,6 +241,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     featureDrawer,
     tentativeRenderer,
     boxSelectionRenderer,
+    bulkFramesRenderer,
     viewportFilter,
     shaderInitializer,
     batchManager,
@@ -263,6 +269,7 @@ const GPU_OWNERS = [
   'featureDrawer',
   'tentativeRenderer',
   'boxSelectionRenderer',
+  'bulkFramesRenderer',
   'textureCache',
   'quadShader',
   'strokeRenderer',

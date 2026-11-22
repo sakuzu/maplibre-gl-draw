@@ -6,9 +6,6 @@
  *
  * A renderer that draws the UI of the box selection made by shift-dragging.
  * It draws the frame of the rectangle (a dotted line) and a translucent fill.
- *
- * It also holds the frames of the rows of a selection of many features (`bulk-frames.ts`), which
- * a box selection makes most often, so that what they hold on the GPU goes with the renderers.
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
@@ -22,7 +19,6 @@ import { FillShaderManager } from '../renderers/polygon/fill.js';
 import type { Color, StrokeStyle } from '../renderers/stroke.js';
 import { StrokeRenderer } from '../renderers/stroke.js';
 import type { OffsetUniforms, ShaderData } from '../shaders/helpers.js';
-import { BulkFramesRenderer } from './bulk-frames.js';
 
 /**
  * BoxSelectionRenderer
@@ -33,8 +29,6 @@ export class BoxSelectionRenderer {
   private strokeRenderer: StrokeRenderer;
   private fillShaderManager: FillShaderManager;
   private styleConfig: BoxSelectionStyleConfig;
-  /** The frames of the rows of a selection of many features */
-  readonly bulkFrames: BulkFramesRenderer;
 
   constructor(
     map: MapLibreMap,
@@ -48,7 +42,6 @@ export class BoxSelectionRenderer {
     this.strokeRenderer = new StrokeRenderer(map, gl, pixelRatio, undefined, ledger);
     this.fillShaderManager = new FillShaderManager(gl, undefined, ledger);
     this.styleConfig = styleConfig ?? DEFAULT_BOX_SELECTION_STYLE_CONFIG;
-    this.bulkFrames = new BulkFramesRenderer(gl, ledger, pixelRatio);
   }
 
   /**
@@ -114,6 +107,5 @@ export class BoxSelectionRenderer {
   dispose(): void {
     this.strokeRenderer.dispose();
     this.fillShaderManager.dispose();
-    this.bulkFrames.dispose();
   }
 }

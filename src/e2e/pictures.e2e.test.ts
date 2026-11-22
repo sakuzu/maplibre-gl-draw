@@ -33,6 +33,8 @@ import { type Bundle, bundlePage, type E2EWindow, launchBrowser, openMapPage } f
 import {
   type Call,
   CUSTOM_TYPE,
+  DATELINE_CAMERA,
+  DATELINE_SCENES,
   FRAME_COLOR,
   imageWarmUp,
   KINDS,
@@ -460,3 +462,25 @@ for (const map of MAPS) {
     });
   });
 }
+
+describe('the pictures of a selection of many features across the antimeridian', () => {
+  let page: Page;
+
+  beforeAll(async () => {
+    page = await openMapPage(browser, bundle, DATELINE_CAMERA);
+  }, browserTimeout(90_000));
+
+  afterAll(async () => {
+    await page?.close();
+  });
+
+  // The pictures are taken for the comparison of a change; the two counts are not held to each
+  // other here (the frame of all of them is drawn on the stored copy only past the count of a few)
+  for (const scene of DATELINE_SCENES) {
+    it(scene.name, async () => {
+      const picture = await take(page, scene);
+      expect(picture.pixels.length).toBe(picture.width * picture.height * 4);
+      if (OUT) await writePicture(OUT, scene.name, picture);
+    });
+  }
+});

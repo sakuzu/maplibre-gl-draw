@@ -6,8 +6,9 @@
  *
  * Features selected one by one get a frame each from the selection UI, made on the CPU from each
  * feature (`selection-ui/renderer.ts`). When more features are selected than the layer keeps
- * features of, the rows drawn by the drawing of the rows (the built-in points, lines and areas)
- * get the same frames drawn from the boxes of their rows, in one draw per row group: every row of
+ * features of, the rows of the built-in points, lines and areas that are not drawn one at a time
+ * in the frame get the same frames drawn from the boxes of their rows, in one draw per row group:
+ * every row of
  * the group with a frame is an instance, and the vertex shader reads the byte of the state of its
  * row (the texture the rows are drawn with, `renderers/row-state.ts`) and draws a frame only for a
  * row marked as selected and not hidden. No feature is made for it, and nothing is done for a row
@@ -20,20 +21,23 @@
  *   the pixels of the latitude of the center of the box), stroked as `StrokeRenderer` strokes a
  *   closed path (the same miters, the same band of one pixel the coverage fades in, the same
  *   triangles, the color given to the whole color). On the terrain and on the globe the sides are
- *   cut into segments as the path of the frame is densified there, up to {@link MAX_SEGMENTS} a
- *   side
+ *   cut into segments as the path of the frame is densified there: no longer than a cell of the
+ *   ground on the terrain, and short enough on the globe for a segment to keep within a pixel of
+ *   the sphere, up to {@link MAX_SEGMENTS} a side (the segments of a group follow its largest box)
  * - a row of one position (no extent): the rectangle of the extent of its marker plus the
  *   margin, laid on the screen around the point, as `AnchoredOutlineRenderer` draws the frame of a
  *   point (the color given to the alpha)
  *
- * The rows drawn one at a time (the images, the custom types, the features with companions) get no
- * instance here: their frames are drawn from their features, as before.
+ * The rows drawn one at a time in the frame (the images, the custom types, the features with
+ * companions, the rows of a chunk drawn at once, the points drawn at once in the band of the
+ * analytic drape of the terrain) get no instance here: their frames are drawn from their features,
+ * as before, so that a frame fades with its point where the terrain fades it.
  *
  * The instances of a group are made from its rows when it is first drawn, and again when the rows
  * of the Store change; the instances of the groups not drawn in a frame are released at its end,
  * and everything (the program too) when no selection of many features is drawn. Every buffer, vertex
- * array and program is recorded in the ledger of the instance as a part of the rows: the instances
- * grow with the rows of the groups selected, as the rows themselves do.
+ * array and program is recorded in the ledger of the instance under `frames`, a part of the rows:
+ * the instances grow with the rows of the groups selected, as the rows themselves do.
  *
  * @internal
  */
@@ -66,7 +70,7 @@ import type { TerrainContext } from '../terrain/context.js';
 import { SelectedRows } from './bulk-selection.js';
 
 /** The part the frames record what they hold on the GPU under (a part of the rows) */
-const FRAMES_PART = 'rows';
+const FRAMES_PART = 'frames';
 
 /** The floats of the instance of a row: its box from the origin, its row and its marker */
 const FLOATS_PER_ROW = 8;
@@ -77,10 +81,10 @@ const VERTICES_PER_SIDE = 6;
 /**
  * The most segments a side of a frame is cut into on the terrain and on the globe
  *
- * Every instance draws the vertices of this many segments a side when one row needs them, so it
- * bounds the work of the vertex shader; a longer side is drawn in this many segments.
+ * Every instance of a group draws the vertices of as many segments a side as the largest box of
+ * the group needs, up to this many; a longer side is drawn in this many segments.
  */
-export const MAX_SEGMENTS = 16;
+export const MAX_SEGMENTS = 64;
 
 /** The types whose rows the drawing of the rows draws (an image is drawn from its feature) */
 const ROW_DRAWN_TYPES: ReadonlySet<string> = new Set([
@@ -112,8 +116,6 @@ export interface BulkFrameRows {
    * type whose box is worked out by a calculator registered for it)
    */
   framedByFeature(type: string): boolean;
-  /** Whether the features with companions are drawn at once (their frames come from them) */
-  readonly companions: boolean;
   /**
    * The half width and the half height, in CSS px, of the marker of a row of one position of a
    * type, a style and a position (the extent the frame of a point spans before the margin)
@@ -125,17 +127,27 @@ export interface BulkFrameRows {
 export type PointHalf = readonly [number, number];
 
 /**
- * Whether the frame of a row is drawn from its feature (and not by the frames of the rows)
+ * Whether the box of a row is that of its feature and not of its row (the types that are not
+ * built-in points, lines and areas, and the types whose box a calculator works out)
+ *
+ * @internal
+ */
+export function boxedByFeature(rows: Pick<BulkFrameRows, 'framedByFeature'>, type: string) {
+  return !ROW_DRAWN_TYPES.has(type) || rows.framedByFeature(type);
+}
+
+/**
+ * Whether the frame of a row is drawn from its feature (and not by the frames of the rows): its
+ * box is that of its feature, or it is drawn one at a time in the frame
  *
  * @internal
  */
 export function framedByFeature(
-  rows: Pick<BulkFrameRows, 'framedByFeature' | 'companions'>,
+  rows: Pick<BulkFrameRows, 'framedByFeature'>,
   type: string,
   drawnAtOnce: () => boolean,
 ): boolean {
-  if (!ROW_DRAWN_TYPES.has(type) || rows.framedByFeature(type)) return true;
-  return rows.companions && drawnAtOnce();
+  return boxedByFeature(rows, type) || drawnAtOnce();
 }
 
 /**
@@ -152,8 +164,6 @@ export interface BulkFramesView {
   readonly config: SelectionUIConfig;
   /** The terrain state of the instance */
   readonly terrain: TerrainContext;
-  /** The longest side of the box of a row selected, in Mercator units */
-  readonly longestSide: number;
 }
 
 /** The instances of the framed rows of a group */
@@ -163,6 +173,8 @@ interface GroupFrames {
   readonly vao: WebGLVertexArrayObject | null;
   readonly origin: [number, number];
   readonly count: number;
+  /** The longest side of the box of a row framed, in Mercator units */
+  readonly longest: number;
 }
 
 /** The uniforms of the program of the frames (besides those of the projection and the rows) */
@@ -174,7 +186,7 @@ type UniformName =
   | 'u_deg_per_px'
   | 'u_origin_lat'
   | 'u_segments'
-  | 'u_grid'
+  | 'u_segment_length'
   | 'u_world'
   | 'u_ratio'
   | 'u_pixel_to_clip'
@@ -192,7 +204,7 @@ const UNIFORMS: readonly UniformName[] = [
   'u_deg_per_px',
   'u_origin_lat',
   'u_segments',
-  'u_grid',
+  'u_segment_length',
   'u_world',
   'u_ratio',
   'u_pixel_to_clip',
@@ -213,13 +225,14 @@ export function buildFrameInstances(
   group: RowGroup,
   rows: BulkFrameRows,
   drawnAtOnce: (row: number) => boolean,
-): { data: Float32Array; origin: [number, number]; count: number } {
+): { data: Float32Array; origin: [number, number]; count: number; longest: number } {
   const reader = rows.reader;
   const n = group.data.length;
   const box = new Float64Array(4);
   const values = new Float32Array(n * FLOATS_PER_ROW);
   let origin: [number, number] | null = null;
   let count = 0;
+  let longest = 0;
   /** The extents of the markers by type and style, made once per group */
   const extents = new Map<string, PointHalf>();
   for (let row = 0; row < n; row++) {
@@ -249,10 +262,19 @@ export function buildFrameInstances(
       values[at + 5] = extent[0];
       values[at + 6] = extent[1];
       values[at + 7] = 1;
+    } else {
+      const width = (box[2] - box[0]) / 360;
+      const height = Math.abs(mercatorY(box[3]) - mercatorY(box[1]));
+      longest = Math.max(longest, width, height);
     }
     count++;
   }
-  return { data: values.subarray(0, count * FLOATS_PER_ROW), origin: origin ?? [0, 0], count };
+  return {
+    data: values.subarray(0, count * FLOATS_PER_ROW),
+    origin: origin ?? [0, 0],
+    count,
+    longest,
+  };
 }
 
 /**
@@ -311,13 +333,14 @@ export class BulkFramesRenderer {
   ): number {
     let made = 0;
     let begun = false;
+    const segmentLength = segmentLengthOf(view);
     for (const entry of groups) {
       if (!entry.texture || !selected.has(entry.group)) continue;
       const frames = this.framesOf(entry, rows);
       this.drawn.add(entry.group);
       if (!frames || frames.count === 0 || !frames.vao) continue;
       if (!begun) {
-        if (!this.begin(view)) return made;
+        if (!this.begin(view, segmentLength)) return made;
         begun = true;
       }
       const gl = this.gl;
@@ -327,14 +350,11 @@ export class BulkFramesRenderer {
       this.projection.setUniforms(view.projectionData, view.zoom, camera, this.originShift);
       const loc = this.locations;
       if (loc.u_origin_lat) gl.uniform1f(loc.u_origin_lat, frames.origin[1]);
+      const segments = segmentsOfGroup(frames.longest, segmentLength, view);
+      if (loc.u_segments) gl.uniform1i(loc.u_segments, segments);
       this.rowState?.bind(entry.texture);
       gl.bindVertexArray(frames.vao);
-      gl.drawArraysInstanced(
-        gl.TRIANGLES,
-        0,
-        4 * this.segmentsOf(view) * VERTICES_PER_SIDE,
-        frames.count,
-      );
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 4 * segments * VERTICES_PER_SIDE, frames.count);
       gl.bindVertexArray(null);
       made++;
       this.draws++;
@@ -375,15 +395,8 @@ export class BulkFramesRenderer {
     this.selection.clear();
   }
 
-  /** The segments a side of a frame may be cut into in this view */
-  private segmentsOf(view: BulkFramesView): number {
-    const step = getSurfaceTessellationStep(view.terrain, 'line');
-    if (!step || !(step.grid > 0) || !(view.longestSide > 0)) return 1;
-    return Math.max(1, Math.min(MAX_SEGMENTS, Math.ceil(view.longestSide / step.grid)));
-  }
-
   /** Uses the program of the view and writes the uniforms of the frame */
-  private begin(view: BulkFramesView): boolean {
+  private begin(view: BulkFramesView, segmentLength: number): boolean {
     if (!this.ensureProgram(view.shaderData)) return false;
     const gl = this.gl;
     gl.useProgram(this.program);
@@ -392,14 +405,12 @@ export class BulkFramesRenderer {
     const ratio = resolvePixelRatio(this.pixelRatio);
     const box = view.config.boundingBox;
     const stroke = box.stroke;
-    const step = getSurfaceTessellationStep(view.terrain, 'line');
     if (loc.u_viewport) gl.uniform2f(loc.u_viewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
     if (loc.u_width) gl.uniform1f(loc.u_width, stroke.width * ratio);
     if (loc.u_miter_limit) gl.uniform1f(loc.u_miter_limit, RENDERING_DEFAULTS.MITER_LIMIT);
     if (loc.u_margin) gl.uniform1f(loc.u_margin, box.margin);
     if (loc.u_deg_per_px) gl.uniform1f(loc.u_deg_per_px, pixelsToDegreesLng(1, 0, view.zoom));
-    if (loc.u_segments) gl.uniform1i(loc.u_segments, this.segmentsOf(view));
-    if (loc.u_grid) gl.uniform1f(loc.u_grid, step && step.grid > 0 ? step.grid : 0);
+    if (loc.u_segment_length) gl.uniform1f(loc.u_segment_length, segmentLength);
     if (loc.u_world) gl.uniform1f(loc.u_world, 512 * 2 ** view.zoom);
     if (loc.u_ratio) gl.uniform1f(loc.u_ratio, ratio);
     if (loc.u_pixel_to_clip) {
@@ -425,8 +436,12 @@ export class BulkFramesRenderer {
     return true;
   }
 
-  /** Makes the program of a projection variant, once */
-  private ensureProgram(shaderData: ShaderData): boolean {
+  /**
+   * Makes the program of a projection variant, once
+   *
+   * @returns Whether the frames can be drawn with it
+   */
+  ensureProgram(shaderData: ShaderData): boolean {
     if (this.program && this.variantName === shaderData.variantName) return true;
     if (this.failed === shaderData.variantName) return false;
     const gl = this.gl;
@@ -502,6 +517,7 @@ export class BulkFramesRenderer {
       vao,
       origin: built.origin,
       count: built.count,
+      longest: built.longest,
     };
     this.frames.set(entry.group, frames);
     return frames;
@@ -517,6 +533,48 @@ export class BulkFramesRenderer {
       this.gl.deleteBuffer(frames.buffer);
     }
   }
+}
+
+/**
+ * The longest segment of a side of a frame in a view, in Mercator units (0 on a flat map: a side is
+ * one segment): no longer than a cell of the step of the surface (the terrain, the cells of the
+ * globe), and on the globe short enough for the chord of a segment to keep within a pixel of the
+ * sphere (the sagitta `R (1 - cos(a / 2))` of an arc `a` on a sphere of `R` px)
+ *
+ * @internal
+ */
+export function segmentLengthOf(view: Pick<BulkFramesView, 'terrain' | 'projectionData' | 'zoom'>) {
+  let length = Number.POSITIVE_INFINITY;
+  const step = getSurfaceTessellationStep(view.terrain, 'line');
+  if (step && step.grid > 0) length = step.grid;
+  if ((view.projectionData.projectionTransition ?? 0) > 0) {
+    const radius = (512 * 2 ** view.zoom) / (2 * Math.PI);
+    const arc = 2 * Math.acos(Math.max(-1, 1 - 1 / radius));
+    length = Math.min(length, arc / (2 * Math.PI));
+  }
+  return Number.isFinite(length) ? length : 0;
+}
+
+/**
+ * The segments a side of the frames of a group is cut into: as many as its largest box needs for
+ * the segments of the view (with the margin), from 1 to {@link MAX_SEGMENTS}
+ *
+ * @internal
+ */
+export function segmentsOfGroup(
+  longest: number,
+  segmentLength: number,
+  view: Pick<BulkFramesView, 'config' | 'zoom'>,
+): number {
+  if (!(segmentLength > 0) || !(longest > 0)) return 1;
+  const margin = (2 * view.config.boundingBox.margin) / (512 * 2 ** view.zoom);
+  return Math.max(1, Math.min(MAX_SEGMENTS, Math.ceil((longest + margin) / segmentLength)));
+}
+
+/** The Web Mercator y of a latitude (the world is 1 high) */
+function mercatorY(lat: number): number {
+  const latRad = (lat * Math.PI) / 180;
+  return (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2;
 }
 
 /**
@@ -552,9 +610,10 @@ uniform float u_margin;
 uniform float u_deg_per_px;
 // The latitude of the origin of the group
 uniform float u_origin_lat;
-// The most segments a side is cut into, and the step of the surface (Mercator; 0 on a flat map)
+// The most segments a side of a frame of the group is cut into, and the longest segment of the
+// surface (Mercator; 0 on a flat map)
 uniform int u_segments;
-uniform float u_grid;
+uniform float u_segment_length;
 // The CSS px of the world at the zoom of the frame (the distances of the dashes)
 uniform float u_world;
 // Device px per CSS px, and device px to clip space
@@ -691,11 +750,12 @@ void main() {
     g_corners[1] = vec2(a_bounds.z + margin.x, a_bounds.w + margin.y);
     g_corners[2] = vec2(a_bounds.z + margin.x, a_bounds.y - margin.y);
     g_corners[3] = vec2(a_bounds.x - margin.x, a_bounds.y - margin.y);
-    // On the terrain and on the globe the sides are cut along the step of the surface
-    if (u_grid > 0.0 && u_segments > 1) {
+    // On the terrain and on the globe the sides are cut into segments no longer than those of
+    // the surface
+    if (u_segment_length > 0.0 && u_segments > 1) {
         float width = (g_corners[1].x - g_corners[0].x) / 360.0;
         float height = abs(mercatorYOf(g_corners[0].y + u_origin_lat) - mercatorYOf(g_corners[3].y + u_origin_lat));
-        g_per_side = clamp(int(ceil(max(width, height) / u_grid)), 1, u_segments);
+        g_per_side = clamp(int(ceil(max(width, height) / u_segment_length)), 1, u_segments);
     }
     int n = 4 * g_per_side;
     if (quad >= n) {

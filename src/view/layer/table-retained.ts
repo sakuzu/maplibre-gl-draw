@@ -1149,19 +1149,36 @@ export class TableLayerRenderer {
           group: groupCache.group,
           texture: groupCache.texture,
           generation: cache.generation,
-          drawnAtOnce: (row) => drawnAtOnceIn(groupCache, row),
+          drawnAtOnce: (row) => this.drawnAtOnceIn(groupCache, row),
         });
       }
     }
   }
 
   /**
-   * Whether a row is drawn at once from its feature, as the rows of a chunk of its group are cut
-   * now (false for a row of a group not drawn, and for the rows the analytic drape draws)
+   * Whether a row is drawn at once from its feature, as the rows of its group are cut now (false
+   * for a row of a group not drawn, and for the rows the analytic drape draws)
    */
   rowDrawnAtOnce(group: RowGroup, row: number): boolean {
     const groupCache = this.cacheOfGroup(group);
-    return groupCache ? drawnAtOnceIn(groupCache, row) : false;
+    return groupCache ? this.drawnAtOnceIn(groupCache, row) : false;
+  }
+
+  /**
+   * Whether a row of a group is drawn at once: in a chunk drawn at once, or draped and not of a
+   * type the analytic drape draws
+   */
+  private drawnAtOnceIn(groupCache: GroupCache, row: number): boolean {
+    if (groupCache.drawing === 'draped') {
+      const group = groupCache.group;
+      return (
+        this.reader.hasGeometry(group, row) && !DRAPED_TYPES.has(this.reader.typeOf(group, row))
+      );
+    }
+    for (const chunk of groupCache.chunks ?? []) {
+      if (row >= chunk.range.from && row < chunk.range.to) return chunk.type === 'immediate';
+    }
+    return false;
   }
 
   /**
@@ -2292,18 +2309,6 @@ export interface DrawnRowGroup {
   readonly generation: number;
   /** Whether a row of it is drawn at once from its feature */
   drawnAtOnce(row: number): boolean;
-}
-
-/**
- * Whether a row of a group is in a chunk drawn at once (the rows the analytic drape draws are
- * not: they are passed over there)
- */
-function drawnAtOnceIn(groupCache: GroupCache, row: number): boolean {
-  if (groupCache.drawing === 'draped') return false;
-  for (const chunk of groupCache.chunks ?? []) {
-    if (row >= chunk.range.from && row < chunk.range.to) return chunk.type === 'immediate';
-  }
-  return false;
 }
 
 /** A chunk for a range of rows (none for a range of a chunk without a box) */

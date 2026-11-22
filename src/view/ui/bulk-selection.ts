@@ -9,14 +9,14 @@
  * the frame of all of them with its handles as for several features. This reads what that frame
  * needs from the rows selected, without making a feature of a row drawn by the drawing of the
  * rows: the box of all of them (the boxes of the rows, and the boxes of the features of the rows
- * framed from their features), whether one of them has an area (the handles are drawn only
+ * whose box is that of their features), whether one of them has an area (the handles are drawn only
  * then), whether one of them is locked (no handle is drawn then), and the row groups that hold
  * them.
  *
  * It is read again only when the selection changes, when the rows of the Store change, when the
  * rows are classified again, and when a layer or a group of the rows selected changes (its lock);
- * a frame that changes nothing reads nothing. The features made are those of the rows framed from
- * their features, once a reading.
+ * a frame that changes nothing reads nothing. The features made are those of the rows whose box is
+ * that of their features (the images, the custom types), once a reading.
  *
  * @internal
  */
@@ -41,8 +41,6 @@ export interface ManySelection {
   readonly locked: boolean;
   /** The row groups (and the parts of the deltas) that hold a row selected */
   readonly groups: ReadonlySet<RowGroup>;
-  /** The longest side of the box of a row selected, in Mercator units */
-  readonly longestSide: number;
 }
 
 /**
@@ -52,8 +50,8 @@ export interface ManySelection {
  */
 export interface ManySelectionRows {
   readonly reader: DrawnRows;
-  /** Whether the frame of a row of a type is drawn from its feature */
-  framedByFeature(type: string, group: RowGroup, row: number): boolean;
+  /** Whether the box of a row of a type is that of its feature (not that of its row) */
+  boxedByFeature(type: string): boolean;
   /** The layer of a row group drawn (undefined for a group not drawn) */
   layerOf(group: RowGroup): string | undefined;
   /** Changes whenever the rows are classified again (which rows are framed from their features) */
@@ -165,7 +163,6 @@ function readSelectedRows(
   let maxY = Number.NEGATIVE_INFINITY;
   let hasArea = false;
   let locked = false;
-  let longestSide = 0;
   const widen = (x0: number, y0: number, x1: number, y1: number): void => {
     if (x0 < minX) minX = x0;
     if (y0 < minY) minY = y0;
@@ -192,7 +189,7 @@ function readSelectedRows(
         layerLocked(layerId ?? rows.layerOf(group));
     }
     const type = reader.typeOf(group, row);
-    if (rows.framedByFeature(type, group, row)) {
+    if (rows.boxedByFeature(type)) {
       const id = reader.idOf(reader.refOf(group, row));
       const feature: Feature | undefined = id === undefined ? undefined : store.getFeature(id);
       const bbox = feature ? computeBoundingBox(feature, rows.extensions) : null;
@@ -207,10 +204,6 @@ function readSelectedRows(
     if (type !== 'Point' && type !== 'Circle' && box.every((value) => value === 0)) return;
     widen(box[0], box[1], box[2], box[3]);
     if (box[0] !== box[2] || box[1] !== box[3]) hasArea = true;
-    const width = (box[2] - box[0]) / 360;
-    const height = Math.abs(mercatorY(box[3]) - mercatorY(box[1]));
-    if (width > longestSide) longestSide = width;
-    if (height > longestSide) longestSide = height;
   };
   const visitRef = (ref: number): void => {
     const place = reader.placeOf(ref);
@@ -271,12 +264,6 @@ function readSelectedRows(
       layers,
       groups: groupsRead,
     },
-    value: { bbox, hasArea, locked, groups, longestSide },
+    value: { bbox, hasArea, locked, groups },
   };
-}
-
-/** The Web Mercator y of a latitude (the world is 1 high) */
-function mercatorY(lat: number): number {
-  const latRad = (lat * Math.PI) / 180;
-  return (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2;
 }

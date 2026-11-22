@@ -58,6 +58,7 @@ const ROW_PARTS: ReadonlySet<string> = new Set([
   'outlines',
   'rows',
   'rowState',
+  'frames',
 ]);
 
 /**

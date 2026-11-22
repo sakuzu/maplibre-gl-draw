@@ -634,6 +634,84 @@ export const MANY_SCENES: readonly ManyScene[] = MAPS.flatMap((map) =>
 );
 
 /**
+ * The camera of the scenes of a selection of many features across the antimeridian: a flat map
+ * whose view holds both sides of longitude 180, drawn as two copies of the world
+ */
+export const DATELINE_CAMERA: Camera = { center: [180, 35.68], zoom: 14 };
+
+/**
+ * The scene of a selection of `count` features on both sides of the antimeridian: on each side an
+ * area, a point and a block of small points, every feature selected
+ */
+function datelineSceneOf(count: number): ManyScene {
+  const unit = unitOf(DATELINE_CAMERA);
+  const [lng0, lat0] = DATELINE_CAMERA.center;
+  // The longitudes east of 180 are stored on the other side of the line
+  const at = (dx: number, dy: number): [number, number] => {
+    const lng = lng0 + dx * unit;
+    return [lng > 180 ? lng - 360 : lng, lat0 + dy * unit];
+  };
+  const square = (x0: number, y0: number, x1: number, y1: number) => ({
+    type: 'Polygon' as const,
+    coordinates: [[at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), at(x0, y0)]],
+  });
+  const area = { fillColor: COLORS.b, fillOpacity: 0.6, strokeColor: '#1b1b3a', strokeWidth: 2 };
+  const point = { pointColor: COLORS.b, pointRadius: 8, pointShape: 'circle' as const };
+  const features: Feature[] = [
+    feature('flat', 'area-west', 'Polygon', square(-3.5, 1, -2, 2.5), area),
+    feature('flat', 'point-west', 'Point', { type: 'Point', coordinates: at(-2.7, -2) }, point),
+    feature('flat', 'area-east', 'Polygon', square(2, 1, 3.5, 2.5), area),
+    feature('flat', 'point-east', 'Point', { type: 'Point', coordinates: at(2.7, -2) }, point),
+  ];
+  const rest = count - features.length;
+  const side = 16;
+  for (let i = 0; i < rest; i++) {
+    const east = i % 2 === 1;
+    const k = Math.floor(i / 2);
+    const x = 4.5 + (1.5 * (k % side)) / (side - 1);
+    const y = -4 + (5 * Math.floor(k / side)) / (Math.ceil(rest / 2 / side) - 1);
+    features.push(
+      feature(
+        'flat',
+        `fill-${i}`,
+        'Point',
+        { type: 'Point', coordinates: at(east ? x : -x, y) },
+        { pointColor: '#3a7d44', pointRadius: 2, pointShape: 'circle' },
+      ),
+    );
+  }
+  return {
+    name: `dateline/many/${count}`,
+    map: 'flat',
+    count,
+    document: {
+      version: '3.0.0',
+      metadata: { title: 'pictures' },
+      layerOrder: [LAYER],
+      layers: [
+        {
+          id: LAYER,
+          name: 'Pictures',
+          visible: true,
+          locked: false,
+          opacity: 1,
+          styleRule: undefined,
+          metadata: undefined,
+          items: features.map((f) => f.id),
+        },
+      ],
+      features,
+    },
+    calls: [['selection.set', 'feature', features.map((f) => f.id)]],
+  };
+}
+
+/** The scenes of a selection of many features across the antimeridian, at the two counts */
+export const DATELINE_SCENES: readonly ManyScene[] = MANY_COUNTS.map((count) =>
+  datelineSceneOf(count),
+);
+
+/**
  * A document with one image at the center of the camera of a map, which the page loads once
  * before the scenes, so that every scene finds the image decoded
  */

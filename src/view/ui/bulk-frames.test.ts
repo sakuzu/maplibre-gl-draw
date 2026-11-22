@@ -31,12 +31,16 @@ import {
   gridPoints,
 } from '../../test-utils.js';
 import type { DrawnRowGroup } from '../layer/table-retained.js';
+import { TerrainContext } from '../terrain/context.js';
 import {
   type BulkFrameRows,
   BulkFramesRenderer,
   buildBulkFramesVertexSource,
   buildFrameInstances,
+  MAX_SEGMENTS,
   rowFrameCorners,
+  segmentLengthOf,
+  segmentsOfGroup,
 } from './bulk-frames.js';
 import { SelectionHandlesRenderer } from './handles.js';
 import { computeBoundingBox, computeCombinedBoundingBox } from './selection-ui/bounding-box.js';
@@ -407,6 +411,30 @@ describe('many features selected', () => {
     expect(framed.map((f) => f.type)).toEqual(['pin']);
   });
 
+  it('frame the rows drawn one at a time in the frame from their features, not from their rows', () => {
+    const instance = instanceOf();
+    const ids = idsOf(
+      instance.draw.features.createMany(
+        shapes(1_500).map((each) =>
+          each.type === 'LineString' ? { ...each, style: { lineStyle: 'dashed' } } : each,
+        ) as never,
+      ),
+    );
+    // Drawn by kind, a dashed line is drawn at once
+    instance.engine.customLayer.getTableRenderer()?.setDrawingByKind(true);
+    settle(instance);
+    const ui = watchSelectionUI();
+    instance.draw.selection.set('feature', ids);
+    instance.map.render();
+    const framed = ui.many.mock.calls[0][0] as readonly Feature[];
+    expect(framed.length).toBe(500);
+    expect(new Set(framed.map((f) => f.type))).toEqual(new Set(['LineString']));
+    const rows = ui.groups.mock.calls[0][1] as BulkFrameRows;
+    const [entry] = drawnGroupsOf(instance);
+    const built = buildFrameInstances(entry.group, rows, (row) => entry.drawnAtOnce(row));
+    expect(built.count).toBe(1_000);
+  });
+
   it('read the rows selected once, not in a frame that changes nothing', () => {
     const instance = instanceOf();
     const ids = idsOf(instance.draw.features.createMany(shapes(2_000) as never));
@@ -444,6 +472,7 @@ describe('the frames of the rows on the GPU', () => {
     const [renderer] = ui.bulk;
     expect(renderer.heldObjects).toBeGreaterThan(0);
     expect(ledger.snapshot().objects).toBeGreaterThan(held.objects);
+    expect(ledger.snapshot().byPart.frames).toBeGreaterThan(0);
     ui.clear();
     instance.draw.selection.clear();
     instance.map.render();
@@ -453,6 +482,7 @@ describe('the frames of the rows on the GPU', () => {
     expect(renderer.heldObjects).toBe(0);
     expect(ledger.snapshot().objects).toBe(held.objects);
     // The buffers of the frames drawn on the CPU keep their size; those of the rows went
+    expect(ledger.snapshot().byPart.frames).toBeUndefined();
     expect(ledger.snapshot().byPart.rows).toBe(held.byPart.rows);
   });
 
@@ -474,6 +504,45 @@ describe('the frames of the rows on the GPU', () => {
       expect(ledger.snapshot().objects).toBe(0);
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe('the segments of a side of the frames of a group', () => {
+  const config = DEFAULT_SELECTION_CONFIG;
+  const globe = (zoom: number) => ({
+    terrain: new TerrainContext(),
+    projectionData: { projectionTransition: 1 } as never,
+    zoom,
+  });
+
+  it('are one on a flat map', () => {
+    const flat = { ...globe(3), projectionData: { projectionTransition: 0 } as never };
+    expect(segmentLengthOf(flat)).toBe(0);
+    expect(segmentsOfGroup(0.5, segmentLengthOf(flat), { config, zoom: 3 })).toBe(1);
+  });
+
+  it('keep every segment within a pixel of the sphere on the globe, from 1 to 64', () => {
+    for (const zoom of [0.5, 1.5, 3, 6]) {
+      const radius = (512 * 2 ** zoom) / (2 * Math.PI);
+      const length = segmentLengthOf(globe(zoom));
+      expect(length).toBeGreaterThan(0);
+      for (const longest of [1e-5, 0.01, 0.2, 0.9]) {
+        const segments = segmentsOfGroup(longest, length, { config, zoom });
+        expect(segments).toBeGreaterThanOrEqual(1);
+        expect(segments).toBeLessThanOrEqual(MAX_SEGMENTS);
+        if (segments === MAX_SEGMENTS) continue;
+        // The arc of a segment of the longest side, with the margin
+        const side = longest + (2 * config.boundingBox.margin) / (512 * 2 ** zoom);
+        const arc = (2 * Math.PI * side) / segments;
+        expect(radius * (1 - Math.cos(arc / 2))).toBeLessThanOrEqual(1 + 1e-9);
+      }
+    }
+    // A group of small boxes is drawn in one segment a side
+    expect(segmentsOfGroup(1e-6, segmentLengthOf(globe(1.5)), { config, zoom: 1.5 })).toBe(1);
+    // A box as large as a continent at a low zoom needs more than 16
+    expect(segmentsOfGroup(0.9, segmentLengthOf(globe(3)), { config, zoom: 3 })).toBeGreaterThan(
+      16,
+    );
   });
 });
 
@@ -533,7 +602,7 @@ describe('what the frames of the rows hold on the GPU', () => {
       expect(made.length).toBeGreaterThan(0);
       for (const object of made) {
         expect(ledger.holds(object)).toBe(true);
-        expect(ledger.partOf(object)).toBe('rows');
+        expect(ledger.partOf(object)).toBe('frames');
       }
       const madeBytes = made.reduce((sum, object) => sum + (tracked.bytes.get(object) ?? 0), 0);
       expect(madeBytes).toBeGreaterThan(0);
