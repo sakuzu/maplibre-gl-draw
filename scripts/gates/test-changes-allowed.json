@@ -1220,6 +1220,36 @@
       "path": "src/view/renderers/drawer.test.ts",
       "change": "the fake store or document of the set-up no longer passes the order a layer or a group holds, which the code read no longer reads (the values checked do not change)",
       "unit": "the layers and the groups that no longer carry the order of what they hold"
+    },
+    {
+      "path": "src/dispatcher/hit-test/service.test.ts",
+      "change": "the hit test reads its candidates from the layer, not from a list of every feature: the list given is left out of the calls, a reordering is written to the Store, the marker gives its largest reach, and the lookup per container is checked on the path that tests the features given",
+      "unit": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
+    },
+    {
+      "path": "src/dispatcher/hit-test/topmost.test.ts",
+      "change": "the list given is left out of the calls",
+      "unit": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
+    },
+    {
+      "path": "src/dispatcher/hit-test/screen-anchor.test.ts",
+      "change": "the list given is left out of the calls",
+      "unit": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
+    },
+    {
+      "path": "src/dispatcher/hit-test/antimeridian.test.ts",
+      "change": "the list given is left out of the calls",
+      "unit": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
+    },
+    {
+      "path": "src/dispatcher/hit-test/bearing.test.ts",
+      "change": "the list given is left out of the calls",
+      "unit": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
+    },
+    {
+      "path": "src/api/impl/work-scenes.test.ts",
+      "change": "the click of the select scene is counted at a place found before the count, which reads every feature through the public list",
+      "unit": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
     }
   ]
 }
