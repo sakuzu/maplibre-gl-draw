@@ -422,6 +422,9 @@ draw.transact(
 );
 ```
 
+`draw.isTransacting()` is true while the function of a `draw.transact`
+runs, for code that must not run inside one and would rather wait.
+
 ## A store of your own
 
 To keep the drawing in a database or on a server, following the changes

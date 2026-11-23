@@ -169,6 +169,8 @@ export function createDrawOnEngine(
         }),
       );
     },
+    // Only the depth of this instance: a transaction opened on the Store directly is not counted
+    isTransacting: () => transactDepth > 0,
     waitForWrites: () => edits.waitForWrites(),
     on: (event, listener) => events.on(event, listener),
     off: (event, listener) => events.off(event, listener),

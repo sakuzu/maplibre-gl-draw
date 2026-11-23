@@ -21,17 +21,9 @@
       "main:doc:DrawProperties{0}.maplibre-gl-draw:rotation": "dd91426b461df5b79b54903796238dee9051fb791295389239d64f7315d99388",
       "main:doc:DrawProperties{0}.maplibre-gl-draw:scale": "3e20fa66ad593d19a1df83fb23b018d4479f67cebb712747772ac25f744e1251"
     },
-    "9": {
-      "main:added:Draw.isTransacting": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
     "13": {
       "main:added:Draw.rendered": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
-    },
-    "25": {
-      "main:added:RestoreOptions": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:added:RestoreOptions.exceptProperties": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "main:sig:FeaturesCollection.restore": "239db9de47d84bd5ed831793b3e75eb27eb19d8af8753eada42eb1da98a836d6"
     },
     "46": {
       "main:added:Sketch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",

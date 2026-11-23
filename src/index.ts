@@ -73,6 +73,7 @@ export type {
   EditOptions,
   FeaturesCollection,
   FeatureTarget,
+  RestoreOptions,
 } from './api/features.js';
 export type { LayersCollection } from './api/layers.js';
 export type { GroupsCollection } from './api/groups.js';

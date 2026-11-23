@@ -25,6 +25,10 @@
  * - What is written of the values is marked per row, from the start of the first `restore` of
  *   them: one that stopped leaves the rest, which the next `restore` of the same values writes;
  *   one that wrote everything uses them up.
+ * - The keys of `properties` the options name are not written on the rows that are there: their
+ *   values before are used up with the rest, and a row the values hold nothing else of is not
+ *   written. A row that comes back (deleted now) comes back with every key. The keys are those
+ *   of one call, not kept with the values.
  * - The values are checked when `restore` is called and again when it is about to write (a
  *   `restore` queued before it may have used them up), and are held until it ends.
  */
@@ -45,7 +49,7 @@ import type {
 } from '../../store/built-in/types.js';
 import type { InstanceDocument } from '../../store/document-access.js';
 import { DrawError } from '../errors.js';
-import type { EditCounts, EditOptions } from '../features.js';
+import type { EditCounts, RestoreOptions } from '../features.js';
 import type { BulkEdits } from './bulk-edits.js';
 import {
   GEOMETRY_VERTICES,
@@ -60,6 +64,7 @@ import {
 import {
   groupLocked,
   invalidInput,
+  isRecord,
   layerLocked,
   notFound,
   onlyLockOrVisibility,
@@ -91,6 +96,9 @@ interface Given {
 
 /** A field not written back for a row (its value now is written) */
 const NOT_GIVEN: unique symbol = Symbol('not given');
+
+/** No key left as it is */
+const NO_FIELDS: ReadonlySet<FeatureRowField> = new Set();
 
 /** The index of the geometry of a row that is not one of the geometries before (`GeometryBuilder`) */
 const NO_SOURCE = -1;
@@ -174,6 +182,20 @@ class GeometryBuilder {
   }
 }
 
+/**
+ * The fields of the keys of `properties` a `restore` leaves as they are on the rows that are
+ * there (`exceptProperties`); throws `invalidInput` unless they are an array of strings
+ */
+function exceptedFields(options: unknown): ReadonlySet<FeatureRowField> {
+  if (!isRecord(options) || options.exceptProperties === undefined) return NO_FIELDS;
+  const keys: unknown = options.exceptProperties;
+  if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string')) {
+    throw invalidInput('restore: exceptProperties must be an array of strings');
+  }
+  if (keys.length === 0) return NO_FIELDS;
+  return new Set(keys.map((key) => `properties:${key as string}` as const));
+}
+
 /** Throws unless the values can be written back */
 function checkValues(
   deps: RestoreDeps,
@@ -242,10 +264,12 @@ function layerOfParent(
 export function startRestore(
   deps: RestoreDeps,
   values: unknown,
-  options: EditOptions | undefined,
+  options: RestoreOptions | undefined,
 ): Promise<EditCounts | null> {
   const { layer, edits, keeper } = { ...deps, keeper: deps.values };
   if (!Array.isArray(values)) throw invalidInput('restore: the values must be an array');
+  // Read once: the keys of this call, whatever the caller does with its array meanwhile
+  const except = exceptedFields(options);
   // Each value once, in the order given
   const given: Given[] = [];
   const seen = new Set<object>();
@@ -290,7 +314,7 @@ export function startRestore(
     started = edits.start(
       [],
       options,
-      (_start, read) => restoreWork(deps, given, read.ignoreLocks),
+      (_start, read) => restoreWork(deps, given, read.ignoreLocks, except),
       {
         targetRows: target.subarray(0, count),
       },
@@ -311,11 +335,15 @@ export function startRestore(
   );
 }
 
-/** The work of a `restore`: writes the rows of its batches, with the groups first and last */
+/**
+ * The work of a `restore`: writes the rows of its batches, with the groups first and last, and
+ * leaves the fields `except` names as they are on the rows that are there
+ */
 function restoreWork(
   deps: RestoreDeps,
   given: readonly Given[],
   ignoreLocks: boolean,
+  except: ReadonlySet<FeatureRowField>,
 ): BulkRowWork {
   const { layer } = deps;
   const tables = layer.getTables();
@@ -545,6 +573,10 @@ function restoreWork(
       for (const k of inLayer) {
         deletedAfter[k] = deletedNow[k];
         let geometryWritten = false;
+        // The keys left as they are, on a row that is there (one that comes back has every key)
+        const leaves = except.size > 0 && deletedNow[k] === 0;
+        let left = false;
+        let fieldGiven = false;
         for (let h = 0; h < holderCount[k]; h++) {
           const v = holders[k * valueCount + h];
           const slot = slots[k * valueCount + h];
@@ -558,6 +590,11 @@ function restoreWork(
           }
           if (before.deleted) deletedAfter[k] = before.deleted[at] === 0 ? 0 : 1;
           for (const [field, column] of before.fields) {
+            if (leaves && except.has(field)) {
+              left = true;
+              continue;
+            }
+            fieldGiven = true;
             let list = fieldValues.get(field);
             if (!list) {
               list = new Array<unknown>(rows.length).fill(NOT_GIVEN);
@@ -575,6 +612,9 @@ function restoreWork(
           else markWritten(k);
         } else if (geometryWritten) {
           withGeometry.push(k);
+        } else if (left && !fieldGiven) {
+          // The values hold nothing else of the row: it is not written, and they are used up
+          markWritten(k);
         } else {
           others.push(k);
         }
@@ -588,7 +628,25 @@ function restoreWork(
         };
         takeWritten(deleteRows, layer.writeRowValues(layerId, values, { ignoreLocks }));
       }
-      if (withGeometry.length > 0) {
+      for (const list of apart(withGeometry)) writeGeometries(list);
+      for (const list of apart(others)) {
+        writeRows(layerId, list, fieldValues, deletedAfter, undefined);
+      }
+
+      /**
+       * The rows that are there apart from those that come back, when keys are left as they are:
+       * a key written to a row that comes back is not written to the others
+       */
+      function apart(list: readonly number[]): ReadonlyArray<readonly number[]> {
+        if (list.length === 0) return [];
+        if (except.size === 0) return [list];
+        const there = list.filter((k) => deletedNow[k] === 0);
+        const back = list.filter((k) => deletedNow[k] === 1);
+        return [there, back].filter((part) => part.length > 0);
+      }
+
+      /** Writes rows with their geometries */
+      function writeGeometries(withGeometry: readonly number[]): void {
         const geometry = new GeometryBuilder(withGeometry.length, n);
         // The geometries now of the rows written back vertex by vertex
         const vertexRows = withGeometry.filter((k) => byVertices[k] === 1);
@@ -652,7 +710,6 @@ function restoreWork(
         if (anyWhole) layer.markWholeGeometry();
         writeRows(layerId, withGeometry, fieldValues, deletedAfter, geometry.build());
       }
-      if (others.length > 0) writeRows(layerId, others, fieldValues, deletedAfter, undefined);
     }
 
     /** Writes rows of one layer, the keys no value wrote taking the values they have now */

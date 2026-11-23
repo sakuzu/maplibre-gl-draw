@@ -141,6 +141,7 @@ const MAIN = [
   'ProvidersCollection',
   'RenderContext',
   'RenderingOptions',
+  'RestoreOptions',
   'Rotation',
   'RuntimeOptions',
   'Scaling',

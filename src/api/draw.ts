@@ -166,6 +166,13 @@ export interface Draw {
    */
   transact<T>(fn: () => T, options?: TransactOptions): T;
   /**
+   * Whether a `draw.transact` of this instance is running now: true inside its `fn`, false
+   * otherwise (a transaction opened on the Store directly is not one of this instance, and
+   * the parts of a bulk edit that follow after `fn` returned are not either). For a caller
+   * that must not run inside a transaction and would rather wait than throw.
+   */
+  isTransacting(): boolean;
+  /**
    * Waits for the edits of this client that are being written to the document in parts (not a
    * saving elsewhere): the bulk edits under
    * way, the one a drag that was let go of writes, and the loads. It waits for those that were
