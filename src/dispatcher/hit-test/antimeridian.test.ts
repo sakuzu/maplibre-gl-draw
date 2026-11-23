@@ -96,34 +96,34 @@ describe('clickCopies', () => {
 
 describe('hit testing the copy on the other side of the antimeridian', () => {
   it('hits a point stored at -179.9 with a click at 180.1', () => {
-    const ordered = load([point('west', [-179.9, 0]), point('east', [179.9, 0])]);
+    load([point('west', [-179.9, 0]), point('east', [179.9, 0])]);
     // The click is at x = 0 of an unproject whose origin is 180.1 (unwrapped)
-    const hit = service.hitTest({ x: 0, y: 0 }, unprojectFrom(180.1), ordered);
+    const hit = service.hitTest({ x: 0, y: 0 }, unprojectFrom(180.1));
     expect(hit?.feature.id).toBe('west');
   });
 
   it('hits the point just across the line from a click within the tolerance', () => {
-    const ordered = load([point('west', [-179.999, 0])]);
+    load([point('west', [-179.999, 0])]);
     // 179.999 is 0.002 degrees from -179.999 across the line (the tolerance is 3 px =
     // 0.003 degrees)
-    const hit = service.hitTest({ x: 0, y: 0 }, unprojectFrom(179.999), ordered);
+    const hit = service.hitTest({ x: 0, y: 0 }, unprojectFrom(179.999));
     expect(hit?.feature.id).toBe('west');
   });
 
   it('hits a line stored on the other side with a click on its drawn copy', () => {
-    const ordered = load([
+    load([
       line('west', [
         [-179.95, -0.01],
         [-179.85, 0.01],
       ]),
     ]);
-    const hit = service.hitTest({ x: 0, y: 0 }, unprojectFrom(180.1), ordered);
+    const hit = service.hitTest({ x: 0, y: 0 }, unprojectFrom(180.1));
     expect(hit?.feature.id).toBe('west');
   });
 
   it('does not change a click away from the antimeridian', () => {
-    const ordered = load([point('a', [139.7, 0]), point('far', [-40.3, 0])]);
-    expect(service.hitTest({ x: 0, y: 0 }, unprojectFrom(139.7), ordered)?.feature.id).toBe('a');
-    expect(service.hitTest({ x: 0, y: 0 }, unprojectFrom(319.7), ordered)?.feature.id).toBe('far');
+    load([point('a', [139.7, 0]), point('far', [-40.3, 0])]);
+    expect(service.hitTest({ x: 0, y: 0 }, unprojectFrom(139.7))?.feature.id).toBe('a');
+    expect(service.hitTest({ x: 0, y: 0 }, unprojectFrom(319.7))?.feature.id).toBe('far');
   });
 });

@@ -298,9 +298,20 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     // On the globe the edges are tested along the path they are drawn along
     drawnShape: createGlobeShapeResolver(map),
     // A click on the marker of a point hits the point (the look of a point is read at each
-    // hit, so a change of the style option applies at once)
-    pointMarkerReachPx: (feature) =>
-      pointMarkerReachPx(feature.style as FeatureStyle | undefined, featureStyle.point.point),
+    // hit, so a change of the style option applies at once). The candidates are searched as far
+    // as the largest marker the points name, or that of the style option when it is larger
+    pointMarker: {
+      reachPx: (feature) =>
+        pointMarkerReachPx(feature.style as FeatureStyle | undefined, featureStyle.point.point),
+      maxReachPx: () => {
+        const largest = store.largestPointMarker();
+        const defaults = featureStyle.point.point;
+        return (
+          Math.max(largest.radius, defaults.size / 2) +
+          Math.max(largest.strokeWidth, defaults.strokeWidth)
+        );
+      },
+    },
   });
 
   // Create the BoxSelectionStrategyRegistry and register the core strategies

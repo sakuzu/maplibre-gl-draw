@@ -11,7 +11,7 @@
 
 import type { ScreenPoint } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
-import type { DocumentAccess } from '../../store/document-access.js';
+import type { DocumentAccess, DocumentBoxes } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type { DrawnShapeResolver } from './globe-shape.js';
@@ -82,31 +82,41 @@ export interface HitTestService {
    */
   setClickTolerance(px: number): void;
   /**
-   * Returns the frontmost feature that is hit, walking `orderedFeatures` from the end
+   * Returns the frontmost feature that is hit, of those shown
+   *
+   * The candidates are the features the spatial index finds near the position; only they are
+   * made, and the frontmost of those hit is decided by the stacking order.
    *
    * @param screenPoint The position in CSS px relative to the map container
    * @param unproject Converts screen positions into degrees
-   * @param orderedFeatures The candidates in display order (the last is in front)
    * @returns The hit, or `null` when nothing is hit
    */
-  hitTest(
-    screenPoint: ScreenPoint,
-    unproject: UnprojectFunction,
-    orderedFeatures: Feature[],
-  ): HitTestResult | null;
+  hitTest(screenPoint: ScreenPoint, unproject: UnprojectFunction): HitTestResult | null;
 
   /**
-   * Returns every feature that is hit, sorted by distance (the closest first)
+   * Returns every feature shown that is hit, sorted by distance (the closest first; those as
+   * close in stacking order, from the back)
    *
    * @param screenPoint The position in CSS px relative to the map container
    * @param unproject Converts screen positions into degrees
-   * @param orderedFeatures The candidates in display order
    * @returns The hits. An empty array when nothing is hit
    */
-  hitTestAll(
+  hitTestAll(screenPoint: ScreenPoint, unproject: UnprojectFunction): HitTestResult[];
+
+  /**
+   * Returns the features given that are hit, sorted by distance (the closest first), as
+   * `hitTestAll` tests them: only those the spatial index finds near the position and whose
+   * visible flags (their own, their layer's and their group's) are on
+   *
+   * @param screenPoint The position in CSS px relative to the map container
+   * @param unproject Converts screen positions into degrees
+   * @param features The features to test, in display order
+   * @returns The hits. An empty array when none is hit
+   */
+  hitTestFeatures(
     screenPoint: ScreenPoint,
     unproject: UnprojectFunction,
-    orderedFeatures: Feature[],
+    features: readonly Feature[],
   ): HitTestResult[];
 
   /**
@@ -171,12 +181,52 @@ export interface HitTestServiceImplOptions extends Partial<HitTestOptions> {
    */
   drawnShape?: DrawnShapeResolver;
   /**
-   * How far the marker of a built-in point reaches from its position, in CSS pixels. When
-   * given, the built-in `Point` and `MultiPoint` strategies hit a point within that reach plus
-   * the tolerance, so a click anywhere on its marker hits it; when omitted a point is hit
-   * within the tolerance of its position alone
+   * How far the marker of a built-in point reaches from its position. When given, the built-in
+   * `Point` and `MultiPoint` strategies hit a point within that reach plus the tolerance, so a
+   * click anywhere on its marker hits it; when omitted a point is hit within the tolerance of its
+   * position alone
    */
-  pointMarkerReachPx?: (feature: Feature) => number;
+  pointMarker?: PointMarkerReach;
+}
+
+/**
+ * How far the markers of the points reach from their positions, in CSS pixels
+ *
+ * @internal
+ */
+export interface PointMarkerReach {
+  /** How far the marker of a point reaches */
+  reachPx(feature: Feature): number;
+  /**
+   * A reach no marker of a point goes beyond (it may be larger than the largest): the candidates
+   * are searched as far, without every point being read
+   */
+  maxReachPx(): number;
+}
+
+/**
+ * The reads of the layer the hit test needs: the features, their visible flags, those shown in
+ * stacking order and the points shown
+ *
+ * @internal
+ */
+export type HitTestDocument = DocumentAccess &
+  Pick<DocumentBoxes, 'listShownInOrder' | 'listShownPoints'>;
+
+/** What a hit test at one position works out before testing its candidates */
+interface HitQuery {
+  /** The position in degrees */
+  readonly coordinate: Coordinate;
+  /** The click tolerance in CSS pixels */
+  readonly tolerancePx: number;
+  /** The click tolerance in degrees of longitude at the position */
+  readonly toleranceLngLat: number;
+  /** The degrees per CSS pixel at the position, measured once and only when needed */
+  degPerPx(): number;
+  /** The position on each copy of the world it can reach */
+  readonly copies: Coordinate[];
+  /** The candidates the spatial index found on each copy */
+  readonly candidatesByCopy: Set<string>[];
 }
 
 /**
@@ -186,7 +236,7 @@ export interface HitTestServiceImplOptions extends Partial<HitTestOptions> {
  */
 export class HitTestServiceImpl implements HitTestService {
   private spatialIndex: SpatialIndex;
-  private store: DocumentAccess;
+  private store: HitTestDocument;
   private registry: HitTestStrategyRegistry;
   private options: HitTestOptions;
   private imageStrategy: ImageHitTestStrategy;
@@ -197,13 +247,15 @@ export class HitTestServiceImpl implements HitTestService {
   private anchorScreen: AnchorScreenProjector | null;
   /** The shape a feature is drawn with (the stored shape when there is no resolver) */
   private drawnShape: DrawnShapeResolver;
+  /** How far the markers of the points reach (null: a point is hit at its position alone) */
+  private pointMarker: PointMarkerReach | null;
 
   setClickTolerance(px: number): void {
     this.options = { ...this.options, clickTolerancePx: px };
   }
 
   constructor(
-    store: DocumentAccess,
+    store: HitTestDocument,
     spatialIndex: SpatialIndex,
     options: HitTestServiceImplOptions = {},
   ) {
@@ -211,12 +263,14 @@ export class HitTestServiceImpl implements HitTestService {
     this.spatialIndex = spatialIndex;
     this.anchorScreen = options.anchorScreen ?? null;
     this.drawnShape = options.drawnShape ?? ((feature) => feature);
+    this.pointMarker = options.pointMarker ?? null;
     this.options = { ...DEFAULT_HIT_TEST_OPTIONS, ...options };
     const tileSize = options.tileSize ?? 512;
 
     // Register the default strategies
     this.registry = new HitTestStrategyRegistry();
-    const markerReach = options.pointMarkerReachPx;
+    const marker = options.pointMarker;
+    const markerReach = marker ? (feature: Feature) => marker.reachPx(feature) : undefined;
     this.registry.register(withReach(new PointHitTestStrategy(), markerReach));
     this.registry.register(new LineHitTestStrategy());
     this.registry.register(new PolygonHitTestStrategy());
@@ -293,7 +347,9 @@ export class HitTestServiceImpl implements HitTestService {
   }
 
   /**
-   * Widens the radius of the candidate search (degrees of longitude) by the extra reach
+   * What a hit test at a position works out before it tests its candidates: the tolerance in
+   * degrees, and the candidates of the spatial index on each copy of the world the position
+   * reaches, searched as far as the tolerance widened by the extra reach
    *
    * The degrees per pixel are obtained by dividing the already computed toleranceLngLat by
    * clickTolerancePx (so no additional call to unproject is made). Only when clickTolerancePx is
@@ -301,29 +357,76 @@ export class HitTestServiceImpl implements HitTestService {
    *
    * The radius is a square box in degrees. A latitude reach needs only radius * cos φ
    * (local-frame.ts), so the box never misses a candidate.
+   *
+   * @param featureReachPx The reach of the features beyond their geometry the search is widened
+   *   by (the markers of the points)
    */
-  private expandSearchRadius(
-    toleranceLngLat: number,
-    degPerPx: () => number,
-    orderedFeatures: Feature[],
-  ): number {
-    const reachPx = this.maxCandidateReachPx() + this.maxFeatureReachPx(orderedFeatures);
-    if (reachPx <= 0) return toleranceLngLat;
-    return toleranceLngLat + reachPx * degPerPx();
+  private queryAt(
+    screenPoint: ScreenPoint,
+    unproject: UnprojectFunction,
+    featureReachPx: number,
+  ): HitQuery {
+    const lngLat = unproject(screenPoint);
+    const coordinate: Coordinate = [lngLat.lng, lngLat.lat];
+
+    // The tolerance is a screen length. It is converted into degrees of longitude at the click
+    // latitude by measuring the ground length of clickTolerancePx pixels, so it does not depend
+    // on the bearing (see local-frame.ts)
+    const tolerancePx = this.options.clickTolerancePx;
+    const toleranceLngLat = toleranceDegrees(unproject, screenPoint, tolerancePx);
+
+    // Stage 1: narrow down the candidates with the spatial index.
+    // The search radius is widened by the registered extra reach
+    // (registerCandidateReach). Unlike the approach of baking the appearance into the bbox
+    // of the index, this does not depend on the state or the zoom. The tolerance passed to
+    // the second stage is toleranceLngLat as before, widened only by the reach of a strategy
+    // (the marker of a point); the registered reach widens only the candidate set.
+    // The degrees per CSS pixel at the click, measured once and only when needed (from the
+    // tolerance already converted, or from one pixel when the tolerance is 0)
+    let degPerPxMemo: number | undefined;
+    const degPerPx = (): number => {
+      degPerPxMemo ??=
+        tolerancePx > 0
+          ? toleranceLngLat / tolerancePx
+          : toleranceDegrees(unproject, screenPoint, 1);
+      return degPerPxMemo;
+    };
+    const reachPx = this.maxCandidateReachPx() + featureReachPx;
+    const searchRadius = reachPx > 0 ? toleranceLngLat + reachPx * degPerPx() : toleranceLngLat;
+    // The click on each copy of the world it can reach (the stored copy alone away from the
+    // antimeridian; local-frame.ts)
+    const copies = clickCopies(coordinate, searchRadius);
+    const candidatesByCopy = copies.map(
+      (copy) => new Set(this.spatialIndex.findNear(copy, searchRadius)),
+    );
+    return { coordinate, tolerancePx, toleranceLngLat, degPerPx, copies, candidatesByCopy };
   }
 
   /**
-   * The largest reach beyond its geometry among the features whose strategy has one
+   * A reach no marker of a point goes beyond, in CSS pixels (0 when the points have none)
+   *
+   * The reach of a strategy (`HitTestStrategy.reachPx`) is that of the marker of a built-in
+   * point, or of the points an override leaves to the built-in type, so the candidates searched
+   * as far take every feature a strategy reaches, without every feature being read.
+   */
+  private maxPointReachPx(): number {
+    if (!this.pointMarker) return 0;
+    const reach = this.pointMarker.maxReachPx();
+    return Number.isFinite(reach) && reach > 0 ? reach : 0;
+  }
+
+  /**
+   * The largest reach beyond its geometry among the features given whose strategy has one
    * (`HitTestStrategy.reachPx`, the markers of the points), in CSS pixels
    *
    * The reach depends on the style of each feature, so it is measured at query time like the
    * rest of the appearance (the bounding boxes of the index stay those of the geometry).
    */
-  private maxFeatureReachPx(orderedFeatures: Feature[]): number {
+  private maxFeatureReachPx(features: readonly Feature[]): number {
     let max = 0;
     let lastType: string | undefined;
     let reachOf: ((feature: Feature) => number) | undefined;
-    for (const feature of orderedFeatures) {
+    for (const feature of features) {
       if (feature.type !== lastType) {
         lastType = feature.type;
         const strategy = this.registry.get(feature.type);
@@ -339,125 +442,55 @@ export class HitTestServiceImpl implements HitTestService {
   /**
    * Returns the frontmost hit in the visual stacking order
    *
-   * The arbitration walks the indices of orderedFeatures in descending order (from the
-   * front) and takes the first feature that satisfies test(). The distance is not used (the
-   * visual stacking order is the only order: a point on top of a polygon wins, and a
-   * polygon in front occludes a point behind it).
+   * The arbitration takes, among the features hit, the one in front in the stacking order. The
+   * distance is not used (the visual stacking order is the only order: a point on top of a
+   * polygon wins, and a polygon in front occludes a point behind it).
    */
-  hitTest(
-    screenPoint: ScreenPoint,
-    unproject: UnprojectFunction,
-    orderedFeatures: Feature[],
-  ): HitTestResult | null {
-    const results = this.hitTestAll(screenPoint, unproject, orderedFeatures);
+  hitTest(screenPoint: ScreenPoint, unproject: UnprojectFunction): HitTestResult | null {
+    const results = this.hitTestAll(screenPoint, unproject);
     if (results.length === 0) return null;
     if (results.length === 1) return results[0];
 
     const byId = new Map(results.map((r) => [r.feature.id, r]));
-    for (let i = orderedFeatures.length - 1; i >= 0; i--) {
-      const result = byId.get(orderedFeatures[i].id);
+    const inOrder = this.store.listShownInOrder(byId.keys()).ids;
+    for (let i = inOrder.length - 1; i >= 0; i--) {
+      const result = byId.get(inOrder[i]);
       if (result) return result;
     }
 
-    // The candidates are narrowed down from orderedFeatures, so this is never reached
-    // (a safety net)
+    // Every result is a feature shown, so this is never reached (a safety net)
     return results[0];
   }
 
-  hitTestAll(
-    screenPoint: ScreenPoint,
-    unproject: UnprojectFunction,
-    orderedFeatures: Feature[],
-  ): HitTestResult[] {
-    const lngLat = unproject(screenPoint);
-    const coordinate: Coordinate = [lngLat.lng, lngLat.lat];
+  hitTestAll(screenPoint: ScreenPoint, unproject: UnprojectFunction): HitTestResult[] {
+    const query = this.queryAt(screenPoint, unproject, this.maxPointReachPx());
 
-    // The tolerance is a screen length. It is converted into degrees of longitude at the
-    // click latitude by measuring the ground length of clickTolerancePx pixels, so it does not
-    // depend on the bearing (see local-frame.ts)
-    const tolerance = this.options.clickTolerancePx;
-    const toleranceLngLat = toleranceDegrees(unproject, screenPoint, tolerance);
-
-    // Stage 1: narrow down the candidates with the spatial index.
-    // The search radius is widened by the registered extra reach
-    // (registerCandidateReach). Unlike the approach of baking the appearance into the bbox
-    // of the index, this does not depend on the state or the zoom. The tolerance passed to
-    // the second stage is toleranceLngLat as before, widened only by the reach of a strategy
-    // (the marker of a point); the registered reach widens only the candidate set.
-    // The degrees per CSS pixel at the click, measured once and only when needed (from the
-    // tolerance already converted, or from one pixel when the tolerance is 0)
-    let degPerPxMemo: number | undefined;
-    const degPerPx = (): number => {
-      degPerPxMemo ??=
-        tolerance > 0 ? toleranceLngLat / tolerance : toleranceDegrees(unproject, screenPoint, 1);
-      return degPerPxMemo;
-    };
-    const searchRadius = this.expandSearchRadius(toleranceLngLat, degPerPx, orderedFeatures);
-    // The click on each copy of the world it can reach (the stored copy alone away from the
-    // antimeridian; local-frame.ts)
-    const copies = clickCopies(coordinate, searchRadius);
-    const candidatesByCopy = copies.map(
-      (copy) => new Set(this.spatialIndex.findNear(copy, searchRadius)),
-    );
-    const isCandidate = (id: string): boolean => candidatesByCopy.some((set) => set.has(id));
-
-    // Filter down to the visible features only.
+    // The candidates the features shown, in stacking order: only they are made.
     // A lock forbids interaction, not selection, so nothing is excluded here for it
     // (a locked feature can still be selected, and moving / transforming / deleting it is
     // rejected on the interaction side).
-    // Hidden features (visible=false on the feature / layer / group) are not drawn, so they
-    // are excluded from the selection targets.
-    // Layers and groups are looked up only once per container (not once per feature).
-    const selectable = createVisibilityLookup(this.store);
-    const visibleCandidates = orderedFeatures.filter((f) => {
-      if (!isCandidate(f.id)) return false;
-      return selectable(f);
-    });
+    // Hidden features (visible=false on the feature / layer / group, or hidden by this client)
+    // are not drawn, so they are excluded from the selection targets, as are the features of a
+    // layer off the stacking order
+    const candidates = new Set<string>();
+    for (const set of query.candidatesByCopy) for (const id of set) candidates.add(id);
+    const shown = candidates.size > 0 ? this.store.listShownInOrder(candidates).ids : [];
 
     // Symbols (points) are tested in screen space. This works only while the terrain is
     // enabled; when it is disabled null is returned and the conventional path is used as
     // before.
-    const screen = this.hitTestAnchorsInScreenSpace(
+    const screen = this.screenHitsOfShownPoints(
       screenPoint,
-      orderedFeatures,
-      tolerance,
-      tolerance > 0 ? toleranceLngLat / tolerance : 0,
-      selectable,
+      query.coordinate,
+      query.tolerancePx,
+      query.tolerancePx > 0 ? query.toleranceLngLat / query.tolerancePx : 0,
     );
 
     // Stage 2: the precise test
     const results: HitTestResult[] = screen ? [...screen.results] : [];
-
-    for (const feature of visibleCandidates) {
-      // Types already tested in screen space are not sent down the longitude/latitude path
-      // (they would be added twice)
-      if (screen?.handledTypes.has(feature.type)) continue;
-      const strategy = this.registry.get(feature.type);
-      if (!strategy) continue;
-
-      // The feature is tested against the click on each copy it is a candidate of, and the
-      // nearest hit counts. It is tested in the shape it is drawn with (the result keeps the
-      // stored feature)
-      const shape = this.drawnShape(feature);
-      // What is drawn beyond the geometry (the marker of a point) is hit as well
-      const reachPx = strategy.reachPx?.(feature) ?? 0;
-      const featureTolerance =
-        reachPx > 0 ? toleranceLngLat + reachPx * degPerPx() : toleranceLngLat;
-      let best: number | null = null;
-      for (let i = 0; i < copies.length; i++) {
-        if (!candidatesByCopy[i].has(feature.id)) continue;
-        const copy = copies[i];
-        let distance: number | null = null;
-        // A strategy that has testDistance finishes the test and the distance computation in
-        // a single scan
-        if (strategy.testDistance) {
-          distance = strategy.testDistance(shape, copy, featureTolerance);
-        } else if (strategy.test(shape, copy, featureTolerance)) {
-          distance = strategy.distance(shape, copy);
-        }
-        if (distance !== null && (best === null || distance < best)) best = distance;
-      }
-      if (best !== null) results.push({ feature, distance: best });
+    for (const id of shown) {
+      const feature = this.store.getFeature(id);
+      if (feature) this.testCandidate(feature, query, screen?.handledTypes, results);
     }
 
     // Sort by distance
@@ -466,14 +499,88 @@ export class HitTestServiceImpl implements HitTestService {
     return results;
   }
 
+  hitTestFeatures(
+    screenPoint: ScreenPoint,
+    unproject: UnprojectFunction,
+    features: readonly Feature[],
+  ): HitTestResult[] {
+    const query = this.queryAt(screenPoint, unproject, this.maxFeatureReachPx(features));
+    const isCandidate = (id: string): boolean => query.candidatesByCopy.some((set) => set.has(id));
+
+    // Filter down to the visible features only (a lock is not looked at, as in hitTestAll).
+    // Layers and groups are looked up only once per container (not once per feature).
+    const selectable = createVisibilityLookup(this.store);
+    const visibleCandidates = features.filter((f) => isCandidate(f.id) && selectable(f));
+
+    const screen = this.screenHitsOfFeatures(
+      screenPoint,
+      features,
+      query.tolerancePx,
+      query.tolerancePx > 0 ? query.toleranceLngLat / query.tolerancePx : 0,
+      selectable,
+    );
+
+    const results: HitTestResult[] = screen ? [...screen.results] : [];
+    for (const feature of visibleCandidates) {
+      this.testCandidate(feature, query, screen?.handledTypes, results);
+    }
+    results.sort((a, b) => a.distance - b.distance);
+    return results;
+  }
+
   /**
-   * Tests the anchors of the symbols in screen coordinates
+   * Tests a candidate with the strategy of its type, against the click on each copy of the world
+   * it is a candidate of, and adds it to the results when it is hit (the nearest hit counts)
+   *
+   * @param handledTypes The types already tested in screen space, which are not sent down the
+   *   longitude/latitude path (they would be added twice)
+   */
+  private testCandidate(
+    feature: Feature,
+    query: HitQuery,
+    handledTypes: ReadonlySet<string> | undefined,
+    results: HitTestResult[],
+  ): void {
+    if (handledTypes?.has(feature.type)) return;
+    const strategy = this.registry.get(feature.type);
+    if (!strategy) return;
+
+    // It is tested in the shape it is drawn with (the result keeps the stored feature)
+    const shape = this.drawnShape(feature);
+    // What is drawn beyond the geometry (the marker of a point) is hit as well
+    const reachPx = strategy.reachPx?.(feature) ?? 0;
+    const featureTolerance =
+      reachPx > 0 ? query.toleranceLngLat + reachPx * query.degPerPx() : query.toleranceLngLat;
+    let best: number | null = null;
+    for (let i = 0; i < query.copies.length; i++) {
+      if (!query.candidatesByCopy[i].has(feature.id)) continue;
+      const copy = query.copies[i];
+      let distance: number | null = null;
+      // A strategy that has testDistance finishes the test and the distance computation in
+      // a single scan
+      if (strategy.testDistance) {
+        distance = strategy.testDistance(shape, copy, featureTolerance);
+      } else if (strategy.test(shape, copy, featureTolerance)) {
+        distance = strategy.distance(shape, copy);
+      }
+      if (distance !== null && (best === null || distance < best)) best = distance;
+    }
+    if (best !== null) results.push({ feature, distance: best });
+  }
+
+  /**
+   * Tests the anchors of the points shown in screen coordinates
    *
    * The candidates are the points that fall within the field of view. Occluded points are
    * candidates too (they are drawn without a depth test and are actually visible). The
    * spatial index is not used: as long as the longitude/latitude obtained by unprojecting
    * the click point lands on the terrain surface in front, nearness in longitude/latitude
    * does not agree with nearness on screen.
+   *
+   * The positions are read from the rows and projected without the features being made; only a
+   * point whose anchor falls within the tolerance and the reach no marker goes beyond is made, and
+   * tested as its own marker reaches. While the terrain is disabled the projection of the click
+   * itself is null (nothing at all is projected then), and no point is read.
    *
    * The distance is converted back into a longitude difference so that it can be lined up
    * with the other results (it is multiplied by the longitude difference per screen pixel).
@@ -482,9 +589,62 @@ export class HitTestServiceImpl implements HitTestService {
    * @returns null when the anchor projection is unusable (it falls back to the conventional
    *   path)
    */
-  private hitTestAnchorsInScreenSpace(
+  private screenHitsOfShownPoints(
     screenPoint: ScreenPoint,
-    orderedFeatures: Feature[],
+    coordinate: Coordinate,
+    tolerancePx: number,
+    degPerPx: number,
+  ): { results: HitTestResult[]; handledTypes: ReadonlySet<string> } | null {
+    const projector = this.anchorScreen;
+    // While the terrain is disabled nothing projects, the click itself included
+    if (!projector?.project(coordinate)) return null;
+
+    const points = this.store.listShownPoints();
+    const markerReachPx = this.maxPointReachPx();
+    const results: HitTestResult[] = [];
+    let usable = false;
+    const position: Coordinate = [0, 0];
+
+    for (let k = 0; k < points.types.length; k++) {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (let p = points.starts[k]; p < points.starts[k + 1]; p++) {
+        position[0] = points.coordinates[p * 2];
+        position[1] = points.coordinates[p * 2 + 1];
+        const point = projector.project(position);
+        // null means the anchor projection is unusable (the terrain is disabled, or the
+        // point is behind the camera). In the former case nothing at all is projected, so
+        // this whole path is not used.
+        if (!point) continue;
+        usable = true;
+        const distance = Math.hypot(point.x - screenPoint.x, point.y - screenPoint.y);
+        if (distance < nearest) nearest = distance;
+      }
+      const type = points.types[k];
+      if (!(nearest <= tolerancePx + this.candidateReachPx(type) + markerReachPx)) continue;
+
+      const feature = this.store.getFeature(points.idOf(k));
+      if (!feature) continue;
+      const reachPx =
+        tolerancePx +
+        this.candidateReachPx(feature.type) +
+        (this.registry.get(feature.type)?.reachPx?.(feature) ?? 0);
+      if (nearest <= reachPx) results.push({ feature, distance: nearest * degPerPx });
+    }
+
+    if (!usable) return null;
+    return { results, handledTypes: SCREEN_SPACE_TYPES };
+  }
+
+  /**
+   * Tests the anchors of the symbols among the features given in screen coordinates, as
+   * {@link screenHitsOfShownPoints} tests those shown
+   *
+   * @returns null when the anchor projection is unusable (it falls back to the conventional
+   *   path)
+   */
+  private screenHitsOfFeatures(
+    screenPoint: ScreenPoint,
+    features: readonly Feature[],
     tolerancePx: number,
     degPerPx: number,
     selectable: VisibilityLookup,
@@ -495,7 +655,7 @@ export class HitTestServiceImpl implements HitTestService {
     const results: HitTestResult[] = [];
     let usable = false;
 
-    for (const feature of orderedFeatures) {
+    for (const feature of features) {
       if (!SCREEN_SPACE_TYPES.has(feature.type)) continue;
       if (!selectable(feature)) continue;
 
@@ -511,9 +671,6 @@ export class HitTestServiceImpl implements HitTestService {
       let nearest = Number.POSITIVE_INFINITY;
       for (const coord of parts) {
         const point = projector.project(coord);
-        // null means the anchor projection is unusable (the terrain is disabled, or the
-        // point is behind the camera). In the former case nothing at all is projected, so
-        // this whole path is not used.
         if (!point) continue;
         usable = true;
         const distance = Math.hypot(point.x - screenPoint.x, point.y - screenPoint.y);

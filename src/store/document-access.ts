@@ -502,6 +502,61 @@ export interface DocumentBoxes {
     boxes: readonly BoundingBox[],
     decided: (type: string) => boolean,
   ): SelectableRows;
+  /**
+   * The features of the IDs given that are shown, in stacking order from the back, read without
+   * the features being made: the features `listFeaturesInOrder` lists, in its order, without
+   * those whose own visible flag, or that of their group or their layer, is off, and those this
+   * client hides. The features of a layer off the stacking order are left out; locked ones are
+   * not. An ID that names no feature is left out
+   *
+   * @param ids - The features asked about (the candidates the spatial index found, say)
+   */
+  listShownInOrder(ids: Iterable<string>): ShownInOrder;
+  /**
+   * Every feature of the type `Point` or `MultiPoint` that is shown (as `listShownInOrder` reads
+   * them), in stacking order from the back, with its positions, read as columns without the
+   * features being made
+   */
+  listShownPoints(): ShownPoints;
+  /**
+   * The largest radius (`pointRadius`) and the largest width of the outline (`pointStrokeWidth`)
+   * the styles of the features of the type `Point` or `MultiPoint` name, each a finite number
+   * (0 when none names one): no point names more. They are read from every row when first asked
+   * for, raised by the rows written afterwards and never lowered (so they may be larger than what
+   * the points name now), and read again after the whole document is replaced
+   */
+  largestPointMarker(): PointMarkerExtent;
+}
+
+/** The features shown, in stacking order (see `DocumentBoxes.listShownInOrder`) */
+export interface ShownInOrder {
+  /** Their IDs, in stacking order from the back */
+  readonly ids: readonly string[];
+  /** The layer of each, entry `k` for `ids[k]` */
+  readonly layerIds: readonly string[];
+}
+
+/** The points shown, with their positions (see `DocumentBoxes.listShownPoints`) */
+export interface ShownPoints {
+  /** The type of each point, in stacking order from the back */
+  readonly types: readonly string[];
+  /**
+   * Where the positions of each point start in `coordinates`, in positions: one more entry than
+   * there are points, so those of point `k` are from `starts[k]` to `starts[k + 1]`
+   */
+  readonly starts: Int32Array;
+  /** The longitude and the latitude of every position, in degrees, one pair after the other */
+  readonly coordinates: Float64Array;
+  /** The ID of point `k` */
+  idOf(k: number): string;
+}
+
+/** The largest marker the points name (see `DocumentBoxes.largestPointMarker`) */
+export interface PointMarkerExtent {
+  /** The largest `pointRadius`, in CSS pixels */
+  readonly radius: number;
+  /** The largest `pointStrokeWidth`, in CSS pixels */
+  readonly strokeWidth: number;
 }
 
 /** The rows a box can select (see `listSelectableRows`) */

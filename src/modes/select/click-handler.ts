@@ -29,7 +29,6 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { hasVertexRef, isSameVertexRef } from '../../shared/utils/vertex-ref.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Selection } from '../../store/types.js';
 import { notifyFeatureCompanionClick } from '../../view/feature-companion.js';
 import { hitTestHandles } from '../../view/ui/handle-test.js';
@@ -74,10 +73,9 @@ export function handleSelectDoubleClick(
   if (context.plugins?.isPluginInteracting()) return;
 
   const { store } = context;
-  const orderedFeatures = getDisplayFeatures(store);
 
   // Store features are not grabbed when a dataset is in the foreground
-  const top = context.hitTestTopmost(event.point, { orderedFeatures });
+  const top = context.hitTestTopmost(event.point);
   if (top?.kind !== 'store') return;
   event.originalEvent.preventDefault();
 
@@ -190,9 +188,7 @@ function handleFeatureClick(
   finishedInteraction: boolean,
 ): void {
   const { store } = context;
-  const orderedFeatures = getDisplayFeatures(store);
-
-  let top = context.hitTestTopmost(event.point, { orderedFeatures });
+  let top = context.hitTestTopmost(event.point);
 
   // A feature companion is in the foreground: the provider receives the click. When it consumes
   // it, core changes the selection in no way at all (not even clearing it as an empty click

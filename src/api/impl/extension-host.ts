@@ -280,7 +280,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       return tester(point);
     },
     distanceToFeaturePx(feature, point) {
-      const hit = context.hitTestService.hitTestAll(point, unproject, [feature])[0];
+      const hit = context.hitTestService.hitTestFeatures(point, unproject, [feature])[0];
       if (!hit) return 0;
       const onePixel = Math.abs(
         unproject({ x: point.x + 1, y: point.y }).lng - unproject(point).lng,

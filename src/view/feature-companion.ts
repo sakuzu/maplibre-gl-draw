@@ -37,7 +37,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import type { MouseNormalizedEvent } from '../dispatcher/types.js';
 import type { FrameDrawContext } from '../extension/index.js';
 import type { LngLat, ScreenPoint } from '../shared/math/index.js';
-import type { Coordinate, Feature, Layer } from '../store/types.js';
+import type { Coordinate, Feature, Layer, StoreChange } from '../store/types.js';
 
 /**
  * A hit on a companion, as returned by {@link FeatureCompanionProvider.hitTest}.
@@ -187,7 +187,36 @@ export interface FeatureCompanionRegistry {
   clear(): void;
   /** Whether there is a provider that has companions for this feature */
   has(feature: Feature): boolean;
+  /**
+   * The features of a document that have companions (those `has` is true of), by their IDs:
+   * the providers are asked of every feature when the features are first asked for, when a
+   * provider comes or goes and when the whole document is replaced, and of a feature alone when
+   * it is created or changes. Empty while no provider is registered (the document is then not
+   * followed)
+   *
+   * Only one document is followed at a time: the one of the instance.
+   */
+  holdersIn(document: CompanionDocument): ReadonlyMap<string, Feature>;
 }
+
+/**
+ * The reads of a document the features that have companions are followed in
+ * (`FeatureCompanionRegistry.holdersIn`)
+ */
+export interface CompanionDocument {
+  /** Every feature, each made as the iterator reaches it */
+  iterateFeatures(): Iterable<Feature>;
+  /**
+   * Calls the listener with each change of the document: the features created, changed and
+   * deleted, and whether the whole document was replaced
+   *
+   * @returns The function that stops
+   */
+  subscribe(listener: (change: StoreChange) => void): () => void;
+}
+
+/** The features that have companions in no document */
+const NO_HOLDERS: ReadonlyMap<string, Feature> = new Map();
 
 /**
  * Creates an empty {@link FeatureCompanionRegistry}, for testing a provider in isolation.
@@ -198,6 +227,51 @@ export interface FeatureCompanionRegistry {
 export function createFeatureCompanionRegistry(): FeatureCompanionRegistry {
   const providers = new Map<string, FeatureCompanionProvider>();
   let generation = 0;
+
+  const has = (feature: Feature): boolean => {
+    if (providers.size === 0) return false;
+    for (const provider of providers.values()) {
+      if (provider.has(feature)) return true;
+    }
+    return false;
+  };
+
+  /**
+   * The document followed, and its features that have companions as the providers of the
+   * generation `askedAt` answered (-1: to be asked of every feature again)
+   */
+  let followed: {
+    document: CompanionDocument;
+    holders: Map<string, Feature>;
+    askedAt: number;
+    stop: () => void;
+  } | null = null;
+
+  const stopFollowing = (): void => {
+    followed?.stop();
+    followed = null;
+  };
+
+  /** Asks the providers again of the features a change of the document created or changed */
+  const follow = (change: StoreChange): void => {
+    const now = followed;
+    if (!now || now.askedAt !== generation) return;
+    if (change.reset) {
+      now.askedAt = -1;
+      return;
+    }
+    const features = change.features;
+    if (!features) return;
+    for (const feature of features.deleted ?? []) now.holders.delete(feature.id);
+    for (const feature of features.created ?? []) {
+      if (has(feature)) now.holders.set(feature.id, feature);
+      else now.holders.delete(feature.id);
+    }
+    for (const { id, feature } of features.updated ?? []) {
+      if (has(feature)) now.holders.set(id, feature);
+      else now.holders.delete(id);
+    }
+  };
 
   return {
     register(provider: FeatureCompanionProvider): () => void {
@@ -218,17 +292,34 @@ export function createFeatureCompanionRegistry(): FeatureCompanionRegistry {
     generation: () => generation,
 
     clear(): void {
+      stopFollowing();
       if (providers.size === 0) return;
       providers.clear();
       generation++;
     },
 
-    has(feature: Feature): boolean {
-      if (providers.size === 0) return false;
-      for (const provider of providers.values()) {
-        if (provider.has(feature)) return true;
+    has,
+
+    holdersIn(document: CompanionDocument): ReadonlyMap<string, Feature> {
+      if (providers.size === 0) {
+        stopFollowing();
+        return NO_HOLDERS;
       }
-      return false;
+      if (followed?.document !== document) {
+        stopFollowing();
+        const holders = new Map<string, Feature>();
+        followed = { document, holders, askedAt: -1, stop: () => {} };
+        followed.stop = document.subscribe(follow);
+      }
+      const now = followed;
+      if (now.askedAt !== generation) {
+        now.holders.clear();
+        for (const feature of document.iterateFeatures()) {
+          if (has(feature)) now.holders.set(feature.id, feature);
+        }
+        now.askedAt = generation;
+      }
+      return now.holders;
     },
   };
 }

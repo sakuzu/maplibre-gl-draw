@@ -265,16 +265,15 @@ describe('the short circuit when there is no dataset', () => {
   });
 });
 
-describe('passing orderedFeatures in', () => {
-  it('uses the list that was passed in as it is (it does not fetch from the Store again)', () => {
+describe('the features of the Store read for the walk', () => {
+  it('reads the features shown from the Store itself', () => {
     createLayer('l1');
     createFeature(polygon('f1', 'l1'));
     putDataset('below', 'belowLayers');
 
-    const orderedFeatures = [store.getFeature('f1') as Feature];
-    const top = createTester()(CENTER, { orderedFeatures });
+    const top = createTester()(CENTER);
 
-    expect(top).toEqual({ kind: 'store', feature: orderedFeatures[0] });
+    expect(top).toEqual({ kind: 'store', feature: store.getFeature('f1') as Feature });
   });
 });
 

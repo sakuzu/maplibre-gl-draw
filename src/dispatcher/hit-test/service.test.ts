@@ -104,9 +104,9 @@ describe('the arbitration of HitTestService (the order takes priority)', () => {
     // A point is placed at the same position as the center of the polygon. With the
     // distance taking priority the point would always win, but here "the front one wins"
     // is confirmed by swapping the order of the polygon and the point.
-    const ordered = load([polygon('poly', [square(0, 0, 10)]), point('pt', [5, 5])]);
+    load([polygon('poly', [square(0, 0, 10)]), point('pt', [5, 5])]);
 
-    const hit = service.hitTest({ x: 50, y: -50 }, unproject, ordered);
+    const hit = service.hitTest({ x: 50, y: -50 }, unproject);
 
     expect(hit?.feature.id).toBe('pt');
   });
@@ -114,9 +114,9 @@ describe('the arbitration of HitTestService (the order takes priority)', () => {
   it('a polygon in front occludes a point behind it', () => {
     // The point is behind (earlier in the array), so the polygon wins. Formerly, with the
     // distance taking priority, the point at distance 0 from the center won.
-    const ordered = load([point('pt', [5, 5]), polygon('poly', [square(0, 0, 10)])]);
+    load([point('pt', [5, 5]), polygon('poly', [square(0, 0, 10)])]);
 
-    const hit = service.hitTest({ x: 50, y: -50 }, unproject, ordered);
+    const hit = service.hitTest({ x: 50, y: -50 }, unproject);
 
     expect(hit?.feature.id).toBe('poly');
   });
@@ -125,29 +125,29 @@ describe('the arbitration of HitTestService (the order takes priority)', () => {
     // A polygon with an outer ring of 0..10 and a hole of 3..7 is laid on top of the
     // polygon behind it
     const holed = polygon('holed', [square(0, 0, 10), square(3, 3, 4)]);
-    const ordered = load([polygon('back', [square(0, 0, 10)]), holed]);
+    load([polygon('back', [square(0, 0, 10)]), holed]);
 
     // Inside the hole (5,5) the click passes through the polygon in front and hits the one
     // behind
-    expect(service.hitTest({ x: 50, y: -50 }, unproject, ordered)?.feature.id).toBe('back');
+    expect(service.hitTest({ x: 50, y: -50 }, unproject)?.feature.id).toBe('back');
     // Outside the hole (1,1) it hits the polygon in front
-    expect(service.hitTest({ x: 10, y: -10 }, unproject, ordered)?.feature.id).toBe('holed');
+    expect(service.hitTest({ x: 10, y: -10 }, unproject)?.feature.id).toBe('holed');
   });
 
   it('the front one wins among overlapping polygons (it follows a reordering)', () => {
     const ordered = load([polygon('a', [square(0, 0, 10)]), polygon('b', [square(0, 0, 10)])]);
 
-    expect(service.hitTest({ x: 50, y: -50 }, unproject, ordered)?.feature.id).toBe('b');
+    expect(service.hitTest({ x: 50, y: -50 }, unproject)?.feature.id).toBe('b');
 
     // Swapping the visual order swaps the result as well
-    const reversed = [ordered[1], ordered[0]];
-    expect(service.hitTest({ x: 50, y: -50 }, unproject, reversed)?.feature.id).toBe('a');
+    store.moveFeatures([ordered[0].id], { kind: 'layer', layerId: 'l1' });
+    expect(service.hitTest({ x: 50, y: -50 }, unproject)?.feature.id).toBe('a');
   });
 
   it('returns null when there is no hit', () => {
-    const ordered = load([polygon('poly', [square(0, 0, 10)])]);
+    load([polygon('poly', [square(0, 0, 10)])]);
 
-    expect(service.hitTest({ x: 500, y: -500 }, unproject, ordered)).toBeNull();
+    expect(service.hitTest({ x: 500, y: -500 }, unproject)).toBeNull();
   });
 });
 
@@ -169,12 +169,12 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
 
   it('keeps the search at clickTolerancePx when unregistered, so a far point misses it', () => {
     service.registerStrategy(wideStrategy);
-    const ordered = load([point('pt', [5, 5])]);
+    load([point('pt', [5, 5])]);
     const findNear = vi.spyOn(spatialIndex, 'findNear');
 
     // 20px (= 2 degrees) to the right of the center. It is inside the test area
     // (3 degrees), but it does not make it into the candidates
-    expect(service.hitTest({ x: 70, y: -50 }, unproject, ordered)).toBeNull();
+    expect(service.hitTest({ x: 70, y: -50 }, unproject)).toBeNull();
     // The search radius stays at toleranceLngLat (5px = 0.5 degrees) as before
     expect(findNear.mock.calls[0][0]).toEqual([7, 5]);
     expect(findNear.mock.calls[0][1]).toBeCloseTo(0.5, 10);
@@ -183,10 +183,10 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
   it('widens the search when a reach is registered, so even a far point reaches it', () => {
     service.registerStrategy(wideStrategy);
     service.registerCandidateReach('Point', 40);
-    const ordered = load([point('pt', [5, 5])]);
+    load([point('pt', [5, 5])]);
     const findNear = vi.spyOn(spatialIndex, 'findNear');
 
-    expect(service.hitTest({ x: 70, y: -50 }, unproject, ordered)?.feature.id).toBe('pt');
+    expect(service.hitTest({ x: 70, y: -50 }, unproject)?.feature.id).toBe('pt');
     // 0.5 degrees (5px) + 40px x 0.1 degrees/px = 4.5 degrees
     expect(findNear.mock.calls[0][1]).toBeCloseTo(4.5, 10);
   });
@@ -195,33 +195,33 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
     service.registerStrategy(wideStrategy);
     let reach = 0;
     service.registerCandidateReach('Point', () => reach);
-    const ordered = load([point('pt', [5, 5])]);
+    load([point('pt', [5, 5])]);
 
-    expect(service.hitTest({ x: 70, y: -50 }, unproject, ordered)).toBeNull();
+    expect(service.hitTest({ x: 70, y: -50 }, unproject)).toBeNull();
 
     reach = 40;
-    expect(service.hitTest({ x: 70, y: -50 }, unproject, ordered)?.feature.id).toBe('pt');
+    expect(service.hitTest({ x: 70, y: -50 }, unproject)?.feature.id).toBe('pt');
   });
 
   it('widens only the candidates; the semantics of a hit are up to the strategy', () => {
     service.registerStrategy(wideStrategy);
     service.registerCandidateReach('Point', 200);
-    const ordered = load([point('pt', [5, 5])]);
+    load([point('pt', [5, 5])]);
     const findNear = vi.spyOn(spatialIndex, 'findNear');
 
     // 100px (= 10 degrees) to the right of the center. It makes it into the candidates, but
     // it is outside the test area (3 degrees)
-    expect(service.hitTest({ x: 150, y: -50 }, unproject, ordered)).toBeNull();
+    expect(service.hitTest({ x: 150, y: -50 }, unproject)).toBeNull();
     expect(findNear.mock.calls[0][1]).toBeCloseTo(20.5, 10);
   });
 
   it('queries once with the single maximum when several types are registered', () => {
     service.registerCandidateReach('Point', 10);
     service.registerCandidateReach('Marker', 64);
-    const ordered = load([point('pt', [5, 5])]);
+    load([point('pt', [5, 5])]);
     const findNear = vi.spyOn(spatialIndex, 'findNear');
 
-    service.hitTestAll({ x: 50, y: -50 }, unproject, ordered);
+    service.hitTestAll({ x: 50, y: -50 }, unproject);
 
     // 0.5 degrees + 64px x 0.1 degrees/px = 6.9 degrees
     expect(findNear.mock.calls[0][1]).toBeCloseTo(6.9, 10);
@@ -230,30 +230,30 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
 
 describe('the marker of a point (pointMarkerReachPx)', () => {
   /** A service whose points are drawn with a marker reaching `reach` px from the position */
-  function withMarker(reach: (feature: Feature) => number): HitTestServiceImpl {
+  function withMarker(reach: (feature: Feature) => number, maxReach: number): HitTestServiceImpl {
     return new HitTestServiceImpl(store, spatialIndex, {
       clickTolerancePx: 5,
-      pointMarkerReachPx: reach,
+      pointMarker: { reachPx: reach, maxReachPx: () => maxReach },
     });
   }
 
   it('hits a point anywhere on its marker, with the tolerance around it', () => {
-    const marked = withMarker(() => 8);
-    const ordered = load([point('pt', [5, 5])]);
+    const marked = withMarker(() => 8, 8);
+    load([point('pt', [5, 5])]);
     const findNear = vi.spyOn(spatialIndex, 'findNear');
 
     // 12px from the position: on the marker (8px) with the tolerance (5px), and beyond the
     // tolerance alone
-    expect(marked.hitTest({ x: 62, y: -50 }, unproject, ordered)?.feature.id).toBe('pt');
-    expect(service.hitTest({ x: 62, y: -50 }, unproject, ordered)).toBeNull();
+    expect(marked.hitTest({ x: 62, y: -50 }, unproject)?.feature.id).toBe('pt');
+    expect(service.hitTest({ x: 62, y: -50 }, unproject)).toBeNull();
     // 14px: beyond both
-    expect(marked.hitTest({ x: 64, y: -50 }, unproject, ordered)).toBeNull();
+    expect(marked.hitTest({ x: 64, y: -50 }, unproject)).toBeNull();
     // The candidates are searched as far: 0.5 degrees + 8px x 0.1 degrees/px
     expect(findNear.mock.calls[0][1]).toBeCloseTo(1.3, 10);
   });
 
   it('follows the marker of each feature, and reaches every part of a MultiPoint', () => {
-    const marked = withMarker((feature) => (feature.id === 'big' ? 30 : 8));
+    const marked = withMarker((feature) => (feature.id === 'big' ? 30 : 8), 30);
     const multi: Feature = {
       ...point('multi', [0, 0]),
       type: 'MultiPoint',
@@ -265,33 +265,33 @@ describe('the marker of a point (pointMarkerReachPx)', () => {
         ],
       },
     };
-    const ordered = load([point('big', [5, 5]), multi]);
+    load([point('big', [5, 5]), multi]);
 
-    expect(marked.hitTest({ x: 80, y: -50 }, unproject, ordered)?.feature.id).toBe('big');
-    expect(marked.hitTest({ x: 212, y: 0 }, unproject, ordered)?.feature.id).toBe('multi');
+    expect(marked.hitTest({ x: 80, y: -50 }, unproject)?.feature.id).toBe('big');
+    expect(marked.hitTest({ x: 212, y: 0 }, unproject)?.feature.id).toBe('multi');
   });
 
   it('leaves the test of one feature (the path of the datasets) and a replaced strategy as they were', () => {
-    const marked = withMarker(() => 8);
+    const marked = withMarker(() => 8, 8);
     const ordered = load([point('pt', [5, 5])]);
 
     // 1 degree = 10px from the position, with the tolerance of 5px in degrees
     expect(marked.hitTestFeature(ordered[0], [6, 5], 0.5)).toBe(false);
 
     marked.registerStrategy(new PointHitTestStrategy());
-    expect(marked.hitTest({ x: 62, y: -50 }, unproject, ordered)).toBeNull();
+    expect(marked.hitTest({ x: 62, y: -50 }, unproject)).toBeNull();
   });
 
   it('widens the screen space test of the symbols by the marker as well', () => {
     const marked = new HitTestServiceImpl(store, spatialIndex, {
       clickTolerancePx: 5,
-      pointMarkerReachPx: () => 8,
+      pointMarker: { reachPx: () => 8, maxReachPx: () => 8 },
       anchorScreen: { project: () => ({ x: 100, y: 0 }) },
     });
-    const ordered = load([point('pt', [10, 0])]);
+    load([point('pt', [10, 0])]);
 
-    expect(marked.hitTestAll({ x: 112, y: 0 }, unproject, ordered)).toHaveLength(1);
-    expect(marked.hitTestAll({ x: 114, y: 0 }, unproject, ordered)).toHaveLength(0);
+    expect(marked.hitTestAll({ x: 112, y: 0 }, unproject)).toHaveLength(1);
+    expect(marked.hitTestAll({ x: 114, y: 0 }, unproject)).toHaveLength(0);
   });
 });
 
@@ -312,7 +312,7 @@ describe('the single scan of hitTestAll', () => {
     service.registerStrategy(spy.strategy);
     const ordered = load([point('pt', [5, 5])]);
 
-    const results = service.hitTestAll({ x: 50, y: -50 }, unproject, ordered);
+    const results = service.hitTestAll({ x: 50, y: -50 }, unproject);
 
     expect(results).toEqual([{ feature: ordered[0], distance: 3 }]);
     expect(spy.testDistance).toHaveBeenCalledTimes(1);
@@ -324,9 +324,9 @@ describe('the single scan of hitTestAll', () => {
     const spy = createSpyStrategy('Point', true);
     spy.testDistance.mockReturnValue(null);
     service.registerStrategy(spy.strategy);
-    const ordered = load([point('pt', [5, 5])]);
+    load([point('pt', [5, 5])]);
 
-    expect(service.hitTestAll({ x: 50, y: -50 }, unproject, ordered)).toEqual([]);
+    expect(service.hitTestAll({ x: 50, y: -50 }, unproject)).toEqual([]);
     expect(spy.distance).not.toHaveBeenCalled();
   });
 
@@ -335,7 +335,7 @@ describe('the single scan of hitTestAll', () => {
     service.registerStrategy(spy.strategy);
     const ordered = load([point('pt', [5, 5])]);
 
-    const results = service.hitTestAll({ x: 50, y: -50 }, unproject, ordered);
+    const results = service.hitTestAll({ x: 50, y: -50 }, unproject);
 
     expect(results).toEqual([{ feature: ordered[0], distance: 3 }]);
     expect(spy.test).toHaveBeenCalledTimes(1);
@@ -368,7 +368,7 @@ describe('the single scan of hitTestAll', () => {
     ]);
 
     const screenPoint = { x: 50, y: -55 };
-    const results = service.hitTestAll(screenPoint, unproject, ordered);
+    const results = service.hitTestAll(screenPoint, unproject);
 
     // Build the expected value with the former implementation (the double scan of
     // test -> distance)
@@ -423,7 +423,7 @@ describe('the visibility lookup of HitTestService', () => {
     const getLayer = vi.spyOn(store, 'getLayer');
     const getGroup = vi.spyOn(store, 'getGroup');
 
-    const hits = service.hitTestAll({ x: 50, y: -50 }, unproject, ordered);
+    const hits = service.hitTestFeatures({ x: 50, y: -50 }, unproject, ordered);
 
     expect(hits.length).toBe(200);
     expect(getLayer).toHaveBeenCalledTimes(1);
@@ -431,10 +431,10 @@ describe('the visibility lookup of HitTestService', () => {
   });
 
   it('rebuilds the lookup per hit test (a visibility change affects the next one)', () => {
-    const ordered = load([point('pt', [5, 5])]);
-    expect(service.hitTest({ x: 50, y: -50 }, unproject, ordered)?.feature.id).toBe('pt');
+    load([point('pt', [5, 5])]);
+    expect(service.hitTest({ x: 50, y: -50 }, unproject)?.feature.id).toBe('pt');
     store.updateLayer('l1', { visible: false });
-    expect(service.hitTest({ x: 50, y: -50 }, unproject, ordered)).toBeNull();
+    expect(service.hitTest({ x: 50, y: -50 }, unproject)).toBeNull();
   });
 });
 
@@ -455,10 +455,10 @@ describe('cancelling the registrations', () => {
     const cancelReach = service.registerCandidateReach('Point', 40);
     service.registerCandidateReach('Point', 10);
     cancelReach();
-    const ordered = load([point('pt', [5, 5])]);
+    load([point('pt', [5, 5])]);
     const findNear = vi.spyOn(spatialIndex, 'findNear');
 
-    service.hitTestAll({ x: 50, y: -50 }, unproject, ordered);
+    service.hitTestAll({ x: 50, y: -50 }, unproject);
 
     // 0.5 degrees + 10px x 0.1 degrees/px
     expect(findNear.mock.calls[0][1]).toBeCloseTo(1.5, 10);

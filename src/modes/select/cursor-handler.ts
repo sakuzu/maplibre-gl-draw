@@ -16,7 +16,6 @@
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import {
   getCursorForHandle,
@@ -111,8 +110,7 @@ export function updateCursorForSelection(
   // When a dataset is in the foreground, the cursor becomes pointer only when it
   // can fire click / hover (interactive). Showing pointer for a dataset that merely occludes
   // would be a lie suggesting "it can be pressed".
-  const orderedFeatures = getDisplayFeatures(store);
-  const top = context.hitTestTopmost(event.point, { orderedFeatures });
+  const top = context.hitTestTopmost(event.point);
 
   canvas.style.cursor =
     top === null || (top.kind === 'dataset' && !top.dataset.interactive) ? 'default' : 'pointer';

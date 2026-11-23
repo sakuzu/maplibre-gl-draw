@@ -25,7 +25,6 @@ import type {
 } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG, type SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Mode, Selection } from '../../store/types.js';
 import { computeCombinedGeoBoundingBox, isPointInGeoBoundingBox } from '../../view/ui/bounds.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
@@ -169,7 +168,6 @@ export class SelectMode implements EngineModeHandler {
     // onClick, so it is unaffected. Shift box selection is already handled above.
     if (store.isInteractionLocked()) return false;
 
-    const orderedFeatures = getDisplayFeatures(store);
     const selectedFeatures = getSelectedFeatures(store);
     const transform = createCoordinateTransform(map, this.#context.anchorProjector);
 
@@ -243,7 +241,7 @@ export class SelectMode implements EngineModeHandler {
     // Feature hit test (unified z traversal)
     // Nothing is grabbed when a dataset is in the foreground. dragPan is also
     // left alive so that the map can be panned even from on top of the data.
-    const top = this.#context.hitTestTopmost(event.point, { orderedFeatures });
+    const top = this.#context.hitTestTopmost(event.point);
     if (top?.kind === 'store') {
       map.dragPan.disable();
       return true;
@@ -358,8 +356,7 @@ export class SelectMode implements EngineModeHandler {
     // When no handle was hit: select the feature -> move operation
     // When a dataset is in the foreground, nothing is grabbed and no drag is
     // started (dragPan is alive, so it becomes a map pan).
-    const orderedFeatures = getDisplayFeatures(store);
-    const top = this.#context.hitTestTopmost(dragStartPoint, { orderedFeatures });
+    const top = this.#context.hitTestTopmost(dragStartPoint);
     if (top?.kind !== 'store') return;
     const hitFeatureId = top.feature.id;
 

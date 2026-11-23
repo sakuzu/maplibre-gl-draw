@@ -50,7 +50,10 @@ import {
   type InstanceDocument,
   type ItemPosition,
   type MoveDestination,
+  type PointMarkerExtent,
   type SelectableRows,
+  type ShownInOrder,
+  type ShownPoints,
 } from '../../store/document-access.js';
 import { ClientState } from '../../store/memory/ui-state.js';
 import type {
@@ -388,6 +391,16 @@ const FEATURE_CACHE_LIMIT = FEATURES_KEPT;
 
 /** The prefix of the fields of the keys of the style of a row */
 const STYLE_FIELD = 'style:';
+
+/** The types of the features whose marker is drawn at their positions (`listShownPoints`) */
+const SCREEN_POINT_TYPES: ReadonlySet<string> = new Set(['Point', 'MultiPoint']);
+
+/** The fields of a row the size of the marker of a point is read from (`largestPointMarker`) */
+const MARKER_FIELDS: readonly FeatureRowField[] = [
+  'type',
+  'style:pointRadius',
+  'style:pointStrokeWidth',
+];
 
 /** The kind of an item of a layer: a row, or a group */
 const ROW_ITEM = 0;
@@ -1072,6 +1085,7 @@ export function createDocumentAccess(
    * the visible flag of the row and that of its group, and what this client hides, read from the
    * columns of the rows without the features being made (the layer itself is not looked at)
    *
+   * @param also - The fields read besides those the marks need, given back with them
    * @returns One entry per row: 1 for a row seen, 0 for one that is not
    */
   const markShownRows = (
@@ -1079,11 +1093,14 @@ export function createDocumentAccess(
     refs: Int32Array,
     hidden: { ids: ReadonlySet<string>; rows: ReadonlySet<number> | null },
     selectable: boolean,
+    also: readonly FeatureRowField[] = [],
   ): { marks: Uint8Array; fields: ReadonlyMap<FeatureRowField, readonly unknown[]> } => {
-    const fields = tables.readValues(
-      refs,
-      selectable ? ['visible', 'locked', 'parent', 'orderKey', 'type'] : ['visible', 'parent'],
-    ).fields;
+    const fields = tables.readValues(refs, [
+      ...(selectable
+        ? (['visible', 'locked', 'parent'] as const)
+        : (['visible', 'parent'] as const)),
+      ...also,
+    ]).fields;
     countWork(counts, 'objectsCreated');
     const visible = fields.get('visible') ?? [];
     const locked = fields.get('locked') ?? [];
@@ -1222,6 +1239,211 @@ export function createDocumentAccess(
   };
 
   /**
+   * The rows of one layer marked, in stacking order from the back, as the positions of each among
+   * the rows given: the items by their keys (a group at its place), then the features of a group
+   * by theirs, the IDs read only for keys that are equal (the order the layer holds its rows in)
+   *
+   * @param fields - The fields `parent` and `orderKey` of the rows given, as `markShownRows` read
+   *   them
+   */
+  const orderMarkedRows = (
+    layerId: string,
+    own: Int32Array,
+    marks: Uint8Array,
+    fields: ReadonlyMap<FeatureRowField, readonly unknown[]>,
+  ): Int32Array => {
+    const parents = fields.get('parent') ?? [];
+    const keys = fields.get('orderKey') ?? [];
+    let count = 0;
+    for (let k = 0; k < marks.length; k++) count += marks[k];
+    const order = new Int32Array(count);
+    let at = 0;
+    for (let k = 0; k < marks.length; k++) if (marks[k] === 1) order[at++] = k;
+    const groupKeys = new Map<string, string>();
+    const itemKeyOf = (k: number): string => {
+      const parent = parents[k] as string;
+      if (parent === layerId) return String(keys[k] ?? '');
+      let key = groupKeys.get(parent);
+      if (key === undefined) {
+        key = store.getGroup(parent)?.orderKey ?? '';
+        groupKeys.set(parent, key);
+      }
+      return key;
+    };
+    const itemIdOf = (k: number): string => {
+      const parent = parents[k] as string;
+      return parent === layerId ? (tables.getRowId(own[k]) ?? '') : parent;
+    };
+    order.sort((a, b) => {
+      const keyA = itemKeyOf(a);
+      const keyB = itemKeyOf(b);
+      if (keyA !== keyB) return compareKeys(keyA, keyB);
+      const byItem = compareKeys(itemIdOf(a), itemIdOf(b));
+      if (byItem !== 0 || parents[a] === layerId) return byItem;
+      const memberA = String(keys[a] ?? '');
+      const memberB = String(keys[b] ?? '');
+      if (memberA !== memberB) return compareKeys(memberA, memberB);
+      return compareKeys(tables.getRowId(own[a]) ?? '', tables.getRowId(own[b]) ?? '');
+    });
+    return order;
+  };
+
+  /**
+   * The features of the IDs given that are shown, in stacking order from the back, read from
+   * their rows without the features being made: those `listFeaturesInOrder` lists without the
+   * ones the visible flags or this client hide (the features of a layer off the stacking order
+   * are left out, locked ones are not)
+   */
+  const listShownInOrder = (ids: Iterable<string>): ShownInOrder => {
+    writePendingPlaces();
+    const refs = featureRowsOf(ids);
+    const hidden = hiddenNow();
+    const ordered = new Set(layerIdsInOrder(false));
+    const outIds: string[] = [];
+    const outLayers: string[] = [];
+    for (const part of rowsByLayer(refs)) {
+      if (!ordered.has(part.layerId) || !layerLets(part.layerId, hidden.ids, false)) continue;
+      const { marks, fields } = markShownRows(part.layerId, part.refs, hidden, false, ['orderKey']);
+      const order = orderMarkedRows(part.layerId, part.refs, marks, fields);
+      for (let i = 0; i < order.length; i++) {
+        const id = tables.getRowId(part.refs[order[i]]);
+        if (id === undefined) continue;
+        outIds.push(id);
+        outLayers.push(part.layerId);
+      }
+    }
+    countWork(counts, 'objectsCreated', 3);
+    return { ids: outIds, layerIds: outLayers };
+  };
+
+  /**
+   * Every point shown (a feature of the type `Point` or `MultiPoint`), in stacking order from the
+   * back, with its positions read as columns, without the features being made: the shown
+   * features as `listShownInOrder` reads them
+   */
+  const listShownPoints = (): ShownPoints => {
+    writePendingPlaces();
+    const hidden = hiddenNow();
+    const parts: Array<{ refs: Int32Array; types: string[]; geometry: GeometryColumn }> = [];
+    let rowCount = 0;
+    let positionCount = 0;
+    for (const layerId of layerIdsInOrder(false)) {
+      if (!layerLets(layerId, hidden.ids, false)) continue;
+      const rows = rowsOfLayer(layerId);
+      if (rows.length === 0) continue;
+      const { marks, fields } = markShownRows(layerId, rows, hidden, false, ['type']);
+      const types = fields.get('type') ?? [];
+      const kept: number[] = [];
+      for (let i = 0; i < rows.length; i++) {
+        if (marks[i] === 1 && SCREEN_POINT_TYPES.has(types[i] as string)) kept.push(i);
+      }
+      if (kept.length === 0) continue;
+      const refs = Int32Array.from(kept, (i) => rows[i]);
+      const geometry = tables.readValues(refs, ['geometry']).geometry;
+      if (!geometry) continue;
+      parts.push({ refs, types: kept.map((i) => types[i] as string), geometry });
+      rowCount += refs.length;
+      positionCount += geometry.coordinates.length / geometry.valuesPerPosition;
+    }
+    const refs = new Int32Array(rowCount);
+    const types = new Array<string>(rowCount);
+    const starts = new Int32Array(rowCount + 1);
+    const coordinates = new Float64Array(positionCount * 2);
+    let row = 0;
+    let position = 0;
+    for (const part of parts) {
+      const { geometry } = part;
+      const stride = geometry.valuesPerPosition;
+      for (let k = 0; k < part.refs.length; k++) {
+        refs[row] = part.refs[k];
+        types[row] = part.types[k];
+        starts[row] = position;
+        const first = geometry.positionStarts[geometry.ringStarts[geometry.partStarts[k]]];
+        const end = geometry.positionStarts[geometry.ringStarts[geometry.partStarts[k + 1]]];
+        for (let p = first; p < end; p++) {
+          coordinates[position * 2] = geometry.coordinates[p * stride];
+          coordinates[position * 2 + 1] = geometry.coordinates[p * stride + 1];
+          position += 1;
+        }
+        row += 1;
+      }
+    }
+    starts[row] = position;
+    countWork(counts, 'objectsCreated', 4 + parts.length);
+    return {
+      types,
+      starts,
+      coordinates,
+      idOf: (k: number) => tables.getRowId(refs[k]) ?? '',
+    };
+  };
+
+  /**
+   * The largest radius and outline of a marker the points name (see `largestPointMarker`): read
+   * from the rows the Store holds when the layer is made, raised by the rows written afterwards,
+   * never lowered, and read again when it is first asked for after a replacement of the whole
+   * document (null until then)
+   */
+  let markerExtent: { radius: number; strokeWidth: number } | null = null;
+
+  /** Raises the largest marker by what the styles of rows of one layer name */
+  const raiseMarker = (refs: Int32Array): void => {
+    const extent = markerExtent;
+    if (!extent || refs.length === 0) return;
+    const fields = tables.readValues(refs, MARKER_FIELDS).fields;
+    countWork(counts, 'objectsCreated');
+    const types = fields.get('type') ?? [];
+    const radii = fields.get('style:pointRadius') ?? [];
+    const strokes = fields.get('style:pointStrokeWidth') ?? [];
+    for (let i = 0; i < refs.length; i++) {
+      if (!SCREEN_POINT_TYPES.has(types[i] as string)) continue;
+      const radius = radii[i];
+      if (typeof radius === 'number' && Number.isFinite(radius) && radius > extent.radius) {
+        extent.radius = radius;
+      }
+      const stroke = strokes[i];
+      if (typeof stroke === 'number' && Number.isFinite(stroke) && stroke > extent.strokeWidth) {
+        extent.strokeWidth = stroke;
+      }
+    }
+  };
+
+  /**
+   * Raises the largest marker by the rows a change of the Store created, and by those whose type
+   * or style it wrote; a replacement of the whole document has it read again when it is next asked
+   * for. A row brought back was read when it was made or last written, and the largest marker
+   * is never lowered
+   */
+  const followMarkers = (change: RowChange): void => {
+    if (change.reset) {
+      markerExtent = null;
+      return;
+    }
+    if (!markerExtent) return;
+    for (const rows of change.rows?.layers.values() ?? []) {
+      raiseMarker(rows.created);
+      if (rows.updated.length === 0) continue;
+      const fields = rows.fields;
+      if (
+        fields.has('type') ||
+        fields.has('style') ||
+        fields.has('style:pointRadius') ||
+        fields.has('style:pointStrokeWidth')
+      ) {
+        raiseMarker(rows.updated);
+      }
+    }
+  };
+
+  const largestPointMarker = (): PointMarkerExtent => {
+    if (!markerExtent) {
+      markerExtent = { radius: 0, strokeWidth: 0 };
+      for (const layer of store.listLayers()) raiseMarker(rowsOfLayer(layer.id));
+    }
+    return markerExtent;
+  };
+
+  /**
    * The rows of the candidates of a box that can be selected, in stacking order from the back:
    * shown (as `shownFeatureSetOf` reads it) and not locked (the row, its group and its layer),
    * read from the rows without the features being made. Each is marked with whether the box of
@@ -1242,9 +1464,10 @@ export function createDocumentAccess(
       if (!layerLets(part.layerId, hidden.ids, true)) continue;
       const view = tables.get(part.layerId);
       if (!view) continue;
-      const { marks, fields } = markShownRows(part.layerId, part.refs, hidden, true);
-      const parents = fields.get('parent') ?? [];
-      const keys = fields.get('orderKey') ?? [];
+      const { marks, fields } = markShownRows(part.layerId, part.refs, hidden, true, [
+        'orderKey',
+        'type',
+      ]);
       const types = fields.get('type') ?? [];
       const decidedTypes = new Map<string, boolean>();
       const decides = (type: string): boolean => {
@@ -1255,41 +1478,8 @@ export function createDocumentAccess(
         }
         return answer;
       };
-      let count = 0;
-      for (let k = 0; k < marks.length; k++) count += marks[k];
-      const order = new Int32Array(count);
-      let at = 0;
-      for (let k = 0; k < marks.length; k++) if (marks[k] === 1) order[at++] = k;
-      // The stacking order within the layer: the items by their keys (a group at its place),
-      // then the features of a group by theirs; the IDs are read only for keys that are equal
       const own = part.refs;
-      const layerId = part.layerId;
-      const groupKeys = new Map<string, string>();
-      const itemKeyOf = (k: number): string => {
-        const parent = parents[k] as string;
-        if (parent === layerId) return String(keys[k] ?? '');
-        let key = groupKeys.get(parent);
-        if (key === undefined) {
-          key = store.getGroup(parent)?.orderKey ?? '';
-          groupKeys.set(parent, key);
-        }
-        return key;
-      };
-      const itemIdOf = (k: number): string => {
-        const parent = parents[k] as string;
-        return parent === layerId ? (tables.getRowId(own[k]) ?? '') : parent;
-      };
-      order.sort((a, b) => {
-        const keyA = itemKeyOf(a);
-        const keyB = itemKeyOf(b);
-        if (keyA !== keyB) return compareKeys(keyA, keyB);
-        const byItem = compareKeys(itemIdOf(a), itemIdOf(b));
-        if (byItem !== 0 || parents[a] === layerId) return byItem;
-        const memberA = String(keys[a] ?? '');
-        const memberB = String(keys[b] ?? '');
-        if (memberA !== memberB) return compareKeys(memberA, memberB);
-        return compareKeys(tables.getRowId(own[a]) ?? '', tables.getRowId(own[b]) ?? '');
-      });
+      const order = orderMarkedRows(part.layerId, own, marks, fields);
       for (let i = 0; i < order.length; i++) {
         const ref = own[order[i]];
         const wholly = decides(String(types[order[i]])) && insideOne(view.getRowBBox(ref), boxes);
@@ -4415,6 +4605,7 @@ export function createDocumentAccess(
     /** Whether the token of the change goes with its notes, until the change is told */
     let held = false;
     try {
+      followMarkers(change);
       rowsLeaveIterators(change);
       rowsLeaveSets(change);
       const own = wroteRows;
@@ -4771,6 +4962,9 @@ export function createDocumentAccess(
     findFeatureIdsInBox,
     setFeatureBoxes,
     listSelectableRows,
+    listShownInOrder,
+    listShownPoints,
+    largestPointMarker,
 
     // The rows as the Store holds them
     getTables: () => tables,
@@ -4973,6 +5167,10 @@ export function createDocumentAccess(
     merge: (change) => merge(change),
     transact: (fn) => busTransact(fn, 'local'),
   });
+
+  // The largest marker of the points the Store holds (none for a Store with no row), raised from
+  // here on by the rows written
+  largestPointMarker();
 
   return layer;
 }

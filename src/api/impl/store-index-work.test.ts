@@ -121,15 +121,10 @@ describe.each(DOCUMENTS)('over %s', (_name, documentOf) => {
     const scene = measured((size) => {
       const instance = instanceOf(documentOf(size));
       const { engine } = instance;
-      const ordered = engine.context.store.listFeaturesInOrder();
       const point = engine.map.project(AT);
       let hit: unknown;
       const work = workOf(instance, () => {
-        hit = engine.context.hitTestService.hitTest(
-          point,
-          (p) => engine.map.unproject([p.x, p.y]),
-          ordered,
-        );
+        hit = engine.context.hitTestService.hitTest(point, (p) => engine.map.unproject([p.x, p.y]));
       });
       return { ...work, hit };
     });

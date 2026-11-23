@@ -39,19 +39,17 @@ import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
-import type { DocumentAccess } from '../../store/document-access.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type {
+  CompanionDocument,
   CompanionHitContext,
   FeatureCompanionHitResult,
   FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
 import { hitTestFeatureCompanions } from '../../view/feature-companion.js';
 import { clickCopies } from './local-frame.js';
-import type { HitTestService, UnprojectFunction } from './service.js';
+import type { HitTestDocument, HitTestService, UnprojectFunction } from './service.js';
 import { DEFAULT_HIT_TEST_OPTIONS } from './strategies/base.js';
-import { createVisibilityLookup, type VisibilityLookup } from './visibility-lookup.js';
 
 /**
  * What the frontmost hit at a screen position is: a feature of the Store, a
@@ -76,26 +74,13 @@ export type TopHit =
   | { kind: 'companion'; companion: FeatureCompanionHitResult };
 
 /**
- * The options of a {@link HitTestTopmost} call.
- */
-export interface TopmostHitTestOptions {
-  /**
-   * The list of the features of the Store in display order
-   *
-   * When the caller already holds `getDisplayFeatures(store)`, passing it avoids fetching
-   * it again. When omitted, this function fetches it itself.
-   */
-  orderedFeatures?: Feature[];
-}
-
-/**
  * Returns the single frontmost hit at a screen position, across the Store, the
  * datasets and the feature companions, in the same order as they are drawn.
  *
  * The position is in CSS px relative to the map container. It returns `null` when nothing is
  * hit.
  */
-export type HitTestTopmost = (point: ScreenPoint, options?: TopmostHitTestOptions) => TopHit | null;
+export type HitTestTopmost = (point: ScreenPoint) => TopHit | null;
 
 /**
  * The dependencies of the unified z traversal
@@ -103,7 +88,8 @@ export type HitTestTopmost = (point: ScreenPoint, options?: TopmostHitTestOption
  * @internal
  */
 export interface TopmostHitTestDeps {
-  store: DocumentAccess;
+  /** The layer over the Store: the features shown in stacking order, and their changes */
+  store: HitTestDocument & CompanionDocument;
   /** The candidate narrowing and the precise test on the Store side */
   hitTestService: HitTestService;
   /** From screen coordinates to geographic coordinates */
@@ -175,50 +161,72 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   };
 
   /**
-   * Asks for a hit on the companions of one feature (a feature that is not visible is not
-   * asked)
+   * What the walk from the front looks at, in stacking order from the back with the layer of
+   * each: the features hit themselves, and the features of the document that have companions
+   * (when a companion can be hit), those shown alone; read without the features being made
    */
-  const companionOf = (
-    feature: Feature,
-    context: CompanionHitContext | null,
-    visible: VisibilityLookup,
-  ): TopHit | null => {
-    if (!context) return null;
-    if (!visible(feature)) return null;
+  const walkOf = (
+    storeHits: ReadonlyMap<string, Feature>,
+    holders: ReadonlyMap<string, Feature> | null,
+  ): { ids: readonly string[]; layerIds: readonly string[] } => {
+    if (!holders || holders.size === 0) {
+      if (storeHits.size === 0) return { ids: [], layerIds: [] };
+      return store.listShownInOrder(storeHits.keys());
+    }
+    const ids = new Set<string>(storeHits.keys());
+    for (const id of holders.keys()) ids.add(id);
+    return store.listShownInOrder(ids);
+  };
 
+  /**
+   * The hit at one step of the walk: the feature itself, then its companions (a companion sits
+   * one z below its feature)
+   */
+  const stepOf = (
+    id: string,
+    storeHits: ReadonlyMap<string, Feature>,
+    holders: ReadonlyMap<string, Feature> | null,
+    context: CompanionHitContext | null,
+  ): TopHit | null => {
+    const hit = storeHits.get(id);
+    if (hit) return { kind: 'store', feature: hit };
+    const holder = holders?.get(id);
     const companions = deps.companions;
-    if (!companions) return null;
-    const companion = hitTestFeatureCompanions(companions, feature, context);
+    if (!holder || !context || !companions) return null;
+    const companion = hitTestFeatureCompanions(companions, holder, context);
     return companion ? { kind: 'companion', companion } : null;
   };
 
-  return (point, options) => {
-    const orderedFeatures = options?.orderedFeatures ?? getDisplayFeatures(store);
+  /** The features of the Store hit at a point, by their IDs (the spatial index is asked once) */
+  const storeHitsAt = (point: ScreenPoint): Map<string, Feature> =>
+    new Map(
+      hitTestService
+        .hitTestAll(point, unproject)
+        .map((result) => [result.feature.id, result.feature]),
+    );
+
+  return (point) => {
     const companion = companionContext(point);
-    // Within one hit test, the visibility of a layer or a group is looked up only once per
-    // container.
-    const visible = createVisibilityLookup(store);
+    // The features of the document that have companions (the providers are asked of a feature
+    // when it changes, not here), only when a companion can be hit
+    const holders = companion && deps.companions ? deps.companions.holdersIn(store) : null;
 
     // On a map with no dataset at all (none is visible), the cost is kept the same as
     // the conventional path. The spatial index is queried only once as well.
     if (!datasets?.hasAny()) {
       if (!companion) {
-        const hit = hitTestService.hitTest(point, unproject, orderedFeatures);
+        const hit = hitTestService.hitTest(point, unproject);
         return hit ? { kind: 'store', feature: hit.feature } : null;
       }
 
       // A companion sits one z below the feature itself, so the features are examined one
       // at a time from the front in the order "the feature itself -> its companions". The
       // spatial index is queried only once.
-      const storeHits = new Set(
-        hitTestService.hitTestAll(point, unproject, orderedFeatures).map((r) => r.feature.id),
-      );
-      for (let i = orderedFeatures.length - 1; i >= 0; i--) {
-        const feature = orderedFeatures[i];
-        if (storeHits.has(feature.id)) return { kind: 'store', feature };
-
-        const companionHit = companionOf(feature, companion, visible);
-        if (companionHit) return companionHit;
+      const storeHits = storeHitsAt(point);
+      const walk = walkOf(storeHits, holders);
+      for (let i = walk.ids.length - 1; i >= 0; i--) {
+        const hit = stepOf(walk.ids[i], storeHits, holders, companion);
+        if (hit) return hit;
       }
       return null;
     }
@@ -241,8 +249,8 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
 
     // 2. The stacking order from the front. One hit test per frame is enough on the Store
     //    side, so it is performed only once, at the moment a layer entry is first met.
-    let storeHits: Set<string> | undefined;
-    let byLayer: Map<string, Feature[]> | undefined;
+    let storeHits: Map<string, Feature> | undefined;
+    let byLayer: Map<string, string[]> | undefined;
     const layerOrder = store.getLayerOrder();
 
     for (let i = layerOrder.length - 1; i >= 0; i--) {
@@ -250,24 +258,17 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
 
       if (store.getLayer(entryId) !== undefined) {
         if (!storeHits) {
-          storeHits = new Set(
-            hitTestService
-              .hitTestAll(point, unproject, orderedFeatures)
-              .map((result) => result.feature.id),
-          );
-          byLayer = groupByLayer(orderedFeatures);
+          storeHits = storeHitsAt(point);
+          byLayer = groupByLayer(walkOf(storeHits, holders));
         }
         // Even when not a single feature itself was hit, a companion can still be hit
         if (storeHits.size === 0 && !companion) continue;
 
-        const features = byLayer?.get(entryId);
-        if (!features) continue;
-        for (let j = features.length - 1; j >= 0; j--) {
-          const feature = features[j];
-          if (storeHits.has(feature.id)) return { kind: 'store', feature };
-
-          const companionHit = companionOf(feature, companion, visible);
-          if (companionHit) return companionHit;
+        const ids = byLayer?.get(entryId);
+        if (!ids) continue;
+        for (let j = ids.length - 1; j >= 0; j--) {
+          const hit = stepOf(ids[j], storeHits, holders, companion);
+          if (hit) return hit;
         }
         continue;
       }
@@ -290,14 +291,17 @@ function toTopHit(hit: { dataset: Dataset; feature: Feature | null; row: number 
 }
 
 /**
- * Splits the features in display order per layer (the order is preserved)
+ * Splits the features in stacking order per layer (the order is preserved)
  */
-function groupByLayer(orderedFeatures: Feature[]): Map<string, Feature[]> {
-  const byLayer = new Map<string, Feature[]>();
-  for (const feature of orderedFeatures) {
-    const features = byLayer.get(feature.layerId);
-    if (features) features.push(feature);
-    else byLayer.set(feature.layerId, [feature]);
+function groupByLayer(walk: {
+  ids: readonly string[];
+  layerIds: readonly string[];
+}): Map<string, string[]> {
+  const byLayer = new Map<string, string[]>();
+  for (let i = 0; i < walk.ids.length; i++) {
+    const ids = byLayer.get(walk.layerIds[i]);
+    if (ids) ids.push(walk.ids[i]);
+    else byLayer.set(walk.layerIds[i], [walk.ids[i]]);
   }
   return byLayer;
 }

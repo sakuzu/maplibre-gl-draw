@@ -102,7 +102,7 @@ function hitsAtOffset(make: (camera: Camera) => Feature, camera: Camera, offsetP
     f.type === 'Point' ? (coordinatesOf(f) as Coordinate) : (coordinatesOf(f) as Coordinate[])[0],
   );
   const click = { x: anchor.x + offsetPx, y: anchor.y };
-  return service.hitTestAll(click, camera.unproject, [f]).length > 0;
+  return service.hitTestAll(click, camera.unproject).length > 0;
 }
 
 const LATITUDES = [0, 60, 80];
@@ -153,7 +153,7 @@ describe('the same pixel distance gives the same decision at any bearing', () =>
         const probe = (offset: number) => {
           const f = make();
           const service = serviceWith([f]);
-          return service.hitTestAll({ x: WIDTH / 2 + offset, y: HEIGHT / 2 }, camera.unproject, [f])
+          return service.hitTestAll({ x: WIDTH / 2 + offset, y: HEIGHT / 2 }, camera.unproject)
             .length;
         };
         expect(probe(5)).toBe(1);

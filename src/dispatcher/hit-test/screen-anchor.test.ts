@@ -74,7 +74,7 @@ describe('screen space hit testing of symbols', () => {
     // of the click (100, 0) is longitude 10, but the point sits at longitude 40 and is
     // projected onto the screen near (100, 0)".
     const target = point('behind-ridge', [40, 0]);
-    const features = load([target]);
+    load([target]);
 
     const service = new HitTestServiceImpl(store, spatialIndex, {
       anchorScreen: {
@@ -85,18 +85,18 @@ describe('screen space hit testing of symbols', () => {
       },
     });
 
-    const results = service.hitTestAll({ x: 100, y: 0 }, unproject, features);
+    const results = service.hitTestAll({ x: 100, y: 0 }, unproject);
     expect(results.map((r) => r.feature.id)).toEqual([target.id]);
 
     // Check that the longitude/latitude path (the spatial index) does not reach it. If it
     // did reach it, this test would be protecting nothing
     const legacy = new HitTestServiceImpl(store, spatialIndex);
-    expect(legacy.hitTestAll({ x: 100, y: 0 }, unproject, features)).toEqual([]);
+    expect(legacy.hitTestAll({ x: 100, y: 0 }, unproject)).toEqual([]);
   });
 
   it('does not hit a point that is far on screen (even when it is near in degrees)', () => {
     const target = point('near-in-degrees', [10, 0]);
-    const features = load([target]);
+    load([target]);
 
     const service = new HitTestServiceImpl(store, spatialIndex, {
       anchorScreen: {
@@ -106,33 +106,33 @@ describe('screen space hit testing of symbols', () => {
       },
     });
 
-    expect(service.hitTestAll({ x: 100, y: 0 }, unproject, features)).toEqual([]);
+    expect(service.hitTestAll({ x: 100, y: 0 }, unproject)).toEqual([]);
   });
 
   it('falls back when the anchor projection is unusable (no terrain, zero regression)', () => {
     const target = point('on-ground', [10, 0]);
-    const features = load([target]);
+    load([target]);
 
     const withProjector = new HitTestServiceImpl(store, spatialIndex, {
       anchorScreen: { project: () => null },
     });
     const legacy = new HitTestServiceImpl(store, spatialIndex);
 
-    const a = withProjector.hitTestAll({ x: 100, y: 0 }, unproject, features);
-    const b = legacy.hitTestAll({ x: 100, y: 0 }, unproject, features);
+    const a = withProjector.hitTestAll({ x: 100, y: 0 }, unproject);
+    const b = legacy.hitTestAll({ x: 100, y: 0 }, unproject);
     expect(a.map((r) => r.feature.id)).toEqual([target.id]);
     expect(a.map((r) => r.feature.id)).toEqual(b.map((r) => r.feature.id));
   });
 
   it('does not hit a hidden point through the screen space path either', () => {
     const target = { ...point('hidden', [40, 0]), visible: false };
-    const features = load([target]);
+    load([target]);
 
     const service = new HitTestServiceImpl(store, spatialIndex, {
       anchorScreen: { project: () => ({ x: 100, y: 0 }) },
     });
 
-    expect(service.hitTestAll({ x: 100, y: 0 }, unproject, features)).toEqual([]);
+    expect(service.hitTestAll({ x: 100, y: 0 }, unproject)).toEqual([]);
   });
 
   it('polygons and lines skip the screen space path (ground-draped, depth-occluded)', () => {
@@ -153,14 +153,14 @@ describe('screen space hit testing of symbols', () => {
       visible: true,
       style: {},
     };
-    const features = load([line]);
+    load([line]);
 
     const service = new HitTestServiceImpl(store, spatialIndex, {
       // Only symbols go through this path, so it has no effect on a line
       anchorScreen: { project: () => ({ x: 100, y: 0 }) },
     });
 
-    const results = service.hitTestAll({ x: 100, y: 0 }, unproject, features);
+    const results = service.hitTestAll({ x: 100, y: 0 }, unproject);
     expect(results.map((r) => r.feature.id)).toEqual(['line']);
   });
 });
