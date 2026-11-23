@@ -242,8 +242,6 @@ export function connectStoreEvents(hub: EventHub, store: InstanceDocument): () =
       return asking.length > 0 ? asking : null;
     },
   });
-  // The orders before a change are kept only while the moves have a listener
-  store.watchMoves(() => hub.has('feature.moved') || hub.has('group.moved'));
   const stop = store.subscribe((changes) => {
     const summary = summaryOfChange(changes);
     // The sets of IDs are made before any listener can write
@@ -449,7 +447,7 @@ function emitResourceEvents(
         });
       }
       if (!movesTold) continue;
-      const move = describeMove(store, update.previous, update.feature);
+      const move = describeMove(store, summary, update.previous, update.feature);
       if (!move) continue;
       moved.add(update.id);
       made();
@@ -467,7 +465,7 @@ function emitResourceEvents(
       if (moved.has(id)) continue;
       const feature = store.getFeature(id);
       if (!feature) continue;
-      const move = describeMoveWithin(store, feature);
+      const move = describeMoveWithin(store, summary, feature);
       made();
       hub.emit('feature.moved', { feature, ...move, source, hasMoreParts });
     }
@@ -539,8 +537,8 @@ function groupMoves(
     out.push({
       id,
       group,
-      from: withIndex({ layerId: before.layerId }, store.getOrderBefore(before.layerId), id),
-      to: atPositionNow(store, { layerId: group.layerId }, group.layerId, id),
+      from: atPositionBefore(store, { layerId: before.layerId }, before.layerId, id),
+      to: atPositionNow(store, summary, { layerId: group.layerId }, group.layerId, id),
     });
   }
   return out;
@@ -548,28 +546,29 @@ function groupMoves(
 
 /**
  * Where a feature moved from and to, when an update changed its layer or its group; null
- * otherwise. The position it left is read from the order its container had before the change,
- * and the position it went to from the order now.
+ * otherwise. The position it left is counted as its container was before the change, and the
+ * position it went to is read from the order right after the change.
  */
 function describeMove(
   store: InstanceDocument,
+  summary: ChangeSummary | undefined,
   previous: StoredFeature,
   feature: StoredFeature,
 ): { from: MoveTarget; to: MoveTarget } | null {
   if (previous.layerId === feature.layerId && previous.groupId === feature.groupId) return null;
 
   const from: MoveTarget = previous.groupId
-    ? withIndex({ groupId: previous.groupId }, store.getOrderBefore(previous.groupId), previous.id)
-    : withIndex({ layerId: previous.layerId }, store.getOrderBefore(previous.layerId), previous.id);
+    ? atPositionBefore(store, { groupId: previous.groupId }, previous.groupId, previous.id)
+    : atPositionBefore(store, { layerId: previous.layerId }, previous.layerId, previous.id);
 
   let to: MoveTarget;
   if (feature.groupId) {
-    to = atPositionNow(store, { groupId: feature.groupId }, feature.groupId, feature.id);
+    to = atPositionNow(store, summary, { groupId: feature.groupId }, feature.groupId, feature.id);
   } else if (previous.groupId && previous.layerId === feature.layerId) {
     // Out of its group, in the same layer
-    to = atPositionNow(store, { groupId: null }, feature.layerId, feature.id);
+    to = atPositionNow(store, summary, { groupId: null }, feature.layerId, feature.id);
   } else {
-    to = atPositionNow(store, { layerId: feature.layerId }, feature.layerId, feature.id);
+    to = atPositionNow(store, summary, { layerId: feature.layerId }, feature.layerId, feature.id);
   }
   return { from, to };
 }
@@ -577,44 +576,52 @@ function describeMove(
 /** Where a feature that took another position in its layer or its group was, and is now */
 function describeMoveWithin(
   store: InstanceDocument,
+  summary: ChangeSummary | undefined,
   feature: StoredFeature,
 ): { from: MoveTarget; to: MoveTarget } {
   if (feature.groupId) {
     const { groupId } = feature;
     return {
-      from: withIndex({ groupId }, store.getOrderBefore(groupId), feature.id),
-      to: atPositionNow(store, { groupId }, groupId, feature.id),
+      from: atPositionBefore(store, { groupId }, groupId, feature.id),
+      to: atPositionNow(store, summary, { groupId }, groupId, feature.id),
     };
   }
   const { layerId } = feature;
   return {
-    from: withIndex({ layerId }, store.getOrderBefore(layerId), feature.id),
-    to: atPositionNow(store, { layerId }, layerId, feature.id),
+    from: atPositionBefore(store, { layerId }, layerId, feature.id),
+    to: atPositionNow(store, summary, { layerId }, layerId, feature.id),
   };
 }
 
 /**
- * A target with the position the item has now in a container, read from its place alone, when
- * it is in that container
+ * A target with the position the item has right after the change in a container, when it is in
+ * that container: counted before a later write when the change was told after it, read from its
+ * place alone otherwise
  */
 function atPositionNow<T extends MoveTarget>(
+  store: InstanceDocument,
+  summary: ChangeSummary | undefined,
+  target: T,
+  containerId: string,
+  id: string,
+): T {
+  const fixed = summary?.positionAfter(id);
+  const at = fixed === undefined ? store.getItemPosition(id) : fixed;
+  return at?.containerId === containerId ? { ...target, index: at.index } : target;
+}
+
+/**
+ * A target with the position the item had in a container before the change being told, when it
+ * was in that container
+ */
+function atPositionBefore<T extends MoveTarget>(
   store: InstanceDocument,
   target: T,
   containerId: string,
   id: string,
 ): T {
-  const at = store.getItemPosition(id);
+  const at = store.getItemPositionBefore(id);
   return at?.containerId === containerId ? { ...target, index: at.index } : target;
-}
-
-/** A target with the position of the ID in the list, when the list holds it */
-function withIndex<T extends MoveTarget>(
-  target: T,
-  list: readonly string[] | undefined,
-  id: string,
-): T {
-  const index = list?.indexOf(id) ?? -1;
-  return index >= 0 ? { ...target, index } : target;
 }
 
 /** Whether two vertex selections hold the same vertices of the same feature */

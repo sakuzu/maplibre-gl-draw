@@ -81,10 +81,10 @@ interface RenderCoordinator {
 ```
 
 `shouldRepaint(changes)` is true when the `StoreChange` carry any of
-`features`, `layers` (including the order between layers), `groups`,
-`layerReorder`, `groupReorder`, `selection`, `tentative` (the in-progress
-geometry of a drawing mode) or `uiStateChanged` (drag state, box
-selection).
+`features`, `layers` (including the order between layers), `groups`, the
+marks `layerReorder` and `groupReorder`, `selection`, `tentative` (the
+in-progress geometry of a drawing mode) or `uiStateChanged` (drag state,
+box selection).
 
 The coordinator only schedules a frame. What the frame redraws, and what
 it rebuilds, is decided by the custom layer from its own Store

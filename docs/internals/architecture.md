@@ -323,8 +323,10 @@ optional category per kind of change:
 
 - `features`, `layers` and `groups`: `created`, `updated` (with `previous`)
   and `deleted`; `layers` also has `orderChanged`
-- `layerReorder` and `groupReorder`: the order inside one layer or group,
-  separate from `layers.updated` so a consumer can handle them apart
+- `layerReorder` and `groupReorder`: marks (`true`) that items took other
+  places among those of their layer or their group, and nothing else of
+  them changed, separate from `layers.updated` so a consumer can handle
+  them apart; the order itself is read from the layer or the group
 - `selection`, `editing`, `tentative`, `mode`, `metadata` and `files`
 - `uiStateChanged`: a state without a category of its own changed (drag
   state, box selection, vertex selection, read-only, the interaction lock,

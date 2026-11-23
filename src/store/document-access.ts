@@ -360,13 +360,15 @@ export interface DocumentPlaces {
    */
   iterateFeatures(match?: FeatureMatch): IterableIterator<Feature>;
   /**
-   * The IDs of the items of a layer or the features of a group as they were before the change
-   * being told, while it is told: kept only while `watchMoves` answers true when the change
-   * starts (undefined otherwise)
+   * Where an item (a feature or a group) was before the change being told, while it is told:
+   * the layer or the group it was in, and its position there, from the back, counted as the
+   * container was before the change. Undefined outside the telling of a change, and for an item
+   * the change created. Counted for a change that moves items, while the changes are noted in
+   * the words of the features: from the order now and what the change put in each container and
+   * took out of it (the places before of the rows a change deleted are read only when it moves
+   * items)
    */
-  getOrderBefore(containerId: string): readonly string[] | undefined;
-  /** Sets the question whether the orders before a change are kept (see `getOrderBefore`) */
-  watchMoves(watching: () => boolean): void;
+  getItemPositionBefore(id: string): ItemPosition | undefined;
 }
 
 /** Where an item is (see `DocumentPlaces.getItemPosition`) */

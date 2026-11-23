@@ -659,29 +659,19 @@ export interface StoreChange {
     deleted?: Group[];
   };
   /**
-   * Reordering of items within a layer
+   * Whether items of a layer (features or groups) took other places among the items of their
+   * layer, and nothing else of them changed
    *
-   * The reordering of items (features or groups) within the layer.items array.
-   * It is emitted separately from layers.updated, as a change of the order of the items
-   * alone.
+   * A mark, set apart from layers.updated: the order is read from the layer itself.
    */
-  layerReorder?: {
-    layerId: string;
-    order: string[];
-    previous: string[];
-  };
+  layerReorder?: true;
   /**
-   * Reordering of features within a group
+   * Whether features of a group took other places among the features of their group, and
+   * nothing else of them changed
    *
-   * The reordering of features within the group.featureIds array.
-   * It is emitted separately from groups.updated, as a change of the order of the features
-   * alone.
+   * A mark, set apart from groups.updated: the order is read from the group itself.
    */
-  groupReorder?: {
-    groupId: string;
-    featureIds: string[];
-    previous: string[];
-  };
+  groupReorder?: true;
   /** The new selection and the one before it */
   selection?: {
     type: SelectionType | null;
