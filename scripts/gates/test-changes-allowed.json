@@ -1207,6 +1207,11 @@
       "unit": "the layers and the groups that no longer carry the order of what they hold"
     },
     {
+      "path": "src/view/layer/display-list.test.ts",
+      "change": "the mark layerReorder given as true, the shape the change has now (it held the orders before)",
+      "unit": "the positions a move came from, counted without the whole order before"
+    },
+    {
       "path": "src/view/renderers/batch-manager.test.ts",
       "change": "the fake store or document of the set-up no longer passes the order a layer or a group holds, which the code read no longer reads (the values checked do not change)",
       "unit": "the layers and the groups that no longer carry the order of what they hold"
