@@ -4,7 +4,8 @@
 /**
  * `draw.isTransacting`: true while the `fn` of a `draw.transact` of the instance runs, nested
  * ones included, and false after it returned or threw, inside a transaction opened on the Store
- * directly, and in the parts of a bulk edit that follow after `fn` returned
+ * directly, and in the parts of a bulk edit that follow after `fn` returned; it throws on a
+ * destroyed instance
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -157,5 +158,10 @@ describe('isTransacting', () => {
     expect(parts.length).toBeGreaterThan(2);
     for (const part of parts.slice(1)) expect(part.transacting).toBe(false);
     expect(parts[parts.length - 1].hasMoreParts).toBe(false);
+  });
+
+  it('throws invalidState on a destroyed instance, as every other method does', () => {
+    draw.destroy();
+    expect(() => draw.isTransacting()).toThrow(expect.objectContaining({ code: 'invalidState' }));
   });
 });
