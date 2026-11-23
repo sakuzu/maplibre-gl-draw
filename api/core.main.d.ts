@@ -1393,14 +1393,19 @@ export interface FeaturesCollection {
      *   given whole (`features.update`) with the same type, parts and rings is compared with
      *   the one before vertex by vertex, as any other edit.
      * - Any other value (an attribute, a key of the look, a flag, the place) is written back key
-     *   by key: a key the change did not write keeps what it has now.
+     *   by key, feature by feature: a key the change did not write of a feature keeps what that
+     *   feature has now, whatever the change wrote of other features. The layer or group a
+     *   feature is in and its position there are two keys (a move within a layer wrote the
+     *   position alone), and a key written with the value it already had was not written.
      * - A feature the change deleted comes back where it was, in its layer and its group, while
      *   the values keep it ({@link FeaturesCollection.releaseValues}). (Deleting features does
      *   not delete the embedded files they name, so there is no file to bring back with them.) A
      *   feature whose group is not there goes into the layer of the group. A feature the change
-     *   created is deleted.
+     *   created is deleted. A feature the change wrote that is deleted now stays deleted:
+     *   nothing of it is written.
      * - The groups, which hold the features, are written back with them: a group the change
-     *   deleted comes back where it was, a group it created is deleted, a group it moved goes
+     *   deleted comes back where it was, a group it created is deleted (the features put into
+     *   it since stay in its layer, as `groups.delete` leaves them), a group it moved goes
      *   back to where it was, and a group whose values it changed (its name, its visibility,
      *   its lock) takes them back.
      *
@@ -5340,8 +5345,10 @@ export interface CompanionProvider {
     readonly name: string;
     /**
      * Whether a feature has a companion. It answers from the feature alone (its type and its
-     * values), and at once: the instance keeps the answer of a feature, and asks again when the
-     * feature changes or when a provider is registered or taken away, not on every frame.
+     * values), and at once: the instance keeps the answer of a feature, and asks again when a
+     * change of the feature is told (`document.changed`) or when a provider is registered or
+     * taken away, not on every frame. Inside a transaction that wrote the feature, a hit test
+     * still has the answer from before.
      */
     has(feature: Feature): boolean;
     /** Draws the companion of a feature, given as it is drawn (see {@link SketchesCollection}). */

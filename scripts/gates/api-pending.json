@@ -25,6 +25,9 @@
       "main:added:Draw.rendered": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Draw.sketches": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
+    "25": {
+      "main:doc:FeaturesCollection.restore": "b7a5a52578365f7b1de67c275576663523c37c8cc4a38d6d0e49e403ab1063dd"
+    },
     "46": {
       "main:added:Sketch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "main:added:Sketch.edit": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
@@ -155,6 +158,9 @@
       "main:doc:PreparedTable": "a093a5b970e9d3c9a949b432c73f46200662726e89acf726949635ee0e851c4b",
       "main:doc:Table": "625bf817f234ee6926316d82932aaf9a10a28e1d8700db7fda8ae0d1a5dc7ced"
     },
+    "130": {
+      "store:added:RowValues.written": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
     "151": {
       "geometry:doc:(entry)": "e42eb927943dc75ea11870c70074a18bec6b289c51f6626cf0524746ec9cfdf7"
     },
@@ -198,6 +204,9 @@
     },
     "162": {
       "main:doc:NameGenerator": "37ab835d682a911f1bd3ef1e10883ba4cc05056de63ef090975410bfc6629557"
+    },
+    "166": {
+      "store:doc:StoreChange.previousValues": "72348907b25fbf3e5e93ea661cca5055f8f36fbb6621d439f7aef503b106a274"
     },
     "171": {
       "main:added:DrawEvents.drag.changed.patch": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
