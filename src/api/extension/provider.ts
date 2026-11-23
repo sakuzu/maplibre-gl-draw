@@ -99,8 +99,10 @@ export interface CompanionProvider {
   readonly name: string;
   /**
    * Whether a feature has a companion. It answers from the feature alone (its type and its
-   * values), and at once: the instance keeps the answer of a feature, and asks again when the
-   * feature changes or when a provider is registered or taken away, not on every frame.
+   * values), and at once: the instance keeps the answer of a feature, and asks again when a
+   * change of the feature is told (`document.changed`) or when a provider is registered or
+   * taken away, not on every frame. Inside a transaction that wrote the feature, a hit test
+   * still has the answer from before.
    */
   has(feature: Feature): boolean;
   /** Draws the companion of a feature. */

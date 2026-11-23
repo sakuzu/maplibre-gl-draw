@@ -53,11 +53,13 @@ type TopHit =
     }
   | { kind: 'companion'; companion: FeatureCompanionHitResult };
 
-type HitTestTopmost = (
-  point: ScreenPoint,
-  options?: { orderedFeatures?: Feature[] },
-) => TopHit | null;
+type HitTestTopmost = (point: ScreenPoint) => TopHit | null;
 ```
+
+Nothing lists every feature of the document for a call: the Store side
+starts from the candidates the spatial index finds near the point, and
+the layer over the Store puts them in stacking order from their rows (see
+"Stage 1: narrowing the candidates").
 
 ### Traversal order
 
@@ -71,8 +73,9 @@ The traversal walks from the front to the back:
 3. The datasets on the `belowLayers` side, from the front
 
 The first hit ends the traversal. The Store side is hit-tested once per
-call, at the moment the first layer entry is met; its hits are then looked
-up layer by layer in stacking order.
+call, at the moment the first layer entry is met; its hits, with the
+features that have companions, are put in stacking order once by the layer
+(`listShownInOrder`) and then looked up layer by layer in that order.
 
 ### What decides a hit
 
@@ -107,8 +110,19 @@ fails, and before it moves on to the next feature behind. The order in
 which things are seen and the order in which they can be grabbed agree
 here as well.
 
+- Only the features that have companions are walked. The registry of the
+  instance keeps them (`FeatureCompanionRegistry.holdersIn`): it asks the
+  providers' `has` of every feature when they are first needed, when a
+  provider is added or removed and when the whole document is replaced,
+  and of a feature alone when a change of it is told. `has` answers from
+  the feature alone, which is what makes that possible. A companion far
+  from the bounding box of its feature (a label) is still hit, since the
+  features that have companions are walked whether or not the spatial
+  index found them. Inside a transaction that wrote a feature, the hit
+  test still has the answer from before it, until the change is told
 - The companions of a feature that is not visible are not asked. The
-  visibility rule is the same as for the feature itself
+  visibility rule is the same as for the feature itself, read by the same
+  stacking order read as the candidates
 - A companion decides a hit by its appearance in screen pixels, so the
   test needs `project` and the zoom. Without them the companion test is
   not performed
@@ -179,7 +193,22 @@ candidate features -> per-type strategy -> hits (with distances)
 The click is unprojected, the tolerance is converted into degrees (see
 "Tolerance and the local frame"), and the spatial index returns the IDs
 whose bounding boxes touch the square of that radius around the click.
-Only visible features among `orderedFeatures` are kept.
+
+The candidate IDs go to the layer over the Store, which reads their rows
+(`listShownInOrder` in `src/api/impl/document-access.ts`) and returns the
+ones shown, in stacking order, without making a feature of them:
+
+- The rules are those of the features drawn: the `visible` flag of the
+  feature, its group and its layer, and local hiding. A feature of a layer
+  that is not in the stacking order (`getLayerOrder()`) is not drawn and is
+  not hit. A locked feature is kept (see "Locked and hidden features")
+- Within a layer, the items are ordered by their keys (a group at its
+  place), the members of a group by theirs, and equal keys by the IDs, as
+  the layer orders its rows
+
+Only those candidates are made into features, for the precise test. A
+pointer event costs the candidates near it, whatever the number of
+features of the document.
 
 ### Additional reach for the candidates
 
@@ -223,9 +252,10 @@ one traversal; otherwise `test()` is followed by `distance()`.
 `testDistance` returns `null` exactly when `test()` would be false, and
 otherwise the same value as `distance()`.
 
-`hitTestAll()` returns every hit sorted by distance. `hitTest()` does not
-look at that distance: it walks `orderedFeatures` from the end (the front)
-and returns the first feature that was hit. So on the Store alone:
+`hitTestAll()` returns every hit sorted by distance (hits at the same
+distance in stacking order). `hitTest()` does not look at that distance: of
+the features hit, it returns the frontmost in stacking order, read again by
+the layer. So on the Store alone:
 
 - A point on top of a polygon wins only when the point is in front; a
   point behind a polygon is blocked by it
@@ -243,12 +273,22 @@ would miss the point and fall through to what is behind it, a companion
 drawn from the point for instance.
 
 So the built-in `Point` and `MultiPoint` strategies carry a reach
-(`HitTestStrategy.reachPx`): the draw instance passes
-`pointMarkerReachPx`, which reads the size and the outline as the
-renderer does. In `hitTestAll()` the tolerance of such a feature is its
-reach plus the click tolerance, the candidate search is widened by the
-largest reach among the features, and the screen space test of the
-symbols (under terrain) adds it as well. `hitTestFeature()`, the path of
+(`HitTestStrategy.reachPx`): the draw instance passes `pointMarker`,
+whose `reachPx` reads the size and the outline as the renderer does. In
+`hitTestAll()` the tolerance of such a feature is its reach plus the click
+tolerance, and the screen space test of the symbols (under terrain) adds
+it as well.
+
+The candidates must be searched as far as the largest marker reaches,
+before any feature is read. The layer keeps the largest `pointRadius` and
+`pointStrokeWidth` the styles of the points name
+(`largestPointMarker`): it reads them from the rows when it is made, raises
+them by the rows each change creates or whose type or style it writes (the
+writes of the instance and those from elsewhere), never lowers them, and
+reads them again after the whole document is replaced. `pointMarker`'s
+`maxReachPx` adds the larger of each and of the point style of the
+instance, which can change at any time. A reach larger than the largest
+only adds candidates. `hitTestFeature()`, the path of
 the datasets, is unchanged: a dataset measures its own markers. A
 definition that takes some points (`appliesTo`) keeps the reach for the
 points it leaves to the built-in type, and its own `hitTest` decides for
@@ -633,15 +673,18 @@ down (layer, then group, then feature). The effective lock is decided by
 on the feature, its layer or its group, or hidden locally). Locked features
 are drawn and can be selected, so they stay among the candidates.
 
-The visibility lookup is built once per test with `createVisibilityLookup`
-(`src/dispatcher/hit-test/visibility-lookup.ts`). It reads each layer and
-group once per container and applies the result to the features. Calling
-`store.getLayer()` per feature would make one test O(N²) on a Store whose
-layer reads cost O(N) (a replaced Store that copies its order array on
-every read, for example), which stalls every `mousemove` on a few thousand
-points. The lookup is not kept between tests, so the next test always sees
-the current Store. The companion visibility in the unified traversal uses
-the same lookup.
+The layer reads the visibility from the rows of the candidates, and each
+layer and group once per test. Calling `store.getLayer()` per feature would
+make one test O(N²) on a Store whose layer reads cost O(N) (a replaced Store
+that copies its order array on every read, for example), which stalls every
+`mousemove` on a few thousand points. Nothing is kept between tests, so the
+next test always sees the current Store.
+
+`HitTestService.hitTestFeatures` tests the features it is given instead of
+the candidates of the document (the distance an extension asks of one
+feature). It keeps them as the visibility lookup of
+`src/dispatcher/hit-test/visibility-lookup.ts` decides, which reads each
+layer and group once per container.
 
 ### Box selection
 
@@ -731,12 +774,18 @@ screen position of the click. No geographic search is involved.
 - Only `Point` and `MultiPoint` are tested this way. Polygons, lines,
   circles and images are draped onto the ground and are occluded correctly
   by depth, so the geographic path is right for them
+- Every point shown is tested, from its positions read as columns
+  (`listShownPoints`), without a feature made of it; only a point whose
+  anchor falls within the click tolerance and the largest reach is made
+  and tested with its own reach. The work of this path grows with the
+  number of points shown
 - The reach in pixels is the click tolerance plus the registered candidate
   reach of the type. Occluded points are candidates too, since they are
   visible
 - While the projector returns null (terrain disabled, no frame yet), the
-  whole path falls back to the geographic one. Hit testing without terrain
-  is unchanged
+  whole path falls back to the geographic one. The position of the click
+  is projected first: when it gives null, no point is read at all, so hit
+  testing without terrain reads no point
 - Vertex handles already share the anchor of the selection UI drawing, so
   they need no special path
 
@@ -769,6 +818,10 @@ copy of the world near the antimeridian is described in
 - Lines and rings with many vertices are tested through the segment index
 - The visibility of layers and groups is looked up once per container and
   per test
+- No pointer event reads or makes every feature of the document: the
+  candidates near the point are read from their rows, and only they are
+  made. The first event after a change of the document costs the same as
+  the next ones
 - Without datasets and without companion providers, a
-  `mousemove` costs one index query and one pass of the strategies over
-  the candidates
+  `mousemove` costs one index query, one read of the candidates in stacking
+  order and one pass of the strategies over them
