@@ -5339,8 +5339,9 @@ export interface CompanionProvider {
     /** The name it is registered under */
     readonly name: string;
     /**
-     * Whether a feature has a companion. It is asked for every feature on every frame and
-     * every hit test, so it must answer at once.
+     * Whether a feature has a companion. It answers from the feature alone (its type and its
+     * values), and at once: the instance keeps the answer of a feature, and asks again when the
+     * feature changes or when a provider is registered or taken away, not on every frame.
      */
     has(feature: Feature): boolean;
     /** Draws the companion of a feature, given as it is drawn (see {@link SketchesCollection}). */
