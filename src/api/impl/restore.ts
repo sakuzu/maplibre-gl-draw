@@ -51,6 +51,7 @@ import type { InstanceDocument } from '../../store/document-access.js';
 import { DrawError } from '../errors.js';
 import type { EditCounts, RestoreOptions } from '../features.js';
 import type { BulkEdits } from './bulk-edits.js';
+import { sameValue } from './feature-rows.js';
 import {
   GEOMETRY_VERTICES,
   GEOMETRY_WHOLE,
@@ -541,7 +542,10 @@ function restoreWork(
       for (let h = 0; h < holderCount[k]; h++) {
         const slot = slots[k * valueCount + h];
         const part = given[holders[k * valueCount + h]].shared.rowsOf(slot);
-        if (typeof part.before?.fields.get('parent')?.[slot - part.start] === 'string') out = h;
+        const at = slot - part.start;
+        // A value whose change did not write the parent of this row does not give it
+        if (part.before?.written?.get('parent')?.[at] === 0) continue;
+        if (typeof part.before?.fields.get('parent')?.[at] === 'string') out = h;
       }
       return out;
     }
@@ -569,13 +573,22 @@ function restoreWork(
       const wholeAt = new Int32Array(rows.length);
       /** Whether each row is written back vertex by vertex (its geometry is read first) */
       const byVertices = new Uint8Array(rows.length);
-      let anyWhole = false;
+      /** The style now of the rows a value holds the whole style of (written back key by key) */
+      const stylesNow = wholeStylesNow(inLayer);
+      /** Gives the value of a field of a row, over what a later value gave */
+      const give = (field: FeatureRowField, k: number, value: unknown): void => {
+        let list = fieldValues.get(field);
+        if (!list) {
+          list = new Array<unknown>(rows.length).fill(NOT_GIVEN);
+          fieldValues.set(field, list);
+        }
+        list[k] = value;
+      };
       for (const k of inLayer) {
         deletedAfter[k] = deletedNow[k];
         let geometryWritten = false;
         // The keys left as they are, on a row that is there (one that comes back has every key)
         const leaves = except.size > 0 && deletedNow[k] === 0;
-        let left = false;
         let fieldGiven = false;
         for (let h = 0; h < holderCount[k]; h++) {
           const v = holders[k * valueCount + h];
@@ -588,32 +601,40 @@ function restoreWork(
             deletedAfter[k] = 1;
             continue;
           }
-          if (before.deleted) deletedAfter[k] = before.deleted[at] === 0 ? 0 : 1;
+          // Only what the change wrote of this row: a field it wrote of other rows only is not
+          // written back here
+          const written = before.written;
+          if (before.deleted && written?.get('deleted')?.[at] !== 0) {
+            deletedAfter[k] = before.deleted[at] === 0 ? 0 : 1;
+          }
           for (const [field, column] of before.fields) {
-            if (leaves && except.has(field)) {
-              left = true;
+            if (written?.get(field)?.[at] === 0) continue;
+            if (field === 'style') {
+              // The whole style written at once: every key of it, and of the style now, takes
+              // the value it had (a key it did not have is taken off)
+              const style = (column[at] ?? {}) as Record<string, unknown>;
+              const now = (stylesNow.get(k) ?? {}) as Record<string, unknown>;
+              for (const key of new Set([...Object.keys(style), ...Object.keys(now)])) {
+                give(`style:${key}` as FeatureRowField, k, style[key]);
+              }
+              fieldGiven = true;
               continue;
             }
+            if (leaves && except.has(field)) continue;
             fieldGiven = true;
-            let list = fieldValues.get(field);
-            if (!list) {
-              list = new Array<unknown>(rows.length).fill(NOT_GIVEN);
-              fieldValues.set(field, list);
-            }
-            list[k] = column[at];
+            give(field, k, column[at]);
           }
           const kind = part.geometryKinds?.[at];
           if (kind === GEOMETRY_WHOLE || kind === GEOMETRY_VERTICES) geometryWritten = true;
           if (kind === GEOMETRY_VERTICES) byVertices[k] = 1;
-          if (kind === GEOMETRY_WHOLE) anyWhole = true;
         }
         if (deletedAfter[k] === 1) {
           if (deletedNow[k] === 0) deleteRows.push(k);
           else markWritten(k);
         } else if (geometryWritten) {
           withGeometry.push(k);
-        } else if (left && !fieldGiven) {
-          // The values hold nothing else of the row: it is not written, and they are used up
+        } else if (!fieldGiven && deletedNow[k] === 0) {
+          // The values hold nothing of the row to write: it is not written, and they are used up
           markWritten(k);
         } else {
           others.push(k);
@@ -628,28 +649,42 @@ function restoreWork(
         };
         takeWritten(deleteRows, layer.writeRowValues(layerId, values, { ignoreLocks }));
       }
-      for (const list of apart(withGeometry)) writeGeometries(list);
-      for (const list of apart(others)) {
-        writeRows(layerId, list, fieldValues, deletedAfter, undefined);
-      }
+      if (withGeometry.length > 0) writeGeometries(withGeometry);
+      if (others.length > 0) writeRows(layerId, others, fieldValues, deletedAfter, undefined);
 
-      /**
-       * The rows that are there apart from those that come back, when keys are left as they are:
-       * a key written to a row that comes back is not written to the others
-       */
-      function apart(list: readonly number[]): ReadonlyArray<readonly number[]> {
-        if (list.length === 0) return [];
-        if (except.size === 0) return [list];
-        const there = list.filter((k) => deletedNow[k] === 0);
-        const back = list.filter((k) => deletedNow[k] === 1);
-        return [there, back].filter((part) => part.length > 0);
+      /** The style now of the rows some value holds the whole style of, read at once */
+      function wholeStylesNow(list: readonly number[]): Map<number, unknown> {
+        const out = new Map<number, unknown>();
+        const wanted: number[] = [];
+        for (const k of list) {
+          for (let h = 0; h < holderCount[k]; h++) {
+            const slot = slots[k * valueCount + h];
+            const part = given[holders[k * valueCount + h]].shared.rowsOf(slot);
+            const before = part.before;
+            if (!before?.fields.has('style')) continue;
+            if (before.written?.get('style')?.[slot - part.start] === 0) continue;
+            wanted.push(k);
+            break;
+          }
+        }
+        if (wanted.length === 0) return out;
+        const styles =
+          readFields(
+            tables,
+            Int32Array.from(wanted, (k) => rows[k]),
+            ['style'],
+          ).get('style') ?? [];
+        wanted.forEach((k, j) => {
+          out.set(k, styles[j]);
+        });
+        return out;
       }
 
       /** Writes rows with their geometries */
-      function writeGeometries(withGeometry: readonly number[]): void {
-        const geometry = new GeometryBuilder(withGeometry.length, n);
+      function writeGeometries(list: readonly number[]): void {
+        const geometry = new GeometryBuilder(list.length, n);
         // The geometries now of the rows written back vertex by vertex
-        const vertexRows = withGeometry.filter((k) => byVertices[k] === 1);
+        const vertexRows = list.filter((k) => byVertices[k] === 1);
         const now =
           vertexRows.length > 0
             ? tables.readValues(
@@ -661,7 +696,9 @@ function restoreWork(
         vertexRows.forEach((k, j) => {
           nowAt.set(k, j);
         });
-        for (const k of withGeometry) {
+        /** The rows given a geometry before whole, which their change takes back whole too */
+        const whole: number[] = [];
+        for (const k of list) {
           wholeFrom[k] = NO_SOURCE;
           // The geometry as the later values leave it: the one now, or a geometry before taken whole
           let current: VertexGeometry | null = null;
@@ -704,15 +741,23 @@ function restoreWork(
             const fromColumn = from.before?.geometry as GeometryColumn;
             const at = wholeAt[k] - from.start;
             geometry.add(geometryOfRow(fromColumn, at), fromColumn.types[at]);
+            whole.push(k);
           }
         }
-        // A part that wrote whole geometries takes them back whole the other way too
-        if (anyWhole) layer.markWholeGeometry();
-        writeRows(layerId, withGeometry, fieldValues, deletedAfter, geometry.build());
+        // The geometries written back whole are taken back whole the other way too; the others
+        // vertex by vertex
+        if (whole.length > 0) layer.markWholeGeometry(Int32Array.from(whole, (k) => rows[k]));
+        writeRows(layerId, list, fieldValues, deletedAfter, geometry.build());
       }
     }
 
-    /** Writes rows of one layer, the keys no value wrote taking the values they have now */
+    /**
+     * Writes rows of one layer at once. A row is written the fields its values give, and the
+     * marks of the write (`RowValues.written`) leave out the others: those take the values the
+     * row has now, and are not written (nor a value equal to the one the row has, as an edit
+     * writes none). The deletion is written to the rows that come back only. A row with nothing
+     * to write is not written (with no geometry given)
+     */
     function writeRows(
       layerId: string,
       list: readonly number[],
@@ -720,36 +765,63 @@ function restoreWork(
       deletedAfter: Uint8Array,
       geometry: GeometryColumn | undefined,
     ): void {
-      const refs = Int32Array.from(list, (k) => rows[k]);
+      const all = Int32Array.from(list, (k) => rows[k]);
       const names = [...fieldValues.keys()].filter((field) =>
         list.some((k) => fieldValues.get(field)?.[k] !== NOT_GIVEN),
       );
-      const missing = names.filter((field) =>
-        list.some((k) => fieldValues.get(field)?.[k] === NOT_GIVEN),
-      );
-      const now = missing.length > 0 ? readFields(tables, refs, missing) : undefined;
+      const now = names.length > 0 ? readFields(tables, all, names) : undefined;
+      /** Whether the values write a field of the row at `j`: given, and not the value it has */
+      const writes = (field: FeatureRowField, k: number, j: number): boolean => {
+        const value = (fieldValues.get(field) as unknown[])[k];
+        if (value === NOT_GIVEN) return false;
+        return deletedNow[k] === 1 || !sameValue(value, now?.get(field)?.[j]);
+      };
+      // The rows to write: every row given a geometry, a row that comes back, and a row with a
+      // field to write
+      const keep: number[] = [];
+      for (let j = 0; j < list.length; j++) {
+        const k = list[j];
+        if (geometry || deletedNow[k] === 1 || names.some((field) => writes(field, k, j))) {
+          keep.push(j);
+        } else {
+          markWritten(k);
+        }
+      }
+      if (keep.length === 0) return;
       const fields = new Map<FeatureRowField, unknown[]>();
+      const written = new Map<FeatureRowField | 'deleted', Uint8Array>();
       for (const field of names) {
         const given = fieldValues.get(field) as unknown[];
         const current = now?.get(field);
-        fields.set(
-          field,
-          list.map((k, j) => (given[k] === NOT_GIVEN ? current?.[j] : given[k])),
-        );
+        const marks = new Uint8Array(keep.length);
+        let count = 0;
+        const column = keep.map((j, i) => {
+          const k = list[j];
+          if (writes(field, k, j)) {
+            marks[i] = 1;
+            count += 1;
+            return given[k];
+          }
+          return current?.[j];
+        });
+        if (count === 0) continue;
+        fields.set(field, column);
+        if (count < keep.length) written.set(field, marks);
       }
-      const back = list.some((k) => deletedNow[k] === 1);
-      if (names.length === 0 && !geometry && !back) {
-        // Nothing to write: the values hold nothing more for these rows
-        for (const k of list) markWritten(k);
-        return;
+      const back = keep.some((j) => deletedNow[list[j]] === 1);
+      if (back) {
+        const marks = Uint8Array.from(keep, (j) => deletedNow[list[j]]);
+        if (marks.some((mark) => mark === 0)) written.set('deleted', marks);
       }
       const values: RowValues = {
-        rows: refs,
+        rows: keep.length === list.length ? all : Int32Array.from(keep, (j) => all[j]),
         fields,
         ...(geometry && { geometry }),
-        ...(back && { deleted: Uint8Array.from(list, (k) => deletedAfter[k]) }),
+        ...(back && { deleted: Uint8Array.from(keep, (j) => deletedAfter[list[j]]) }),
+        ...(written.size > 0 && { written }),
       };
-      takeWritten(list, layer.writeRowValues(layerId, values, { ignoreLocks }));
+      const kept = keep.map((j) => list[j]);
+      takeWritten(kept, layer.writeRowValues(layerId, values, { ignoreLocks }));
     }
 
     /** Marks the rows written, as the layer gave them back */

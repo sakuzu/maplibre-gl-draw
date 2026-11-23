@@ -55,7 +55,11 @@ export interface ValueRows {
   readonly layerId: string;
   /** The references of the rows */
   readonly rows: Int32Array;
-  /** The values the rows had before the change; undefined for the rows it created */
+  /**
+   * The values the rows had before the change; undefined for the rows it created. A field it
+   * wrote of some of the rows only says which (`RowValues.written`): the others are not written
+   * back
+   */
   readonly before: RowValues | undefined;
   /** Where these rows start among the rows of the values (their slots) */
   readonly start: number;
@@ -192,6 +196,7 @@ export class SharedValues {
       bytes += values.rows.byteLength;
       if (values.deleted) bytes += values.deleted.byteLength;
       for (const column of values.fields.values()) bytes += 8 * column.length;
+      for (const marks of values.written?.values() ?? []) bytes += marks.byteLength;
       const geometry = values.geometry;
       if (geometry) {
         bytes +=
@@ -395,17 +400,20 @@ function isEmptyDiff(diff: VertexDiff): boolean {
 
 /**
  * How the geometries a change wrote are written back: whole for a change that wrote whole
- * geometries, and for a row deleted or one whose type, parts or rings changed; vertex by vertex
- * otherwise, with what the change did to them (a row whose geometry did not change is not written
- * back)
+ * geometries (or for the rows it wrote whole geometries of), and for a row deleted or one whose
+ * type, parts or rings changed; vertex by vertex otherwise, with what the change did to them (a
+ * row whose geometry did not change, or that the change did not write the geometry of, is not
+ * written back)
  *
  * @param before - The values before of the rows of one layer, their geometries among them
  * @param after - The geometries of the rows there after the change (`readValues`), for the
  *   positions given
  * @param positions - The position in `before` of each row read in `after`
- * @param wholeGeometry - Whether the change wrote whole geometries
+ * @param wholeGeometry - Whether the change wrote whole geometries: every geometry it wrote when
+ *   true, those of the rows `isWhole` tells otherwise
  * @param start - The slot of the first row of `before`
  * @param tracked - Takes the rows written back vertex by vertex, by their slots
+ * @param isWhole - Whether the change wrote the geometry of a row (by its reference) whole
  * @internal
  */
 export function geometryKindsOf(
@@ -415,12 +423,19 @@ export function geometryKindsOf(
   wholeGeometry: boolean,
   start: number,
   tracked: Map<number, TrackedGeometry>,
+  isWhole: (ref: number) => boolean = () => false,
 ): Uint8Array {
   const column = before.geometry as GeometryColumn;
   const kinds = new Uint8Array(before.rows.length).fill(GEOMETRY_WHOLE);
+  // A row the change did not write the geometry of is not written back
+  const written = before.written?.get('geometry');
+  if (written) {
+    for (let i = 0; i < kinds.length; i++) if (written[i] === 0) kinds[i] = GEOMETRY_KEPT;
+  }
   if (wholeGeometry || !after) return kinds;
   for (let k = 0; k < positions.length; k++) {
     const i = positions[k];
+    if (written?.[i] === 0 || isWhole(before.rows[i])) continue;
     const was = geometryOfRow(column, i);
     const now = geometryOfRow(after, k);
     if (column.types[i] === 255 || after.types[k] === 255) continue;
@@ -452,6 +467,7 @@ export function geometryKindsOf(
  * @param input.layerIds - The layers there are, where the rows created are looked for (read once
  *   when the change created rows)
  * @param input.wholeGeometry - Whether the change wrote whole geometries
+ * @param input.wholeRows - The rows it wrote whole geometries of, when not every geometry it wrote
  * @param input.groups - What the change did to the groups
  * @param input.made - Counts an object made (an array)
  * @internal
@@ -462,10 +478,12 @@ export function valuesOfChange(input: {
   readonly tables: FeatureTables;
   readonly layerIds: () => readonly string[];
   readonly wholeGeometry: boolean;
+  readonly wholeRows?: readonly Int32Array[];
   readonly groups: GroupChanges;
   readonly made?: (count: number) => void;
 }): SharedValues | null {
   const { tables } = input;
+  const isWhole = wholeRowsLookup(input.wholeRows ?? []);
   const rows: ValueRows[] = [];
   const ids: string[] = [];
   const tracked = new Map<number, TrackedGeometry>();
@@ -497,6 +515,7 @@ export function valuesOfChange(input: {
         input.wholeGeometry,
         start,
         tracked,
+        isWhole,
       );
       input.made?.(3);
     }
@@ -545,6 +564,32 @@ export function valuesOfChange(input: {
 }
 
 /**
+ * Whether a row (by its reference) is among rows, looked up in them sorted once (false for none)
+ */
+function wholeRowsLookup(lists: readonly Int32Array[]): (ref: number) => boolean {
+  let total = 0;
+  for (const list of lists) total += list.length;
+  if (total === 0) return () => false;
+  const sorted = new Int32Array(total);
+  let at = 0;
+  for (const list of lists) {
+    sorted.set(list, at);
+    at += list.length;
+  }
+  sorted.sort();
+  return (ref) => {
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid] < ref) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo < sorted.length && sorted[lo] === ref;
+  };
+}
+
+/**
  * The parents rows had before a change, each once, with the layer each one was or was in when the
  * change is told (see `ValueRows.placesBefore`): a layer is its own; a group there is in the layer
  * that holds its rows, and a group the change deleted in the layer it was deleted from. Undefined
@@ -561,11 +606,14 @@ function placesBeforeOf(
 ): ReadonlyMap<string, string | undefined> | undefined {
   const parents = before.fields.get('parent');
   if (!parents || parents.length === 0) return undefined;
+  // Only the parents of the rows the change wrote the parent of
+  const written = before.written?.get('parent');
   const { tables } = input;
   const places = new Map<string, string | undefined>();
   let layers: ReadonlySet<string> | undefined;
   let last: unknown;
   for (let i = 0; i < parents.length; i++) {
+    if (written?.[i] === 0) continue;
     const parent = parents[i];
     // The rows of one parent mostly follow each other: each is looked up once
     if (i > 0 && parent === last) continue;

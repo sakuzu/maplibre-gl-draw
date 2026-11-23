@@ -128,7 +128,13 @@ export interface Store extends StoreView {
    * there) and it comes back there; without one the call throws `notFound`.
    *
    * A new `parent` puts a row in another layer or group (into the layer of the group), and a new
-   * `orderKey` puts it in another place there. The rows of one call are those of one layer.
+   * `orderKey` puts it in another place there. The rows of one call are those of one layer. One
+   * call writes the whole look (`style`) or keys of it (`style:<key>`), not both.
+   *
+   * Values with `written` ({@link RowValues.written}) write a field to the rows marked only: the
+   * caller gives, for the other rows, the value the row has now, so that a Store that does not
+   * read the marks writes the same value again, and one that reads them leaves the field of
+   * those rows unwritten (it is not in the values before of the write either).
    *
    * A deleted row that a {@link DeletedRowsToken} keeps, and one that values of features keep on
    * the main entry (`FeatureValues`), are found by their ids with `tables.findRow`.
@@ -484,6 +490,15 @@ export interface RowValues {
    * comes back at its place as it was); absent when the deletion is not read or written
    */
   readonly deleted?: Uint8Array;
+  /**
+   * In the values before of a change ({@link StoreChange.previousValues}): the rows the change
+   * wrote each field of, non-zero at entry `i` when it wrote the field of row `i`; the geometry
+   * is named `'geometry'` and the deletion `'deleted'`. A field the change wrote of every row has
+   * no entry, and the value of a row it did not write a field of is the value the row had,
+   * which a caller that writes the change back leaves as it is. Given to `writeRows`, it tells
+   * the rows each field is written to (see `writeRows`). Absent from values read from the rows.
+   */
+  readonly written?: ReadonlyMap<FeatureRowField | 'deleted', Uint8Array>;
 }
 
 /**
@@ -733,7 +748,11 @@ export interface StoreChange {
    * keys of the style written), with `deleted` for the rows it deleted or brought back. A row
    * created by the transaction has none. In a change with `reset`, the rows taken out have every
    * field they had (their geometry, their type, their place, their flags, every attribute and
-   * every key of their style): they cannot be read from the tables once they are taken out. Only
+   * every key of their style): they cannot be read from the tables once they are taken out. When
+   * the transaction wrote a field of some of the rows only, `written` of the values tells which
+   * (a Store that leaves it out says that every row was written every field, and a change
+   * written back then overwrites what the other rows got since). Every field given to a write
+   * made to the Store directly is written, a value equal to the one the row had included. Only
    * for a listener that asked for them, for this source ({@link SubscribeOptions.previousValues}).
    */
   previousValues?: ReadonlyMap<string, RowValues>;

@@ -248,6 +248,28 @@ function deletedRowsOf(rows: Int32Array, deleted: Uint8Array): Int32Array {
 }
 
 /** Throws unless values of rows keep the rules of their fields */
+/**
+ * The marks of the rows each field of a write is written to (`RowValues.written`), checked:
+ * undefined when every row is written every field
+ */
+function writtenMarksOf(
+  what: string,
+  written: unknown,
+  rows: number,
+): ReadonlyMap<string, Uint8Array> | undefined {
+  if (written === undefined) return undefined;
+  if (!(written instanceof Map)) invalid(`${what}: written is not a Map`);
+  for (const [field, mark] of written as Map<unknown, unknown>) {
+    if (typeof field !== 'string') invalid(`${what}: a key of written is not a field`);
+    if (!(mark instanceof Uint8Array) || mark.length !== rows) {
+      invalid(
+        `${what}: the marks of ${JSON.stringify(field)} are not a Uint8Array of one entry per row`,
+      );
+    }
+  }
+  return written.size > 0 ? (written as ReadonlyMap<string, Uint8Array>) : undefined;
+}
+
 function checkValues(what: string, values: RowValues | NewRows, valuesPerPosition: number): void {
   const problem = validateRowValues(
     values,
@@ -584,8 +606,14 @@ export function storeWritesOf(
       const written =
         again.length > 0 ? withValuesOfNewRows(fields, Int32Array.from(again), ids.length) : fields;
       const refs = tables(() => rowWrites.allocateRowRefs(column));
+      // The rows that come back are written their deletion as well
       if (found)
-        readValuesBefore(changes, refs, fieldsWritten(written, geometry as GeometryColumn));
+        readValuesBefore(
+          changes,
+          refs,
+          [...fieldsWritten(written, geometry as GeometryColumn), 'deleted'],
+          { marks: new Map([['deleted', found]]) },
+        );
       try {
         writeTables(refs, written, geometry as GeometryColumn, layerId, undefined, true);
       } catch (error) {
@@ -616,6 +644,7 @@ export function storeWritesOf(
       }
       const { rows, fields, geometry, deleted } = values;
       checkFields(what, fields);
+      const marks = writtenMarksOf(what, values.written, rows.length);
       if (rows.length === 0) {
         checkValues(what, values, 2);
         return true;
@@ -688,7 +717,14 @@ export function storeWritesOf(
           }
         }
       }
-      readValuesBefore(changes, rows, fieldsWritten(fields, geometry));
+      // The rows the marks leave out are given the values they have, and are not written: the
+      // values before leave them out
+      readValuesBefore(
+        changes,
+        rows,
+        [...fieldsWritten(fields, geometry), ...(deleted ? (['deleted'] as const) : [])],
+        { marks },
+      );
       writeTables(
         rows,
         fields,
@@ -759,7 +795,9 @@ export function storeWritesOf(
       // The values before: every field of every row there is, with its deletion, as the rows
       // cannot be read once they are taken out (only for a listener that asked for them)
       if (readsValuesBefore(changes)) {
-        for (const refs of rows.values()) readValuesBefore(changes, refs, everyFieldOf(refs));
+        for (const refs of rows.values()) {
+          readValuesBefore(changes, refs, [...everyFieldOf(refs), 'deleted']);
+        }
       }
       addCleared(changes, {
         rows,
@@ -872,7 +910,7 @@ export function storeWritesOf(
           refs.set(batch, at);
           at += batch.length;
         }
-        readValuesBefore(changes, refs, []);
+        readValuesBefore(changes, refs, ['deleted']);
         const deleted = new Uint8Array(length).fill(1);
         const tablesToken = tablesTokenOf(changes);
         const written = tables(() =>

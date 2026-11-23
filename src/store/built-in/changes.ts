@@ -564,11 +564,12 @@ function pendingOf(changes: Changes): PendingChange {
 export function readValuesBefore(
   changes: Changes,
   rows: Int32Array,
-  fields: Iterable<FeatureRowField>,
+  fields: Iterable<FeatureRowField | 'deleted'>,
+  options?: { readonly marks?: ReadonlyMap<string, Uint8Array> },
 ): void {
   const before = changes.transaction?.before;
   const read = changes.readBefore;
-  if (before && read) readBeforeWrite(before, read, rows, fields);
+  if (before && read) readBeforeWrite(before, read, rows, fields, options);
 }
 
 /**

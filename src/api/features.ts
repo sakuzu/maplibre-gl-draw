@@ -405,7 +405,9 @@ export interface FeaturesCollection {
    *
    * - The geometry is taken back vertex by vertex, as the values keep it (see
    *   {@link FeatureValues}): a vertex the change moved goes back to where it was, a vertex it
-   *   added is deleted, and a vertex it deleted comes back; the other vertices, such as those
+   *   added is deleted, and a vertex it deleted comes back before the vertex that was after
+   *   it (at the end when it was the last one; when the vertex that was after it is gone, it
+   *   does not come back and is counted as skipped); the other vertices, such as those
    *   another edit moved since, stay as they are. The vertices are followed from the change to
    *   now as {@link VertexRef} says; one that cannot be followed is left as it is and counted
    *   (`EditCounts.skippedVertexCount`). A change that changed the whole geometry (a move, a
@@ -414,14 +416,23 @@ export interface FeaturesCollection {
    *   given whole (`features.update`) with the same type, parts and rings is compared with
    *   the one before vertex by vertex, as any other edit.
    * - Any other value (an attribute, a key of the look, a flag, the place) is written back key
-   *   by key: a key the change did not write keeps what it has now.
-   * - A feature the change deleted comes back where it was, in its layer and its group, while
-   *   the values keep it ({@link FeaturesCollection.releaseValues}). (Deleting features does
+   *   by key, feature by feature: a key the change did not write of a feature keeps what that
+   *   feature has now, whatever the change wrote of other features. The layer or group a
+   *   feature is in and its position there are two keys (a move within a layer wrote the
+   *   position alone), and a key written with the value it already had was not written. A
+   *   change that wrote the whole look of a feature at once (a write made to the Store
+   *   directly with the field `style`) wrote every key of it, and takes them all back.
+   * - A feature the change deleted comes back where it was, in its layer and its group, at
+   *   the position its place before gives among what is there now, while
+   *   the values keep it ({@link FeaturesCollection.releaseValues}); one that is there again
+   *   already is left as it is, and nothing of it is written. (Deleting features does
    *   not delete the embedded files they name, so there is no file to bring back with them.) A
    *   feature whose group is not there goes into the layer of the group. A feature the change
-   *   created is deleted.
+   *   created is deleted. A feature the change wrote that is deleted now stays deleted:
+   *   nothing of it is written.
    * - The groups, which hold the features, are written back with them: a group the change
-   *   deleted comes back where it was, a group it created is deleted, a group it moved goes
+   *   deleted comes back where it was, a group it created is deleted (the features put into
+   *   it since stay in its layer, as `groups.delete` leaves them), a group it moved goes
    *   back to where it was, and a group whose values it changed (its name, its visibility,
    *   its lock) takes them back.
    *

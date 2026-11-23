@@ -317,6 +317,7 @@ function tellSubscribers(
           tables: store.getTables(),
           layerIds: () => store.getLayerOrder(),
           wholeGeometry: summary.wholeGeometry,
+          wholeRows: summary.wholeRows,
           groups: groupChangesOf(changes.groups, summary.groupsMoved, summary.groupsDeleted),
           made: (count) => countWork(counts, 'objectsCreated', count),
         })

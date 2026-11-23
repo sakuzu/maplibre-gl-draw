@@ -616,10 +616,11 @@ export interface DocumentOperations {
   isLayerBeingDeleted(id: string): boolean;
   /**
    * Notes that the transaction open writes whole geometries (a move, a rotation, a scaling): its
-   * change carries the mark, so that what it wrote is taken back whole. Nothing outside a
-   * transaction
+   * change carries the mark, so that what it wrote is taken back whole. With rows, only the
+   * geometries of those rows are (the others it writes are taken back vertex by vertex).
+   * Nothing outside a transaction
    */
-  markWholeGeometry(): void;
+  markWholeGeometry(rows?: Int32Array): void;
 }
 
 /**

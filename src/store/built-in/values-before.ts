@@ -17,6 +17,11 @@
  * positions (`GeometryColumn`), never an object per row. A transaction of one write gives the
  * values that write read as they are.
  *
+ * Each read keeps the fields its write wrote, with the rows of each when the write marks them
+ * (`RowValues.written`): the values before tell, by field, the rows the transaction wrote it of
+ * (`written`, an entry only for a field some rows were not written; the geometry is `'geometry'`
+ * and the deletion `'deleted'`). A read again for a field a later write brought wrote nothing.
+ *
  * @internal
  */
 
@@ -43,7 +48,26 @@ export interface ValuesBefore {
   readonly known: Set<FeatureRowField>;
   /** What each read read, in the order of the reads */
   readonly parts: RowValues[];
+  /** What the write of each read wrote, in the same order (see `WrittenOfRead`) */
+  readonly writtenOf: WrittenOfRead[];
 }
+
+/**
+ * What the write of one read wrote: its fields (`'geometry'` and `'deleted'` among them), and
+ * for a field it wrote of some of its rows only, those rows (one entry per row of the read)
+ *
+ * @internal
+ */
+export interface WrittenOfRead {
+  readonly fields: ReadonlySet<string>;
+  readonly marks: ReadonlyMap<string, Uint8Array> | undefined;
+}
+
+/** A read that wrote nothing (a read again for a field a later write brought) */
+const WROTE_NOTHING: WrittenOfRead = Object.freeze({ fields: new Set<string>(), marks: undefined });
+
+/** The deletion, named among the fields a write wrote */
+const DELETED = 'deleted';
 
 /**
  * Nothing read yet
@@ -51,7 +75,7 @@ export interface ValuesBefore {
  * @internal
  */
 export function createValuesBefore(): ValuesBefore {
-  return { fields: [], known: new Set(), parts: [] };
+  return { fields: [], known: new Set(), parts: [], writtenOf: [] };
 }
 
 /** The rows of parts, one after the other */
@@ -71,17 +95,24 @@ function joinedRows(parts: readonly RowValues[]): Int32Array {
 /**
  * Reads the values rows have before a write writes the fields given
  *
+ * @param written - The fields the write writes (`'deleted'` for its deletion, which is not read
+ *   as a field)
+ * @param options.marks - The rows the write writes each field of, when not all (one entry per
+ *   row, as `RowValues.written`)
  * @internal
  */
 export function readBeforeWrite(
   before: ValuesBefore,
   read: ReadBefore,
   rows: Int32Array,
-  written: Iterable<FeatureRowField>,
+  written: Iterable<FeatureRowField | typeof DELETED>,
+  options: { readonly marks?: ReadonlyMap<string, Uint8Array> } = {},
 ): void {
   const added: FeatureRowField[] = [];
+  const own = new Set<string>();
   for (const field of written) {
-    if (before.known.has(field)) continue;
+    own.add(field);
+    if (field === DELETED || before.known.has(field)) continue;
     before.known.add(field);
     before.fields.push(field);
     added.push(field);
@@ -89,8 +120,15 @@ export function readBeforeWrite(
   // The rows read before have the values they had for the fields no write wrote yet
   if (added.length > 0 && before.parts.length > 0) {
     before.parts.push(read(joinedRows(before.parts), added));
+    before.writtenOf.push(WROTE_NOTHING);
   }
-  if (rows.length > 0) before.parts.push(read(rows, [...before.fields]));
+  if (rows.length > 0) {
+    before.parts.push(read(rows, [...before.fields]));
+    before.writtenOf.push({
+      fields: own,
+      marks: options.marks && options.marks.size > 0 ? options.marks : undefined,
+    });
+  }
 }
 
 /** The geometries of rows taken from the geometries of other rows, into new columns */
@@ -194,7 +232,13 @@ export function valuesBeforeOf(
 
   const parts = before.parts;
   // One read of exactly the rows of one layer: its values, as they are
-  if (parts.length === 1 && layers.length === 1 && parts[0].rows.length === total) {
+  if (
+    parts.length === 1 &&
+    layers.length === 1 &&
+    parts[0].rows.length === total &&
+    before.writtenOf[0]?.marks === undefined &&
+    before.writtenOf[0] !== WROTE_NOTHING
+  ) {
     const seen = new Uint8Array(total);
     let all = true;
     for (const row of parts[0].rows) {
@@ -223,12 +267,24 @@ export function valuesBeforeOf(
   const at = new Int32Array(total);
   const deleted = new Uint8Array(total);
   const taken = new Uint8Array(total);
-  for (const list of counts) countWork(list, 'objectsCreated', 2 * fields.length + 4);
+  // The rows each field was written of: the fields, then the geometry, then the deletion
+  const marks = Array.from({ length: fields.length + 2 }, () => new Uint8Array(total));
+  for (const list of counts) countWork(list, 'objectsCreated', 3 * fields.length + 6);
   const take = (part: RowValues, index: number): void => {
     const columns = fields.map((field) => part.fields.get(field));
+    const wrote = before.writtenOf[index] ?? WROTE_NOTHING;
+    // For each field and the geometry and the deletion: whether the write wrote it, and of which rows
+    const writtenColumns = [...fields, 'geometry', DELETED].map((field) =>
+      wrote.fields.has(field) ? (wrote.marks?.get(field) ?? null) : undefined,
+    );
     for (let i = 0; i < part.rows.length; i++) {
       const place = placeOf.get(part.rows[i]);
       if (place === undefined) continue;
+      for (let f = 0; f < writtenColumns.length; f++) {
+        const column = writtenColumns[f];
+        if (column === undefined) continue;
+        if (column === null || column[i] !== 0) marks[f][place] = 1;
+      }
       for (let f = 0; f < fields.length; f++) {
         const column = columns[f];
         if (!column || have[f][place]) continue;
@@ -282,8 +338,41 @@ export function valuesBeforeOf(
       }),
     };
     for (const list of counts) countWork(list, 'objectsCreated', 2 + fields.length);
-    out.set(layer.id, withDeletion(layerValues, deleted, layer.deletedRows, start, end));
+    const withDeleted = withDeletion(layerValues, deleted, layer.deletedRows, start, end);
+    const written = writtenOfLayer(withDeleted, fields, marks, start, end, counts);
+    out.set(layer.id, written ? { ...withDeleted, written } : withDeleted);
   }
+  return out;
+}
+
+/**
+ * The rows of a layer each field was written of, for the fields some of them were not written
+ * (undefined when every row was written every field the values hold)
+ */
+function writtenOfLayer(
+  values: RowValues,
+  fields: readonly FeatureRowField[],
+  marks: readonly Uint8Array[],
+  start: number,
+  end: number,
+  counts: readonly WorkCounts[],
+): Map<FeatureRowField | typeof DELETED, Uint8Array> | undefined {
+  let out: Map<FeatureRowField | typeof DELETED, Uint8Array> | undefined;
+  const add = (field: FeatureRowField | typeof DELETED, mark: Uint8Array): void => {
+    for (let i = start; i < end; i++) {
+      if (mark[i] !== 0) continue;
+      out ??= new Map();
+      out.set(field, mark.slice(start, end));
+      for (const list of counts) countWork(list, 'objectsCreated');
+      return;
+    }
+  };
+  fields.forEach((field, f) => {
+    add(field, marks[f]);
+  });
+  if (values.geometry) add('geometry', marks[fields.length]);
+  if (values.deleted) add(DELETED, marks[fields.length + 1]);
+  if (out) for (const list of counts) countWork(list, 'objectsCreated');
   return out;
 }
 
@@ -327,6 +416,7 @@ export function shareValuesBefore(
       fields: new Map(layer.fields),
       ...(layer.geometry && { geometry: { ...layer.geometry } }),
       ...(layer.deleted && { deleted: layer.deleted }),
+      ...(layer.written && { written: new Map(layer.written) }),
     });
   }
   for (const list of counts) countWork(list, 'objectsCreated', 1 + 3 * values.size);

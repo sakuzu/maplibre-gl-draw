@@ -17,6 +17,9 @@ import type { Feature, FeatureStyle } from '../../store/types.js';
 /** The prefix of the fields of the attributes of a row */
 export const PROPERTY_FIELD = 'properties:';
 
+/** The prefix of the field of a key of the style (`style:<key>`) */
+const STYLE_FIELD = 'style:';
+
 /** The fields every feature is read with, besides its attributes */
 export const FEATURE_FIELDS: readonly FeatureRowField[] = Object.freeze([
   'type',
@@ -241,7 +244,7 @@ export function newRowFields(
 }
 
 /** Whether two values read from JSON are the same, key by key */
-function sameValue(a: unknown, b: unknown): boolean {
+export function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
@@ -261,8 +264,9 @@ function sameValue(a: unknown, b: unknown): boolean {
 
 /**
  * The fields of a row that an update of a feature writes: the fields of the values that differ
- * from the feature before it, and the geometry when it is given. The place (`parent` and
- * `orderKey`) is written by the caller.
+ * from the feature before it, and the geometry when it is given. The style is written by the
+ * keys that differ (`style:<key>`), as the attributes are, so that a change names the keys it
+ * wrote. The place (`parent` and `orderKey`) is written by the caller.
  */
 export function updatedRowFields(
   previous: Feature,
@@ -278,7 +282,12 @@ export function updatedRowFields(
     fields.set('locked', [updated.locked === true]);
   }
   if ('style' in updates && !sameValue(updated.style, previous.style)) {
-    fields.set('style', [(updated.style ?? {}) as FeatureStyle]);
+    const before = (previous.style ?? {}) as Record<string, unknown>;
+    const after = (updated.style ?? {}) as Record<string, unknown>;
+    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      if (sameValue(after[key], before[key])) continue;
+      fields.set(`${STYLE_FIELD}${key}` as FeatureRowField, [after[key]]);
+    }
   }
   if ('properties' in updates) {
     const before = previous.properties ?? {};

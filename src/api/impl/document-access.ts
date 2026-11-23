@@ -138,6 +138,8 @@ interface Notes {
   claimed: boolean;
   /** Whether the change wrote whole geometries (see `DocumentOperations.markWholeGeometry`) */
   wholeGeometry: boolean;
+  /** The rows the change wrote whole geometries of, when not every geometry it wrote */
+  wholeRows: Int32Array[];
   /** The groups deleted, with the layer and the key of the place each had */
   readonly groupsDeleted: Map<string, { layerId: string; key: string }>;
   /** The groups created (null for none) */
@@ -175,6 +177,7 @@ function newNotes(): Notes {
     tokens: [],
     claimed: false,
     wholeGeometry: false,
+    wholeRows: [],
     groupsDeleted: new Map(),
     groupsCreated: null,
     places: null,
@@ -265,6 +268,7 @@ function mergeNotes(target: Notes, from: Notes): void {
   // The tokens go with the notes they are merged into, once
   for (const token of from.tokens.splice(0)) target.tokens.push(token);
   if (from.wholeGeometry) target.wholeGeometry = true;
+  for (const rows of from.wholeRows.splice(0)) target.wholeRows.push(rows);
   for (const [id, place] of from.groupsDeleted) {
     if (!target.groupsDeleted.has(id)) target.groupsDeleted.set(id, place);
   }
@@ -324,6 +328,11 @@ export interface ChangeSummary {
    * wrote is taken back whole
    */
   readonly wholeGeometry: boolean;
+  /**
+   * The rows whose geometries the change wrote whole, when it did not write every geometry so
+   * (empty otherwise): those are taken back whole, the others vertex by vertex
+   */
+  readonly wholeRows: readonly Int32Array[];
   /** The groups the change deleted, with the layer and the key of the place each had */
   readonly groupsDeleted: ReadonlyMap<string, { readonly layerId: string; readonly key: string }>;
   /**
@@ -611,8 +620,18 @@ function selectRows(values: RowValues, at: readonly number[]): RowValues {
     fields: typeof fields;
     geometry?: GeometryColumn;
     deleted?: Uint8Array;
+    written?: Map<FeatureRowField | 'deleted', Uint8Array>;
   } = { rows, fields };
   if (values.deleted) out.deleted = Uint8Array.from(at, (i) => values.deleted?.[i] ?? 0);
+  if (values.written) {
+    out.written = new Map();
+    for (const [field, marks] of values.written) {
+      out.written.set(
+        field,
+        Uint8Array.from(at, (i) => marks[i]),
+      );
+    }
+  }
   const g = values.geometry;
   if (g) {
     const types = new Uint8Array(at.length);
@@ -1576,6 +1595,7 @@ export function createDocumentAccess(
         };
       },
       wholeGeometry: notes.wholeGeometry,
+      wholeRows: notes.wholeRows,
       groupsDeleted: notes.groupsDeleted,
       positionAfter(id: string) {
         const fixed = notes.fixedMoves;
@@ -1624,6 +1644,7 @@ export function createDocumentAccess(
       notes.wholeGeometry = true;
       wholeGeometryNow = false;
     }
+    for (const rows of wholeRowsNow.splice(0)) notes.wholeRows.push(rows);
     return notes;
   };
 
@@ -1843,6 +1864,8 @@ export function createDocumentAccess(
    * `DocumentOperations.markWholeGeometry`): noted with its change
    */
   let wholeGeometryNow = false;
+  /** The rows the transaction open wrote whole geometries of (see `markWholeGeometry`) */
+  const wholeRowsNow: Int32Array[] = [];
   let rowSource: UpdateSource = 'local';
   /** Whether a transaction of the instance on the Store is being opened */
   let opening = false;
@@ -1945,7 +1968,10 @@ export function createDocumentAccess(
     } finally {
       opening = false;
       // The change of an outermost transaction has been told: its mark goes with it
-      if (openedOutermost) wholeGeometryNow = false;
+      if (openedOutermost) {
+        wholeGeometryNow = false;
+        wholeRowsNow.length = 0;
+      }
     }
     if (!openedOutermost && wroteRows && !awaitingRows) {
       // The change of the Store comes when the transaction opened from elsewhere ends: what
@@ -4067,15 +4093,29 @@ export function createDocumentAccess(
       const fields = new Map(write.fields);
       fields.set('parent', parentColumn);
       fields.set('orderKey', keyColumn);
-      write = { ...write, fields };
+      // The place given to those rows is written to them
+      let written = write.written;
+      if (written && (written.has('parent') || written.has('orderKey'))) {
+        const marks = new Map(written);
+        for (const field of ['parent', 'orderKey'] as const) {
+          const mark = marks.get(field);
+          if (!mark) continue;
+          const copy = mark.slice();
+          for (const k of homeless) copy[k] = 1;
+          marks.set(field, copy);
+        }
+        written = marks;
+      }
+      write = { ...write, fields, ...(written && { written }) };
       for (const key of keys) keyTaken(layerId, key);
     }
     // Read from the change of the Store, as a change written to it directly
     stored(store.writeRows(write));
     const deleted = write.deleted;
     if (deleted) {
+      const marks = write.written?.get('deleted');
       for (let k = 0; k < write.rows.length; k++) {
-        if (deleted[k] === 0) broughtBack.add(write.rows[k]);
+        if (deleted[k] === 0 && marks?.[k] !== 0) broughtBack.add(write.rows[k]);
       }
     }
     return write.rows;
@@ -4227,6 +4267,7 @@ export function createDocumentAccess(
         const patch: Record<string, unknown> = {};
         const properties: Record<string, unknown> = { ...now.properties };
         let propertiesChanged = false;
+        let style: Record<string, unknown> | undefined;
         for (const [field, column] of before.fields) {
           const value = column[at];
           if (field.startsWith(PROPERTY_FIELD)) {
@@ -4236,6 +4277,12 @@ export function createDocumentAccess(
             else properties[key] = value;
           } else if (field === 'parent') {
             Object.assign(patch, placeOf(value));
+          } else if (field.startsWith(STYLE_FIELD)) {
+            // A key of the style written alone: the style before is the one now with that key
+            const key = field.slice(STYLE_FIELD.length);
+            style ??= { ...now.style };
+            if (value === undefined) delete style[key];
+            else style[key] = value;
           } else if (
             field === 'visible' ||
             field === 'locked' ||
@@ -4246,6 +4293,7 @@ export function createDocumentAccess(
           }
         }
         if (propertiesChanged) patch.properties = properties;
+        if (style && !('style' in patch)) patch.style = style;
         if (before.geometry) {
           const shape = geometryOfBefore(before, at);
           if (shape) patch.geometry = shape;
@@ -4920,8 +4968,10 @@ export function createDocumentAccess(
       }
     },
     isLayerBeingDeleted: (id: string) => layersBeingDeleted?.has(id) === true,
-    markWholeGeometry() {
-      if (rowDepth > 0) wholeGeometryNow = true;
+    markWholeGeometry(rows?: Int32Array) {
+      if (rowDepth === 0) return;
+      if (rows === undefined) wholeGeometryNow = true;
+      else if (rows.length > 0) wholeRowsNow.push(rows.slice());
     },
 
     // The reads by position

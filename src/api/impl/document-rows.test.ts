@@ -631,9 +631,9 @@ describe('a key of the style of an extension', () => {
       new Map([['style:example:dashed', [[false]]]]),
     );
     const layerId = draw.features.get('p0')?.layerId ?? '';
-    expect(changes[changes.length - 1]?.previousValues?.get(layerId)?.fields.get('style')).toEqual([
-      { fillColor: '#f00', 'example:dashed': true },
-    ]);
+    expect(
+      changes[changes.length - 1]?.previousValues?.get(layerId)?.fields.get('style:example:dashed'),
+    ).toEqual([true]);
     // One key written alone to the Store
     store.transact(() => {
       store.writeRows({
