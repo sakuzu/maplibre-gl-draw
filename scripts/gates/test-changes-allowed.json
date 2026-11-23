@@ -1250,6 +1250,11 @@
       "path": "src/api/impl/work-scenes.test.ts",
       "change": "the click of the select scene is counted at a place found before the count, which reads every feature through the public list",
       "unit": "the work that tests what is under the pointer from the features near it, without making a feature of every row"
+    },
+    {
+      "path": "src/api/impl/document-rows.test.ts",
+      "change": "the value before of a key of the style written alone is read from its own field (style:example:dashed), as the look is written key by key",
+      "unit": "the restore that takes a change back feature by feature, field by field and key by key of the look"
     }
   ]
 }
