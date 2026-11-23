@@ -746,6 +746,13 @@ export interface Draw {
      */
     transact<T>(fn: () => T, options?: TransactOptions): T;
     /**
+     * Whether a `draw.transact` of this instance is running now: true inside its `fn`, false
+     * otherwise (a transaction opened on the Store directly is not one of this instance, and
+     * the parts of a bulk edit that follow after `fn` returned are not either). For a caller
+     * that must not run inside a transaction and would rather wait than throw.
+     */
+    isTransacting(): boolean;
+    /**
      * Waits for the edits of this client that are being written to the document in parts (not a
      * saving elsewhere): the bulk edits under
      * way, the one a drag that was let go of writes, and the loads. It waits for those that were
@@ -1418,8 +1425,8 @@ export interface FeaturesCollection {
      *
      * @param values - The values, in the order their changes arrived
      * @param options - Where the writes come from (`'local'` when left out; an extension that
-     *   writes back the edits of the user names its own source), and whether they ignore the
-     *   locks
+     *   writes back the edits of the user names its own source), whether they ignore the
+     *   locks, and the keys of the attributes it leaves as they are
      * @returns The counts of the edit, or `null` when it is refused (read-only, or every feature
      *   is locked)
      * Values are used up by what is written back of them. A `restore` that stopped
@@ -1434,7 +1441,7 @@ export interface FeaturesCollection {
      *   one this instance gave to this subscriber, was let go of, or was written back whole, or
      *   `notFound` when it names a layer that is not there; nothing is written then
      */
-    restore(values: readonly FeatureValues[], options?: EditOptions): Promise<EditCounts | null>;
+    restore(values: readonly FeatureValues[], options?: RestoreOptions): Promise<EditCounts | null>;
     /**
      * Lets go of what values of features keep: the features and groups a change deleted,
      * kept so that `restore` can bring them back. Every subscriber that asks for the values
@@ -2292,6 +2299,18 @@ export interface EditOptions {
      * that of the `draw.transact` the edit is started in.
      */
     ignoreLocks?: boolean;
+}
+
+/** The options of `features.restore`. */
+export interface RestoreOptions extends EditOptions {
+    /**
+     * Keys of `properties` the restore does not write back: on the features that are there,
+     * these keys keep what they have now, for a caller that takes them back itself (a text it
+     * puts back onto what was typed since, say). A feature that comes back still comes back
+     * with every key it had. The values before of these keys are used up with the rest. None
+     * when left out.
+     */
+    exceptProperties?: readonly string[];
 }
 
 /** The options of `features.duplicate`. */
