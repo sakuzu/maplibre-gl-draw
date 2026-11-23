@@ -98,9 +98,10 @@ describe(WORK_SCENES.select, () => {
     // to the place before it clicks there, as it does on a page (the first event after a change
     // of the document tests what is under the pointer from every feature: its own scene)
     settle(instance);
-    instance.input.move(pointOf(instance));
+    const at = pointOf(instance);
+    instance.input.move(at);
     const before = frameDraws(instance);
-    const work = workDuring(instance.counts, () => instance.input.click(pointOf(instance)));
+    const work = workDuring(instance.counts, () => instance.input.click(at));
     if (instance.draw.selection.get().ids.count() !== 1) throw new Error('nothing selected');
     return { ...work, addedDraws: frameDraws(instance) - before };
   });
