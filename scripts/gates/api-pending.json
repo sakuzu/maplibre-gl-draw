@@ -158,6 +158,9 @@
       "main:doc:PreparedTable": "a093a5b970e9d3c9a949b432c73f46200662726e89acf726949635ee0e851c4b",
       "main:doc:Table": "625bf817f234ee6926316d82932aaf9a10a28e1d8700db7fda8ae0d1a5dc7ced"
     },
+    "109": {
+      "store:doc:Store.writeRows": "ce7d1ff362fd802d17fe63890304a2839e4037ebf8a07a2e834c049000cbe751"
+    },
     "130": {
       "store:added:RowValues.written": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
     },
