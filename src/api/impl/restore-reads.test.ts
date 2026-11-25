@@ -14,7 +14,7 @@
  *   before of every change
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from '../../store/built-in/create-store.js';
 import type { Store } from '../../store/built-in/types.js';
 import { createCountedInstance, createMapStub, gridPoints } from '../../test-utils.js';
@@ -300,8 +300,21 @@ for (const [name, asks] of ASKS) {
 }
 
 describe('the work of writing back a move to another layer', () => {
-  /** What writing back `count` features moved reads and makes */
-  async function workOf(count: number, asks: Asks, listening: boolean) {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * What writing back `count` features moved reads and makes, on a clock that goes on by
+   * `readingMs` each time it is read: the batches and the parts of the edit do not follow the
+   * time the machine takes
+   */
+  async function workOf(count: number, asks: Asks, listening: boolean, readingMs: number) {
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => {
+      clock += readingMs;
+      return clock;
+    });
     const instance = createCountedInstance();
     ({ draw, store } = instance);
     first = draw.layers.list()[0].id;
@@ -338,16 +351,17 @@ describe('the work of writing back a move to another layer', () => {
     return work;
   }
 
-  // The parts of a large edit are split by time, and what is made for each part with them
-  for (const [count, margin] of [
-    [1_000, 1],
-    [10_000, 1.02],
+  // On the second clock a large edit is written in more parts, each with what is made for it
+  for (const [count, margin, readingMs] of [
+    [1_000, 1, 0],
+    [10_000, 1.02, 0],
+    [10_000, 1.02, 2],
   ] as const) {
     for (const listening of [false, true]) {
-      it(`is no more without the values before it, for ${count} ${listening ? 'listened to' : ''}`, async () => {
-        const asked = await workOf(count, true, listening);
+      it(`is no more without the values before it, for ${count} ${listening ? 'listened to ' : ''}on a clock of ${readingMs} ms`, async () => {
+        const asked = await workOf(count, true, listening, readingMs);
         draw.destroy();
-        const notAsked = await workOf(count, ['local'], listening);
+        const notAsked = await workOf(count, ['local'], listening, readingMs);
         expect(notAsked.rows).toBeLessThanOrEqual(asked.rows * margin);
         expect(notAsked.objects).toBeLessThanOrEqual(asked.objects * margin);
         // The work with the values before it, which reading them by the layer did not change
