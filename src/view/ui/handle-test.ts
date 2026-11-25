@@ -130,7 +130,7 @@ function hitTestRotateHandle(
   marginedBbox: BoundingBoxCoords,
   config: SelectionUIConfig,
   zoom: number,
-  params: HitTestParams,
+  params: Pick<HitTestParams, 'screenPoint' | 'transform'>,
 ): HandleHitResult | null {
   const handle = computeRotateHandle(marginedBbox, config.rotateHandle.distance, zoom);
   const handleScreenPos = params.transform.project(handle.position);
@@ -155,7 +155,7 @@ function hitTestRotateHandle(
 function hitTestResizeHandles(
   marginedBbox: BoundingBoxCoords,
   config: SelectionUIConfig,
-  params: HitTestParams,
+  params: Pick<HitTestParams, 'screenPoint' | 'transform'>,
   getAdditionalHandles?: (marginedBbox: BoundingBoxCoords) => HandleInfo[],
 ): HandleHitResult | null {
   const additionalHandles = getAdditionalHandles?.(marginedBbox);
@@ -527,11 +527,12 @@ export function hitTestHandles(
     scope,
   };
 
-  // When only single-coordinate features (Point and the like) are selected, skip the rotate
-  // and resize handles
-  const singleFeatureBbox =
-    features.length === 1 ? computeBoundingBox(features[0], scope.extensions) : null;
-  const isPointOnly = singleFeatureBbox !== null && hasZeroArea(singleFeatureBbox);
+  // When only single-coordinate features (Point and the like) are selected, one or several, the
+  // rotate and resize handles are not drawn, and are not tested
+  const isPointOnly = !features.some((feature) => {
+    const bbox = computeBoundingBox(feature, scope.extensions);
+    return bbox !== null && !hasZeroArea(bbox);
+  });
   // A Circle has no rotate handle; it has a radius handle instead
   const isCircle = features.length === 1 && features[0].type === 'Circle';
 
@@ -596,6 +597,45 @@ export function hitTestHandles(
   }
 
   return null;
+}
+
+/**
+ * Hit test against the handles of a selection of many features, from the box of all of them (what
+ * their frame is drawn with, `ManySelection`): the rotate handle and the resize handles when one of
+ * them has an area (they are drawn only then), then the inside of the frame (move)
+ *
+ * The other handles belong to a single feature, so a selection of several has none of them.
+ *
+ * @param screenPoint Screen coordinates
+ * @param many The box of the features selected, and whether one of them has an area
+ * @param transform Coordinate transform
+ * @param config Configuration of the selection UI
+ * @param zoom Zoom level
+ *
+ * @internal
+ */
+export function hitTestManyHandles(
+  screenPoint: { x: number; y: number },
+  many: { readonly bbox: BoundingBoxCoords | null; readonly hasArea: boolean },
+  transform: CoordinateTransform,
+  config: SelectionUIConfig,
+  zoom: number,
+): HandleHitResult | null {
+  const { bbox } = many;
+  if (!bbox) return null;
+  const params = { screenPoint, transform: alignToPointer(transform, screenPoint) };
+  const marginedBbox: BoundingBoxCoords = {
+    ...applyMarginToBoundingBox(bbox, config.boundingBox.margin, params.transform),
+    center: bbox.center,
+  };
+  if (many.hasArea) {
+    const hit =
+      hitTestRotateHandle(marginedBbox, config, zoom, params) ??
+      hitTestResizeHandles(marginedBbox, config, params);
+    if (hit) return hit;
+  }
+  const { lng, lat } = params.transform.unproject(screenPoint);
+  return isPointInGeoBoundingBox([lng, lat], marginedBbox) ? { type: 'move' } : null;
 }
 
 /**

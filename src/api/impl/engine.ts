@@ -375,6 +375,7 @@ export function createEngine(
     spatialIndex,
     hitTestService,
     hitTestTopmost,
+    getManySelection: () => customLayer.getManySelection(),
     featureCompanions,
     selectionScope: context.selectionScope,
     eventEmitter,

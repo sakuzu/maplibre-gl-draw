@@ -28,7 +28,11 @@ import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { BoxSelection, Coordinate, Mode, Selection } from '../../store/types.js';
 import { computeCombinedGeoBoundingBox, isPointInGeoBoundingBox } from '../../view/ui/bounds.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
-import { hitTestGlobalAuxiliaryHandles, hitTestHandles } from '../../view/ui/handle-test.js';
+import {
+  hitTestGlobalAuxiliaryHandles,
+  hitTestHandles,
+  hitTestManyHandles,
+} from '../../view/ui/handle-test.js';
 import {
   computeSelectionBoundingBox,
   getSelectedFeatureIdSet,
@@ -168,10 +172,16 @@ export class SelectMode implements EngineModeHandler {
     // onClick, so it is unaffected. Shift box selection is already handled above.
     if (store.isInteractionLocked()) return false;
 
-    const selectedFeatures = getSelectedFeatures(store);
     const transform = createCoordinateTransform(map, this.#context.anchorProjector);
 
-    // Test against the handles of the selected features / inside their bbox
+    // Test against the handles of the selected features / inside their bbox: from the reading
+    // their frame is drawn with when many are selected, from the features otherwise
+    const many = this.#context.getManySelection?.() ?? null;
+    if (many && hitTestManyHandles(event.point, many, transform, this.#config, map.getZoom())) {
+      map.dragPan.disable();
+      return true;
+    }
+    const selectedFeatures = many ? [] : getSelectedFeatures(store);
     if (selectedFeatures.length > 0) {
       const bbox = computeSelectionBoundingBox(
         selectedFeatures,
@@ -302,8 +312,22 @@ export class SelectMode implements EngineModeHandler {
     // during a pan). Shift box selection is already handled above, so it is preserved.
     if (store.isInteractionLocked()) return;
 
-    // A handle hit on the selected features -> start the corresponding drag operation
-    if (selectedIds.count() > 0) {
+    // A handle hit on the selected features -> start the corresponding drag operation (decided
+    // from the reading their frame is drawn with when many are selected)
+    const many = this.#context.getManySelection?.() ?? null;
+    if (many) {
+      const handleHit = hitTestManyHandles(
+        dragStartPoint,
+        many,
+        transform,
+        this.#config,
+        map.getZoom(),
+      );
+      if (handleHit) {
+        this.#dragHandler.startDrag(handleHit, event, this.#context, many.areaBbox ?? many.bbox);
+        return;
+      }
+    } else if (selectedIds.count() > 0) {
       const selectedFeatures = getSelectedFeatures(store);
       if (selectedFeatures.length > 0) {
         const bbox = computeSelectionBoundingBox(
@@ -367,11 +391,14 @@ export class SelectMode implements EngineModeHandler {
       store.setSelection('feature', filtered);
     }
 
-    const newSelectedFeatures = getSelectedFeatures(store);
-    const bbox = computeSelectionBoundingBox(
-      newSelectedFeatures,
-      this.#context.selectionScope.extensions,
-    );
+    // The box of the features selected now (read from their rows when many are)
+    const manyNow = this.#context.getManySelection?.() ?? null;
+    const bbox = manyNow
+      ? (manyNow.areaBbox ?? manyNow.bbox)
+      : computeSelectionBoundingBox(
+          getSelectedFeatures(store),
+          this.#context.selectionScope.extensions,
+        );
     const moveHit: HandleHitResult = { type: 'move' };
     this.#dragHandler.startDrag(moveHit, event, this.#context, bbox);
   }

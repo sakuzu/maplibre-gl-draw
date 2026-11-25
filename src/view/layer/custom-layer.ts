@@ -67,11 +67,17 @@ import {
   setTerrainCameraMoving,
   setTerrainRenderState,
 } from '../terrain/state.js';
+import type { ManySelection } from '../ui/bulk-selection.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 import { DisplayListCache } from './display-list.js';
 import { DrapePlanner, isOpacityOnlyLayersChange } from './drape-planner.js';
-import { type FrameRenderDeps, renderForeground, renderSegment } from './frame-render.js';
-import { buildFrameState, type FrameState, StyleZoom } from './frame-state.js';
+import {
+  type FrameRenderDeps,
+  readManySelection,
+  renderForeground,
+  renderSegment,
+} from './frame-render.js';
+import { buildFrameState, type FrameState, manySelectedRows, StyleZoom } from './frame-state.js';
 import { createRenderScope } from './render-scope.js';
 import { disposeRenderers, initRenderers, type Renderers } from './renderers.js';
 import { SlotManager } from './slot-manager.js';
@@ -199,6 +205,11 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   getGpuLedger(): GpuLedger;
   /** The drawing of the layers from their rows (null while the GPU side is not built) */
   getTableRenderer(): TableLayerRenderer | null;
+  /**
+   * The reading of the selection its selection UI is drawn from, when many features are selected
+   * and the layers are drawn from their rows (null otherwise: the features selected are read then)
+   */
+  getManySelection(): ManySelection | null;
   /**
    * The instance is gone: the GPU side is dropped if it is still there, and what is still in the
    * ledger was left behind. It is deleted and counted (`leakedBytes` of the ledger)
@@ -868,6 +879,22 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     getTableRenderer(): TableLayerRenderer | null {
       return engine.tableRetained;
+    },
+
+    getManySelection(): ManySelection | null {
+      const { renderers, tableRetained } = engine;
+      if (!renderers) return null;
+      const reader = manySelectedRows(renderers, store, tableRetained !== null);
+      if (!reader) return null;
+      const deps = {
+        renderers,
+        store,
+        tableRetained,
+        customRenderers,
+        featureCompanions,
+        selectionScope: renderScope.selection,
+      };
+      return readManySelection(deps, reader)?.selection ?? null;
     },
 
     destroyGpu(): void {

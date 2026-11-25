@@ -97,6 +97,13 @@ export interface EngineModeContext {
    */
   hitTestTopmost: import('../dispatcher/hit-test/topmost.js').HitTestTopmost;
   /**
+   * The reading of the selection the selection UI is drawn from, when many features are selected
+   * and the layers are drawn from their rows: the pointer over the selection is answered from it,
+   * without the features selected being read. Null when a few are selected, or the layers are not
+   * drawn from their rows (or when it is omitted): the features selected are read then
+   */
+  getManySelection?(): import('../view/ui/bulk-selection.js').ManySelection | null;
+  /**
    * Provider of the companion rendering and the companion hits (the ones of this draw instance)
    *
    * Used to return a consumed companion hit to the provider.

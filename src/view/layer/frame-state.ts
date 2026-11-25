@@ -363,8 +363,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
 
   // The layers are drawn from their rows, on every surface: in the band of the analytic drape,
   // their polygons and lines are on the drape and their other rows drawn in their order
-  const useRows =
-    input.rowsAvailable === true && r.batchManager.getRetainedRenderers() !== undefined;
+  const useRows = drawsFromRows(r, input.rowsAvailable);
   const tableSurface: TableLayerSurface = {
     kind: terrainState.active
       ? 'terrain'
@@ -393,19 +392,11 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
             excluded === null || (excluded.has(feature.id) && !interleavedQuadIds.has(feature.id)),
         );
 
-  // When more features are selected than the layer keeps features of, and the layers are drawn
-  // from their rows, the selection UI is drawn from the rows selected (frame-render.ts): neither
-  // their IDs nor their features are read here. The number selected is read from the selection
-  // and the rows, once per selection and change of the rows
-  const rowsRead = useRows
-    ? drawnRowsOf((store as DocumentAccess & Partial<DocumentTables>).getTables?.())
-    : undefined;
+  // When many features are selected, the selection UI is drawn from the rows selected
+  // (frame-render.ts): neither their IDs nor their features are read here
+  const manySelected = manySelectedRows(r, store, input.rowsAvailable);
   // The selection of a group or a layer is read with the reads by position of the layer
   const selectionStore = store as SelectionDocument;
-  const manySelected =
-    rowsRead && r.bulkFramesRenderer.selection.countOf(selectionStore, rowsRead) > FEATURES_KEPT
-      ? rowsRead
-      : undefined;
 
   // The single source of truth of the selection carries a kind. A group / layer selection is
   // resolved to its members and reflected on the map (getSelectedFeatureIdSet absorbs
@@ -550,6 +541,37 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     baseCopy,
     copies,
   };
+}
+
+/**
+ * Whether the layers are drawn from their rows: the drawing of the rows exists, and the renderers
+ * support it
+ */
+function drawsFromRows(r: Renderers, rowsAvailable: boolean | undefined): boolean {
+  return rowsAvailable === true && r.batchManager.getRetainedRenderers() !== undefined;
+}
+
+/**
+ * The rows a selection of many features is read from: when more features are selected than the
+ * layer keeps features of, and the layers are drawn from their rows (undefined otherwise, the
+ * features selected being read then)
+ *
+ * The frame that draws the selection UI and the modes that answer the pointer over it decide it
+ * here. The number selected is read from the selection and the rows, once per selection and change
+ * of the rows.
+ *
+ * @internal
+ */
+export function manySelectedRows(
+  r: Renderers,
+  store: DocumentAccess & Partial<DocumentTables>,
+  rowsAvailable: boolean | undefined,
+): DrawnRows | undefined {
+  if (!drawsFromRows(r, rowsAvailable)) return undefined;
+  const rows = drawnRowsOf(store.getTables?.());
+  if (!rows) return undefined;
+  const count = r.bulkFramesRenderer.selection.countOf(store as SelectionDocument, rows);
+  return count > FEATURES_KEPT ? rows : undefined;
 }
 
 /**

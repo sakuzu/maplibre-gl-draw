@@ -14,7 +14,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
 import type { AnchorProjector } from '../../shared/math/index.js';
-import { type DrawnRows, pageRowBox } from '../../store/built-in/drawn-rows.js';
+import type { DrawnRows } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Feature } from '../../store/types.js';
@@ -29,6 +29,7 @@ import {
 } from '../terrain/state.js';
 import { type BulkFrameRows, boxedByFeature } from '../ui/bulk-frames.js';
 import type { ManySelection } from '../ui/bulk-selection.js';
+import type { SelectionDocument } from '../ui/helper.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 import { computeBoundingBox, hasZeroArea } from '../ui/selection-ui/index.js';
 import {
@@ -49,6 +50,7 @@ import {
 } from './gl-state.js';
 import { renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
+import { drawnRowBox } from './table-partition.js';
 import type { DrawnRowGroup, TableLayerRenderer } from './table-retained.js';
 
 /**
@@ -412,38 +414,50 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   if (f.quadDrapeFrame) setQuadDrapeFrame(terrainContext, null);
 }
 
-/** What the selection UI of a selection of many features is drawn with in a frame */
-interface ManySelectionFrame {
+/** The reading of a selection of many features, and what its rows are drawn with */
+interface ManySelectionRead {
   readonly selection: ManySelection;
   /** How the frames of the rows are read */
   readonly rows: BulkFrameRows;
-  /** The row groups drawn in the frame */
+  /** The row groups drawn in the last frame */
   readonly groups: readonly DrawnRowGroup[];
+}
+
+/** What the selection UI of a selection of many features is drawn with in a frame */
+interface ManySelectionFrame extends ManySelectionRead {
   /** The features selected framed from their features, drawn in the frame */
   readonly framed: readonly Feature[];
 }
 
 /**
- * Reads what the selection UI of a selection of many features is drawn with: the row groups
- * drawn, the rows selected (read again only when something they come from changed) and the
- * features selected drawn one at a time in the frame, which are framed from their features (null
- * without the drawing of the rows)
+ * Reads a selection of many features from the rows it is read from (`manySelectedRows`), in a
+ * frame or outside one: the rows selected (read again only when something they come from changed)
+ * and the row groups drawn (null without the drawing of the rows)
+ *
+ * The selection UI is drawn from this reading, and the select mode answers the pointer from it.
+ *
+ * @internal
  */
-function manySelectionOf(
-  deps: FrameRenderDeps,
-  f: FrameState,
+export function readManySelection(
+  deps: Pick<
+    FrameRenderDeps,
+    | 'renderers'
+    | 'store'
+    | 'tableRetained'
+    | 'customRenderers'
+    | 'featureCompanions'
+    | 'selectionScope'
+  >,
   reader: DrawnRows,
-): ManySelectionFrame | null {
+): ManySelectionRead | null {
   const table = deps.tableRetained;
   if (!table) return null;
   const { store, customRenderers, featureCompanions, selectionScope } = deps;
   const extensions = selectionScope.extensions;
   const groups: DrawnRowGroup[] = [];
-  const layerOf = new Map<unknown, string>();
   const generations = new Map<string, number>();
   table.forEachDrawnGroup((entry) => {
     groups.push(entry);
-    layerOf.set(entry.group, entry.layerId);
     generations.set(entry.layerId, entry.generation);
   });
   const classification = [
@@ -475,13 +489,29 @@ function manySelectionOf(
       return [extent.halfWidth, extent.halfHeight];
     },
   };
-  const selection = deps.renderers.bulkFramesRenderer.selection.read(store, {
+  // The selection of a group or a layer is read with the reads by position of the layer
+  const selection = deps.renderers.bulkFramesRenderer.selection.read(store as SelectionDocument, {
     reader,
     boxedByFeature: (type) => boxedByFeature(rows, type),
-    layerOf: (group) => layerOf.get(group),
     classification,
     extensions,
   });
+  return { selection, rows, groups };
+}
+
+/**
+ * Reads what the selection UI of a selection of many features is drawn with in a frame: the
+ * reading of the selection, and the features selected drawn one at a time in the frame, which are
+ * framed from their features (null without the drawing of the rows)
+ */
+function manySelectionOf(
+  deps: FrameRenderDeps,
+  f: FrameState,
+  reader: DrawnRows,
+): ManySelectionFrame | null {
+  const table = deps.tableRetained;
+  const read = readManySelection(deps, reader);
+  if (!table || !read) return null;
   // Every row drawn one at a time in the frame is framed from its feature, as it is drawn (a point
   // the terrain fades gets its frame faded with it)
   const framed: Feature[] = [];
@@ -490,11 +520,11 @@ function manySelectionOf(
   });
   // The images the analytic drape draws are not drawn at once: their features are those of the
   // drape
-  const chosen = store.getSelection();
+  const chosen = deps.store.getSelection();
   for (const feature of [...f.pendingQuads.map((quad) => quad.feature), ...f.drapeFallbackQuads]) {
     if (selectedIn(chosen, feature)) framed.push(feature);
   }
-  return { selection, rows, groups, framed };
+  return { ...read, framed };
 }
 
 /** Whether a feature is in a selection (by its ID, its group or its layer) */
@@ -554,7 +584,7 @@ function selectedInView(
       if (!hasZeroArea(bbox)) hasArea = true;
       continue;
     }
-    if (!pageRowBox(group.data, row, box)) continue;
+    if (!drawnRowBox(reader, group, row, box)) continue;
     if (type !== 'Point' && type !== 'Circle' && box.every((value) => value === 0)) continue;
     widen(box[0], box[1], box[2], box[3]);
     if (box[0] !== box[2] || box[1] !== box[3]) hasArea = true;

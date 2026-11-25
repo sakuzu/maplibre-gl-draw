@@ -8,12 +8,13 @@
  * selection UI is drawn from the rows: the frames of the rows on the GPU (`bulk-frames.ts`), and
  * the frame of all of them with its handles as for several features. This reads what that frame
  * needs from the rows selected, without making a feature of a row drawn by the drawing of the
- * rows: the box of all of them (the boxes of the rows, and the boxes of the features of the rows
- * whose box is that of their features), whether one of them has an area (the handles are drawn only
- * then), whether one of them is locked (no handle is drawn then), and the row groups that hold
- * them.
+ * rows: the box of all of them and that of the ones that have an area (the boxes of the rows as
+ * they are drawn, and the boxes of the features of the rows whose box is that of their features),
+ * whether one of them has an area (the handles are drawn only then), whether one of them is locked
+ * (no handle is drawn then), the number of them, and the row groups that hold them.
  *
- * It is read again only when the selection changes, when the rows of the Store change, when the
+ * The select mode answers the pointer from the same reading, so that what can be grabbed is what is
+ * drawn. It is read again only when the selection changes, when the rows of the Store change, when the
  * rows are classified again, and when a layer or a group of the rows selected changes (its lock);
  * a frame that changes nothing reads nothing. The features made are those of the rows whose box is
  * that of their features (the images, the custom types), once a reading.
@@ -24,6 +25,8 @@
 import { type DrawnRows, pageRowBox, type RowGroup } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess, InstanceDocument } from '../../store/document-access.js';
 import type { Feature, Group, Layer, Selection } from '../../store/types.js';
+import { drawnRowBox } from '../layer/table-partition.js';
+import { getSelectedFeatureIdSet, type SelectionDocument } from './helper.js';
 import type { BoundingBoxCoords, SelectionExtensionRegistry } from './selection-ui/index.js';
 import { computeBoundingBox, hasZeroArea } from './selection-ui/index.js';
 
@@ -35,10 +38,17 @@ import { computeBoundingBox, hasZeroArea } from './selection-ui/index.js';
 export interface ManySelection {
   /** The box of every feature selected (as `computeCombinedBoundingBox`), null for none */
   readonly bbox: BoundingBoxCoords | null;
+  /**
+   * The box of the features selected that have an area, null when none has one: with `bbox` in its
+   * place then, what `computeSelectionBoundingBox` gives for the features selected
+   */
+  readonly areaBbox: BoundingBoxCoords | null;
   /** Whether a feature selected has a box with an area (the handles are drawn only then) */
   readonly hasArea: boolean;
   /** Whether a feature selected is locked, by itself, by its group or by its layer */
   readonly locked: boolean;
+  /** The number of features selected */
+  readonly count: number;
   /** The row groups (and the parts of the deltas) that hold a row selected */
   readonly groups: ReadonlySet<RowGroup>;
 }
@@ -52,8 +62,6 @@ export interface ManySelectionRows {
   readonly reader: DrawnRows;
   /** Whether the box of a row of a type is that of its feature (not that of its row) */
   boxedByFeature(type: string): boolean;
-  /** The layer of a row group drawn (undefined for a group not drawn) */
-  layerOf(group: RowGroup): string | undefined;
   /** Changes whenever the rows are classified again (which rows are framed from their features) */
   readonly classification: string;
   /** The registrations of the selection UI (the boxes of the custom types) */
@@ -120,7 +128,7 @@ export class SelectedRows {
   }
 
   /** What the frame of the selection of many features is drawn with (read again on a change) */
-  read(store: DocumentAccess, rows: ManySelectionRows): ManySelection {
+  read(store: SelectionDocument, rows: ManySelectionRows): ManySelection {
     const selection = store.getSelection();
     const kept = this.#read;
     if (kept && this.#same(kept.key, store, selection, rows)) return kept.value;
@@ -149,7 +157,7 @@ export class SelectedRows {
 
 /** Reads the rows selected */
 function readSelectedRows(
-  store: DocumentAccess,
+  store: SelectionDocument,
   selection: Selection,
   rows: ManySelectionRows,
 ): { key: ReadKey; value: ManySelection } {
@@ -158,17 +166,17 @@ function readSelectedRows(
   const groupsRead = new Map<string, Group | undefined>();
   const groups = new Set<RowGroup>();
   const box = new Float64Array(4);
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  let hasArea = false;
+  const all = newExtent();
+  const areas = newExtent();
+  /** The number of features that have an area, and the box of the first of them */
+  let areaCount = 0;
+  let firstArea: BoundingBoxCoords | null = null;
   let locked = false;
-  const widen = (x0: number, y0: number, x1: number, y1: number): void => {
-    if (x0 < minX) minX = x0;
-    if (y0 < minY) minY = y0;
-    if (x1 > maxX) maxX = x1;
-    if (y1 > maxY) maxY = y1;
+  /** The layers of the row groups, made when a row is read without its layer */
+  let layerOfGroup: Map<RowGroup, string> | null = null;
+  const layerOf = (group: RowGroup): string | undefined => {
+    layerOfGroup ??= layersOfGroups(store, reader);
+    return layerOfGroup.get(group);
   };
   const layerLocked = (layerId: string | undefined): boolean => {
     if (layerId === undefined) return false;
@@ -187,7 +195,7 @@ function readSelectedRows(
       locked =
         reader.lockedOf(group, row) ||
         groupLocked(reader.groupIdOf(group, row)) ||
-        layerLocked(layerId ?? rows.layerOf(group));
+        layerLocked(layerId ?? layerOf(group));
     }
     const type = reader.typeOf(group, row);
     if (rows.boxedByFeature(type)) {
@@ -195,20 +203,29 @@ function readSelectedRows(
       const feature: Feature | undefined = id === undefined ? undefined : store.getFeature(id);
       const bbox = feature ? computeBoundingBox(feature, rows.extensions) : null;
       if (!bbox) return;
+      const area = !hasZeroArea(bbox);
       for (const [x, y] of [bbox.topLeft, bbox.topRight, bbox.bottomRight, bbox.bottomLeft]) {
-        widen(x, y, x, y);
+        widen(all, x, y, x, y);
+        if (area) widen(areas, x, y, x, y);
       }
-      if (!hasZeroArea(bbox)) hasArea = true;
+      if (area && areaCount++ === 0) firstArea = bbox;
       return;
     }
-    if (!pageRowBox(group.data, row, box)) return;
+    if (!drawnRowBox(reader, group, row, box)) return;
     if (type !== 'Point' && type !== 'Circle' && box.every((value) => value === 0)) return;
-    widen(box[0], box[1], box[2], box[3]);
-    if (box[0] !== box[2] || box[1] !== box[3]) hasArea = true;
+    widen(all, box[0], box[1], box[2], box[3]);
+    if (box[0] === box[2] && box[1] === box[3]) return;
+    widen(areas, box[0], box[1], box[2], box[3]);
+    if (areaCount++ > 0) return;
+    firstArea = boxOfExtent({ minX: box[0], minY: box[1], maxX: box[2], maxY: box[3] });
+    // The box of a Circle is around its position
+    if (type === 'Circle' && pageRowBox(group.data, row, box)) {
+      firstArea = { ...firstArea, center: [box[0], box[1]] };
+    }
   };
-  const visitRef = (ref: number): void => {
+  const visitRef = (ref: number, layerId?: string): void => {
     const place = reader.placeOf(ref);
-    if (place) visit(place.group, place.row, undefined);
+    if (place) visit(place.group, place.row, layerId);
   };
 
   switch (selection.type) {
@@ -223,7 +240,7 @@ function readSelectedRows(
         if (!group) continue;
         groupsRead.set(id, group);
         layerLocked(group.layerId);
-        for (const ref of reader.membersOf(group.layerId, id)) visitRef(ref);
+        for (const ref of reader.membersOf(group.layerId, id)) visitRef(ref, group.layerId);
       }
       break;
     case 'layer':
@@ -247,15 +264,6 @@ function readSelectedRows(
       break;
   }
 
-  const bbox: BoundingBoxCoords | null = Number.isFinite(minX)
-    ? {
-        topLeft: [minX, maxY],
-        topRight: [maxX, maxY],
-        bottomRight: [maxX, minY],
-        bottomLeft: [minX, minY],
-        center: [(minX + maxX) / 2, (minY + maxY) / 2],
-      }
-    : null;
   return {
     key: {
       type: selection.type,
@@ -265,6 +273,63 @@ function readSelectedRows(
       layers,
       groups: groupsRead,
     },
-    value: { bbox, hasArea, locked, groups },
+    value: {
+      bbox: Number.isFinite(all.minX) ? boxOfExtent(all) : null,
+      // The box of one feature is that of the feature itself (that of a turned image is turned)
+      areaBbox: areaCount > 1 ? boxOfExtent(areas) : firstArea,
+      hasArea: areaCount > 0,
+      locked,
+      count: getSelectedFeatureIdSet(store).count(),
+      groups,
+    },
   };
+}
+
+/** An extent being widened, in degrees */
+interface Extent {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** An extent of nothing */
+function newExtent(): Extent {
+  return {
+    minX: Number.POSITIVE_INFINITY,
+    minY: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    maxY: Number.NEGATIVE_INFINITY,
+  };
+}
+
+/** Widens an extent by a box */
+function widen(extent: Extent, x0: number, y0: number, x1: number, y1: number): void {
+  if (x0 < extent.minX) extent.minX = x0;
+  if (y0 < extent.minY) extent.minY = y0;
+  if (x1 > extent.maxX) extent.maxX = x1;
+  if (y1 > extent.maxY) extent.maxY = y1;
+}
+
+/** The box of an extent */
+function boxOfExtent({ minX, minY, maxX, maxY }: Extent): BoundingBoxCoords {
+  return {
+    topLeft: [minX, maxY],
+    topRight: [maxX, maxY],
+    bottomRight: [maxX, minY],
+    bottomLeft: [minX, minY],
+    center: [(minX + maxX) / 2, (minY + maxY) / 2],
+  };
+}
+
+/** The layer of every row group and of every part of the deltas the rows are read from */
+function layersOfGroups(store: DocumentAccess, reader: DrawnRows): Map<RowGroup, string> {
+  const layers = new Map<RowGroup, string>();
+  for (const { id } of store.listLayers()) {
+    const table = reader.table(id);
+    if (!table) continue;
+    for (let g = 0; g < table.groupCount; g++) layers.set(table.groupAt(g), id);
+    for (const part of reader.deltaParts(table)) layers.set(part.group, id);
+  }
+  return layers;
 }

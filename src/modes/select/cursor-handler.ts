@@ -21,6 +21,7 @@ import {
   getCursorForHandle,
   hitTestGlobalAuxiliaryHandles,
   hitTestHandles,
+  hitTestManyHandles,
 } from '../../view/ui/handle-test.js';
 import {
   computeSelectionBoundingBox,
@@ -52,7 +53,18 @@ export function updateCursorForSelection(
   // startDrag with the same predicate, so the cursor alone would be a lie suggesting it is
   // possible. It falls through to the feature hit test below (pointer), matching the operation
   // that is actually possible: "it can be selected by clicking".
-  if (selectedIds.count() > 0) {
+  // When many features are selected, both are decided from the reading their frame is drawn with.
+  const many = context.getManySelection?.() ?? null;
+  if (many) {
+    const blocked = many.locked || store.isReadOnly() || store.isInteractionLocked();
+    const handleHit = blocked
+      ? null
+      : hitTestManyHandles(event.point, many, transform, config, map.getZoom());
+    if (handleHit) {
+      canvas.style.cursor = getCursorForHandle(handleHit);
+      return;
+    }
+  } else if (selectedIds.count() > 0) {
     const selectedFeatures = getSelectedFeatures(store);
     const blocked = selectedFeatures.some((f) => isInteractionBlocked(f, store));
     const bbox = blocked

@@ -19,10 +19,17 @@ import {
 
 /**
  * What the selection is read from: the layer over the Store, with its reads of the features of a
- * group and of a layer
+ * group and of a layer, and of the place of a feature
  */
 export type SelectionDocument = DocumentAccess &
-  Pick<InstanceDocument, 'countGroupFeatures' | 'listGroupFeatureIds' | 'iterateFeatures'>;
+  Pick<
+    InstanceDocument,
+    | 'countGroupFeatures'
+    | 'listGroupFeatureIds'
+    | 'countFeatures'
+    | 'iterateFeatures'
+    | 'getFeaturePlace'
+  >;
 
 /**
  * The features the current selection covers, read without an array of their IDs: the selection
@@ -48,7 +55,10 @@ export function getSelectedFeatureIds(store: SelectionDocument): readonly string
 
 /**
  * The features the current selection covers, as `getSelectedFeatureIds` resolves them, read
- * without an array of their IDs for a feature selection (the set of the selection itself)
+ * without an array of their IDs: the set of the selection itself for a feature selection, and the
+ * members of the groups or the layers selected otherwise. The members are counted by the reads
+ * that count, a feature is one of them by its place (its group or its layer), and they are listed
+ * only when they are iterated, as the document is then.
  *
  * @internal
  */
@@ -58,37 +68,67 @@ export function getSelectedFeatureIdSet(store: SelectionDocument): SelectedFeatu
     case 'feature':
       return selection.ids;
     case 'group':
-      return setOf(
-        [...selection.ids.iterate()].flatMap((id) =>
-          store.listGroupFeatureIds(id, 0, store.countGroupFeatures(id)),
-        ),
-      );
+      return membersOfGroups(store, selection.ids);
     case 'layer':
-      return setOf([...selection.ids.iterate()].flatMap((id) => featureIdsInLayer(store, id)));
+      return featuresOfLayers(store, selection.ids);
     default:
-      return setOf([]);
+      return NO_FEATURES;
   }
 }
 
-/** The IDs of the members of groups or layers, read as a set */
-function setOf(ids: readonly string[]): SelectedFeatureIds {
-  let lookup: Set<string> | null = null;
+/** No feature */
+const NO_FEATURES: SelectedFeatureIds = Object.freeze({
+  count: () => 0,
+  has: () => false,
+  iterate: () => [][Symbol.iterator](),
+});
+
+/** The members of the groups selected */
+function membersOfGroups(store: SelectionDocument, groupIds: IdSet): SelectedFeatureIds {
   return {
-    count: () => ids.length,
-    has: (id) => {
-      lookup ??= new Set(ids);
-      return lookup.has(id);
+    count: () => {
+      let count = 0;
+      for (const id of groupIds.iterate()) count += store.countGroupFeatures(id);
+      return count;
     },
-    iterate: () => ids[Symbol.iterator](),
+    has: (id) => {
+      const groupId = store.getFeaturePlace(id)?.groupId;
+      return groupId !== undefined && groupIds.has(groupId);
+    },
+    *iterate() {
+      for (const id of groupIds.iterate()) {
+        yield* store.listGroupFeatureIds(id, 0, store.countGroupFeatures(id));
+      }
+    },
   };
 }
 
-// All feature IDs under a layer, in stacking order (the members of its groups at their place)
-function featureIdsInLayer(store: SelectionDocument, layerId: string): string[] {
-  if (!store.getLayer(layerId)) return [];
-  const ids: string[] = [];
-  for (const feature of store.iterateFeatures({ layerId })) ids.push(feature.id);
-  return ids;
+/**
+ * The features of the layers selected, each layer in stacking order (the members of its groups at
+ * their place)
+ */
+function featuresOfLayers(store: SelectionDocument, layerIds: IdSet): SelectedFeatureIds {
+  return {
+    count: () => {
+      let count = 0;
+      for (const layerId of layerIds.iterate()) {
+        if (store.getLayer(layerId)) count += store.countFeatures({ layerId });
+      }
+      return count;
+    },
+    has: (id) => {
+      const layerId = store.getFeaturePlace(id)?.layerId;
+      return (
+        layerId !== undefined && layerIds.has(layerId) && store.getLayer(layerId) !== undefined
+      );
+    },
+    *iterate() {
+      for (const layerId of layerIds.iterate()) {
+        if (!store.getLayer(layerId)) continue;
+        for (const feature of store.iterateFeatures({ layerId })) yield feature.id;
+      }
+    },
+  };
 }
 
 /**
