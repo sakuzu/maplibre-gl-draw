@@ -1270,6 +1270,11 @@
       "path": "src/view/layer/render.test.ts",
       "change": "a frame drawn from the rows never asks the index: the rows drawn one by one are those whose box is in the range, and all of them in a frame without a range",
       "unit": "the work that stops keeping a list of every feature, and reads what is selected and what is in view from the rows"
+    },
+    {
+      "path": "src/api/impl/restore-sweep-parts.test.ts",
+      "change": "the first and the second tests are made one test for each seed; the seeds, the points, the steps and what is expected are the same",
+      "unit": "the work that frames the circles of a large selection by their boxes, with small changes beside it"
     }
   ]
 }
