@@ -49,6 +49,7 @@ import {
   type SelectedFeatureIds,
   type SelectionDocument,
 } from '../ui/helper.js';
+import { featureInRanges } from '../viewport.js';
 import { applyDrawBlendState } from './blend.js';
 import type { DisplayListCache } from './display-list.js';
 import {
@@ -497,7 +498,9 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     displayList: input.displayList,
     center: centerLngLat,
     mainMatrixArray,
-    useRows,
+    rows: useRows
+      ? drawnRowsOf((store as DocumentAccess & Partial<DocumentTables>).getTables?.())
+      : undefined,
     excluded,
     interleavedQuadIds,
     transition: defaultProjectionData.projectionTransition ?? 0,
@@ -651,7 +654,8 @@ export function planCopies(
     displayList: DisplayListCache;
     center: [number, number];
     mainMatrixArray: number[];
-    useRows: boolean;
+    /** The rows the layers are drawn from (undefined when they are drawn from their features) */
+    rows: DrawnRows | undefined;
     excluded: Set<string> | null;
     interleavedQuadIds: Set<string>;
     transition: number;
@@ -664,23 +668,30 @@ export function planCopies(
   const viewCopies = filter.getCopies();
   if (viewCopies.length === 1 && viewCopies[0].lngShift === 0) return [baseCopy];
 
+  const { rows } = options;
+  const scratch = new Float64Array(4);
   return viewCopies.map((viewCopy) => {
-    let visibleIds: Set<string> | null = null;
-    const getVisibleIds = (): Set<string> => {
-      if (!visibleIds) visibleIds = filter.getVisibleIdsIn(viewCopy.bounds);
-      return visibleIds;
-    };
-    const view: RenderLayersView = { bounds: viewCopy.bounds, getVisibleIds };
-    const features = options.useRows
-      ? []
-      : options.displayList
-          .inOrder(getVisibleIds())
-          .filter(
-            (feature) =>
-              options.excluded === null ||
-              (options.excluded.has(feature.id) && !options.interleavedQuadIds.has(feature.id)),
-          );
-    const selected = baseCopy.selectedFeatures.filter((feature) => getVisibleIds().has(feature.id));
+    const view: RenderLayersView = { bounds: viewCopy.bounds };
+    // The features in view, and those selected: read by their ids when the features are drawn one
+    // by one; with the layers drawn from their rows, the rows selected are compared with the range
+    let features: Feature[] = [];
+    let selected: Feature[];
+    if (rows) {
+      const ranges = [viewCopy.bounds];
+      selected = baseCopy.selectedFeatures.filter((feature) =>
+        featureInRanges(rows, feature.id, ranges, scratch),
+      );
+    } else {
+      const visibleIds = filter.getVisibleIdsIn(viewCopy.bounds);
+      features = options.displayList
+        .inOrder(visibleIds)
+        .filter(
+          (feature) =>
+            options.excluded === null ||
+            (options.excluded.has(feature.id) && !options.interleavedQuadIds.has(feature.id)),
+        );
+      selected = baseCopy.selectedFeatures.filter((feature) => visibleIds.has(feature.id));
+    }
 
     const shift = viewCopy.lngShift;
     if (shift === 0) {

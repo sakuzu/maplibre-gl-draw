@@ -46,6 +46,8 @@ export interface GivenRowBoxes {
 export interface RowBoxesSlot {
   /** The boxes set, or null while nothing is set */
   given: GivenRowBoxes | null;
+  /** Changes each time the boxes are set or taken back (what was read of them is read again) */
+  epoch: number;
   /** Makes the boxes of the rows again at the next read of a range (once the tables are made) */
   refresh: (() => void) | null;
 }
@@ -56,7 +58,7 @@ export interface RowBoxesSlot {
  * @internal
  */
 export function createRowBoxesSlot(): RowBoxesSlot {
-  return { given: null, refresh: null };
+  return { given: null, epoch: 0, refresh: null };
 }
 
 /**
@@ -113,10 +115,12 @@ export function setRowBoxes(tables: unknown, boxes: GivenRowBoxes): () => void {
     throw new DrawError('invalidInput', 'setRowBoxes: the boxes have no gives and boxOf');
   }
   slot.given = boxes;
+  slot.epoch++;
   slot.refresh?.();
   return () => {
     if (slot.given !== boxes) return;
     slot.given = null;
+    slot.epoch++;
     slot.refresh?.();
   };
 }

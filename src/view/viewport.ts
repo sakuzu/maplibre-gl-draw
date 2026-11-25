@@ -11,6 +11,7 @@
 import type { LngLatBounds, Map as MapLibreMap } from 'maplibre-gl';
 import { LngLatBounds as LngLatBoundsClass } from 'maplibre-gl';
 
+import type { DrawnRows, RowGroup } from '../store/built-in/drawn-rows.js';
 import type { SpatialIndex } from '../store/spatial/spatial-index.js';
 import type { BoundingBox, Feature } from '../store/types.js';
 
@@ -208,6 +209,45 @@ export function getExpandedViewportBounds(map: MapLibreMap, expansionFactor: num
   return hullOf(getExpandedViewportRanges(map, expansionFactor));
 }
 
+/**
+ * Whether a row is in one of the ranges of a view: whether the box the spatial index of the Store
+ * has of it meets one, as the index finds the features in the range (a box that touches the edge
+ * meets it, and a row without a box meets none)
+ *
+ * @param scratch Four values the box is read into
+ */
+export function rowInRanges(
+  rows: Pick<DrawnRows, 'indexedBox'>,
+  group: RowGroup,
+  row: number,
+  ranges: readonly BoundingBox[],
+  scratch: Float64Array,
+): boolean {
+  if (!rows.indexedBox(group, row, scratch)) return false;
+  for (const { minX, minY, maxX, maxY } of ranges) {
+    if (maxX < scratch[0] || maxY < scratch[1] || minX > scratch[2] || minY > scratch[3]) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Whether the row of a feature is in one of the ranges of a view (`rowInRanges`; false for a
+ * feature that is not there)
+ *
+ * @param scratch Four values the box is read into
+ */
+export function featureInRanges(
+  rows: Pick<DrawnRows, 'indexedBox' | 'refOfId' | 'placeOf'>,
+  id: string,
+  ranges: readonly BoundingBox[],
+  scratch: Float64Array,
+): boolean {
+  const ref = rows.refOfId(id);
+  const place = ref === undefined ? undefined : rows.placeOf(ref);
+  return place !== undefined && rowInRanges(rows, place.group, place.row, ranges, scratch);
+}
+
 /** The bbox of one or two ranges (two ranges together cover every stored longitude) */
 function hullOf(ranges: BoundingBox[]): BoundingBox {
   if (ranges.length === 1) return ranges[0];
@@ -245,6 +285,9 @@ export class ViewportFilter {
   /**
    * Gets the Set of feature IDs that exist inside the current viewport
    *
+   * Read when the features are drawn one by one from their list, and not when the layers are drawn
+   * from their rows (the rows are compared with `getRanges` then).
+   *
    * @returns The Set of feature IDs inside the viewport
    */
   getVisibleIds(): Set<string> {
@@ -267,7 +310,15 @@ export class ViewportFilter {
   }
 
   /**
-   * Gets the Set of feature IDs inside a range of stored longitudes (one copy of the view)
+   * Gets the ranges of the current expanded viewport (one, or two across the antimeridian)
+   */
+  getRanges(): BoundingBox[] {
+    return getExpandedViewportRanges(this.map, this.expansionFactor);
+  }
+
+  /**
+   * Gets the Set of feature IDs inside a range of stored longitudes (one copy of the view), read
+   * when the features are drawn one by one from their list
    */
   getVisibleIdsIn(bounds: BoundingBox): Set<string> {
     return new Set(this.spatialIndex.findInBounds(bounds));

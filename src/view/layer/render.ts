@@ -45,8 +45,8 @@ import type { TableLayerRenderer } from './table-retained.js';
  * - From the rows (tableLayers is present and the renderers support the retained batches): draws
  *   each layer from its rows (`table-retained.ts`). The features argument is not used. The
  *   chunks are thinned per chunk, so the bbox of the expanded viewport is computed once per
- *   frame and passed in. The rows drawn one feature at a time are thinned per feature as well,
- *   so the set of visible ids is passed too (only once it becomes necessary).
+ *   frame and passed in. The rows drawn one feature at a time are thinned per row as well, by
+ *   their boxes, against the ranges of the viewport (the spatial index is not queried).
  * - Immediate mode: walks features every frame and draws them.
  *
  * The rendering result (including the z-order) is the same either way.
@@ -116,21 +116,14 @@ export function renderLayers(
 
   // Immediate chunks (dashed lines, images, custom types) cannot be thinned by the chunk bbox
   // alone: once a chunk touches the view, even features outside the screen are drawn one by one.
-  // The set of visible ids is passed so that the same per-feature thinning as immediate mode is
-  // applied. Querying the spatial index once per frame is enough, and it is not needed at all in
-  // a frame without a single immediate chunk, so it is looked up once, when first needed.
-  let visibleIdsMemo: ReadonlySet<string> | undefined;
-  const canFilterVisible =
-    view !== undefined ||
-    (viewportBounds !== undefined && typeof r.viewportFilter?.getVisibleIds === 'function');
-  const getVisibleIds = canFilterVisible
-    ? (): ReadonlySet<string> => {
-        if (!visibleIdsMemo) {
-          visibleIdsMemo = view ? view.getVisibleIds() : r.viewportFilter.getVisibleIds();
-        }
-        return visibleIdsMemo;
-      }
-    : undefined;
+  // Their rows are compared, one by one, with the ranges of the viewport (two across the
+  // antimeridian, where the bbox covers every longitude), so that the features drawn are those
+  // immediate mode draws.
+  const viewportRanges = view
+    ? [view.bounds]
+    : typeof r.viewportFilter?.getRanges === 'function'
+      ? r.viewportFilter.getRanges()
+      : undefined;
 
   // Insertion point 1: behind every layer of the Store
   if (drawBelow) {
@@ -176,6 +169,7 @@ export function renderLayers(
             viewportBounds.maxX,
             viewportBounds.maxY,
           ],
+          ranges: viewportRanges,
         },
         {
           renderers: retainedRenderers,
@@ -184,7 +178,6 @@ export function renderLayers(
           customRenderers,
           customRendererContext: layerContext,
           companions,
-          getVisibleIds,
           restoreBlendState,
         },
       );
@@ -266,10 +259,8 @@ export function layerRendererContext(base: FrameDrawContext, layer: Layer): Fram
  * The part of the view one rendering covers (one copy of the world)
  */
 export interface RenderLayersView {
-  /** The range to draw, in stored longitudes (thins the chunks) */
+  /** The range to draw, in stored longitudes (thins the chunks, and the rows drawn one by one) */
   readonly bounds: BoundingBox;
-  /** The ids of the features inside `bounds` (thins the immediate chunks one by one) */
-  readonly getVisibleIds: () => ReadonlySet<string>;
 }
 
 /**

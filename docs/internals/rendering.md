@@ -368,9 +368,11 @@ stacking order alone decides the order:
 The bounding box of the expanded viewport (`viewportBounds`) does not
 depend on the number of features, so it is computed once per frame and
 passed to `drawLayer` and to the datasets, whether or not retained mode
-is in use. The set of visible ids for immediate chunks (`getVisibleIds`) is
-queried at most once per frame, and only when a first immediate chunk needs
-it. If the renderers lack the retained API (a test stub, for example),
+is in use. The ranges of the viewport (`viewportRanges`: the range of the
+copy of the world being drawn, or the one or two ranges of the expanded
+view) are passed to `drawLayer` too. The rows of an immediate chunk are
+compared with them, box by box, and the spatial index is not queried. If
+the renderers lack the retained API (a test stub, for example),
 `getRetainedRenderers()` returns `undefined` and the loop falls back to
 immediate mode.
 
@@ -385,6 +387,7 @@ class ViewportFilter {
     expansionFactor = DEFAULT_VIEWPORT_EXPANSION_FACTOR);
   getVisibleIds(): Set<string>; // ids in the expanded view
   getCopies(): ViewportCopy[]; // world copies the view covers
+  getRanges(): BoundingBox[]; // ranges of the expanded view
   getVisibleIdsIn(bounds: BoundingBox): Set<string>;
   getBounds(): BoundingBox; // bbox of the expanded view
   filter(features: Feature[]): Feature[]; // keeps draw order
@@ -393,14 +396,18 @@ class ViewportFilter {
 
 - The view is expanded by `DEFAULT_VIEWPORT_EXPANSION_FACTOR` (2.0), so
   panning and zooming do not show features popping in at the edges
-- Queries go through the R-tree of the Store's spatial index
+- The ids are read through the R-tree of the Store's spatial index, and
+  only when the features are drawn one by one from their list. A frame that
+  draws the layers from their rows reads no set of ids: it compares the
+  boxes of rows with the ranges (`rowInRanges`). The box of a row is the one
+  the spatial index has of it, so the answer is that of the index
 - Across the antimeridian maplibre reports the view with unwrapped
   longitudes (an east edge above 180), and the view covers two copies of
   the world. `getCopies()` (`splitLongitudeCopies`) returns each copy with
   its shift (0 or ±360) and its range in stored longitudes. The rendering
-  draws each copy with its own range (`getVisibleIdsIn(bounds)`).
-  `getVisibleIds()` queries every range, and `getBounds()` returns one bbox
-  that then covers every stored longitude
+  draws each copy with its own range. `getRanges()` returns the ranges of
+  every copy, and `getBounds()` returns one bbox that then covers every
+  stored longitude
 - When the expanded view is 360 degrees wide or more, the longitudes of the
   view itself are used, but the latitudes keep the expansion. On the globe
   the whole sphere is often in view, and the bounds maplibre reports fall
@@ -422,8 +429,8 @@ Neither path calls `filter()` in a frame.
   visible, one pass over the list is cheaper than sorting and is used
   instead
 - The retained path never walks the feature list. Chunks are thinned by
-  their bbox against `getBounds()`, and `getVisibleIds()` is used only for
-  immediate chunks, memoized per frame
+  their bbox against `getBounds()`, and the rows of immediate chunks by
+  their boxes against `getRanges()`
 
 ## ShaderInitializer
 
@@ -974,10 +981,14 @@ chunks that do not intersect the expanded viewport are skipped.
   huge bbox and is always drawn, which is the safe side
 - A Circle's bbox comes from the four extreme points of the drawn polygon
 
-Immediate chunks are also thinned per feature with
-`ViewportFilter.getVisibleIds()`, so touching the view does not draw every
-off-screen feature of the chunk. The query runs only in frames that draw an
-immediate chunk, once per frame.
+Immediate chunks are also thinned per row, so touching the view does not
+draw every off-screen feature of the chunk. The rows of the chunk are walked
+in any case, so each is compared with the ranges of the frame by its box
+(`rowInRanges`), before its id is read or its feature is made. The box is
+the one the spatial index has of the row: the box of its positions, or for
+a type that gives its box (an image, a circle, a custom type with `bbox`)
+the box given, which is read once and kept until the row is written
+(`DrawnRows.indexedBox`).
 
 ### Invalidation
 

@@ -16,7 +16,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DatasetManager } from '../../dataset/manager.js';
 import { createDatasetManager } from '../../dataset/manager.js';
 import type {
@@ -26,9 +26,12 @@ import type {
 } from '../../extension/index.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { DocumentAccess as Store } from '../../store/document-access.js';
+import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature, Layer } from '../../store/types.js';
-import { toRow } from '../../test-utils.js';
+import { createCountedInstance, toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { BatchManager } from '../renderers/batch-manager.js';
+import { ViewportFilter } from '../viewport.js';
 import { type RenderLayersRange, renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
 import type { TableDrawDeps, TableLayerRenderer } from './table-retained.js';
@@ -567,98 +570,91 @@ describe('renderLayers and the drawing of the layers from their rows', () => {
   });
 });
 
-describe('renderLayers and the visible id set of immediate chunks', () => {
+describe('renderLayers and the rows drawn one by one', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   /**
-   * Stub of the drawing of the rows that can specify how many times drawLayer calls
-   * deps.getVisibleIds
-   *
-   * The real one calls it once per run of rows drawn at once. We want to confirm that however
-   * many times it is called within a frame, the spatial index is queried only once.
+   * An instance over two layers of images (drawn one by one), between points, in the view and out
+   * of it, with the ids of the images in the view and of the others
    */
-  function createTableLayers(
-    seen: Array<ReadonlySet<string> | undefined>,
-    callsPerLayer: number,
-  ): TableLayerRenderer {
-    return {
-      beginFrame: (): void => {},
-      drawLayer: (_layerId: string, _layer: unknown, _frame: unknown, deps: TableDrawDeps) => {
-        for (let i = 0; i < callsPerLayer; i++) seen.push(deps.getVisibleIds?.());
-        return true;
-      },
-    } as unknown as TableLayerRenderer;
+  function instanceOfImages() {
+    const instance = createCountedInstance();
+    const { draw } = instance;
+    const inView: string[] = [];
+    const outOfView: string[] = [];
+    for (const name of ['below', 'above']) {
+      const layerId = draw.layers.create({ name })?.id as string;
+      for (const [x, into] of [
+        [0, inView],
+        [60, outOfView],
+        [0.5, inView],
+      ] as const) {
+        const made = draw.features.createMany([
+          {
+            type: 'Image',
+            layerId,
+            geometry: { type: 'Point', coordinates: [x, 0] },
+            properties: {
+              'maplibre-gl-draw:imageWidth': 20,
+              'maplibre-gl-draw:imageHeight': 20,
+              'maplibre-gl-draw:createdZoom': 10,
+            },
+          },
+          { type: 'Point', layerId, geometry: { type: 'Point', coordinates: [x, 0.5] } },
+        ] as never) as unknown as Array<{ id: string }>;
+        into.push(made[0].id);
+      }
+    }
+    return { instance, inView, outOfView };
   }
 
-  function run(
-    layerOrder: string[],
-    callsPerLayer: number,
-    withViewportFilter: boolean,
-  ): { seen: Array<ReadonlySet<string> | undefined>; queries: number } {
-    const seen: Array<ReadonlySet<string> | undefined> = [];
-    let queries = 0;
-
-    const viewportFilter = {
-      getBounds: () => ({ minX: -1, minY: -1, maxX: 1, maxY: 1 }),
-      getVisibleIds: (): Set<string> => {
-        queries++;
-        return new Set(['visible-1']);
-      },
-    };
-
-    const r = {
-      batchManager: {
-        beginFrame: (): void => {},
-        processFeature: (): boolean => false,
-        endFrame: (): void => {},
-        getRetainedRenderers: () => ({}) as never,
-      },
-      tentativeRenderer: { drawGeometry: (): void => {} },
-      ...(withViewportFilter ? { viewportFilter } : {}),
-    } as unknown as Renderers;
-
-    const store = {
-      getLayerOrder: (): string[] => layerOrder,
-      getLayer: makeGetLayer(layerOrder),
-      getTentative: (): null => null,
-    } as unknown as Store;
-
-    renderLayers(
-      r,
-      store,
-      [],
-      new Set<string>(),
-      {} as unknown as ProjectionData,
-      14,
-      new Map<string, FeatureTypeHandler['renderer']>(),
-      {} as unknown as FrameDrawContext,
-      createFeatureCompanionRegistry(),
-      [] as LayeredOverlayRenderer[],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      createTableLayers(seen, callsPerLayer),
-    );
-
-    return { seen, queries };
+  /** The ids of the features drawn one by one in a frame */
+  function drawnIn(instance: ReturnType<typeof createCountedInstance>): string[] {
+    const drawn: string[] = [];
+    const processed = vi.spyOn(BatchManager.prototype, 'processFeature');
+    instance.map.render();
+    for (const [feature] of processed.mock.calls) drawn.push(feature.id);
+    processed.mockRestore();
+    return drawn;
   }
 
-  it('the spatial index is queried only once however often it is asked in a frame', () => {
-    const { seen, queries } = run(['layer-1', 'layer-2'], 2, true);
-
-    expect(queries).toBe(1);
-    expect(seen).toHaveLength(4);
-    for (const ids of seen) expect(ids).toEqual(new Set(['visible-1']));
+  it('never ask the spatial index, however many runs of rows are drawn one by one', () => {
+    const { instance, inView } = instanceOfImages();
+    const found = vi.spyOn(StoreSpatialIndex.prototype, 'findInBounds');
+    const ids = vi.spyOn(ViewportFilter.prototype, 'getVisibleIds');
+    for (let frame = 0; frame < 10; frame++) instance.map.render();
+    expect(drawnIn(instance)).toEqual(inView);
+    expect(found).not.toHaveBeenCalled();
+    expect(ids).not.toHaveBeenCalled();
+    instance.draw.destroy();
   });
 
-  it('the spatial index is not queried in a frame where nobody asks', () => {
-    expect(run(['layer-1', 'layer-2'], 0, true).queries).toBe(0);
+  it('draw the rows whose box is in the range alone', () => {
+    const { instance, inView, outOfView } = instanceOfImages();
+    expect(drawnIn(instance)).toEqual(inView);
+    // Seen from where the others are
+    const bounds = (west: number, east: number) => ({
+      getWest: () => west,
+      getEast: () => east,
+      getSouth: () => -1,
+      getNorth: () => 1,
+      getSouthWest: () => ({ lng: west, lat: -1 }),
+      getNorthEast: () => ({ lng: east, lat: 1 }),
+    });
+    Object.assign(instance.map.map as object, { getBounds: () => bounds(59, 61) });
+    expect(drawnIn(instance)).toEqual(outOfView);
+    Object.assign(instance.map.map as object, { getBounds: () => bounds(20, 22) });
+    expect(drawnIn(instance)).toEqual([]);
+    instance.draw.destroy();
   });
 
-  it('getVisibleIds is not passed for an implementation without a ViewportFilter', () => {
-    const { seen } = run(['layer-1'], 1, false);
-
-    expect(seen).toEqual([undefined]);
+  it('draw every row in a frame without a range', () => {
+    const { instance, inView, outOfView } = instanceOfImages();
+    vi.spyOn(ViewportFilter.prototype, 'getRanges').mockReturnValue(undefined as never);
+    expect(drawnIn(instance).sort()).toEqual([...inView, ...outOfView].sort());
+    instance.draw.destroy();
   });
 });
 

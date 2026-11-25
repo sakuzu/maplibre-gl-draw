@@ -56,6 +56,7 @@ import {
   type TableWorkBudget,
 } from '@sakuzu/kasane/render';
 import type { FeatureStyle } from '../../shared/types/model.js';
+import type { BoundingBox } from '../types.js';
 import type { StoreDocument } from './document.js';
 import { ROW_COLUMNS } from './row-columns.js';
 
@@ -149,6 +150,19 @@ export interface DrawnRows {
   membersOf(layerId: string, groupId: string): readonly number[];
   /** The row group and the row a reference is read from (undefined for none) */
   placeOf(ref: number): { readonly group: RowGroup; readonly row: number } | undefined;
+  /**
+   * The box the spatial index of the Store has of a row, written to `out` as
+   * `[minX, minY, maxX, maxY]`: the box given for its type (`row-boxes.ts`), or the box of its
+   * positions (false for a row without one, which meets no range). A row of a page meets a range
+   * just when `forEachRowInBox` finds it there
+   */
+  indexedBox(group: RowGroup, row: number, out: Float64Array): boolean;
+  /**
+   * Calls `visit` with the reference of every row whose box meets a box (as `findFeatureIdsInBox`
+   * of the layer finds their features: the hidden rows included, the deleted ones not), read from
+   * the spatial index of the Store
+   */
+  forEachRowInBox(bounds: BoundingBox, visit: (ref: number) => void): void;
   /** The row group of a handle (undefined for none) */
   groupOf(handle: RowGroupHandle): RowGroup | undefined;
   /** The parts of the delta of a layer, the oldest first */
@@ -191,19 +205,91 @@ export interface DrawnRows {
 /** The field of the tables of a built-in Store that holds the reader of the drawing */
 const DRAWN_ROWS = Symbol('drawn rows');
 
+/** A box given for a row that is to be read (again) */
+const BOX_UNREAD = 0;
+/** A row of a type that gives its box, without one */
+const BOX_NONE = 1;
+/** A box given for a row, as it was read */
+const BOX_READ = 2;
+
+/** The boxes given for rows of a group, kept once read */
+interface GivenBoxes {
+  /** The set of the boxes they were read of (`RowBoxesSlot.epoch`) */
+  readonly epoch: number;
+  /** The place of each row among the boxes */
+  readonly placeOf: Map<number, number>;
+  /** What is known of each box (`BOX_UNREAD`, `BOX_NONE` or `BOX_READ`) */
+  readonly known: number[];
+  /** The boxes, four values each */
+  readonly values: number[];
+}
+
+/**
+ * Reads the boxes given for the rows of some types, each kept until its row is written or the boxes
+ * are set again: giving one makes the feature of the row, and the drawing compares the boxes of the
+ * rows drawn one at a time with the view in every frame
+ */
+function givenBoxReader(
+  document: StoreDocument,
+  pages: Pages<FeatureStyle>,
+): (group: RowGroup, row: number, out: Float64Array) => boolean {
+  const kept = new WeakMap<RowGroup, GivenBoxes>();
+  // A row written in place is read again (a row written elsewhere is read in another group)
+  pages.onRowsWritten((_layerId, writes) => {
+    for (const write of writes) {
+      const place = pages.placeOf(write.handle);
+      if (!place) continue;
+      const boxes = kept.get(place.group);
+      const at = boxes?.placeOf.get(place.row);
+      if (boxes && at !== undefined) boxes.known[at] = BOX_UNREAD;
+    }
+  });
+  return (group, row, out) => {
+    const { given, epoch } = document.rowBoxes;
+    if (!given) return false;
+    let boxes = kept.get(group);
+    if (!boxes || boxes.epoch !== epoch) {
+      boxes = { epoch, placeOf: new Map(), known: [], values: [] };
+      kept.set(group, boxes);
+    }
+    const { placeOf, known, values } = boxes;
+    let at = placeOf.get(row);
+    if (at === undefined) {
+      at = known.length;
+      placeOf.set(row, at);
+      known.push(BOX_UNREAD);
+      values.push(0, 0, 0, 0);
+    }
+    if (known[at] === BOX_UNREAD) {
+      const has = given.boxOf(group.data.rows[row], out);
+      let finite = has;
+      for (let k = 0; has && k < 4; k++) {
+        values[at * 4 + k] = out[k];
+        if (!Number.isFinite(out[k])) finite = false;
+      }
+      known[at] = finite ? BOX_READ : BOX_NONE;
+    }
+    if (known[at] === BOX_NONE) return false;
+    for (let k = 0; k < 4; k++) out[k] = values[at * 4 + k];
+    return true;
+  };
+}
+
 /** The reader of the drawing over the tables of a document */
 function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
   const pages = listPages(document.rows) as Pages<FeatureStyle>;
+  const givenBox = givenBoxReader(document, pages);
+  const typeOf = (group: RowGroup, row: number): string => {
+    const column = group.data.wholes[TYPE_AT] as PageValues | null;
+    return column ? (column.values[column.indexes[row]] as string) : '';
+  };
   return {
     get revision() {
       return pages.revision;
     },
     table: (layerId) => pages.rowTable(layerId),
     notDrawn: (group, row) => (group.state[row] & NOT_DRAWN) !== 0,
-    typeOf: (group, row) => {
-      const column = group.data.wholes[TYPE_AT] as PageValues | null;
-      return column ? (column.values[column.indexes[row]] as string) : '';
-    },
+    typeOf,
     styleNumberOf: (group, row) => {
       const column = group.data.wholes[STYLE_AT] as PageDictionary | null;
       return column ? column.indexes[row] : -1;
@@ -230,6 +316,16 @@ function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
     placeOf: (ref) => {
       const place = pages.placeOf(ref);
       return place ? { group: place.group, row: place.row } : undefined;
+    },
+    indexedBox: (group, row, out) =>
+      document.rowBoxes.given?.gives(typeOf(group, row)) === true
+        ? givenBox(group, row, out)
+        : pageRowBox(group.data, row, out),
+    forEachRowInBox: ({ minX, minY, maxX, maxY }, visit) => {
+      const batches = document.rows.scan({ bbox: [minX, minY, maxX, maxY] });
+      for (let batch = batches.next(); !batch.done; batch = batches.next()) {
+        for (let i = 0; i < batch.value.length; i++) visit(batch.value[i]);
+      }
     },
     groupOf: (handle) => pages.rowGroup(handle)?.group,
     deltaParts: (table) => table.delta.parts,

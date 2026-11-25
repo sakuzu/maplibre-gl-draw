@@ -93,7 +93,7 @@ import {
   ROW_WRITE_STYLE,
 } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess } from '../../store/document-access.js';
-import type { Feature, Layer, SelectionType, StoreChange } from '../../store/types.js';
+import type { BoundingBox, Feature, Layer, SelectionType, StoreChange } from '../../store/types.js';
 import {
   drawFeatureCompanionsInFrame,
   type FeatureCompanionRegistry,
@@ -131,6 +131,7 @@ import { getAnchorElevationGeneration } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
 import { getTerrainDrapeDebug } from '../terrain/state.js';
 import type { TessellationStep } from '../terrain/tessellation.js';
+import { rowInRanges } from '../viewport.js';
 import {
   collectRow,
   ROWS_LAYOUT,
@@ -235,6 +236,11 @@ export interface TableLayerFrame {
   readonly zoom: number;
   /** The range to draw, on one copy of the world (everything when undefined) */
   readonly bounds: BBox | undefined;
+  /**
+   * The ranges of stored longitudes the rows drawn one at a time are compared with: the range of
+   * the copy of the world, or the one or two ranges of the view (every row is drawn when omitted)
+   */
+  readonly ranges?: readonly BoundingBox[];
 }
 
 /**
@@ -266,8 +272,6 @@ export interface TableDrawDeps {
   readonly customRendererContext: FrameDrawContext;
   /** The providers of companion drawing and companion hits */
   readonly companions: FeatureCompanionRegistry;
-  /** The ids of the features in view (the rows drawn at once are drawn when theirs is) */
-  readonly getVisibleIds?: () => ReadonlySet<string>;
   /** Re-establishes the blend state of our own drawing after an external renderer */
   readonly restoreBlendState?: () => void;
 }
@@ -588,6 +592,8 @@ export class TableLayerRenderer {
   private readonly atOnce = new Map<string, { feature: Feature; frame: number }>();
   /** The frame the features not drawn in it were let go in last */
   private atOnceTrimmed = -1;
+  /** The box of a row compared with the ranges of the frame */
+  private readonly rowBox = new Float64Array(4);
   /**
    * Advances whenever which rows are drawn at once may have changed without a new classification
    * (a group drawn from its other side, a chunk of the frames the drape paints drawn at once or
@@ -2082,8 +2088,8 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Draws rows of a group at once, from their features, the ones in view (by the ids of the
-   * features in view)
+   * Draws rows of a group at once, from their features, the ones in view (those whose box meets a
+   * range of the frame)
    *
    * @param byCopy Whether the state of the rows is read from their copies (a part not packed)
    * @param skipDraped Whether the rows the drape paints are passed over (rows not cut for a frame
@@ -2101,7 +2107,7 @@ export class TableLayerRenderer {
     const deps = cache.deps as TableDrawDeps;
     const frame = this.pass.frame as TableLayerFrame;
     const layer = cache.layer ?? undefined;
-    const visible = frame.bounds !== undefined ? deps.getVisibleIds?.() : undefined;
+    const { ranges } = frame;
     const { batchManager, customRenderers, customRendererContext } = deps;
     let begun = false;
     for (let row = from; row < to; row++) {
@@ -2112,8 +2118,10 @@ export class TableLayerRenderer {
         : (groupCache.bytes[row] & ROW_STATE_HIDDEN) !== 0;
       if (hidden) continue;
       if (!this.reader.hasGeometry(groupCache.group, row)) continue;
+      // Compared before anything of the row is made
+      if (ranges && !rowInRanges(this.reader, groupCache.group, row, ranges, this.rowBox)) continue;
       const id = this.reader.idOf(this.reader.refOf(groupCache.group, row));
-      if (id === undefined || (visible && !visible.has(id))) continue;
+      if (id === undefined) continue;
       const feature = this.atOnceFeature(id);
       if (!feature) continue;
       if (!begun) {
