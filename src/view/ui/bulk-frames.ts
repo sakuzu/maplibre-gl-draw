@@ -16,14 +16,15 @@
  *
  * A frame is drawn as the selection UI draws the frame of a feature of a selection of several:
  *
- * - a row with an extent: the box of the row widened by the margin on the map plane, as
- *   `applyMarginToBoundingBox` widens it with the zoom (every side moved out by the margin, in
- *   the pixels of the latitude of the center of the box), stroked as `StrokeRenderer` strokes a
- *   closed path (the same miters, the same band of one pixel the coverage fades in, the same
- *   triangles, the color given to the whole color). On the terrain and on the globe the sides are
- *   cut into segments as the path of the frame is densified there: no longer than a cell of the
- *   ground on the terrain, and short enough on the globe for a segment to keep within a pixel of
- *   the sphere, up to {@link MAX_SEGMENTS} a side (the segments of a group follow its largest box)
+ * - a row with an extent: the box of the row as it is drawn (for a Circle row, the box of its
+ *   circle), widened by the margin on the map plane, as `applyMarginToBoundingBox` widens it with
+ *   the zoom (every side moved out by the margin, in the pixels of the latitude of the center of
+ *   the box), stroked as `StrokeRenderer` strokes a closed path (the same miters, the same band of
+ *   one pixel the coverage fades in, the same triangles, the color given to the whole color). On
+ *   the terrain and on the globe the sides are cut into segments as the path of the frame is
+ *   densified there: no longer than a cell of the ground on the terrain, and short enough on the
+ *   globe for a segment to keep within a pixel of the sphere, up to {@link MAX_SEGMENTS} a side
+ *   (the segments of a group follow its largest box)
  * - a row of one position (no extent): the rectangle of the extent of its marker plus the
  *   margin, laid on the screen around the point, as `AnchoredOutlineRenderer` draws the frame of a
  *   point (the color given to the alpha)
@@ -49,10 +50,11 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { getDashPattern, pixelsToDegreesLng, RENDERING_DEFAULTS } from '../../shared/math/index.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
-import { type DrawnRows, pageRowBox, type RowGroup } from '../../store/built-in/drawn-rows.js';
+import type { DrawnRows, RowGroup } from '../../store/built-in/drawn-rows.js';
 import type { Feature } from '../../store/types.js';
 import { getSurfaceTessellationStep } from '../globe-subdivision.js';
 import { GpuLedger } from '../gpu-ledger.js';
+import { drawnRowBox } from '../layer/table-partition.js';
 import type { DrawnRowGroup } from '../layer/table-retained.js';
 import {
   ROW_HIDDEN_POSITION_GLSL,
@@ -268,7 +270,7 @@ export function buildFrameInstances(
     if (!reader.hasGeometry(group, row)) continue;
     const type = reader.typeOf(group, row);
     if (framedByFeature(rows, type, () => drawnAtOnce(row))) continue;
-    if (!pageRowBox(group.data, row, box)) continue;
+    if (!drawnRowBox(reader, group, row, box)) continue;
     if (!POSITION_TYPES.has(type) && box[0] === 0 && box[1] === 0 && box[2] === 0 && box[3] === 0) {
       // The selection UI gives such a feature no frame
       continue;

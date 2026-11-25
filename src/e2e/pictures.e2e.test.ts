@@ -20,9 +20,15 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DrawDocument } from '../index.js';
+import { DEFAULT_SELECTION_CONFIG } from '../shared/config/selection.js';
 import { browserTimeout } from '../test-utils.js';
 import { TERRAIN_GHOST_OPACITY } from '../view/terrain/occlusion.js';
-import { computeBoundingBox } from '../view/ui/selection-ui/bounding-box.js';
+import { rowFrameCorners } from '../view/ui/bulk-frames.js';
+import { computeResizeHandles, computeRotateHandle } from '../view/ui/handles.js';
+import {
+  computeBoundingBox,
+  computeCombinedBoundingBox,
+} from '../view/ui/selection-ui/bounding-box.js';
 import {
   compareSets,
   describeComparison,
@@ -33,6 +39,8 @@ import {
 import { type Bundle, bundlePage, type E2EWindow, launchBrowser, openMapPage } from './harness.js';
 import {
   type Call,
+  CIRCLE_PART,
+  CIRCLES_SCENES,
   CUSTOM_TYPE,
   DATELINE_CAMERA,
   DATELINE_SCENES,
@@ -462,6 +470,118 @@ for (const map of MAPS) {
             Math.abs((other as PixelBox)[side] - (one as PixelBox)[side]),
             `${part} ${side}`,
           ).toBeLessThanOrEqual(1);
+        }
+      }
+    });
+  });
+}
+
+/** The box of the drawing buffer around positions, with some pixels around them */
+async function pixelBoxAround(
+  page: Page,
+  positions: readonly (readonly number[])[],
+  padPx: number,
+): Promise<PixelBox> {
+  return page.evaluate(
+    ({ at, pad }) => {
+      const { map } = window as unknown as E2EWindow;
+      const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+      const ratio = gl.drawingBufferWidth / map.getCanvas().clientWidth;
+      const points = at.map((c) => map.project(c as [number, number]));
+      const xs = points.map((p) => p.x * ratio);
+      const ys = points.map((p) => p.y * ratio);
+      return {
+        x0: Math.max(0, Math.floor(Math.min(...xs) - pad * ratio)),
+        y0: Math.max(0, Math.floor(Math.min(...ys) - pad * ratio)),
+        x1: Math.min(gl.drawingBufferWidth, Math.ceil(Math.max(...xs) + pad * ratio)),
+        y1: Math.min(gl.drawingBufferHeight, Math.ceil(Math.max(...ys) + pad * ratio)),
+      };
+    },
+    { at: positions as number[][], pad: padPx },
+  );
+}
+
+/** The pixels around a handle the box of it holds: the handle (10 px) and the ends of the lines */
+const HANDLE_PAD_PX = 8;
+
+/** The fewest pixels of the color of the frames in the box of a handle drawn there */
+const HANDLE_PIXELS = 60;
+
+for (const map of MAPS) {
+  describe(`the pictures of a selection of many circles alone on the ${map} map`, () => {
+    const scenes = CIRCLES_SCENES.filter((scene) => scene.map === map);
+    const taken = new Map<number, Picture>();
+    const boxes = new Map<string, PixelBox>();
+    let page: Page;
+
+    beforeAll(async () => {
+      page = await openPage(map);
+      const features = scenes[0].document.features as never[];
+      const { margin } = DEFAULT_SELECTION_CONFIG.boundingBox;
+      const { zoom } = MAP_SETUPS[map].camera;
+      const part = computeBoundingBox(
+        scenes[0].document.features.find((f) => f.id === CIRCLE_PART.id) as never,
+      );
+      const all = computeCombinedBoundingBox(features);
+      if (!part || !all) throw new Error('no box of the circles');
+      const [topLeft, topRight, bottomRight, bottomLeft] = rowFrameCorners(
+        [all.bottomLeft[0], all.bottomLeft[1], all.topRight[0], all.topRight[1]],
+        margin,
+        zoom,
+      );
+      const frame = { topLeft, topRight, bottomRight, bottomLeft, center: all.center };
+      const handles = [
+        ...computeResizeHandles(frame),
+        computeRotateHandle(frame, DEFAULT_SELECTION_CONFIG.rotateHandle.distance, zoom),
+      ];
+      boxes.set(
+        'circle',
+        await pixelBoxAround(
+          page,
+          [part.topLeft, part.topRight, part.bottomRight, part.bottomLeft],
+          CIRCLE_PART.padPx,
+        ),
+      );
+      for (const [i, handle] of handles.entries()) {
+        const box = await pixelBoxAround(page, [handle.position], HANDLE_PAD_PX);
+        boxes.set(`handle ${i}`, box);
+      }
+    }, browserTimeout(90_000));
+
+    afterAll(async () => {
+      await page?.close();
+    });
+
+    for (const scene of scenes) {
+      it(scene.name, async () => {
+        const picture = await take(page, scene);
+        taken.set(scene.count, picture);
+        if (OUT) await writePicture(OUT, scene.name, picture);
+      });
+    }
+
+    it('frame a circle, frame all of them and draw the handles the same way at both counts', () => {
+      const [few, many] = MANY_COUNTS.map((count) => taken.get(count));
+      if (!few || !many) throw new Error('the pictures of the two counts were not taken');
+      expect(boxes.size).toBe(6);
+      const whole = { x0: 0, y0: 0, x1: few.width, y1: few.height };
+      for (const [part, box] of [...boxes, ['all', whole] as const]) {
+        const one = frameExtentIn(few, box);
+        const other = frameExtentIn(many, box);
+        expect(one, part).not.toBeNull();
+        expect(other, part).not.toBeNull();
+        for (const side of ['x0', 'y0', 'x1', 'y1'] as const) {
+          expect(
+            Math.abs((other as PixelBox)[side] - (one as PixelBox)[side]),
+            `${part} ${side}`,
+          ).toBeLessThanOrEqual(1);
+        }
+        if (!part.startsWith('handle')) continue;
+        for (const picture of [few, many]) {
+          const pixels = pixelsIn(picture, box);
+          let drawn = 0;
+          for (let i = 0; i < pixels.length; i += 4) if (isFrame(pixels, i)) drawn++;
+          expect(drawn, part).toBeGreaterThan(HANDLE_PIXELS);
         }
       }
     });

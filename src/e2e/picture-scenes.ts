@@ -634,6 +634,70 @@ export const MANY_SCENES: readonly ManyScene[] = MAPS.flatMap((map) =>
 );
 
 /**
+ * The large circle of the scenes of a selection of many circles: its ID, and the pixels around its
+ * box that hold its frame
+ */
+export const CIRCLE_PART = { id: 'circle', padPx: 14 } as const;
+
+/**
+ * The scene of a selection of `count` circles alone on a map: a large circle, two small ones at
+ * the corners of the box of all of them, and a block of small ones on the right, every one selected
+ */
+function circlesSceneOf(map: MapName, count: number): ManyScene {
+  const at = placesOf(map);
+  const meters = unitMeters(map);
+  const circle = (id: string, x: number, y: number, radius: number) =>
+    feature(
+      map,
+      id,
+      'Circle',
+      { type: 'Point', coordinates: at(x, y) },
+      { fillColor: COLORS.b, fillOpacity: 0.6, strokeColor: '#1b1b3a', strokeWidth: 1 },
+      { 'maplibre-gl-draw:radiusMeters': radius * meters },
+    );
+  const features: Feature[] = [
+    circle(CIRCLE_PART.id, -1, 0.2, 1),
+    circle('corner-0', -4.5, 2.6, 0.02),
+    circle('corner-1', 4.5, -2, 0.02),
+  ];
+  const side = 32;
+  for (let i = 0; features.length < count; i++) {
+    const x = 2 + (1.6 * (i % side)) / (side - 1);
+    const y = -0.8 + (2 * Math.floor(i / side)) / (side - 1);
+    features.push(circle(`fill-${i}`, x, y, 0.02));
+  }
+  return {
+    name: `${map}/many-circles/${count}`,
+    map,
+    count,
+    document: {
+      version: '3.0.0',
+      metadata: { title: 'pictures' },
+      layerOrder: [LAYER],
+      layers: [
+        {
+          id: LAYER,
+          name: 'Pictures',
+          visible: true,
+          locked: false,
+          opacity: 1,
+          styleRule: undefined,
+          metadata: undefined,
+          items: features.map((f) => f.id),
+        },
+      ],
+      features,
+    },
+    calls: [['selection.set', 'feature', features.map((f) => f.id)]],
+  };
+}
+
+/** The scenes of a selection of many circles alone: every map, at the two counts */
+export const CIRCLES_SCENES: readonly ManyScene[] = MAPS.flatMap((map) =>
+  MANY_COUNTS.map((count) => circlesSceneOf(map, count)),
+);
+
+/**
  * The camera of the scenes of a selection of many features across the antimeridian: a flat map
  * whose view holds both sides of longitude 180, drawn as two copies of the world
  */
