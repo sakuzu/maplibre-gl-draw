@@ -290,6 +290,8 @@ describe('the box of a row compared with a range', () => {
         draw.features.update(id, { geometry: { type: 'Point', coordinates: place() } });
       }
       draw.features.moveMany(some('Sign'), { layerId: layers[0] } as never);
+      // Before a frame is drawn, and after
+      expectSame();
       settle(instance);
       expectSame();
       // Rows written since the frame
