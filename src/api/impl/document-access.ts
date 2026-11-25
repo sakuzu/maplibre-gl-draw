@@ -1881,11 +1881,27 @@ export function createDocumentAccess(
   };
   /** What the writes of the instance touched since the last change of the Store arrived */
   let ownRows = new Set<number>();
+  /**
+   * What the layer wrote to rows as columns since the last change of the Store arrived (null for
+   * none): those rows are read from the change, whatever the layer wrote to them in the words of
+   * the features before or after
+   */
+  let columnWrites: {
+    /** The rows written */
+    readonly rows: Set<number>;
+    /** Those brought back (a deletion written 0), read as created */
+    readonly broughtBack: Set<number>;
+    /** Where those whose place was written were before the first write of it */
+    readonly places: RowPlaces;
+  } | null = null;
   let ownLayers = new Set<string>();
   let ownGroups = new Set<string>();
   let ownFiles = new Set<string>();
   let ownMetadata = false;
   let ownOrder = false;
+  /** Whether a row of a change is read from it: not told by the layer as it wrote it */
+  const readFromChange = (ref: number): boolean =>
+    !ownRows.has(ref) || columnWrites?.rows.has(ref) === true;
 
   /** Asked by the Store at the start of each outermost transaction */
   const asksValuesBefore = (change: {
@@ -1922,6 +1938,7 @@ export function createDocumentAccess(
   const clearOwn = (): void => {
     wroteRows = false;
     ownRows = new Set();
+    columnWrites = null;
     ownLayers = new Set();
     ownGroups = new Set();
     ownFiles = new Set();
@@ -3010,11 +3027,11 @@ export function createDocumentAccess(
       return;
     }
     for (const [layerId, rows] of change.rows?.layers ?? []) {
-      const deleted = rows.deleted.filter((ref) => !ownRows.has(ref));
+      const deleted = rows.deleted.filter(readFromChange);
       const moved =
-        rows.created.some((ref) => !ownRows.has(ref)) ||
+        rows.created.some(readFromChange) ||
         ((rows.fields.has('parent') || rows.fields.has('orderKey')) &&
-          rows.updated.some((ref) => !ownRows.has(ref)));
+          rows.updated.some(readFromChange));
       if (!moved && deleted.length > 0) {
         // The ends only when one went
         if (deletedAwayFromEnds(deleted, change.previousValues?.get(layerId))) continue;
@@ -3989,12 +4006,6 @@ export function createDocumentAccess(
   // The values written back
   // ==========================================================================
 
-  /**
-   * The rows this layer brought back (a deletion written 0) whose change has not been read yet:
-   * read as created, as the rows a change written to the Store directly brings back
-   */
-  const broughtBack = new Set<number>();
-
   /** The parents and the keys of rows, read at once, or one at a time for rows of several layers */
   const readPlaces = (rows: Int32Array): ReadonlyMap<FeatureRowField, readonly unknown[]> => {
     try {
@@ -4092,6 +4103,18 @@ export function createDocumentAccess(
     }
     // Read from the change of the Store, as a change written to it directly
     stored(store.writeRows(write));
+    columnWrites ??= { rows: new Set(), broughtBack: new Set(), places: newRowPlaces() };
+    const { broughtBack, places } = columnWrites;
+    for (const ref of write.rows) columnWrites.rows.add(ref);
+    if (write.fields.has('parent') || write.fields.has('orderKey')) {
+      const keysNow = now.get('orderKey') ?? [];
+      for (let k = 0; k < write.rows.length; k++) {
+        const ref = write.rows[k];
+        const parent = String(parentsNow[keep[k]]);
+        const key = String(keysNow[keep[k]] ?? '');
+        notePlaceBefore(places, ref, tables.getRowId(ref) ?? '', parent, key);
+      }
+    }
     const deleted = write.deleted;
     if (deleted) {
       const marks = write.written?.get('deleted');
@@ -4178,7 +4201,16 @@ export function createDocumentAccess(
     return true;
   };
 
-  /** The change of the Store in the words of the features, for what the instance did not write */
+  /** Whether a row is there (not deleted) */
+  const isRowThere = (ref: number): boolean => {
+    const id = tables.getRowId(ref);
+    return id !== undefined && tables.getRowRef(id) === ref;
+  };
+
+  /**
+   * The change of the Store in the words of the features, for what the instance did not write, or
+   * wrote as columns
+   */
   const changeFromRows = (change: RowChange): StoreChange => {
     const out: StoreChange = {};
     const created: Feature[] = [];
@@ -4200,10 +4232,28 @@ export function createDocumentAccess(
       // What a replacement of the whole document takes out and what it writes are noted apart
       if (change.reset) notes.reset = true;
     }
+    // The layers the groups the change deleted or updated were in before it
+    const groupLayersBefore = new Map<string, string>();
+    for (const group of change.groups?.deleted ?? []) {
+      groupLayersBefore.set(group.id, group.layerId);
+    }
+    for (const { id, previous } of change.groups?.updated ?? []) {
+      groupLayersBefore.set(id, previous.layerId);
+    }
+    /** The layer and the group of a container a row was in before the change */
+    const placeOfBefore = (
+      container: unknown,
+    ): { layerId: string; groupId: string | undefined } => {
+      const groupId = String(container);
+      const groupLayer = groupLayersBefore.get(groupId);
+      return groupLayer === undefined ? placeOf(container) : { layerId: groupLayer, groupId };
+    };
     for (const [layerId, rows] of change.rows?.layers ?? []) {
-      let createdRefs = rows.created.filter((ref) => !ownRows.has(ref));
-      let updatedRefs = rows.updated.filter((ref) => !ownRows.has(ref));
-      const deletedRefs = rows.deleted.filter((ref) => !ownRows.has(ref));
+      let createdRefs = rows.created.filter(readFromChange);
+      // A row that was deleted before the change and still is (one of a group the change moved)
+      // is no feature
+      let updatedRefs = rows.updated.filter((ref) => readFromChange(ref) && isRowThere(ref));
+      const deletedRefs = rows.deleted.filter(readFromChange);
       // A row brought back (its deletion written 0) is told as created, whoever wrote it
       const backFrom = change.previousValues?.get(layerId);
       const wasDeleted = new Set<number>();
@@ -4212,8 +4262,9 @@ export function createDocumentAccess(
           if (backFrom.deleted[i] !== 0) wasDeleted.add(backFrom.rows[i]);
         }
       }
-      if (broughtBack.size > 0 || wasDeleted.size > 0) {
-        const back = updatedRefs.filter((ref) => broughtBack.has(ref) || wasDeleted.has(ref));
+      const broughtBack = columnWrites?.broughtBack;
+      if ((broughtBack && broughtBack.size > 0) || wasDeleted.size > 0) {
+        const back = updatedRefs.filter((ref) => broughtBack?.has(ref) || wasDeleted.has(ref));
         if (back.length > 0) {
           const backSet = new Set(back);
           updatedRefs = updatedRefs.filter((ref) => !backSet.has(ref));
@@ -4257,7 +4308,7 @@ export function createDocumentAccess(
             if (value === undefined) delete properties[key];
             else properties[key] = value;
           } else if (field === 'parent') {
-            Object.assign(patch, placeOf(value));
+            Object.assign(patch, placeOfBefore(value));
           } else if (field.startsWith(STYLE_FIELD)) {
             // A key of the style written alone: the style before is the one now with that key
             const key = field.slice(STYLE_FIELD.length);
@@ -4297,7 +4348,8 @@ export function createDocumentAccess(
           emptiedGroups.add(feature.groupId);
         }
       }
-      // The places of the rows before the change, from their values before it
+      // The places of the rows before the change: from their values before it (a field those do
+      // not hold was not written), or else as the layer read them before it wrote them
       if (placed && updatedRefs.length > 0) {
         const nowValues = tables.readValues(updatedRefs, ['parent', 'orderKey']).fields;
         placedBefore ??= newRowPlaces();
@@ -4305,33 +4357,43 @@ export function createDocumentAccess(
           const id = tables.getRowId(updatedRefs[i]);
           if (id === undefined) continue;
           const at = beforeIndex.get(updatedRefs[i]);
-          const parent =
-            at !== undefined && before?.fields.has('parent')
-              ? before.fields.get('parent')?.[at]
-              : nowValues.get('parent')?.[i];
-          const key =
-            at !== undefined && before?.fields.has('orderKey')
-              ? before.fields.get('orderKey')?.[at]
-              : nowValues.get('orderKey')?.[i];
-          notePlaceBefore(placedBefore, updatedRefs[i], id, String(parent), String(key ?? ''));
+          if (before && at !== undefined) {
+            const parents = before.fields.get('parent');
+            const keys = before.fields.get('orderKey');
+            const parent = parents ? parents[at] : nowValues.get('parent')?.[i];
+            const key = keys ? keys[at] : nowValues.get('orderKey')?.[i];
+            notePlaceBefore(placedBefore, updatedRefs[i], id, String(parent), String(key ?? ''));
+            continue;
+          }
+          const places = columnWrites?.places;
+          const over = places?.at.get(updatedRefs[i]);
+          if (!places || over === undefined) continue;
+          const { containers, keys } = places;
+          notePlaceBefore(placedBefore, updatedRefs[i], id, containers[over], keys[over]);
         }
       }
       for (const ref of updatedRefs) {
         const id = tables.getRowId(ref);
         if (id === undefined) continue;
+        /** The container the row was in before the change, when it is known */
+        let containerBefore: string | undefined;
         if (placed) {
           const now = tables.readValues(Int32Array.of(ref), ['parent', 'orderKey']).fields;
           const parent = String(now.get('parent')?.[0]);
           const at = placedBefore?.at.get(ref);
           const container = at === undefined ? undefined : placedBefore?.containers[at];
           const key = at === undefined ? undefined : placedBefore?.keys[at];
+          containerBefore = container;
           // Put in another place: in another container, or under another key in its own
-          if (notes && (container !== parent || key !== now.get('orderKey')?.[0])) {
+          if (
+            notes &&
+            container !== undefined &&
+            key !== undefined &&
+            (container !== parent || key !== now.get('orderKey')?.[0])
+          ) {
             noteMoved(notes, id, ref);
-            if (container !== undefined && key !== undefined) {
-              noted ??= newRowPlaces();
-              notePlaceBefore(noted, ref, id, container, key);
-            }
+            noted ??= newRowPlaces();
+            notePlaceBefore(noted, ref, id, container, key);
           }
           if (onlyPlaces && container === parent) {
             // Not a change of the feature: a change of the order of its container
@@ -4342,7 +4404,13 @@ export function createDocumentAccess(
         const cached = featureCache.get(id);
         featureCache.delete(id);
         const [now] = makeFeatures(Int32Array.of(ref), [id]);
-        const previous = cached ?? previousOf(ref, id, now) ?? now;
+        let previous = cached ?? previousOf(ref, id, now) ?? now;
+        if (!cached && containerBefore !== undefined) {
+          const place = placeOfBefore(containerBefore);
+          if (previous.layerId !== place.layerId || previous.groupId !== place.groupId) {
+            previous = frozenFeature(previous, place);
+          }
+        }
         remember(now);
         updated.push({ id, feature: now, previous });
         if (notes) {
@@ -4370,7 +4438,6 @@ export function createDocumentAccess(
         }
       }
     }
-    broughtBack.clear();
     if (created.length + updated.length + deleted.length > 0) {
       out.features = {
         ...(created.length > 0 && { created }),
