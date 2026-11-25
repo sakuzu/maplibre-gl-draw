@@ -104,8 +104,8 @@ async function settled<T>(promise: Promise<T>): Promise<T> {
 const propertiesOf = (id: string) => draw.features.get(id)?.properties;
 
 describe('a writing back in parts, feature by feature', () => {
-  it('goes on after it stopped, leaving the features written first as they are since', async () => {
-    for (let seed = 1; seed <= 10; seed++) {
+  for (let seed = 1; seed <= 10; seed++) {
+    it(`goes on after it stopped, leaving the features written first as they are since (seed ${seed})`, async () => {
       const r = rng(seed);
       open();
       const ids = points();
@@ -137,13 +137,11 @@ describe('a writing back in parts, feature by feature', () => {
         const n = written.has(id) && touched.has(id) ? 'elsewhere' : 0;
         expect(propertiesOf(id), id).toEqual({ name: 'n0', n, m: except ? 1 : 0 });
       }
-      draw.destroy();
-    }
-    open();
-  });
+    });
+  }
 
-  it('makes again the writing back of a rename and a move, each feature what its change wrote', async () => {
-    for (let seed = 1; seed <= 5; seed++) {
+  for (let seed = 1; seed <= 5; seed++) {
+    it(`makes again the writing back of a rename and a move, each feature what its change wrote (seed ${seed})`, async () => {
       const r = rng(seed + 100);
       open();
       const ids = points();
@@ -179,10 +177,8 @@ describe('a writing back in parts, feature by feature', () => {
         expect(draw.features.get(id)?.geometry, id).toEqual({ type: 'Point', coordinates: [9, 9] });
         expect(propertiesOf(id)?.name, id).toBe('n1');
       }
-      draw.destroy();
-    }
-    open();
-  });
+    });
+  }
 
   it('keeps the values of a move of every feature as they were: no row told apart', async () => {
     open();
