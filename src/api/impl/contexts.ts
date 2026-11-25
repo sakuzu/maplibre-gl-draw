@@ -186,7 +186,10 @@ export interface ContextServices {
   /** The selection extents of the custom types */
   readonly selectionExtensions: SelectionExtensionRegistry;
   /** The spatial index, for the invalidation of features */
-  readonly spatialIndex: Pick<StoreSpatialIndex, 'invalidate' | 'invalidateType'>;
+  readonly spatialIndex: Pick<
+    StoreSpatialIndex,
+    'invalidate' | 'invalidateEvery' | 'invalidateType'
+  >;
   readonly modeManager: ModeManager;
   /** The public API the contexts hand out */
   getDraw(): Draw;
@@ -322,7 +325,7 @@ export function createExtensionContext(
   screen: ScreenContext,
   subscriptions: Subscriptions,
 ): ExtensionContext {
-  const { store, spatialIndex, map } = services;
+  const { spatialIndex, map } = services;
   const listeners = new Map<unknown, Map<string, () => void>>();
   const forget = (event: string, listener: unknown): void => {
     const byEvent = listeners.get(listener);
@@ -372,7 +375,7 @@ export function createExtensionContext(
       if (filter?.type !== undefined) spatialIndex.invalidateType(filter.type);
       if (filter?.ids !== undefined) spatialIndex.invalidate(filter.ids);
       if (filter?.type === undefined && filter?.ids === undefined) {
-        spatialIndex.invalidate(store.listFeatures().map((feature) => feature.id));
+        spatialIndex.invalidateEvery();
       }
       map.triggerRepaint();
     },

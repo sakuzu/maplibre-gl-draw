@@ -12,10 +12,11 @@
  *
  * The measured path is shaped the same as in a browser. That is, the events of the instance
  * follow the Store, and "an idempotent subscriber that scans the whole store every time" (the
- * equivalent of recomputing a list in the application) is wired to the events that arrive
- * once per transaction (`document.changed`, and those of the layers, the groups and the
- * metadata). If a bulk import were split into N transactions, the subscriber would scan O(N)
- * for each one, O(N^2) in total. The purpose of this test is to detect that regression.
+ * equivalent of recomputing a list in the application) is wired to the event that arrives
+ * once per transaction (`document.changed`); those of the layers, the groups and the metadata
+ * are followed too, and only counted. If a bulk import were split into N transactions, the
+ * subscriber would scan O(N) for each one, O(N^2) in total. The purpose of this test is to
+ * detect that regression.
  *
  * One more test is placed here, which looks at whether the membership decision of
  * layer.order is O(1) with the store alone (see the describe below).
@@ -121,7 +122,7 @@ function generate(count: number): Data {
 }
 
 // Measurement equivalent to a browser: the events of the instance follow the Store, with an
-// O(N) idempotent subscriber on the events that arrive once per transaction, and returns the elapsed time of
+// O(N) idempotent subscriber on the event that arrives once per transaction, and returns the elapsed time of
 // 1 load. Because the minimum is taken to resist noise, it returns the time of a single run
 // and the caller repeats it.
 async function measureLoadOnce(data: Data): Promise<number> {
@@ -148,6 +149,9 @@ async function measureLoadOnce(data: Data): Promise<number> {
     for (const f of store.listFeatures()) acc += f.id.length;
     if (acc < 0) throw new Error('unreachable');
   };
+  events.on('document.changed', emitLike);
+  // The other events are followed without the list being made again
+  let told = 0;
   for (const ev of [
     'layer.created',
     'layer.updated',
@@ -156,14 +160,16 @@ async function measureLoadOnce(data: Data): Promise<number> {
     'group.updated',
     'group.deleted',
     'metadata.updated',
-    'document.changed',
   ] as const) {
-    events.on(ev, emitLike);
+    events.on(ev, () => {
+      told++;
+    });
   }
 
   const start = performance.now();
   await document.load(data);
   const elapsed = performance.now() - start;
+  if (told === 0) throw new Error('no event was told');
   stop();
   return elapsed;
 }

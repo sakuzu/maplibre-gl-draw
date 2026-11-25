@@ -95,6 +95,7 @@ import {
 import type { DocumentAccess } from '../../store/document-access.js';
 import type { BoundingBox, Feature, Layer, SelectionType, StoreChange } from '../../store/types.js';
 import {
+  type CompanionDocument,
   drawFeatureCompanionsInFrame,
   type FeatureCompanionRegistry,
 } from '../feature-companion.js';
@@ -286,7 +287,7 @@ export interface TableLayerRendererOptions {
   /** What the drawing reads of the rows of the built-in Store */
   readonly reader: DrawnRows;
   /** The layer over the Store: the features of the rows drawn at once, and this client */
-  readonly store: DocumentAccess;
+  readonly store: DocumentAccess & CompanionDocument;
   /** Where the textures of the state of the rows are recorded */
   readonly ledger: GpuLedger;
   /** The rendering pixel ratio (read from window when omitted) */
@@ -1652,6 +1653,7 @@ export class TableLayerRenderer {
         slots: cache.slots as RowStyleSlots,
         customTypes: deps.customRenderers,
         companions: deps.companions,
+        document: this.options.store,
         featureOf: (g, r) => this.featureOfRow(g, r),
         layer: cache.layer ?? undefined,
         oneDraw,

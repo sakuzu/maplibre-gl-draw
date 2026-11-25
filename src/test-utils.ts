@@ -356,7 +356,7 @@ export function createModeHarness(options: {
     pixelRatio: { resolve: () => 1, getScaleFactor: () => 1 },
     autoNameGenerator,
     selectionExtensions: createSelectionExtensionRegistry(),
-    spatialIndex: { invalidate: () => {}, invalidateType: () => {} },
+    spatialIndex: { invalidate: () => {}, invalidateEvery: () => {}, invalidateType: () => {} },
     modeManager,
     getDraw: () => draw,
     collections,

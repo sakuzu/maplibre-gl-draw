@@ -29,7 +29,7 @@ import {
 } from '../../store/built-in/drawn-rows.js';
 import type { Feature, Layer } from '../../store/types.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
-import type { FeatureCompanionRegistry } from '../feature-companion.js';
+import type { CompanionDocument, FeatureCompanionRegistry } from '../feature-companion.js';
 import type { RowStyleSlots } from './table-collect.js';
 import { rowGeometryOf } from './table-collect.js';
 
@@ -62,9 +62,11 @@ export interface RowClassifyContext {
   readonly customTypes: ReadonlyMap<string, unknown>;
   /** The providers of the companions of the features */
   readonly companions: FeatureCompanionRegistry;
+  /** The document whose features that have companions are asked for */
+  readonly document: CompanionDocument;
   /**
    * The feature of a row, made only for a renderer that refuses some features of its type
-   * (`appliesTo`) and for a provider of companions
+   * (`appliesTo`)
    */
   featureOf(group: RowGroup, row: number): Feature | undefined;
   /** The layer */
@@ -108,8 +110,9 @@ export function classifyRow(
   }
   // A feature with a companion needs a hook right before it
   if (context.companions.any()) {
-    const feature = context.featureOf(group, row);
-    if (feature && context.companions.has(feature)) return 'immediate';
+    const holders = context.companions.holdersIn(context.document);
+    const id = holders.size > 0 ? rows.idOf(rows.refOf(group, row)) : undefined;
+    if (id !== undefined && holders.has(id)) return 'immediate';
   }
   const style = rows.styleNumberOf(group, row);
   const ruleColor = context.slots.ruleColorOf(group, row);

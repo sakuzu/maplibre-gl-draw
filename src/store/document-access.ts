@@ -53,10 +53,21 @@ export const FEATURES_KEPT = 1_024;
 export interface DocumentReads {
   /** Returns the feature with this ID, or undefined */
   getFeature(id: string): Feature | undefined;
-  /** Every feature, in no particular order */
+  /**
+   * Every feature, in no particular order, made each time it is called (none is kept for the next
+   * call but the ones read one by one)
+   */
   listFeatures(): Feature[];
-  /** Every feature in stacking order, back to front, whatever the visible flags say */
+  /**
+   * Every feature in stacking order, back to front, whatever the visible flags say, made each time
+   * it is called
+   */
   listFeaturesInOrder(): Feature[];
+  /**
+   * The names (the attribute `name`, the texts alone) of the features of a type, in no particular
+   * order, read as a column without the features being made
+   */
+  listFeatureNames(type: FeatureType): string[];
   /** Returns the layer with this ID, or undefined */
   getLayer(id: string): Layer | undefined;
   /** Every layer, in no particular order */

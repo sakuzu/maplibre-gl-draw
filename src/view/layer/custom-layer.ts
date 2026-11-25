@@ -51,7 +51,7 @@ import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/
 import { drawnRowsOf } from '../../store/built-in/drawn-rows.js';
 import type { DocumentAccess, DocumentTables } from '../../store/document-access.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { FeatureCompanionRegistry } from '../feature-companion.js';
+import type { CompanionDocument, FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
@@ -97,7 +97,7 @@ export interface CustomLayerDeps {
    * The layer over the Store; the layers are drawn from the rows of its tables (`getTables`) when
    * they are those of a built-in Store
    */
-  store: DocumentAccess & Partial<DocumentTables>;
+  store: DocumentAccess & CompanionDocument & Partial<DocumentTables>;
   spatialIndex: SpatialIndex;
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;

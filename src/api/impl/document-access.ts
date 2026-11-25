@@ -1875,12 +1875,9 @@ export function createDocumentAccess(
   let lastOuterSource: UpdateSource | null = null;
   /** Whether the instance wrote to the Store since its last change arrived */
   let wroteRows = false;
-  /** How many times the document was written, by the instance or directly to the Store */
-  let documentVersion = 0;
   /** A write of the instance to the Store */
   const wrote = (): void => {
     wroteRows = true;
-    documentVersion += 1;
   };
   /** What the writes of the instance touched since the last change of the Store arrived */
   let ownRows = new Set<number>();
@@ -2193,7 +2190,7 @@ export function createDocumentAccess(
 
   /** The feature of a row, made from it unless it is kept made */
   const featureOfRow = (ref: number, id: string): Feature => {
-    const known = featureCache.get(id) ?? featureRead(id);
+    const known = featureCache.get(id);
     if (known) return known;
     const [feature] = makeFeatures(Int32Array.of(ref), [id]);
     remember(feature);
@@ -2202,7 +2199,7 @@ export function createDocumentAccess(
 
   const getFeature = (id: string): Feature | undefined => {
     if (typeof id !== 'string') return undefined;
-    const known = featureCache.get(id) ?? featureRead(id);
+    const known = featureCache.get(id);
     if (known) {
       remember(known);
       return known;
@@ -2227,7 +2224,7 @@ export function createDocumentAccess(
     const missingIds: string[] = [];
     for (let i = 0; i < refs.length; i++) {
       const id = tables.getRowId(refs[i]) as string;
-      const known = featureCache.get(id) ?? featureRead(id);
+      const known = featureCache.get(id);
       if (known) out[i] = known;
       else {
         missing.push(i);
@@ -2265,50 +2262,34 @@ export function createDocumentAccess(
   };
 
   /**
-   * The features of the whole document in stacking order, as last read, kept while the document
-   * is not written: the parts that read every feature (the drawing, the hit testing) read it
-   * again without the features being made again. The features of the layers that are not on the
-   * stacking order are at the end of the one with them.
+   * The features of the whole document in stacking order, made each time (those kept made as they
+   * are). The features of the layers that are not on the stacking order are at the end of the one
+   * with them
    */
-  const everyFeature: {
-    version: number;
-    inOrder: Feature[] | null;
-    withOffOrder: Feature[] | null;
-    byId: Map<string, Feature> | null;
-  } = { version: -1, inOrder: null, withOffOrder: null, byId: null };
-
-  /** The features of the whole document as last read, while they are what the document holds */
-  const everyFeatureNow = (): typeof everyFeature => {
-    if (everyFeature.version !== documentVersion) {
-      everyFeature.version = documentVersion;
-      everyFeature.inOrder = null;
-      everyFeature.withOffOrder = null;
-      everyFeature.byId = null;
-    }
-    return everyFeature;
-  };
-
-  /** A feature of the whole document as last read, while it is what the document holds */
-  const featureRead = (id: string): Feature | undefined => {
-    const every = everyFeatureNow();
-    const list = every.withOffOrder ?? every.inOrder;
-    if (!list) return undefined;
-    if (!every.byId) every.byId = new Map(list.map((feature) => [feature.id, feature]));
-    return every.byId.get(id);
-  };
-
   const listFeaturesInOrder = (withOffOrder: boolean): Feature[] => {
-    const every = everyFeatureNow();
-    const known = withOffOrder ? every.withOffOrder : every.inOrder;
-    if (known) return known.slice();
     const out: Feature[] = [];
     for (const layerId of layerIdsInOrder(withOffOrder)) {
       for (const feature of featuresOfRows(rowsOfLayer(layerId))) out.push(feature);
     }
-    if (withOffOrder) every.withOffOrder = out;
-    else every.inOrder = out;
-    every.byId = null;
-    return out.slice();
+    return out;
+  };
+
+  /** The names of the features of a type, read as a column (see `DocumentReads`) */
+  const listFeatureNames = (type: Feature['type']): string[] => {
+    const names: string[] = [];
+    const nameField: FeatureRowField = `${PROPERTY_FIELD}name`;
+    for (const layerId of layerIdsInOrder(true)) {
+      const refs = rowsOfLayer(layerId);
+      if (refs.length === 0) continue;
+      const { fields } = tables.readValues(refs, ['type', nameField]);
+      const types = fields.get('type');
+      const values = fields.get(nameField);
+      for (let i = 0; i < refs.length; i++) {
+        const name = values?.[i];
+        if (types?.[i] === type && typeof name === 'string') names.push(name);
+      }
+    }
+    return names;
   };
 
   // ==========================================================================
@@ -4648,8 +4629,6 @@ export function createDocumentAccess(
 
   /** A change of the Store: what the instance wrote is told as it wrote it, the rest read here */
   const onRowChange = (change: RowChange): void => {
-    // Whoever wrote it, the document is no longer the one last read
-    documentVersion += 1;
     /** Whether the token of the change goes with its notes, until the change is told */
     let held = false;
     try {
@@ -4849,6 +4828,7 @@ export function createDocumentAccess(
     getFeature,
     listFeatures: () => listFeaturesInOrder(true),
     listFeaturesInOrder: () => listFeaturesInOrder(false),
+    listFeatureNames,
     getLayer,
     listLayers: () => store.listLayers().map((base) => layerOf(base) as Layer),
     getLayerOrder: () => [...store.getLayerOrder()],

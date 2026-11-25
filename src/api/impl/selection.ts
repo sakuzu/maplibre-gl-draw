@@ -11,7 +11,6 @@ import { groupSelection, ungroupSelection } from '../../operations/layer-operati
 import { deleteSelectedVertices } from '../../operations/selection-operations.js';
 import { coordinatesOf, supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isFeatureLocked } from '../../store/lock.js';
-import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
@@ -209,12 +208,13 @@ export function createSelection(
         }
         return out as Feature[];
       }
-      const wanted = new Set(ids.iterate());
-      const inside = (feature: StoredFeature): boolean =>
-        type === 'group'
-          ? feature.groupId !== undefined && wanted.has(feature.groupId)
-          : wanted.has(feature.layerId);
-      return listEveryFeatureInOrder(store).filter(inside) as Feature[];
+      // The features of the groups or the layers selected, each made once, in stacking order
+      const made = new Map<string, StoredFeature>();
+      for (const id of ids.iterate()) {
+        const match = type === 'group' ? { groupId: id } : { layerId: id };
+        for (const feature of store.iterateFeatures(match)) made.set(feature.id, feature);
+      }
+      return store.sortInStackingOrder([...made.keys()]).map((id) => made.get(id)) as Feature[];
     },
 
     delete() {

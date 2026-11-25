@@ -272,7 +272,7 @@ describe('a Store that knows numbers beyond what it lists', () => {
   function partialSource(known: Record<string, number>) {
     const recorded: Array<[string, number]> = [];
     const source = {
-      listFeatures: () => store.listFeatures(),
+      listFeatureNames: (type: FeatureType) => store.listFeatureNames(type),
       listLayers: () => store.listLayers(),
       listGroups: () => store.listGroups(),
       subscribe: (listener: Parameters<InstanceDocument['subscribe']>[0]) =>
@@ -360,7 +360,7 @@ describe('a Store that knows numbers beyond what it lists', () => {
     const recordNameNumber = vi.fn();
     const generator = new AutoNameGenerator(
       {
-        listFeatures: () => store.listFeatures(),
+        listFeatureNames: (type) => store.listFeatureNames(type),
         listLayers: () => store.listLayers(),
         listGroups: () => store.listGroups(),
         subscribe: (listener) => store.subscribe(listener),
@@ -385,7 +385,7 @@ describe('the computational cost of AutoNameGenerator', () => {
     );
 
     const generator = new AutoNameGenerator(store);
-    const spy = vi.spyOn(store, 'listFeatures');
+    const spy = vi.spyOn(store, 'listFeatureNames');
 
     for (let i = 0; i < 100; i++) {
       generator.generateName('Point');
@@ -401,7 +401,7 @@ describe('the computational cost of AutoNameGenerator', () => {
 
   it('the full scan happens only once, the first time, even during a bulk import', () => {
     const generator = new AutoNameGenerator(store);
-    const spy = vi.spyOn(store, 'listFeatures');
+    const spy = vi.spyOn(store, 'listFeatureNames');
 
     store.transact(() => {
       for (let i = 0; i < 1_000; i++) {

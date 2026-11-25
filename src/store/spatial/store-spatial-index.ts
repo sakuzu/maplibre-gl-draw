@@ -111,6 +111,16 @@ export class StoreSpatialIndex implements SpatialIndex {
   }
 
   /**
+   * Makes the boxes of the features of every type that gives its box again (the images, the
+   * circles, the types registered with a calculator), for extents that changed for a reason the
+   * Store does not see. The boxes are read at the next query, and no feature of another type is
+   * made for it
+   */
+  invalidateEvery(): void {
+    this.#refresh();
+  }
+
+  /**
    * Makes the boxes of the given features again, for an extent that changed for a reason the
    * Store does not see (the box of positions follows the Store by itself)
    */

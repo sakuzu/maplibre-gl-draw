@@ -28,7 +28,8 @@ import { deepFreeze } from './deep-freeze.js';
  * from its contents alone.
  */
 interface NameSource {
-  listFeatures(): Feature[];
+  /** The names of the features of a type, read without the features being made */
+  listFeatureNames(type: FeatureType): Iterable<string>;
   listLayers(): Layer[];
   listGroups(): Group[];
   subscribe(listener: (changes: StoreChange) => void): () => void;
@@ -177,7 +178,7 @@ export class AutoNameGenerator {
 
   constructor(
     store: {
-      listFeatures(): Feature[];
+      listFeatureNames(type: FeatureType): Iterable<string>;
       listLayers(): Layer[];
       listGroups(): Group[];
       subscribe(listener: (changes: StoreChange) => void): () => void;
@@ -377,21 +378,10 @@ export class AutoNameGenerator {
    * Gets the largest number from the existing Features
    */
   private getMaxNumberFromFeatures(featureType: FeatureType, typeName: string): number {
-    const features = this.store.listFeatures();
     let maxNumber = 0;
 
-    for (const feature of features) {
-      // Only features of the same type are considered
-      if (feature.type !== featureType) {
-        continue;
-      }
-
-      // Get the name property
-      const name = feature.properties?.name;
-      if (typeof name !== 'string') {
-        continue;
-      }
-
+    // Only the names of the features of the same type are considered
+    for (const name of this.store.listFeatureNames(featureType)) {
       // Extract the number
       const number = extractNumberFromName(name, typeName);
       if (number !== null && number > maxNumber) {
