@@ -37,7 +37,9 @@
  * (`rows-occlusion.ts`), and the frame is drawn as faint as the frame of its feature.
  *
  * The instances of a group are made from its rows when it is first drawn, and again when the rows
- * of the Store change; the instances of the groups not drawn in a frame are released at its end,
+ * of the Store change, or a style or an attribute is written in place where they were made from
+ * the styles or the attributes of their rows (the extents of the markers, the boxes of the
+ * circles); the instances of the groups not drawn in a frame are released at its end,
  * and everything (the program too) when no selection of many features is drawn. Every buffer, vertex
  * array and program is recorded in the ledger of the instance under `frames`, a part of the rows:
  * the instances grow with the rows of the groups selected, as the rows themselves do.
@@ -185,6 +187,10 @@ export interface BulkFramesView {
 /** The instances of the framed rows of a group */
 interface GroupFrames {
   readonly revision: string;
+  /** The writes of styles they were made after (null: made from no style) */
+  readonly styleWrites: number | null;
+  /** The writes of attributes they were made after (null: made from no attribute) */
+  readonly valueWrites: number | null;
   readonly buffer: WebGLBuffer | null;
   readonly vao: WebGLVertexArrayObject | null;
   readonly origin: [number, number];
@@ -242,7 +248,8 @@ const UNIFORMS: readonly UniformName[] = [
  * sides of the antimeridian) is taken from a second origin, its own box, so that no offset of a
  * row holds the whole turn of the world, which Float32 holds to about a pixel only
  *
- * @returns The data, the two origins and the number of rows framed
+ * @returns The data, the two origins and the number of rows framed, and whether a style (the
+ *   extent of a marker) and an attribute (the radius of a Circle) were read
  * @internal
  */
 export function buildFrameInstances(
@@ -255,6 +262,8 @@ export function buildFrameInstances(
   second: [number, number];
   count: number;
   longest: number;
+  readsStyles: boolean;
+  readsValues: boolean;
 } {
   const reader = rows.reader;
   const n = group.data.length;
@@ -264,12 +273,15 @@ export function buildFrameInstances(
   let second: [number, number] | null = null;
   let count = 0;
   let longest = 0;
+  let readsStyles = false;
+  let readsValues = false;
   /** The extents of the markers by type and style, made once per group */
   const extents = new Map<string, PointHalf>();
   for (let row = 0; row < n; row++) {
     if (!reader.hasGeometry(group, row)) continue;
     const type = reader.typeOf(group, row);
     if (framedByFeature(rows, type, () => drawnAtOnce(row))) continue;
+    if (type === 'Circle') readsValues = true;
     if (!drawnRowBox(reader, group, row, box)) continue;
     if (!POSITION_TYPES.has(type) && box[0] === 0 && box[1] === 0 && box[2] === 0 && box[3] === 0) {
       // The selection UI gives such a feature no frame
@@ -291,6 +303,7 @@ export function buildFrameInstances(
     values[at + 4] = row;
     values[at + 7] = kind;
     if (box[0] === box[2] && box[1] === box[3]) {
+      readsStyles = true;
       const style = reader.styleNumberOf(group, row);
       const key = `${type}\u0000${style}`;
       let extent = extents.get(key);
@@ -314,6 +327,8 @@ export function buildFrameInstances(
     second: second ?? origin ?? [0, 0],
     count,
     longest,
+    readsStyles,
+    readsValues,
   };
 }
 
@@ -524,11 +539,19 @@ export class BulkFramesRenderer {
     return true;
   }
 
-  /** The instances of a group (made again when the rows changed) */
+  /** The instances of a group (made again when the rows changed, or what they were made from) */
   private framesOf(entry: DrawnRowGroup, rows: BulkFrameRows): GroupFrames | null {
     const revision = `${rows.revision}|${entry.generation}`;
     const known = this.frames.get(entry.group);
-    if (known && known.revision === revision) return known;
+    const { styleWrites, valueWrites } = rows.reader;
+    if (
+      known &&
+      known.revision === revision &&
+      (known.styleWrites === null || known.styleWrites === styleWrites) &&
+      (known.valueWrites === null || known.valueWrites === valueWrites)
+    ) {
+      return known;
+    }
     if (known) {
       this.release(known);
       this.frames.delete(entry.group);
@@ -563,6 +586,8 @@ export class BulkFramesRenderer {
     }
     const frames: GroupFrames = {
       revision,
+      styleWrites: built.readsStyles ? styleWrites : null,
+      valueWrites: built.readsValues ? valueWrites : null,
       buffer,
       vao,
       origin: built.origin,

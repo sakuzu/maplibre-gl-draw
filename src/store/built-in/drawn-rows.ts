@@ -122,6 +122,13 @@ export interface DeltaInsert {
 export interface DrawnRows {
   /** Changes with every change of the rows drawn of any layer */
   readonly revision: number;
+  /**
+   * The writes of styles in place so far: what is made of the style of a row is made again when it
+   * changed (`revision` does not change with them)
+   */
+  readonly styleWrites: number;
+  /** The writes of attributes in place so far (as `styleWrites`) */
+  readonly valueWrites: number;
   /** The rows of a layer (undefined for a layer that holds none) */
   table(layerId: string): RowTable | undefined;
   /** Whether a row is left out of the rows drawn (hidden, deleted, read elsewhere) */
@@ -279,6 +286,14 @@ function givenBoxReader(
 function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
   const pages = listPages(document.rows) as Pages<FeatureStyle>;
   const givenBox = givenBoxReader(document, pages);
+  let styleWrites = 0;
+  let valueWrites = 0;
+  pages.onRowsWritten((_layerId, writes) => {
+    let what = 0;
+    for (const write of writes) what |= write.what;
+    if ((what & ROW_WRITE_STYLE) !== 0) styleWrites++;
+    if ((what & ROW_WRITE_VALUES) !== 0) valueWrites++;
+  });
   const typeOf = (group: RowGroup, row: number): string => {
     const column = group.data.wholes[TYPE_AT] as PageValues | null;
     return column ? (column.values[column.indexes[row]] as string) : '';
@@ -286,6 +301,12 @@ function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
   return {
     get revision() {
       return pages.revision;
+    },
+    get styleWrites() {
+      return styleWrites;
+    },
+    get valueWrites() {
+      return valueWrites;
     },
     table: (layerId) => pages.rowTable(layerId),
     notDrawn: (group, row) => (group.state[row] & NOT_DRAWN) !== 0,

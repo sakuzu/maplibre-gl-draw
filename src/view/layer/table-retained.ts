@@ -135,6 +135,7 @@ import type { TessellationStep } from '../terrain/tessellation.js';
 import { rowInRanges } from '../viewport.js';
 import {
   collectRow,
+  isPackedKey,
   ROWS_LAYOUT,
   RowCoordsDraft,
   RowStyleSlots,
@@ -2509,9 +2510,11 @@ export class TableLayerRenderer {
     write: PendingWrite,
   ): boolean {
     const group = groupCache.group;
+    // An attribute the packing reads is written as the geometry is
+    const packed = this.packedKeyWritten(write.keys);
+    const shaped = (write.what & ROW_WRITE_GEOMETRY) !== 0 || packed;
     const drawn =
-      (write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STYLE)) !== 0 ||
-      this.ruleKeyWritten(cache, write.keys);
+      shaped || (write.what & ROW_WRITE_STYLE) !== 0 || this.ruleKeyWritten(cache, write.keys);
     const chunk = groupCache.chunks?.find((c) => row >= c.range.from && row < c.range.to);
     const drawing = groupCache.drawing;
     // The classification of the row may have changed (its type, its style, what an extension reads)
@@ -2535,7 +2538,7 @@ export class TableLayerRenderer {
     ) {
       return false;
     }
-    if ((write.what & ROW_WRITE_GEOMETRY) !== 0 && chunk.type !== 'immediate') {
+    if (shaped && chunk.type !== 'immediate') {
       // The extent of the chunk only widens, so a row moved out of it is not culled with it
       const b = new Float64Array(4);
       if (drawnRowBox(this.reader, group, row, b)) {
@@ -2590,6 +2593,7 @@ export class TableLayerRenderer {
     if (
       !cut &&
       (write.what & ROW_WRITE_GEOMETRY) !== 0 &&
+      !packed &&
       write.sameShape &&
       !styleWritten &&
       (layout & ROWS_LAYOUT.dashed) === 0 &&
@@ -2608,7 +2612,7 @@ export class TableLayerRenderer {
       return true;
     }
     // The style only: a style of the same layout of instances
-    if ((write.what & ROW_WRITE_GEOMETRY) === 0) {
+    if (!shaped) {
       const style = resolveRowStyle(group, row, context);
       if (style === held) return true;
       if (style >= 0 && held >= 0 && rowsStyles.layoutOf(style) === rowsStyles.layoutOf(held)) {
@@ -2637,6 +2641,13 @@ export class TableLayerRenderer {
       return true;
     }
     draft.releaseStyles();
+    return false;
+  }
+
+  /** Whether an attribute read when a row is packed is among the keys written */
+  private packedKeyWritten(keys: ReadonlySet<string> | null): boolean {
+    if (!keys) return false;
+    for (const key of keys) if (isPackedKey(key)) return true;
     return false;
   }
 

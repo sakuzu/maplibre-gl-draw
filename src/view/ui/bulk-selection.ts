@@ -15,9 +15,11 @@
  *
  * The select mode answers the pointer from the same reading, so that what can be grabbed is what is
  * drawn. It is read again only when the selection changes, when the rows of the Store change, when the
- * rows are classified again, and when a layer or a group of the rows selected changes (its lock);
- * a frame that changes nothing reads nothing. The features made are those of the rows whose box is
- * that of their features (the images, the custom types), once a reading.
+ * rows are classified again, when a layer or a group of the rows selected changes (its lock), and
+ * when a style or an attribute is written in place and a box read was made from one (that of a
+ * Circle from its radius, that of a feature from both); a frame that changes nothing reads nothing.
+ * The features made are those of the rows whose box is that of their features (the images, the
+ * custom types), once a reading.
  *
  * @internal
  */
@@ -73,6 +75,10 @@ interface ReadKey {
   readonly type: Selection['type'];
   readonly ids: unknown;
   readonly revision: number;
+  /** The writes of styles it was read after (null: no box was made from a style) */
+  readonly styleWrites: number | null;
+  /** The writes of attributes it was read after (null: no box was made from an attribute) */
+  readonly valueWrites: number | null;
   readonly classification: string;
   /** The layers and the groups of the rows selected, as they were read */
   readonly layers: ReadonlyMap<string, Layer | undefined>;
@@ -149,6 +155,9 @@ export class SelectedRows {
     if (key.revision !== rows.reader.revision || key.classification !== rows.classification) {
       return false;
     }
+    const { styleWrites, valueWrites } = rows.reader;
+    if (key.styleWrites !== null && key.styleWrites !== styleWrites) return false;
+    if (key.valueWrites !== null && key.valueWrites !== valueWrites) return false;
     for (const [id, layer] of key.layers) if (store.getLayer(id) !== layer) return false;
     for (const [id, group] of key.groups) if (store.getGroup(id) !== group) return false;
     return true;
@@ -172,6 +181,9 @@ function readSelectedRows(
   let areaCount = 0;
   let firstArea: BoundingBoxCoords | null = null;
   let locked = false;
+  /** Whether a box was made from a style, and from an attribute, of its row */
+  let readsStyles = false;
+  let readsValues = false;
   /** The layers of the row groups, made when a row is read without its layer */
   let layerOfGroup: Map<RowGroup, string> | null = null;
   const layerOf = (group: RowGroup): string | undefined => {
@@ -199,6 +211,8 @@ function readSelectedRows(
     }
     const type = reader.typeOf(group, row);
     if (rows.boxedByFeature(type)) {
+      readsStyles = true;
+      readsValues = true;
       const id = reader.idOf(reader.refOf(group, row));
       const feature: Feature | undefined = id === undefined ? undefined : store.getFeature(id);
       const bbox = feature ? computeBoundingBox(feature, rows.extensions) : null;
@@ -211,6 +225,7 @@ function readSelectedRows(
       if (area && areaCount++ === 0) firstArea = bbox;
       return;
     }
+    if (type === 'Circle') readsValues = true;
     if (!drawnRowBox(reader, group, row, box)) return;
     if (type !== 'Point' && type !== 'Circle' && box.every((value) => value === 0)) return;
     widen(all, box[0], box[1], box[2], box[3]);
@@ -269,6 +284,8 @@ function readSelectedRows(
       type: selection.type,
       ids: selection.ids,
       revision: reader.revision,
+      styleWrites: readsStyles ? reader.styleWrites : null,
+      valueWrites: readsValues ? reader.valueWrites : null,
       classification: rows.classification,
       layers,
       groups: groupsRead,

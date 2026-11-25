@@ -20,21 +20,12 @@
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import { circleBoundingBox } from '../../geometry/circle.js';
 import type { BBox } from '../../geometry/types.js';
-import { drawPropertyKey } from '../../shared/properties.js';
-import {
-  type DrawnRows,
-  pageRowBox,
-  type RowGroup,
-  rowNumber,
-} from '../../store/built-in/drawn-rows.js';
+import { type DrawnRows, pageRowBox, type RowGroup } from '../../store/built-in/drawn-rows.js';
 import type { Feature, Layer } from '../../store/types.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
 import type { CompanionDocument, FeatureCompanionRegistry } from '../feature-companion.js';
 import type { RowStyleSlots } from './table-collect.js';
-import { rowGeometryOf } from './table-collect.js';
-
-/** The key of the radius of a Circle in the attributes of a row */
-const RADIUS_KEY = drawPropertyKey('radiusMeters');
+import { rowGeometryOf, rowRadius } from './table-collect.js';
 
 /** The number of vertices of the ring of a Circle (the estimate of its work) */
 const CIRCLE_VERTICES = 65;
@@ -170,7 +161,7 @@ export interface OrderedChunkRange {
 export function drawnRowBox(rows: DrawnRows, group: RowGroup, row: number, out: Float64Array) {
   if (!pageRowBox(group.data, row, out)) return false;
   if (rows.typeOf(group, row) !== 'Circle') return true;
-  const radius = rowNumber(group, row, RADIUS_KEY);
+  const radius = rowRadius(group, row);
   if (!radius || radius <= 0) return true;
   const box = circleBoundingBox([out[0], out[1]], radius);
   if (!box) return true;

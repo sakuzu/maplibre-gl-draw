@@ -87,6 +87,16 @@ const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
 
+/**
+ * Whether a key is that of an attribute read when a row is packed (besides the one the style rule
+ * of its layer reads): the row is packed again when it is written
+ *
+ * @internal
+ */
+export function isPackedKey(key: string): boolean {
+  return key === CREATED_ZOOM_KEY || key === RADIUS_KEY;
+}
+
 /** The degrees of the Web Mercator world per CSS px at zoom 0 (the 512 px tiles of maplibre) */
 const CSS_PX_PER_DEGREE = 512 / 360;
 
@@ -851,6 +861,15 @@ export function rowCreatedZoom(group: RowGroup, row: number): number | undefined
   return rowNumber(group, row, CREATED_ZOOM_KEY);
 }
 
+/**
+ * The radius of the row of a Circle, in meters (undefined for none)
+ *
+ * @internal
+ */
+export function rowRadius(group: RowGroup, row: number): number | undefined {
+  return rowNumber(group, row, RADIUS_KEY);
+}
+
 /** Whether a type of feature is drawn as a line */
 function isLineType(type: string): boolean {
   return type === 'LineString' || type === 'Freehand' || type === 'MultiLineString';
@@ -877,7 +896,7 @@ export function rowPolygonsOf(group: RowGroup, row: number, type: string): Coord
   if (!geometry) return [];
   const { reader, at } = geometry;
   if (type === 'Circle' && reader.type === 'Point') {
-    const radius = rowNumber(group, row, RADIUS_KEY);
+    const radius = rowRadius(group, row);
     if (!radius || radius <= 0) return [];
     const center = reader.position(reader.vertexStart(at));
     return [[generateCirclePolygon([center[0], center[1]], radius)]];
