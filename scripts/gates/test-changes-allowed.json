@@ -1255,6 +1255,21 @@
       "path": "src/api/impl/document-rows.test.ts",
       "change": "the value before of a key of the style written alone is read from its own field (style:example:dashed), as the look is written key by key",
       "unit": "the restore that takes a change back feature by feature, field by field and key by key of the look"
+    },
+    {
+      "path": "src/store/load-scaling.test.ts",
+      "change": "the listener that reads every feature is added to document.changed alone, and those of the other events count their calls",
+      "unit": "the work that stops keeping a list of every feature, and reads what is selected and what is in view from the rows"
+    },
+    {
+      "path": "src/shared/utils/name-generator.test.ts",
+      "change": "the source has the read of the names as a column in place of listFeatures, and the reads are counted there",
+      "unit": "the work that stops keeping a list of every feature, and reads what is selected and what is in view from the rows"
+    },
+    {
+      "path": "src/view/layer/render.test.ts",
+      "change": "a frame drawn from the rows never asks the index: the rows drawn one by one are those whose box is in the range, and all of them in a frame without a range",
+      "unit": "the work that stops keeping a list of every feature, and reads what is selected and what is in view from the rows"
     }
   ]
 }
