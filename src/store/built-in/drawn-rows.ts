@@ -330,7 +330,7 @@ function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
     groupOf: (handle) => pages.rowGroup(handle)?.group,
     deltaParts: (table) => table.delta.parts,
     deltaPart: (table, handle) => table.delta.part(handle),
-    deltaInserts: (table) => deltaInsertsOf(table, pages),
+    deltaInserts: (table) => deltaInsertsOf(table),
     advance: (budget) => {
       // The new rows gathered wait a few rebuilds for more rows to come before they are built into
       // groups of their own (in the Worker of the Store when it has one), and are drawn from the
@@ -361,7 +361,7 @@ function drawnRowsOfDocument(document: StoreDocument): DrawnRows {
  * order), the rows gone of a part left out, the rows that follow each other at one place of one
  * part in one insert
  */
-function deltaInsertsOf(table: RowTable, pages: Pages<FeatureStyle>): DeltaInsert[] {
+function deltaInsertsOf(table: RowTable): DeltaInsert[] {
   const parts = table.delta.parts;
   const out: DeltaInsert[] = [];
   if (parts.length === 0) return out;
@@ -391,7 +391,7 @@ function deltaInsertsOf(table: RowTable, pages: Pages<FeatureStyle>): DeltaInser
         at[s],
         groups[next].data,
         at[next],
-        pages.groups,
+        table.groupKeys,
       );
       if (order < 0) next = s;
     }
