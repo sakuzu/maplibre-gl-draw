@@ -1275,6 +1275,26 @@
       "path": "src/api/impl/restore-sweep-parts.test.ts",
       "change": "the first and the second tests are made one test for each seed; the seeds, the points, the steps and what is expected are the same",
       "unit": "the work that frames the circles of a large selection by their boxes, with small changes beside it"
+    },
+    {
+      "path": "bench/edit-document.test.ts",
+      "change": "the test of the document of the editing benchmark with dashed features (dash=1) is added; the tests there do not change",
+      "unit": "the vertex stage of the rows that finds its texels by shift and mask, and draws the parts without dashed rows by a program without the outputs of the dashes"
+    },
+    {
+      "path": "src/e2e/rows-drawing.e2e.test.ts",
+      "change": "the comparison of the pictures drawn by the two programs of the rows is added; the tests there do not change",
+      "unit": "the vertex stage of the rows that finds its texels by shift and mask, and draws the parts without dashed rows by a program without the outputs of the dashes"
+    },
+    {
+      "path": "src/e2e/picture-scenes.ts",
+      "change": "a set of scenes is added; the names, the documents and the way of taking of the scenes there do not change",
+      "unit": "the vertex stage of the rows that finds its texels by shift and mask, and draws the parts without dashed rows by a program without the outputs of the dashes"
+    },
+    {
+      "path": "src/e2e/pictures.e2e.test.ts",
+      "change": "the taking of the added set of scenes is added; the tests there do not change",
+      "unit": "the vertex stage of the rows that finds its texels by shift and mask, and draws the parts without dashed rows by a program without the outputs of the dashes"
     }
   ]
 }
