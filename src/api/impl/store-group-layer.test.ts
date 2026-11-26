@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { createStore } from '../../store/built-in/create-store.js';
 import type { Store } from '../../store/built-in/types.js';
-import { createMapStub } from '../../test-utils.js';
+import { createCountedInstance, createMapStub, gridPoints } from '../../test-utils.js';
 import type { DocumentSubscribeOptions } from '../document.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents } from '../events.js';
@@ -171,4 +171,49 @@ describe('a group put in another layer in the Store', () => {
       draw.destroy();
     });
   }
+});
+
+describe('the work of reading a group put in another layer in the Store', () => {
+  /** What moving a group of `count` features to another layer reads and makes */
+  async function workOf(count: number, direct: boolean, listening: boolean) {
+    const instance = createCountedInstance();
+    const { draw, store, counts } = instance;
+    const first = draw.layers.list()[0].id;
+    draw.layers.create({ id: 'other', name: 'other' });
+    const ids = (draw.features.createMany(gridPoints(count)) as Feature[]).map(({ id }) => id);
+    await draw.groups.create({ id: 'g', featureIds: ids });
+    if (listening) for (const name of EVENTS) draw.on(name, () => {});
+    const before = { ...counts };
+    if (direct) {
+      store.transact(() => store.updateGroup('g', { layerId: 'other', orderKey: 'A' }), 'remote');
+    } else {
+      await draw.groups.move('g', { layerId: 'other', index: 0 });
+    }
+    const work = {
+      rows: counts.rowsTouched - before.rowsTouched,
+      objects: counts.objectsCreated - before.objectsCreated,
+    };
+    expect(draw.features.get(ids[0])?.layerId).toBe('other');
+    expect(draw.features.get(ids[count - 1])?.layerId).toBe('other');
+    expect(draw.layers.listItemIds(first, { start: 0, end: 10 })).toEqual([]);
+    draw.destroy();
+    return work;
+  }
+
+  for (const count of [1_000, 10_000]) {
+    it(`is in proportion to the members, for ${count}`, async () => {
+      const work = await workOf(count, true, false);
+      expect(work.rows).toBeLessThanOrEqual(count * 7);
+      expect(work.objects).toBeLessThanOrEqual(count * 22 + 100);
+    });
+  }
+
+  // Few features: the place a move is told from is counted, for now, in the square of them
+  it('listened to, adds no more than it reads and makes unheard, for 500', async () => {
+    const unheard = await workOf(500, true, false);
+    const moved = await workOf(500, false, true);
+    const written = await workOf(500, true, true);
+    expect(written.rows - moved.rows).toBeLessThanOrEqual(unheard.rows);
+    expect(written.objects - moved.objects).toBeLessThanOrEqual(unheard.objects);
+  });
 });
