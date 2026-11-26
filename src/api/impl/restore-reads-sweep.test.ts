@@ -13,13 +13,17 @@
  *   events, but for the values before and, in `feature.updated`, the fields of the feature before
  *   other than its layer and its group
  *
- * The edits are drawn from the rows of the Store, so that what is read does not change them. In
- * the lists over many features the layer keeps none of the features edited made.
+ * The edits are drawn from the rows of the Store, so that what is read does not change them. Some
+ * of them are written to the Store directly, as a change made outside the instance is: the
+ * layers, the groups (a group put in another layer takes its members with it), the places of rows,
+ * new rows and their deletion. In the lists over many features the layer keeps none of the
+ * features edited made.
  */
 
 import { describe, expect, it } from 'vitest';
 import { createStore } from '../../store/built-in/create-store.js';
-import type { Store } from '../../store/built-in/types.js';
+import { compareKeys, createOrderKeyBetween } from '../../store/built-in/order-keys.js';
+import type { FeatureRowField, Store } from '../../store/built-in/types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { DocumentSubscribeOptions } from '../document.js';
 import type { Draw } from '../draw.js';
@@ -129,6 +133,8 @@ interface Run {
   placesBack: number;
   /** The writings back that told a feature as updated more than once, or updated and deleted */
   overlaps: number;
+  /** The groups with members put in another layer by a write to the Store directly */
+  groupsMoved: number;
 }
 
 // ============================================================================
@@ -179,7 +185,14 @@ async function runList({ seed, watching, restores, notKept }: ListOptions): Prom
   };
   // Half of the lists read every feature after each step, which keeps it made
   const reads = !notKept && seed % 2 === 0;
-  const run: Run = { wrong: [], steps: [], document: '', placesBack: 0, overlaps: 0 };
+  const run: Run = {
+    wrong: [],
+    steps: [],
+    document: '',
+    placesBack: 0,
+    overlaps: 0,
+    groupsMoved: 0,
+  };
 
   // The values before of the changes of this client, whoever asks for more
   const values: { given: FeatureValues; placed: boolean }[] = [];
@@ -216,6 +229,8 @@ async function runList({ seed, watching, restores, notKept }: ListOptions): Prom
     }
     return out;
   };
+  /** The layers of the edits that are there (one written to the Store directly may be gone) */
+  const layersThere = (): string[] => LAYERS.filter((id) => store.getLayer(id) !== undefined);
   const groupsNow = (): string[] =>
     store
       .listGroups()
@@ -260,7 +275,7 @@ async function runList({ seed, watching, restores, notKept }: ListOptions): Prom
       // The other values, as another instance over the Store reads them
       const another = createDraw(createMapStub().map, { store, ...options });
       const textOf = (instance: Draw): string[] =>
-        LAYERS.flatMap((layerId) =>
+        layersThere().flatMap((layerId) =>
           [...instance.features.iterate({ layerId })].map((f) => JSON.stringify(plain(f))),
         );
       const here = textOf(draw);
@@ -307,6 +322,8 @@ async function runList({ seed, watching, restores, notKept }: ListOptions): Prom
     let edit: { name: string; run: () => unknown } | null = null;
     let written: typeof values = [];
     let source: string | undefined;
+    /** Whether the edit is written to the Store directly */
+    let direct = false;
 
     if (random() < 0.35) {
       const oldest = random() < 0.5;
@@ -326,6 +343,9 @@ async function runList({ seed, watching, restores, notKept }: ListOptions): Prom
             }),
         };
       }
+    } else if (random() < 0.3) {
+      direct = true;
+      edit = storeEdit();
     } else {
       edit = drawEdit();
     }
@@ -354,7 +374,7 @@ async function runList({ seed, watching, restores, notKept }: ListOptions): Prom
       for (const value of written) values.splice(values.indexOf(value), 1);
     }
     const name = `seed ${seed} step ${step}: ${edit.name}`;
-    check(name, written.length > 0 && restores);
+    check(name, (written.length > 0 && restores) || direct);
     run.steps.push({ edit: name, result, told: told.map(({ text }) => text) });
     told = [];
     letGo();
@@ -470,13 +490,180 @@ async function runList({ seed, watching, restores, notKept }: ListOptions): Prom
         }
       }
     }
+
+    /** A write to the Store directly, as a change made outside the instance is written */
+    function storeEdit(): { name: string; run: () => unknown } | null {
+      const kind = pick([
+        ...['layer', 'layer', 'deleteLayer', 'group', 'group', 'moveGroup', 'moveGroup'],
+        ...['orderGroup', 'ungroup', 'place', 'place', 'place', 'order', 'create', 'delete'],
+      ]);
+      const as = (what: string, write: () => unknown) => ({
+        name: `store ${kind} ${what}`,
+        run: () => store.transact(write, 'remote'),
+      });
+      const layers = layersThere();
+      /** The rows there of a layer, at random */
+      const rowsOf = (layerId: string, most: number): string[] => {
+        const of = there.filter((id) => rows.get(id)?.layerId === layerId);
+        return of.filter(() => random() < 0.5).slice(0, most);
+      };
+      /** A key of a new place among the items of a layer or a group, at random */
+      const keyIn = (container: string, taken: string[] = []): string => {
+        const keys = [...taken];
+        for (const layerId of layers) {
+          const view = store.tables.get(layerId);
+          if (!view || view.rowCount === 0) continue;
+          const refs = view.listRowRefs(0, view.rowCount);
+          const { fields } = store.tables.readValues(refs, ['parent', 'orderKey']);
+          refs.forEach((_, i) => {
+            if (String(fields.get('parent')?.[i]) === container) {
+              keys.push(String(fields.get('orderKey')?.[i]));
+            }
+          });
+        }
+        for (const group of store.listGroups()) {
+          if (group.layerId === container) keys.push(group.orderKey);
+        }
+        keys.sort(compareKeys);
+        const at = Math.floor(random() * (keys.length + 1));
+        const behind = keys[at - 1];
+        const front = keys[at];
+        return behind !== undefined && behind === front
+          ? createOrderKeyBetween(keys[keys.length - 1], undefined)
+          : createOrderKeyBetween(behind, front);
+      };
+      /** Writes the places of rows of one layer: in `parent`, or in their own container */
+      const place = (ids: string[], parent: string | null): void => {
+        const refs = Int32Array.from(ids, (id) => store.tables.getRowRef(id) as number);
+        const keys: string[] = [];
+        for (const id of ids) {
+          const row = rows.get(id) as Row;
+          keys.push(keyIn(parent ?? row.groupId ?? row.layerId, keys));
+        }
+        const fields = new Map<FeatureRowField, unknown[]>([['orderKey', keys]]);
+        if (parent !== null)
+          fields.set(
+            'parent',
+            ids.map(() => parent),
+          );
+        store.writeRows({ rows: refs, fields });
+      };
+      switch (kind) {
+        case 'layer': {
+          const gone = LAYERS.find((id) => !layers.includes(id));
+          if (gone !== undefined) {
+            const layer = { id: gone, name: gone, visible: true, locked: false, opacity: 1 };
+            return as(gone, () =>
+              store.createLayer({ ...layer, styleRule: undefined, metadata: undefined }),
+            );
+          }
+          const id = pick(layers);
+          const name = `${id} ${step}`;
+          return as(`${id} ${name}`, () => store.updateLayer(id, { name }));
+        }
+        case 'deleteLayer': {
+          if (layers.length === 0 || random() < 0.5) return null;
+          const id = pick(layers);
+          return as(id, () => store.deleteLayer(id));
+        }
+        case 'group': {
+          if (layers.length === 0 || groupIds.length >= 3) return null;
+          const layerId = pick(layers);
+          const members = rowsOf(layerId, 3);
+          if (members.length === 0) return null;
+          const id = `g${groups++}`;
+          return as(`${id} ${layerId} ${members}`, () => {
+            const orderKey = keyIn(layerId);
+            store.createGroup({ id, name: id, visible: true, locked: false, layerId, orderKey });
+            place(members, id);
+          });
+        }
+        case 'moveGroup':
+        case 'orderGroup': {
+          if (groupIds.length === 0) return null;
+          const id = pick(groupIds);
+          const layerId =
+            kind === 'moveGroup' && layers.length > 0
+              ? pick(layers)
+              : (store.getGroup(id)?.layerId as string);
+          const moves = layerId !== store.getGroup(id)?.layerId;
+          if (moves && there.some((member) => rows.get(member)?.groupId === id)) {
+            run.groupsMoved += 1;
+          }
+          return as(`${id} ${layerId}`, () => {
+            const orderKey = keyIn(layerId);
+            return kind === 'moveGroup'
+              ? store.updateGroup(id, { layerId, orderKey })
+              : store.updateGroup(id, { orderKey });
+          });
+        }
+        case 'ungroup': {
+          if (groupIds.length === 0) return null;
+          const id = pick(groupIds);
+          const group = store.getGroup(id);
+          if (!group) return null;
+          const members = there.filter((member) => rows.get(member)?.groupId === id);
+          return as(`${id} ${members}`, () => {
+            if (members.length > 0) place(members, group.layerId);
+            return store.deleteGroup(id);
+          });
+        }
+        case 'place':
+        case 'order': {
+          if (layers.length === 0) return null;
+          const ids = rowsOf(pick(layers), 3);
+          if (ids.length === 0) return null;
+          if (kind === 'order') return as(`${ids}`, () => place(ids, null));
+          const parent = pick([...layers, ...groupIds]);
+          return as(`${ids} ${parent}`, () => place(ids, parent));
+        }
+        case 'create': {
+          if (there.length >= 12 || layers.length === 0) return null;
+          const parent = pick([...layers, ...groupIds]);
+          const id = `f${features++}`;
+          const coordinates = Float64Array.of(Math.round(random() * 1000) / 1000, 0.5);
+          return as(`${id} ${parent}`, () =>
+            store.createRows({
+              ids: [id],
+              fields: new Map<FeatureRowField, unknown[]>([
+                ['type', ['Point']],
+                ['parent', [parent]],
+                ['orderKey', [keyIn(parent)]],
+                ['properties:k1', [Math.floor(random() * 100)]],
+              ]),
+              geometry: {
+                types: Uint8Array.of(0),
+                coordinates,
+                valuesPerPosition: 2,
+                partStarts: Int32Array.of(0, 1),
+                ringStarts: Int32Array.of(0, 1),
+                positionStarts: Int32Array.of(0, 1),
+              },
+            }),
+          );
+        }
+        default: {
+          if (layers.length === 0) return null;
+          const ids = rowsOf(pick(layers), 2);
+          if (ids.length === 0) return null;
+          const refs = Int32Array.from(ids, (id) => store.tables.getRowRef(id) as number);
+          return as(`${ids}`, () =>
+            store.writeRows({
+              rows: refs,
+              fields: new Map(),
+              deleted: new Uint8Array(refs.length).fill(1),
+            }),
+          );
+        }
+      }
+    }
   }
 
   const { created: _created, modified: _modified, ...json } = draw.document.toJSON();
   run.document = JSON.stringify(
     plain({
-      features: LAYERS.map((layerId) => [...draw.features.iterate({ layerId })]),
-      items: LAYERS.map((id) => draw.layers.listItemIds(id, { start: 0, end: 100 })),
+      features: layersThere().map((layerId) => [...draw.features.iterate({ layerId })]),
+      items: layersThere().map((id) => draw.layers.listItemIds(id, { start: 0, end: 100 })),
       members: groupsNow().map((id) => draw.groups.listFeatureIds(id, { start: 0, end: 100 })),
       groups: draw.groups.list(),
       layers: draw.layers.list(),
@@ -530,16 +717,19 @@ describe('the lists of edits under several sets of subscribers', () => {
   }, async () => {
     let placesBack = 0;
     let overlaps = 0;
+    let groupsMoved = 0;
     const wrong: string[] = [];
     for (let seed = 1; seed <= LISTS; seed++) {
       const result = await compareSets({ seed, restores: true, notKept: false }, sets);
       wrong.push(...result.wrong);
       placesBack += result.runs.get(OWN_LISTENED)?.placesBack ?? 0;
       overlaps += result.runs.get(OWN_LISTENED)?.overlaps ?? 0;
+      groupsMoved += result.runs.get(OWN_LISTENED)?.groupsMoved ?? 0;
     }
     expect(wrong).toEqual([]);
     expect(placesBack).toBeGreaterThan(0);
     expect(overlaps).toBeGreaterThan(0);
+    expect(groupsMoved).toBeGreaterThan(0);
   });
 
   it('read as with no subscriber at all, without a writing back', {
@@ -557,13 +747,16 @@ describe('the lists of edits under several sets of subscribers', () => {
     timeout: 300_000,
   }, async () => {
     let placesBack = 0;
+    let groupsMoved = 0;
     const wrong: string[] = [];
     for (let seed = 1; seed <= LISTS_NOT_KEPT; seed++) {
       const result = await compareSets({ seed, restores: true, notKept: true }, sets);
       wrong.push(...result.wrong);
       placesBack += result.runs.get(OWN_LISTENED)?.placesBack ?? 0;
+      groupsMoved += result.runs.get(OWN_LISTENED)?.groupsMoved ?? 0;
     }
     expect(wrong).toEqual([]);
     expect(placesBack).toBeGreaterThan(0);
+    expect(groupsMoved).toBeGreaterThan(0);
   });
 });

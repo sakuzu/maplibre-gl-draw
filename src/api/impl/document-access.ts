@@ -4395,7 +4395,10 @@ export function createDocumentAccess(
             noted ??= newRowPlaces();
             notePlaceBefore(noted, ref, id, container, key);
           }
-          if (onlyPlaces && container === parent) {
+          // A row whose group the change put in another layer went with it: a moved feature
+          const groupLayer = container === undefined ? undefined : groupLayersBefore.get(container);
+          const wentWithGroup = groupLayer !== undefined && groupLayer !== layerId;
+          if (onlyPlaces && container === parent && !wentWithGroup) {
             // Not a change of the feature: a change of the order of its container
             reordered.add(parent);
             continue;
