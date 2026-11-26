@@ -58,6 +58,7 @@ import {
   MAPS,
   type MapName,
   type PictureScene,
+  ROWS_SCENES,
   SCENES,
   STATES,
   TERRAIN_EXAGGERATION,
@@ -740,3 +741,43 @@ describe('the pictures of the points behind the peak', () => {
     }
   });
 });
+
+// ============================================================================
+// The textures the rows are read from
+// ============================================================================
+
+for (const map of MAPS) {
+  const scenes = ROWS_SCENES.filter((scene) => scene.map === map);
+  describe(`the pictures of the textures of the rows on the ${map} map`, () => {
+    const taken = new Map<string, Picture>();
+    let page: Page;
+
+    beforeAll(async () => {
+      page = await openPage(map);
+    }, browserTimeout(90_000));
+
+    afterAll(async () => {
+      await page?.close();
+    });
+
+    for (const scene of scenes) {
+      it(scene.name, async () => {
+        const picture = await take(page, scene);
+        taken.set(scene.name, picture);
+        if (OUT) await writePicture(OUT, scene.name, picture);
+      });
+    }
+
+    it('every scene taken again, after the others, gives the same picture', {
+      timeout: browserTimeout(300_000),
+    }, async () => {
+      const again = new Map<string, Picture>();
+      for (const scene of scenes) again.set(scene.name, await take(page, scene));
+      expect(taken.size).toBe(scenes.length);
+      const failed = compareSets(taken, again)
+        .filter((c) => c.failed)
+        .map(describeComparison);
+      expect(failed).toEqual([]);
+    });
+  });
+}

@@ -942,6 +942,300 @@ export const GHOST_SCENES: readonly GhostScene[] = (['grid', 'few', 'many'] as c
   ghostSceneOf(name),
 );
 
+// ============================================================================
+// The scenes of the textures the rows are read from
+// ============================================================================
+
+/**
+ * A scene of where the drawing of the rows reads them from its textures: its map, the document and
+ * the calls
+ *
+ * - `rows/address`: one chunk of 1,600 rows and more than 6,000 coordinates, each row of a color
+ *   of its own, so that the textures of its coordinates, of the styles of its rows, of the values
+ *   of its styles and of the state of its rows all have more than one line; rows past the first
+ *   line of the texture of the state (128 rows) and past the first line of the texture of the
+ *   styles of the rows (1,024 rows) hidden on this client and selected
+ * - `rows/small`: layers of one feature each, whose textures of coordinates are 1, 2, 4 and 8
+ *   texels wide: a point, lines of 2, 3 and 5 points, and a square
+ * - `rows/layers/<map>`: four layers stacked, one with dashed or dotted rows after one without,
+ *   so that one frame draws chunks with dashes and chunks without them in turn
+ */
+export interface RowsScene {
+  /** `rows/<address or small>`, or `rows/layers/<map>` */
+  readonly name: string;
+  readonly map: MapName;
+  readonly document: DrawDocument;
+  readonly calls: readonly Call[];
+}
+
+/** The rows of `rows/address`, and the side of its grid */
+export const ADDRESS_ROWS = { count: 1_600, columns: 50 } as const;
+
+/** The rows of `rows/address` hidden on this client: past 128 rows and past 1,024 rows */
+export const ADDRESS_HIDDEN: readonly number[] = [
+  130, 257, 515, 777, 1_000, 1_030, 1_100, 1_250, 1_400, 1_555,
+];
+
+/** The rows of `rows/address` selected: past 128 rows and past 1,024 rows */
+export const ADDRESS_SELECTED: readonly number[] = [
+  140, 260, 520, 780, 1_010, 1_040, 1_111, 1_260, 1_410, 1_560,
+];
+
+/** A color of its own for each of 4,096 numbers */
+function colorOfNumber(i: number): string {
+  const channel = (v: number) => (40 + v * 13).toString(16).padStart(2, '0');
+  return `#${channel(i % 16)}${channel(Math.floor(i / 16) % 16)}${channel(Math.floor(i / 256) % 16)}`;
+}
+
+/** A document of layers stacked from the back, each with its features */
+function layersDocument(layers: ReadonlyArray<{ id: string; features: Feature[] }>): DrawDocument {
+  return {
+    version: '3.0.0',
+    metadata: { title: 'pictures' },
+    layerOrder: layers.map((layer) => layer.id),
+    layers: layers.map((layer) => ({
+      id: layer.id,
+      name: layer.id,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      styleRule: undefined,
+      metadata: undefined,
+      items: layer.features.map((f) => f.id),
+    })),
+    features: layers.flatMap((layer) => layer.features.map((f) => ({ ...f, layerId: layer.id }))),
+  };
+}
+
+/** The scene of one chunk of many rows, hidden and selected past the first lines of the textures */
+function addressScene(): RowsScene {
+  const map: MapName = 'flat';
+  const at = placesOf(map);
+  const { count, columns } = ADDRESS_ROWS;
+  // Cells of 9 units of 1/28 of a unit, the grid centered on the camera
+  const cell = 9 / UNIT_PX;
+  const left = -(columns * cell) / 2;
+  const top = (Math.ceil(count / columns) * cell) / 2;
+  const features: Feature[] = [];
+  for (let i = 0; i < count; i++) {
+    const x = left + (i % columns) * cell;
+    const y = top - Math.floor(i / columns) * cell;
+    const s = cell * 0.75;
+    const color = colorOfNumber(i);
+    if (i % 2 === 0) {
+      features.push(
+        feature(
+          map,
+          `row-${i}`,
+          'LineString',
+          {
+            type: 'LineString',
+            coordinates: [at(x, y), at(x + s / 3, y - s), at(x + (2 * s) / 3, y), at(x + s, y - s)],
+          },
+          { strokeColor: color, strokeWidth: 2 },
+        ),
+      );
+    } else {
+      features.push(
+        feature(
+          map,
+          `row-${i}`,
+          'Polygon',
+          {
+            type: 'Polygon',
+            coordinates: [[at(x, y), at(x + s, y), at(x + s, y - s), at(x, y - s), at(x, y)]],
+          },
+          { fillColor: color, fillOpacity: 0.9, strokeColor: '#202020', strokeWidth: 1 },
+        ),
+      );
+    }
+  }
+  return {
+    name: 'rows/address',
+    map,
+    document: layersDocument([{ id: LAYER, features }]),
+    calls: [
+      ...ADDRESS_HIDDEN.map((row): Call => ['hidden.add', `row-${row}`]),
+      ['selection.set', 'feature', ADDRESS_SELECTED.map((row) => `row-${row}`)],
+    ],
+  };
+}
+
+/** The scene of layers of one feature each, their textures of coordinates 1 to 8 texels wide */
+function smallScene(): RowsScene {
+  const map: MapName = 'flat';
+  const at = placesOf(map);
+  const line = (id: string, points: Array<[number, number]>, color: string): Feature =>
+    feature(
+      map,
+      id,
+      'LineString',
+      { type: 'LineString', coordinates: points.map(([x, y]) => at(x, y)) },
+      { strokeColor: color, strokeWidth: 4 },
+    );
+  const layers = [
+    feature(
+      map,
+      'one',
+      'Point',
+      { type: 'Point', coordinates: at(-6, 2) },
+      { pointColor: '#d1495b', pointRadius: 8, pointShape: 'circle' },
+    ),
+    line(
+      'two',
+      [
+        [-4, 3],
+        [-2, 1],
+      ],
+      '#2e86ab',
+    ),
+    line(
+      'three',
+      [
+        [-1, 3],
+        [0, 1],
+        [1, 3],
+      ],
+      '#3a7d44',
+    ),
+    line(
+      'five',
+      [
+        [2, 1],
+        [3, 3],
+        [4, 1],
+        [5, 3],
+        [6, 1],
+      ],
+      '#5c4d7d',
+    ),
+    feature(
+      map,
+      'square',
+      'Polygon',
+      {
+        type: 'Polygon',
+        coordinates: [[at(-2, -1), at(2, -1), at(2, -4), at(-2, -4), at(-2, -1)]],
+      },
+      { fillColor: '#f4a259', fillOpacity: 0.8, strokeColor: '#202020', strokeWidth: 2 },
+    ),
+  ];
+  return {
+    name: 'rows/small',
+    map,
+    document: layersDocument(layers.map((f) => ({ id: `small-${f.id}`, features: [f] }))),
+    calls: [],
+  };
+}
+
+/** The scene of four layers stacked, those with dashed or dotted rows after those without */
+function layersScene(map: MapName): RowsScene {
+  const at = placesOf(map);
+  const square = (x0: number, y0: number, x1: number, y1: number) => ({
+    type: 'Polygon' as const,
+    coordinates: [[at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), at(x0, y0)]],
+  });
+  const line = (points: Array<[number, number]>) => ({
+    type: 'LineString' as const,
+    coordinates: points.map(([x, y]) => at(x, y)),
+  });
+  return {
+    name: `rows/layers/${map}`,
+    map,
+    document: layersDocument([
+      {
+        id: 'solid-under',
+        features: [
+          feature(map, 'area-under', 'Polygon', square(-5, 3, -1, -1), {
+            fillColor: '#3a7d44',
+            fillOpacity: 0.8,
+            strokeColor: '#203a24',
+            strokeWidth: 2,
+          }),
+          feature(
+            map,
+            'line-under',
+            'LineString',
+            line([
+              [-6, -2],
+              [6, 2],
+            ]),
+            { strokeColor: '#ffbf00', strokeWidth: 5 },
+          ),
+        ],
+      },
+      {
+        id: 'dashed',
+        features: [
+          feature(
+            map,
+            'line-dashed',
+            'LineString',
+            line([
+              [-6, 2],
+              [0, -1],
+              [6, 2.5],
+            ]),
+            { strokeColor: '#2e86ab', strokeWidth: 4, lineStyle: 'dashed' },
+          ),
+          feature(map, 'area-dashed', 'Polygon', square(1, 3, 5, -1), {
+            fillColor: '#5c4d7d',
+            fillOpacity: 0.6,
+            strokeColor: '#d1495b',
+            strokeWidth: 3,
+            lineStyle: 'dashed',
+          }),
+        ],
+      },
+      {
+        id: 'solid-over',
+        features: [
+          feature(
+            map,
+            'point-over',
+            'Point',
+            { type: 'Point', coordinates: at(-3, 1) },
+            { pointColor: '#111111', pointRadius: 9, pointShape: 'square' },
+          ),
+          feature(
+            map,
+            'line-over',
+            'LineString',
+            line([
+              [-6, 0],
+              [6, -0.5],
+            ]),
+            { strokeColor: '#7b2cbf', strokeWidth: 3 },
+          ),
+        ],
+      },
+      {
+        id: 'dotted',
+        features: [
+          feature(
+            map,
+            'line-dotted',
+            'LineString',
+            line([
+              [-5, -3],
+              [5, 3.5],
+            ]),
+            { strokeColor: '#e07a5f', strokeWidth: 4, lineStyle: 'dotted' },
+          ),
+        ],
+      },
+    ]),
+    calls: [],
+  };
+}
+
+/** The scenes of the textures the rows are read from */
+export const ROWS_SCENES: readonly RowsScene[] = [
+  addressScene(),
+  smallScene(),
+  ...MAPS.map((map) => layersScene(map)),
+];
+
 /**
  * A document with one image at the center of the camera of a map, which the page loads once
  * before the scenes, so that every scene finds the image decoded
