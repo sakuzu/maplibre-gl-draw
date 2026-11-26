@@ -646,6 +646,8 @@ export class RowsDraft {
   readonly runMercator: Float32Array;
   /** What the stations of the segments are decided from */
   readonly lines: RowsLineMetrics = { surface: false, maxSegmentMeters: 0, maxSegmentMercator: 0 };
+  /** Whether a row packed is dashed or dotted (by the layout of its resolved style) */
+  dashed = false;
 
   /**
    * @param rows The rows of the chunk
@@ -745,6 +747,7 @@ export class RowsDraft {
       coordFirst: this.coordFirst,
       palette,
       lines: this.lines,
+      dashed: this.dashed,
     };
   }
 
@@ -1076,6 +1079,7 @@ function collectLineRow(
   const ruleColor = context.slots.ruleColorOf(group, row);
   const style = context.rowsStyles.line(styleNumber, type, ruleColor);
   writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
+  if ((context.rowsStyles.layoutOf(style) & ROWS_LAYOUT.dashed) !== 0) draft.dashed = true;
   const dashed = context.slots.line(styleNumber, type, ruleColor).stroke.lineStyle !== 'solid';
   const coords = reader.coords;
   const stride = reader.stride;
@@ -1149,6 +1153,7 @@ function collectPolygonRow(
   if (polygons.length === 0) return;
   const style = context.rowsStyles.polygon(styleNumber, type, ruleColor);
   writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
+  if ((context.rowsStyles.layoutOf(style) & ROWS_LAYOUT.dashed) !== 0) draft.dashed = true;
   const solidOutline = slot.hasStroke && !slot.dashedStroke;
   const dashedOutline = slot.hasStroke && slot.dashedStroke;
   const surface = context.surface;

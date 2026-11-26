@@ -22,8 +22,12 @@
 
 import type { GpuLedger } from '../gpu-ledger.js';
 import { giveStorage, textureBytes } from '../gpu-ledger.js';
+import { texelPlaceGlsl, widthShift } from './rows/rows-writes.js';
 
-/** The width of the texture of the state of a row group (rows per texture line) */
+/**
+ * The width of the texture of the state of a row group (rows per texture line; a power of two,
+ * read with a shift and a mask fixed in the shader)
+ */
 export const ROW_STATE_WIDTH = 128;
 
 /** The texture unit the texture of the state of the rows is read on */
@@ -47,10 +51,9 @@ export const ROW_STATE_PART = 'rowState';
  */
 export const ROW_STATE_GLSL = `
 uniform highp usampler2D u_row_state;
-uniform int u_row_state_width;
 
 uint readRowState(int index) {
-    return texelFetch(u_row_state, ivec2(index % u_row_state_width, index / u_row_state_width), 0).r;
+    return texelFetch(u_row_state, ${texelPlaceGlsl('index', String(ROW_STATE_WIDTH - 1), String(widthShift(ROW_STATE_WIDTH)))}, 0).r;
 }
 
 bool rowStateHidden(uint state) {
@@ -174,14 +177,12 @@ export function uploadRowState(
  */
 export class RowStateUniforms {
   private readonly state: WebGLUniformLocation | null;
-  private readonly width: WebGLUniformLocation | null;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
     program: WebGLProgram,
   ) {
     this.state = gl.getUniformLocation(program, 'u_row_state');
-    this.width = gl.getUniformLocation(program, 'u_row_state_width');
   }
 
   /**
@@ -194,6 +195,5 @@ export class RowStateUniforms {
     gl.bindTexture(gl.TEXTURE_2D, texture.texture);
     gl.activeTexture(gl.TEXTURE0);
     if (this.state) gl.uniform1i(this.state, ROW_STATE_TEXTURE_UNIT);
-    if (this.width) gl.uniform1i(this.width, texture.width);
   }
 }

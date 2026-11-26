@@ -19,7 +19,12 @@
  * The instances of a row are contiguous and in the order the rows are drawn in, so one draw
  * draws the rows in their order (the primitives of one draw are blended in the order they are
  * issued), and a range of rows is one range of instances.
+ *
+ * Every texture is a power of two wide, and a texel is found in it with a shift and a mask
+ * (`rows-writes.ts`), never with a division.
  */
+
+import { texelLine, widthShift } from './rows-writes.js';
 
 /** The floats of an instance */
 export const ROWS_INSTANCE_FLOATS = 8;
@@ -96,11 +101,17 @@ export const ROWS_ROW_STYLE_FLOATS = 4;
 /** The code of the pattern of a line: solid, dashed, dotted */
 export const ROWS_DASH = { solid: 0, dashed: 1, dotted: 2 } as const;
 
-/** The widest texture of the coordinates of a chunk (texels per line) */
+/**
+ * The widest texture of the coordinates of a chunk (texels per line; a power of two, as every
+ * width of the textures of the rows)
+ */
 export const ROWS_COORD_WIDTH = 2_048;
-/** The widest texture of the styles of the rows of a chunk (texels per line) */
+/** The widest texture of the styles of the rows of a chunk (texels per line; a power of two) */
 export const ROWS_ROW_STYLE_WIDTH = 1_024;
-/** The width of the texture of the values of the styles of a layer (texels per line) */
+/**
+ * The width of the texture of the values of the styles of a layer (texels per line; a power of
+ * two, read with a shift and a mask fixed in the shader)
+ */
 export const ROWS_STYLE_WIDTH = 1_024;
 
 /**
@@ -270,7 +281,7 @@ export class RowsPalette {
   write(index: number, values: ArrayLike<number>): void {
     const at = index * ROWS_STYLE_FLOATS;
     for (let i = 0; i < ROWS_STYLE_FLOATS; i++) this.values[at + i] = values[i] ?? 0;
-    this.dirty.add(Math.floor((index * ROWS_STYLE_TEXELS) / ROWS_STYLE_WIDTH));
+    this.dirty.add(texelLine(index * ROWS_STYLE_TEXELS, widthShift(ROWS_STYLE_WIDTH)));
   }
 
   /** The rows that use a number */
@@ -365,4 +376,6 @@ export interface RowsChunkData extends RowsChunkLayout {
   readonly coords: Float32Array;
   /** The style of each row, {@link ROWS_ROW_STYLE_FLOATS} floats per row */
   readonly rowStyles: Float32Array;
+  /** Whether a row of it is dashed or dotted (it is drawn with the dashes of the shader) */
+  readonly dashed: boolean;
 }

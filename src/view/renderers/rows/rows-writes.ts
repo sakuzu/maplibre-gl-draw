@@ -10,7 +10,56 @@
  * takes the entries in their order and uploads each run of texels that follow each other on a
  * line of the texture once, so a line written many times in a frame is uploaded once and only
  * the texels written are uploaded: moving one vertex of a line of 100,000 is one texel.
+ *
+ * Every texture the rows are read from is a power of two wide, and the place of a texel in it is
+ * taken out of its number with a shift and a mask (`texelLine`, `texelColumn`): where the CPU
+ * writes a texel and where the shaders read it (`texelPlaceGlsl`) come from this one formula.
  */
+
+/**
+ * The shift of a width that is a power of two (the width is `1 << shift`)
+ *
+ * @throws when the width is not a power of two
+ * @internal
+ */
+export function widthShift(width: number): number {
+  const shift = Math.log2(width);
+  if (!Number.isInteger(shift) || shift < 0) {
+    throw new Error(`a texture of the rows is ${width} texels wide, not a power of two`);
+  }
+  return shift;
+}
+
+/**
+ * The line of a texel in a texture `1 << shift` texels wide
+ *
+ * @internal
+ */
+export function texelLine(texel: number, shift: number): number {
+  return texel >> shift;
+}
+
+/**
+ * The texel on its line of a texel in a texture `1 << shift` texels wide
+ *
+ * @internal
+ */
+export function texelColumn(texel: number, shift: number): number {
+  return texel & ((1 << shift) - 1);
+}
+
+/**
+ * The GLSL of the place of a texel (an `ivec2` for `texelFetch`), the formula of `texelColumn`
+ * and `texelLine`
+ *
+ * @param index The GLSL of the number of the texel (an `int`)
+ * @param mask The GLSL of the mask of the width (`width - 1`, an `int`)
+ * @param shift The GLSL of the shift of the width (an `int`)
+ * @internal
+ */
+export function texelPlaceGlsl(index: string, mask: string, shift: string): string {
+  return `ivec2((${index}) & (${mask}), (${index}) >> (${shift}))`;
+}
 
 /**
  * The values written of the texels (or instances) of one texture (or buffer) of a chunk
@@ -55,23 +104,26 @@ export class TexelWrites {
 
   /**
    * Hands the texels written to `upload`, as runs of texels that follow each other on a line of
-   * `width` texels (each texel once), and forgets them
+   * `1 << shift` texels (each texel once), and forgets them
    *
-   * @param width The texels of a line (Infinity for a buffer: a run only ends at a gap)
+   * @param shift The shift of the width of a line (null for a buffer: a run only ends at a gap)
    * @param upload Receives each run: its line, its first texel on the line, and its values
    */
-  drain(width: number, upload: (line: number, first: number, values: Float32Array) => void): void {
+  drain(
+    shift: number | null,
+    upload: (line: number, first: number, values: Float32Array) => void,
+  ): void {
     if (this.slots.size === 0) return;
     const texels = [...this.slots.keys()].sort((a, b) => a - b);
     const floats = this.floats;
     for (let i = 0; i < texels.length; ) {
       const start = texels[i];
-      const line = Number.isFinite(width) ? Math.floor(start / width) : 0;
+      const line = shift === null ? 0 : texelLine(start, shift);
       let j = i + 1;
       while (
         j < texels.length &&
         texels[j] === texels[j - 1] + 1 &&
-        (!Number.isFinite(width) || Math.floor(texels[j] / width) === line)
+        (shift === null || texelLine(texels[j], shift) === line)
       ) {
         j++;
       }
@@ -80,7 +132,7 @@ export class TexelWrites {
         const slot = this.slots.get(texels[k]) as number;
         run.set(this.values.subarray(slot * floats, (slot + 1) * floats), (k - i) * floats);
       }
-      upload(line, Number.isFinite(width) ? start - line * width : start, run);
+      upload(line, shift === null ? start : texelColumn(start, shift), run);
       i = j;
     }
     this.clear();

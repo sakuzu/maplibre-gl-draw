@@ -4,10 +4,11 @@
 // The parts of the editing benchmark that run without a map: the documents it makes and the
 // list of its scenes (`npx vitest run --root bench`). The measurements are not tested.
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   countFromSearch,
   DEFAULT_COUNT,
+  dashedFromSearch,
   EDIT_COUNTS,
   featureIdsOf,
   LAYER_ID,
@@ -134,5 +135,76 @@ describe('the number of features from the address', () => {
     for (const value of ['0', '-5', '1.5', 'abc', String(MAX_COUNT + 1)]) {
       expect(countFromSearch(`?n=${value}`)).toHaveProperty('error');
     }
+  });
+});
+
+describe('the documents with dash=1 in the address', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** The document of the page with an address */
+  function documentAt(search: string, n: number, interleaved = false) {
+    vi.stubGlobal('location', { search });
+    try {
+      return makeDocument(n, interleaved);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  const isDashed = (feature: { style: unknown }) =>
+    JSON.stringify(feature.style) === JSON.stringify({ lineStyle: 'dashed' });
+
+  it('is read from the address', () => {
+    expect(dashedFromSearch('?dash=1')).toBe(true);
+    expect(dashedFromSearch('?n=1000&dash=1')).toBe(true);
+    expect(dashedFromSearch('')).toBe(false);
+    expect(dashedFromSearch('?dash=0')).toBe(false);
+  });
+
+  it.each([false, true])(
+    'dash one polygon in ten and one line in ten, each kind counted apart, and no point (interleaved: %s)',
+    (interleaved) => {
+      const document = documentAt('?dash=1', 1_000, interleaved);
+      const seen: Record<string, number> = { Polygon: 0, LineString: 0, Point: 0 };
+      let dashed = 0;
+      for (const feature of document.features) {
+        const number = seen[feature.type]++;
+        const expected = feature.type !== 'Point' && number % 10 === 0;
+        expect(isDashed(feature), feature.id).toBe(expected);
+        if (!expected) expect(feature.style, feature.id).toEqual({});
+        if (expected) dashed++;
+      }
+      // 50 polygons in 500 and 30 lines in 300
+      expect(dashed).toBe(80);
+    },
+  );
+
+  it.each([1_000, 2_000, 20_000])(
+    'dash the features that are not points whose number is a multiple of 10, for %i features one kind after the other',
+    (n) => {
+      const document = documentAt('?dash=1', n);
+      document.features.forEach((feature, i) => {
+        expect(isDashed(feature), feature.id).toBe(feature.type !== 'Point' && i % 10 === 0);
+      });
+    },
+  );
+
+  it('are the documents of before without it, to the byte', () => {
+    /** The length of the text of a value and its FNV-1a hash */
+    const fingerprint = (value: unknown): string => {
+      const text = JSON.stringify(value);
+      let hash = 0x811c9dc5;
+      for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+      }
+      return `${text.length}:${hash.toString(16).padStart(8, '0')}`;
+    };
+    expect(fingerprint(makeDocument(1_000))).toBe('327508:5d8d7223');
+    expect(fingerprint(makeDocument(1_000, true))).toBe('327306:9cf4e053');
+    expect(fingerprint(makeDocument(2_000))).toBe('705639:4f3b6a0a');
+    expect(fingerprint(documentAt('?n=1000', 1_000))).toBe(fingerprint(makeDocument(1_000)));
   });
 });

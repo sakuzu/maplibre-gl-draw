@@ -9,6 +9,9 @@
  * and the rest points. They are the same on every visit (no random numbers), so two branches
  * are measured on the same document. The same features are made as a document of the library
  * (to open) and as GeoJSON (to import).
+ *
+ * With `dash=1` in the address of the page, one polygon in ten and one line in ten of the
+ * document of the library are dashed (`dashedFromSearch`).
  */
 
 import type { DocumentLayer, DrawDocument, Feature as DrawFeature } from '@sakuzu/maplibre-gl-draw';
@@ -80,6 +83,14 @@ export function terrainFromSearch(search: string): { terrain: boolean } | { erro
   if (value === null || value === '' || value === '0') return { terrain: false };
   if (value === '1') return { terrain: true };
   return { error: `terrain=${value} is neither 1 nor 0` };
+}
+
+/**
+ * Reads from the address whether one polygon in ten and one line in ten of the document of the
+ * library are dashed (`dash=1`)
+ */
+export function dashedFromSearch(search: string): boolean {
+  return new URLSearchParams(search).get('dash') === '1';
 }
 
 /** The extent of the grid of `n` features */
@@ -215,8 +226,16 @@ function layerOf(items: readonly string[]): DocumentLayer {
 /**
  * A document of the library with `n` features in one layer (with `interleaved`, its polygons,
  * lines and points one kind after another)
+ *
+ * With `dash=1` in the address of the page, the polygons and the lines are counted apart, each
+ * kind in the order of the document from 0, and those whose number is a multiple of 10 are
+ * dashed; the points are not. In the document of polygons, lines and points one kind after the
+ * other, with a number of features that is a multiple of 20, those are the features that are not
+ * points whose number in the document is a multiple of 10.
  */
 export function makeDocument(n: number, interleaved = false): DrawDocument {
+  const dashed = dashedFromSearch(globalThis.location?.search ?? '');
+  const seen = { Polygon: 0, LineString: 0, Point: 0 };
   const features: DrawFeature[] = makeShapes(n, interleaved).map((shape) => ({
     id: shape.id,
     type: shape.type,
@@ -224,7 +243,10 @@ export function makeDocument(n: number, interleaved = false): DrawDocument {
     layerId: LAYER_ID,
     groupId: undefined,
     properties: {},
-    style: {},
+    style:
+      dashed && shape.type !== 'Point' && seen[shape.type]++ % 10 === 0
+        ? { lineStyle: 'dashed' }
+        : {},
     visible: true,
     locked: false,
   }));

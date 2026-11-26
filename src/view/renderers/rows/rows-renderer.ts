@@ -24,8 +24,16 @@
  * the terrain is drawn, as the fills of the polygons do (`drawFillWithTerrainCull`).
  *
  * The program is made for the projection of the frame (`ensureShader`, as the other renderers
- * make theirs). When it cannot be made (`failed`), the side that draws the rows draws them another
- * way.
+ * make theirs), in two variants made together from one source: one that cuts the dashed and
+ * dotted rows into their dashes, and one without the dashes, lighter, that draws the chunks
+ * without a dashed or dotted row (`RowsChunk.dashed`, set when a chunk is packed or a row of it
+ * is packed again with dashes, and kept until the chunk is made again). Each variant keeps the
+ * values last written to its uniforms. When the program cannot be made (`failed`), the side that
+ * draws the rows draws them another way.
+ *
+ * The textures of a chunk are a power of two wide (the smallest that holds what they hold, up to
+ * the widest, `textureSizeOf`), and the shader finds a texel in them with the mask and the shift
+ * of their widths (`rows-writes.ts`).
  *
  * Everything it holds on the GPU is in the ledger of its instance, under the part of the rows
  * (`rows`): the chunks, the values of the styles of each layer, the corners of the strip and the
@@ -73,7 +81,7 @@ import {
 } from './rows-format.js';
 import { TerrainOcclusionUniforms } from './rows-occlusion.js';
 import { buildRowsFragmentSource, buildRowsVertexSource } from './rows-shader.js';
-import { TexelWrites } from './rows-writes.js';
+import { TexelWrites, widthShift } from './rows-writes.js';
 
 /** The texture units of the program (the state of the rows is on its own unit, 1) */
 const UNIT_COORDS = 0;
@@ -101,8 +109,11 @@ const CORNERS: readonly number[] = Object.freeze(
 /** A texture and its size */
 interface SizedTexture {
   readonly texture: WebGLTexture;
+  /** A power of two */
   readonly width: number;
   readonly height: number;
+  /** The shift of its width */
+  readonly shift: number;
 }
 
 /**
@@ -133,6 +144,12 @@ export interface RowsChunk {
    * is not written and draws nothing); 0 otherwise
    */
   refused: number;
+  /**
+   * Whether a row of it is dashed or dotted: it is drawn with the variant of the program that cuts
+   * the dashes. Set when it is packed and when a row is written in place with dashes, and kept
+   * until it is made again
+   */
+  dashed: boolean;
 }
 
 /**
@@ -149,12 +166,13 @@ export interface RowsChunkWrites {
 /** The uniforms of the program that are not the projection */
 interface RowsUniformLocations {
   readonly coords: WebGLUniformLocation | null;
-  readonly coordWidth: WebGLUniformLocation | null;
+  readonly coordMask: WebGLUniformLocation | null;
+  readonly coordShift: WebGLUniformLocation | null;
   readonly rowStyles: WebGLUniformLocation | null;
-  readonly rowStyleWidth: WebGLUniformLocation | null;
+  readonly rowStyleMask: WebGLUniformLocation | null;
+  readonly rowStyleShift: WebGLUniformLocation | null;
   readonly rowBase: WebGLUniformLocation | null;
   readonly styles: WebGLUniformLocation | null;
-  readonly styleWidth: WebGLUniformLocation | null;
   readonly viewport: WebGLUniformLocation | null;
   readonly zoom: WebGLUniformLocation | null;
   readonly miterLimit: WebGLUniformLocation | null;
@@ -171,7 +189,7 @@ interface RowsUniformLocations {
   readonly fillCull: WebGLUniformLocation | null;
 }
 
-/** The program of the projection of the frame */
+/** A variant of the program of the projection of the frame */
 interface RowsProgram {
   readonly program: WebGLProgram;
   readonly locations: RowsUniformLocations;
@@ -188,9 +206,9 @@ interface RowsUniformMemo {
   zoom: number;
   scale: number;
   opacity: number;
-  coordWidth: number;
+  coordShift: number;
   rowBase: number;
-  rowStyleWidth: number;
+  rowStyleShift: number;
   stations: number;
   stationStep: number;
   stationGrid: number;
@@ -210,7 +228,12 @@ export class RowsRenderer {
   private readonly gl: WebGL2RenderingContext;
   private readonly terrain: TerrainContext;
   private readonly ledger: GpuLedger;
+  /** The variant of the program without the dashes */
   private program: RowsProgram | null = null;
+  /** The variant of the program that cuts the dashed and dotted rows into their dashes */
+  private dashedProgram: RowsProgram | null = null;
+  /** The variant last used to draw */
+  private lastUsed: RowsProgram | null = null;
   /** The variant of the projection the program was made for */
   private variantName = '';
   /** Whether the program could not be made (for the variant of `variantName`) */
@@ -230,6 +253,12 @@ export class RowsRenderer {
   uploadedBytes = 0;
   /** The draws issued so far */
   draws = 0;
+  /** The draws issued with the variant of the program that cuts the dashes */
+  dashedDraws = 0;
+  /** The times a draw used another variant of the program than the draw before */
+  programSwitches = 0;
+  /** The variants of the program made so far */
+  programsMade = 0;
 
   /**
    * @param makeProgram Makes the program from its sources (`createProgram` when omitted; the tests
@@ -255,7 +284,8 @@ export class RowsRenderer {
   }
 
   /**
-   * Makes the program for the projection of the frame (again when it changed)
+   * Makes the two variants of the program for the projection of the frame (again when it
+   * changed); when one cannot be made, neither is kept
    *
    * @returns Whether the program can draw
    */
@@ -265,38 +295,46 @@ export class RowsRenderer {
       this.variantName = shaderData.variantName;
       this.broken = false;
       try {
-        const program = this.makeProgram(
-          this.gl,
-          buildRowsVertexSource(shaderData.vertexShaderPrelude, shaderData.define),
-          buildRowsFragmentSource(),
-        );
-        this.ledger.record(program, ROWS_PART, 'program');
-        this.program = {
-          program,
-          locations: locationsOf(this.gl, program),
-          projection: (() => {
-            // Not drawn flat as a whole on a frame that draws the polygons and the lines flat:
-            // the points keep their elevations, and the program lays the rest flat itself
-            const manager = new ProjectionUniformManager(this.gl);
-            manager.useTerrainState(this.terrain);
-            manager.getLocations(program);
-            return manager;
-          })(),
-          rowState: new RowStateUniforms(this.gl, program),
-          ghosts: new TerrainOcclusionUniforms(this.gl, program),
-          memo: emptyMemo(),
-        };
+        this.program = this.buildProgram(shaderData, false);
+        this.dashedProgram = this.buildProgram(shaderData, true);
       } catch (error) {
         console.error('The program of the rows could not be made', error);
+        this.releaseProgram();
         this.broken = true;
       }
     }
-    return this.program !== null;
+    return this.program !== null && this.dashedProgram !== null;
+  }
+
+  /** Makes a variant of the program for the projection of the frame */
+  private buildProgram(shaderData: ShaderData, withDashes: boolean): RowsProgram {
+    const program = this.makeProgram(
+      this.gl,
+      buildRowsVertexSource(shaderData.vertexShaderPrelude, shaderData.define, withDashes),
+      buildRowsFragmentSource(withDashes),
+    );
+    this.programsMade++;
+    this.ledger.record(program, ROWS_PART, 'program');
+    return {
+      program,
+      locations: locationsOf(this.gl, program),
+      projection: (() => {
+        // Not drawn flat as a whole on a frame that draws the polygons and the lines flat:
+        // the points keep their elevations, and the program lays the rest flat itself
+        const manager = new ProjectionUniformManager(this.gl);
+        manager.useTerrainState(this.terrain);
+        manager.getLocations(program);
+        return manager;
+      })(),
+      rowState: new RowStateUniforms(this.gl, program),
+      ghosts: new TerrainOcclusionUniforms(this.gl, program),
+      memo: emptyMemo(),
+    };
   }
 
   /** Whether the program can draw */
   get ready(): boolean {
-    return this.program !== null;
+    return this.program !== null && this.dashedProgram !== null;
   }
 
   /** Whether the program could not be made for the projection of the frame */
@@ -332,6 +370,7 @@ export class RowsRenderer {
       pointedFirst: -1,
       writes: null,
       disposed: false,
+      dashed: data.dashed,
     };
     data.palette.refs++;
     this.palettes.add(data.palette);
@@ -369,7 +408,8 @@ export class RowsRenderer {
    * `coordFirst`), as large as what it was packed with. A row packed again fits when it has no
    * more of each than its place holds: its instances are written over the ones of its place, the
    * rest of the place is filled with instances that draw nothing, and its coordinates and its style
-   * are written. The write reaches the GPU with the next `flushUploads`
+   * are written. The write reaches the GPU with the next `flushUploads`. A row written with
+   * dashes marks the chunk as dashed (the mark stays until the chunk is made again)
    *
    * @param fromRow The first row written, in the chunk
    * @param patch The rows packed again on their own, with the palette of the chunk (the chunk takes
@@ -429,6 +469,7 @@ export class RowsRenderer {
       if (old >= 0) data.palette.release(old);
       data.rowStyle[row] = patch.rowStyle[r];
     }
+    if (patch.dashed) chunk.dashed = true;
     return true;
   }
 
@@ -568,6 +609,9 @@ export class RowsRenderer {
    *   analytic drape paints)
    * @param pointsOnly Whether only its points are drawn (a chunk of the other frames drawn on a
    *   frame the drape paints, which paints the rest of it)
+   * The chunk is drawn with the variant of the program that cuts the dashes when it is marked
+   * dashed, with the one without them otherwise
+   *
    * @returns Whether it was drawn (false for a chunk not written yet, or without a program)
    */
   drawRange(
@@ -581,7 +625,7 @@ export class RowsRenderer {
     ghosts = false,
     pointsOnly = false,
   ): boolean {
-    const program = this.program;
+    const program = chunk.dashed ? this.dashedProgram : this.program;
     if (!chunk.uploaded || !program) return false;
     const data = chunk.data;
     const first = data.rowFirst[fromRow];
@@ -592,6 +636,10 @@ export class RowsRenderer {
 
     const gl = this.gl;
     gl.useProgram(program.program);
+    if (this.lastUsed !== program) {
+      this.programSwitches++;
+      this.lastUsed = program;
+    }
     const camera = this.offsetUniforms;
     let center: OffsetUniforms;
     if (camera) {
@@ -624,6 +672,7 @@ export class RowsRenderer {
     }
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 2 * (stations + 1), count);
     this.draws++;
+    if (program === this.dashedProgram) this.dashedDraws++;
     gl.bindVertexArray(null);
     return true;
   }
@@ -657,14 +706,22 @@ export class RowsRenderer {
     }
   }
 
+  /** Releases both variants of the program */
   private releaseProgram(): void {
-    if (!this.program) return;
-    this.ledger.release(this.program.program);
-    this.gl.deleteProgram(this.program.program);
+    for (const held of [this.program, this.dashedProgram]) {
+      if (!held) continue;
+      this.ledger.release(held.program);
+      this.gl.deleteProgram(held.program);
+    }
     this.program = null;
+    this.dashedProgram = null;
+    this.lastUsed = null;
   }
 
-  /** Writes the uniforms of a draw (those of the frame once per frame, the others when changed) */
+  /**
+   * Writes the uniforms of a draw into a variant of the program (those of the frame once per frame,
+   * the others when changed, from the values the variant last had)
+   */
   private writeUniforms(
     program: RowsProgram,
     chunk: RowsChunk,
@@ -683,7 +740,6 @@ export class RowsRenderer {
       if (locations.coords) gl.uniform1i(locations.coords, UNIT_COORDS);
       if (locations.rowStyles) gl.uniform1i(locations.rowStyles, UNIT_ROW_STYLES);
       if (locations.styles) gl.uniform1i(locations.styles, UNIT_STYLES);
-      if (locations.styleWidth) gl.uniform1i(locations.styleWidth, ROWS_STYLE_WIDTH);
       if (locations.viewport) {
         gl.uniform2f(locations.viewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
       }
@@ -704,15 +760,18 @@ export class RowsRenderer {
       gl.uniform1f(locations.opacity, factors.opacity);
       memo.opacity = factors.opacity;
     }
-    const coordWidth = (chunk.coords as SizedTexture).width;
-    if (locations.coordWidth && (stale || memo.coordWidth !== coordWidth)) {
-      gl.uniform1i(locations.coordWidth, coordWidth);
-      memo.coordWidth = coordWidth;
+    // The mask and the shift of the widths of the textures of the chunk
+    const coordShift = (chunk.coords as SizedTexture).shift;
+    if (stale || memo.coordShift !== coordShift) {
+      if (locations.coordMask) gl.uniform1i(locations.coordMask, (1 << coordShift) - 1);
+      if (locations.coordShift) gl.uniform1i(locations.coordShift, coordShift);
+      memo.coordShift = coordShift;
     }
-    const rowStyleWidth = (chunk.rowStyles as SizedTexture).width;
-    if (locations.rowStyleWidth && (stale || memo.rowStyleWidth !== rowStyleWidth)) {
-      gl.uniform1i(locations.rowStyleWidth, rowStyleWidth);
-      memo.rowStyleWidth = rowStyleWidth;
+    const rowStyleShift = (chunk.rowStyles as SizedTexture).shift;
+    if (stale || memo.rowStyleShift !== rowStyleShift) {
+      if (locations.rowStyleMask) gl.uniform1i(locations.rowStyleMask, (1 << rowStyleShift) - 1);
+      if (locations.rowStyleShift) gl.uniform1i(locations.rowStyleShift, rowStyleShift);
+      memo.rowStyleShift = rowStyleShift;
     }
     const rowBase = chunk.data.rowBase;
     if (locations.rowBase && (stale || memo.rowBase !== rowBase)) {
@@ -936,7 +995,7 @@ export class RowsRenderer {
       paddedRange(values, 0, width * height * floats),
     );
     gl.bindTexture(gl.TEXTURE_2D, null);
-    return { texture, width, height };
+    return { texture, width, height, shift: widthShift(width) };
   }
 
   /**
@@ -950,7 +1009,7 @@ export class RowsRenderer {
     if (writes.instances.size > 0) {
       if (chunk.instanceBuffer) {
         gl.bindBuffer(gl.ARRAY_BUFFER, chunk.instanceBuffer);
-        writes.instances.drain(Number.POSITIVE_INFINITY, (_line, first, run) => {
+        writes.instances.drain(null, (_line, first, run) => {
           gl.bufferSubData(gl.ARRAY_BUFFER, first * ROWS_INSTANCE_BYTES, run);
           this.uploadedBytes += run.byteLength;
         });
@@ -965,7 +1024,7 @@ export class RowsRenderer {
         return;
       }
       gl.bindTexture(gl.TEXTURE_2D, target.texture);
-      values.drain(target.width, (line, first, run) => {
+      values.drain(target.shift, (line, first, run) => {
         gl.texSubImage2D(
           gl.TEXTURE_2D,
           0,
@@ -992,9 +1051,9 @@ function emptyMemo(): RowsUniformMemo {
     zoom: Number.NaN,
     scale: Number.NaN,
     opacity: Number.NaN,
-    coordWidth: Number.NaN,
+    coordShift: Number.NaN,
     rowBase: Number.NaN,
-    rowStyleWidth: Number.NaN,
+    rowStyleShift: Number.NaN,
     stations: Number.NaN,
     stationStep: Number.NaN,
     stationGrid: Number.NaN,
@@ -1006,9 +1065,16 @@ function emptyMemo(): RowsUniformMemo {
   };
 }
 
-/** The size of a texture of `count` texels, `widest` texels wide at most */
-function textureSizeOf(count: number, widest: number): { width: number; height: number } {
-  const width = Math.max(1, Math.min(widest, count));
+/**
+ * The size of a texture of `count` texels: the smallest power of two that holds them on one line,
+ * `widest` (a power of two) at most, and as many lines as they take. The one place the widths of
+ * the textures of the chunks are decided
+ *
+ * @internal
+ */
+export function textureSizeOf(count: number, widest: number): { width: number; height: number } {
+  let width = 1;
+  while (width < count && width < widest) width *= 2;
   return { width, height: Math.max(1, Math.ceil(count / width)) };
 }
 
@@ -1068,12 +1134,13 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
   const at = (name: string) => gl.getUniformLocation(program, name);
   return {
     coords: at('u_coords'),
-    coordWidth: at('u_coord_width'),
+    coordMask: at('u_coord_mask'),
+    coordShift: at('u_coord_shift'),
     rowStyles: at('u_row_styles'),
-    rowStyleWidth: at('u_row_style_width'),
+    rowStyleMask: at('u_row_style_mask'),
+    rowStyleShift: at('u_row_style_shift'),
     rowBase: at('u_row_base'),
     styles: at('u_styles'),
-    styleWidth: at('u_style_width'),
     viewport: at('u_viewport'),
     zoom: at('u_zoom'),
     miterLimit: at('u_miter_limit'),

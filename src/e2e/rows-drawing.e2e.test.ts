@@ -12,6 +12,8 @@
  *   to (`compare-pictures.ts`): a dashed or dotted scene with 1% of its pixels drawn differing by
  *   more than 8 levels at most (1.5% for the three scenes of `LOOSER`), another with 0.1% by more
  *   than 2
+ * - The variant of the program of the rows without the dashes draws scenes without dashed rows on
+ *   the four maps exactly as the variant with the dashes draws them, to the pixel
  */
 
 import type { Browser, Page } from 'playwright-core';
@@ -29,7 +31,16 @@ import {
   openMapPage,
   settle,
 } from './harness.js';
-import { type Call, CUSTOM_TYPE, MAP_SETUPS, type PictureScene, SCENES } from './picture-scenes.js';
+import {
+  type Call,
+  CUSTOM_TYPE,
+  MAP_SETUPS,
+  MAPS,
+  type MapName,
+  type PictureScene,
+  SCENES,
+  TERRAIN_EXAGGERATION,
+} from './picture-scenes.js';
 
 /** A pitched camera close to the ground */
 const PITCHED: Camera = { center: [139.0, 35.0], zoom: 17, pitch: 60, bearing: 0 };
@@ -349,6 +360,121 @@ for (const map of ['flat', 'pitched'] as const) {
         expect(failed).toEqual([]);
       } finally {
         await Promise.all([oneDraw.close(), byKind.close()]);
+      }
+    });
+  });
+}
+
+// ============================================================================
+// The variant of the program without the dashes
+// ============================================================================
+
+/**
+ * Opens the page of a map; with `withDashesOnly`, every source of the program of the rows is made
+ * the variant with the dashes (the define of that variant added to the sources without it), so
+ * that every chunk is drawn with it
+ *
+ * @returns The page, the sources the define was added to, and what the drawing told
+ */
+async function openVariantPage(
+  map: MapName,
+  withDashesOnly: boolean,
+): Promise<{ page: Page; changed: () => Promise<number>; told: () => Promise<string[]> }> {
+  const setup = MAP_SETUPS[map];
+  const page = await openMapPage(browser, bundle, setup.camera);
+  await page.evaluate(
+    async ({ withDashesOnly, terrain, globe, exaggeration }) => {
+      const w = window as unknown as E2EWindow & {
+        e2e: {
+          createDraw: typeof import('../index.js').createDraw;
+          terrain: {
+            addTestTerrain(map: import('maplibre-gl').Map, exaggeration: number): Promise<void>;
+          };
+        };
+        changedSources: number;
+        told: string[];
+      };
+      w.changedSources = 0;
+      // What the drawing tells (it tells when the program of the rows cannot be made)
+      const told: string[] = [];
+      w.told = told;
+      const warn = console.warn.bind(console);
+      console.warn = (...args: unknown[]) => {
+        told.push(String(args[0]));
+        warn(...args);
+      };
+      if (withDashesOnly) {
+        const proto = WebGL2RenderingContext.prototype;
+        const shaderSource = proto.shaderSource;
+        proto.shaderSource = function (shader, source) {
+          let given = source;
+          if (source.includes('ROWS_DASHED') && !source.includes('#define ROWS_DASHED')) {
+            const end = source.indexOf('\n') + 1;
+            given = `${source.slice(0, end)}#define ROWS_DASHED\n${source.slice(end)}`;
+            w.changedSources++;
+          }
+          shaderSource.call(this, shader, given);
+        };
+        // A new instance compiles its programs anew
+        w.draw.destroy();
+        w.draw = w.e2e.createDraw(w.map);
+      }
+      if (globe) w.map.setProjection({ type: 'globe' });
+      if (terrain) await w.e2e.terrain.addTestTerrain(w.map, exaggeration);
+    },
+    {
+      withDashesOnly,
+      terrain: setup.terrain,
+      globe: setup.globe,
+      exaggeration: TERRAIN_EXAGGERATION,
+    },
+  );
+  await settle(page);
+  return {
+    page,
+    changed: () =>
+      page.evaluate(() => (window as unknown as { changedSources: number }).changedSources),
+    told: () => page.evaluate(() => (window as unknown as { told: string[] }).told),
+  };
+}
+
+for (const map of MAPS) {
+  describe(`the variant of the program of the rows without the dashes on the ${map} map`, () => {
+    // Points, lines and areas stacked in turn, none dashed or dotted
+    const scenes = ['point-circle', 'line-solid', 'area'].map(
+      (kind) => SCENES.find((scene) => scene.name === `${map}/${kind}/interleaved`) as PictureScene,
+    );
+
+    it('draws the scenes without dashed rows as the variant with the dashes draws them', {
+      timeout: browserTimeout(300_000),
+    }, async () => {
+      for (const scene of scenes) {
+        expect(JSON.stringify(scene.document)).not.toMatch(/"lineStyle":"(dashed|dotted)"/);
+      }
+      const [without, withDashes] = await Promise.all([
+        openVariantPage(map, false),
+        openVariantPage(map, true),
+      ]);
+      try {
+        const before = new Map<string, Picture>();
+        const after = new Map<string, Picture>();
+        for (const scene of scenes) {
+          before.set(scene.name, await take(without.page, scene));
+          after.set(scene.name, await take(withDashes.page, scene));
+        }
+        // The variant without the dashes was made into the other one on the second page only
+        expect(await without.changed()).toBe(0);
+        expect(await withDashes.changed()).toBeGreaterThan(0);
+        // Both drew in one draw (the program of the rows was made on both)
+        for (const page of [without, withDashes]) {
+          expect((await page.told()).filter((text) => text.includes('drawn by kind'))).toEqual([]);
+        }
+        const failed = compareSets(before, after)
+          .filter((c) => c.failed)
+          .map(describeComparison);
+        expect(failed).toEqual([]);
+      } finally {
+        await Promise.all([without.page.close(), withDashes.page.close()]);
       }
     });
   });

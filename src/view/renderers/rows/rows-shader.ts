@@ -40,6 +40,13 @@
  * The blending is the one of the layer, so the branches differ only in what they emit. The
  * shaders never read `gl_InstanceID`: a range of rows is drawn by pointing the instance
  * attributes at its first instance, so the place of an instance in a draw means nothing.
+ *
+ * The sources come in two variants made from the same text, told apart by one define
+ * (`ROWS_DASHED`): with it, the dashed segments are cut into their dashes; without it, the
+ * stages hold nothing of the dashes (their outputs, their values and their functions), for the
+ * chunks without a dashed or dotted row. A row that is not dashed is drawn by the same formulas
+ * in both. The textures are read at places taken out of the numbers of their texels with a shift
+ * and a mask (`rows-writes.ts`).
  */
 
 import { DEFAULT_TILE_SIZE } from '../../../shared/math/index.js';
@@ -52,8 +59,15 @@ import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
 import { POINT_SDF_GLSL } from '../point/point-sdf.js';
 import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
-import { ROWS_KIND, ROWS_KIND_SHIFT, ROWS_ROW_MASK, ROWS_STYLE_TEXELS } from './rows-format.js';
+import {
+  ROWS_KIND,
+  ROWS_KIND_SHIFT,
+  ROWS_ROW_MASK,
+  ROWS_STYLE_TEXELS,
+  ROWS_STYLE_WIDTH,
+} from './rows-format.js';
 import { TERRAIN_OCCLUSION_GLSL } from './rows-occlusion.js';
+import { texelPlaceGlsl, widthShift } from './rows-writes.js';
 
 /** A float literal of GLSL */
 function glslFloat(value: number): string {
@@ -67,18 +81,25 @@ const FAR = 1e6;
 /** The depth of a point on the terrain in normalized device coordinates: just past the near plane */
 const POINT_NEAR_DEPTH = -0.999999;
 
+/** The line that makes a source the variant that cuts the dashed segments into their dashes */
+function dashedDefine(dashed: boolean): string {
+  return dashed ? '#define ROWS_DASHED\n' : '';
+}
+
 /**
  * The vertex shader source
  *
  * @param prelude The vertex shader prelude maplibre hands to the custom layer
  * @param define The defines of the projection variant
+ * @param withDashes Whether it is the variant that cuts the dashed segments into their dashes
+ *   (the variant without them draws no dashed or dotted row as it is)
  * @internal
  */
-export function buildRowsVertexSource(prelude: string, define: string): string {
+export function buildRowsVertexSource(prelude: string, define: string, withDashes = true): string {
   const dashed = DASH_COEFFICIENTS.dashed;
   const dotted = DASH_COEFFICIENTS.dotted;
   return `#version 300 es
-${prelude}
+${dashedDefine(withDashes)}${prelude}
 ${define}
 ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}${TERRAIN_OCCLUSION_GLSL}
 
@@ -95,18 +116,19 @@ layout(location = 2) in vec3 a_head;
 // and z: the longest segment of its line in meters and on the Mercator plane
 layout(location = 3) in vec4 a_tail;
 
-// The coordinates of the chunk (offsets from its origin)
+// The coordinates of the chunk (offsets from its origin), and the mask and the shift of its width
 uniform sampler2D u_coords;
-uniform int u_coord_width;
+uniform int u_coord_mask;
+uniform int u_coord_shift;
 // The style of each row of the chunk: x the number of its style, y its created zoom, z 1 when it
-// has one
+// has one; and the mask and the shift of its width
 uniform sampler2D u_row_styles;
-uniform int u_row_style_width;
+uniform int u_row_style_mask;
+uniform int u_row_style_shift;
 // The first row of the chunk in its group
 uniform int u_row_base;
-// The values of the styles of the layer, ${ROWS_STYLE_TEXELS} texels per style
+// The values of the styles of the layer, ${ROWS_STYLE_TEXELS} texels per style, ${ROWS_STYLE_WIDTH} texels wide
 uniform sampler2D u_styles;
-uniform int u_style_width;
 
 uniform vec2 u_viewport;
 uniform float u_zoom;
@@ -137,6 +159,7 @@ flat out vec4 v_color2;
 // A point: radius, outer radius, ink, shape. A segment: half width, length on screen. An edge
 // of an outline: half width
 flat out vec4 v_params;
+#ifdef ROWS_DASHED
 // A dashed segment: the dash, the period (CSS px), CSS px per device pixel along the segment (a
 // period of 0: not dashed)
 flat out vec3 v_dash;
@@ -158,6 +181,7 @@ flat out vec2 v_dash_w;
 // of the segment and 1 where it meets no segment, or past the limit of the miter)
 flat out vec3 v_dash_miter0;
 flat out vec3 v_dash_miter1;
+#endif
 // A point: the offset in device pixels. A segment: the signed distance from its center line, the
 // position along it, and for a dashed one its position on the line (CSS px). An edge of an
 // outline: the signed distance
@@ -192,12 +216,12 @@ vec2 stationOffset(vec2 a, vec2 b, float t) {
 
 vec2 rowsCoord(float index) {
     int i = int(index + 0.5);
-    return texelFetch(u_coords, ivec2(i % u_coord_width, i / u_coord_width), 0).xy;
+    return texelFetch(u_coords, ${texelPlaceGlsl('i', 'u_coord_mask', 'u_coord_shift')}, 0).xy;
 }
 
 vec4 rowsStyle(int style, int texel) {
     int i = style * ${ROWS_STYLE_TEXELS} + texel;
-    return texelFetch(u_styles, ivec2(i % u_style_width, i / u_style_width), 0);
+    return texelFetch(u_styles, ${texelPlaceGlsl('i', String(ROWS_STYLE_WIDTH - 1), String(widthShift(ROWS_STYLE_WIDTH)))}, 0);
 }
 
 vec4 rowsProject(vec2 offset) {
@@ -218,6 +242,7 @@ vec2 quadCorner() {
     return vec2((g_corner & 1) == 1 ? 1.0 : -1.0, (g_corner & 2) == 2 ? 1.0 : -1.0);
 }
 
+#ifdef ROWS_DASHED
 // The length of a segment as the lines dashed on the CPU measure it, in CSS px at zoom 0
 float dashLength0(vec2 a, vec2 b) {
     vec2 base = u_origin_shift + u_center_lnglat;
@@ -273,6 +298,7 @@ vec4 dashNeighbor(vec2 from, vec2 to, float wFrom, float wTo, float lengthCss, v
     if (start >= last) return none;
     return vec4(turn, neighborPx(base, lengthCss, wFrom, wTo, cornerAt, px, start), neighborPx(base, lengthCss, wFrom, wTo, cornerAt, px, min(start + dash, last)));
 }
+#endif
 
 void drawPoint(int style) {
     vec2 offset = rowsCoord(a_head.x);
@@ -438,6 +464,7 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     v_params = vec4(halfWidth, screenSegmentLength, 0.0, 0.0);
     v_geom = vec4(side * expandedHalfWidth, linePos, 0.0, 0.0);
 
+#ifdef ROWS_DASHED
     int pattern = int(widths.w + 0.5);
     if (pattern > 0 && screenSegmentLength > 0.0) {
         // The pattern of the lines dashed on the CPU (dash.ts), from the width drawn in CSS px
@@ -483,6 +510,7 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         float along = t * screenSegmentLength + dot(vertexOffset, segmentDir);
         v_geom.z = startCss + along * cssPerPx;
     }
+#endif
 }
 
 void drawOutline(int style, float createdZoom, bool hasCreatedZoom) {
@@ -547,6 +575,7 @@ void main() {
     v_color = vec4(0.0);
     v_color2 = vec4(0.0);
     v_params = vec4(0.0);
+#ifdef ROWS_DASHED
     v_dash = vec3(0.0);
     v_dash_range = vec3(0.0);
     v_dash_ends = vec4(0.0);
@@ -555,6 +584,7 @@ void main() {
     v_dash_miter1 = vec3(0.0, 1.0, 1.0);
     v_dash_prev = vec4(1.0, 0.0, -2.0 * ${glslFloat(FAR)}, -${glslFloat(FAR)});
     v_dash_next = vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
+#endif
     v_geom = vec4(0.0);
 
     // The state of the row: a hidden row draws nothing; nor does a row that is not a point when
@@ -568,7 +598,7 @@ void main() {
     int local = row - u_row_base;
     vec4 rowStyle = texelFetch(
         u_row_styles,
-        ivec2(local % u_row_style_width, local / u_row_style_width),
+        ${texelPlaceGlsl('local', 'u_row_style_mask', 'u_row_style_shift')},
         0
     );
     int style = int(rowStyle.x + 0.5);
@@ -595,16 +625,18 @@ void main() {
 /**
  * The fragment shader source
  *
+ * @param withDashes Whether it is the variant that cuts the dashed segments into their dashes
  * @internal
  */
-export function buildRowsFragmentSource(): string {
+export function buildRowsFragmentSource(withDashes = true): string {
   return `#version 300 es
-precision highp float;
+${dashedDefine(withDashes)}precision highp float;
 
 flat in int v_kind;
 flat in vec4 v_color;
 flat in vec4 v_color2;
 flat in vec4 v_params;
+#ifdef ROWS_DASHED
 flat in vec3 v_dash;
 flat in vec3 v_dash_range;
 flat in vec4 v_dash_prev;
@@ -613,6 +645,7 @@ flat in vec4 v_dash_ends;
 flat in vec2 v_dash_w;
 flat in vec3 v_dash_miter0;
 flat in vec3 v_dash_miter1;
+#endif
 in vec4 v_geom;
 
 // The opacity factor of the drawing (the opacity of the layer)
@@ -624,6 +657,7 @@ out vec4 fragColor;
 
 const float AA = 0.5;
 
+#ifdef ROWS_DASHED
 // Where a fragment of a dashed segment is, from where it falls on the segment on the screen: x its
 // position on the line (CSS px), through the perspective of the ends of the segment; y the length
 // on the line per device pixel along the segment there; z its signed distance from the center line
@@ -651,6 +685,7 @@ vec3 dashPlace() {
     float perPx = whole * w0 * w1 / (den * den) / screenLength;
     return vec3(first + g * whole, perPx > 0.0 ? perPx : v_dash.z, d);
 }
+#endif
 ${POINT_SDF_GLSL}
 ${TERRAIN_SHADE_FRAGMENT_GLSL}
 
@@ -667,6 +702,7 @@ float bodyCoverage(float d, float w) {
     return right - left;
 }
 
+#ifdef ROWS_DASHED
 // The coverage of a dash drawn as a line of its own from a to b along its segment, at u along it
 // and d across it (device pixels): round ends, or none at an end far away (one that goes on over
 // a corner, up to the miter)
@@ -682,10 +718,14 @@ float neighborCoverage(vec4 dash, float u, float d, float w) {
     return dashCoverage(u * dash.y + d * dash.x, u * dash.x - d * dash.y, dash.z, dash.w, w);
 }
 
+#endif
+
 // The color a line drawn with a coverage emits, as the SDF lines emit it
 vec4 lineColor(float coverage) {
     return v_color * coverage * u_opacity;
 }
+
+#ifdef ROWS_DASHED
 
 // One fragment drawn over another of the same draw, as the one fragment the blending of the
 // frame (the color by its alpha, the alpha added over) makes of the two
@@ -832,6 +872,7 @@ vec4 dashedColor(float w) {
     float fromEnd = (pos - last) / perPx;
     return drawnOver(color, lineColor(neighborCoverage(v_dash_next, fromEnd, d, w)));
 }
+#endif
 
 vec4 shadePoint() {
     if (v_params.y <= 0.0) discard;
@@ -849,7 +890,9 @@ vec4 shadePoint() {
 vec4 shadeSegment() {
     float d = v_geom.x;
     float w = v_params.x;
+#ifdef ROWS_DASHED
     if (v_dash.y > 0.0) return dashedColor(w);
+#endif
     float linePos = v_geom.y;
     float startDist = -linePos;
     float endDist = linePos - v_params.y;

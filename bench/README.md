@@ -72,6 +72,7 @@ layer.
 | `n` | Number of features (1 to 250,000) | `1000` |
 | `run` | Time a scene may run once it is prepared (ms) | none |
 | `terrain` | `1` puts hills made in the page under the features | `0` |
+| `dash` | `1` dashes one polygon in ten and one line in ten, each kind counted apart | `0` |
 
 The page links to 1,000, 10,000 and 100,000 features; start with the
 fewest. Nothing runs until a scene is asked for. A button, or
