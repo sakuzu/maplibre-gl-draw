@@ -9,9 +9,10 @@
 // regular expression is a part of that token, not a comment.
 //
 // The files longer than that now are in scripts/gates/file-length-baseline.json, with their
-// lengths. The gate fails when a file of the list is longer than the list gives, when a file of
-// the list is no longer than LIMIT or is gone, and when a file the list does not have is longer
-// than LIMIT. So the list only gets shorter. Only the maintainer adds to the list.
+// lengths. The gate fails when a file of the list is longer or shorter than the list gives (a
+// shorter file lowers its length in the list to its length now), when a file of the list is no
+// longer than LIMIT or is gone, and when a file the list does not have is longer than LIMIT. So
+// the list only gets shorter. Only the maintainer adds to the list.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -106,7 +107,9 @@ export function check(ctx) {
         `${file}: ${n} lines of code, no more than ${LIMIT}; remove it from scripts/gates/file-length-baseline.json`,
       );
     } else if (n < was) {
-      out.notes.push(`${file} is ${n} lines of code, ${was} in the baseline`);
+      out.errors.push(
+        `${file}: ${n} lines of code, the baseline is ${was}; lower it to ${n} in scripts/gates/file-length-baseline.json`,
+      );
     }
   }
   for (const file of Object.keys(base)) {

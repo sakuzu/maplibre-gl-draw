@@ -88,20 +88,31 @@ describe('the gate of the length of the files', () => {
     expect(check({ root }).errors).toEqual([]);
   });
 
-  it('notes a file of the list that got shorter and is still over the limit', () => {
-    const root = base();
-    write(root, { 'src/view/long.ts': code(850) });
-    const r = check({ root });
-    expect(r.errors).toEqual([]);
-    expect(r.notes).toEqual(['src/view/long.ts is 850 lines of code, 900 in the baseline']);
-  });
-
   it('fails on a file of the list one line longer than the list gives', () => {
     const root = base();
     write(root, { 'src/view/long.ts': code(901) });
     expect(check({ root }).errors).toEqual([
       'src/view/long.ts: 901 lines of code, the baseline is 900',
     ]);
+  });
+
+  it('fails on a file of the list one line shorter than the list gives, still over the limit', () => {
+    const root = base();
+    write(root, { 'src/view/long.ts': code(899) });
+    expect(check({ root }).errors).toEqual([
+      'src/view/long.ts: 899 lines of code, the baseline is 900; lower it to 899 in scripts/gates/file-length-baseline.json',
+    ]);
+  });
+
+  it('passes on a file of the list that got shorter, with its length in the list lowered', () => {
+    const root = base();
+    write(root, {
+      'scripts/gates/file-length-baseline.json': { files: { 'src/view/long.ts': 899 } },
+      'src/view/long.ts': code(899),
+    });
+    const r = check({ root });
+    expect(r.errors).toEqual([]);
+    expect(r.notes).toEqual([]);
   });
 
   it('fails on a file the list does not have, of one line over the limit', () => {
