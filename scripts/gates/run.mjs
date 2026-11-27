@@ -12,6 +12,7 @@ import * as branch from './branch.mjs';
 import * as deps from './deps.mjs';
 import * as entries from './entries.mjs';
 import * as extensionPoints from './extension-points.mjs';
+import * as fileLength from './file-length.mjs';
 import * as imports from './imports.mjs';
 import { recordsOfBuild } from './lib/declarations.mjs';
 import * as moduleState from './module-state.mjs';
@@ -38,6 +39,7 @@ export const GATES = [
   storeWrites,
   workScenes,
   parityRecords,
+  fileLength,
 ];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

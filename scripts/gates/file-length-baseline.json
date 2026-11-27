@@ -1,0 +1,11 @@
+{
+  "description": "The source files of the library longer than the limit of scripts/gates/file-length.mjs (800 lines of code, without the blank lines and the comments), with the number of their lines of code. A file may get shorter and may not get longer; a file no longer than the limit leaves the list. Only the maintainer adds to the list.",
+  "files": {
+    "src/api/impl/document-access.ts": 4170,
+    "src/view/layer/table-retained.ts": 2116,
+    "src/view/layer/table-collect.ts": 918,
+    "src/store/built-in/writes.ts": 909,
+    "src/view/renderers/rows/rows-renderer.ts": 861,
+    "src/store/built-in/changes.ts": 808
+  }
+}
