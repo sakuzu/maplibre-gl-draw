@@ -27,13 +27,12 @@ export const LIMIT = 800;
  * The number of the lines of code of a file
  *
  * @param {string} text
- * @param {string} file The path, which chooses between TypeScript and JavaScript
+ * @param {string} file The path
  * @returns {number}
  */
 export function codeLines(text, file) {
   const ts = loadTypeScript();
-  const kind = /\.(js|mjs|cjs)$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
-  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const lines = new Set();
   const mark = (start, end) => {
     let line = sf.getLineAndCharacterOfPosition(start).line;
@@ -76,9 +75,26 @@ export function check(ctx) {
   const { root } = ctx;
   const out = result(name);
   const base = readList(root, 'file-length-baseline.json').files ?? {};
+  if (typeof base !== 'object' || base === null || Array.isArray(base)) {
+    out.errors.push(
+      'the files of scripts/gates/file-length-baseline.json are not an object of the files and their lengths',
+    );
+    return out;
+  }
+  // A row whose length is not a whole number over the limit fails, and is compared with nothing
+  const broken = new Set();
+  for (const [file, was] of Object.entries(base)) {
+    if (!Number.isInteger(was) || was <= LIMIT) {
+      broken.add(file);
+      out.errors.push(
+        `${file}: the length ${JSON.stringify(was)} of scripts/gates/file-length-baseline.json is not a whole number over ${LIMIT}`,
+      );
+    }
+  }
   const now = lengthsOf(root);
   for (const [file, n] of now) {
-    const was = base[file];
+    if (broken.has(file)) continue;
+    const was = Object.hasOwn(base, file) ? base[file] : undefined;
     if (was === undefined) {
       if (n > LIMIT) {
         out.errors.push(`${file}: ${n} lines of code, more than ${LIMIT}`);

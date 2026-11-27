@@ -120,6 +120,39 @@ describe('the gate of the length of the files', () => {
     ]);
   });
 
+  it('fails on a row of the list whose length is not a whole number over the limit', () => {
+    const root = base();
+    write(root, {
+      'scripts/gates/file-length-baseline.json': {
+        files: {
+          'src/view/long.ts': 'x',
+          'src/view/other.ts': {},
+          'src/view/third.ts': 900.5,
+          'src/view/fourth.ts': LIMIT,
+        },
+      },
+      'src/view/long.ts': code(5000),
+      'src/view/other.ts': code(900),
+      'src/view/third.ts': code(900),
+      'src/view/fourth.ts': code(900),
+    });
+    const list = 'of scripts/gates/file-length-baseline.json is not a whole number over';
+    expect(check({ root }).errors).toEqual([
+      `src/view/long.ts: the length "x" ${list} ${LIMIT}`,
+      `src/view/other.ts: the length {} ${list} ${LIMIT}`,
+      `src/view/third.ts: the length 900.5 ${list} ${LIMIT}`,
+      `src/view/fourth.ts: the length ${LIMIT} ${list} ${LIMIT}`,
+    ]);
+  });
+
+  it('fails on a list whose files are not an object', () => {
+    const root = base();
+    write(root, { 'scripts/gates/file-length-baseline.json': { files: ['src/view/long.ts'] } });
+    expect(check({ root }).errors).toEqual([
+      'the files of scripts/gates/file-length-baseline.json are not an object of the files and their lengths',
+    ]);
+  });
+
   it('fails on a file of the list that is gone, or is not a source file of the library', () => {
     const root = base();
     write(root, {
